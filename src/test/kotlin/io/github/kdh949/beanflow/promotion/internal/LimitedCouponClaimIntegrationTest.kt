@@ -2,8 +2,11 @@ package io.github.kdh949.beanflow.promotion.internal
 
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignOperations
+import io.github.kdh949.beanflow.promotion.api.StopLimitedCouponCampaignCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
@@ -23,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.transaction.support.TransactionTemplate
 import java.sql.Timestamp
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -42,6 +46,9 @@ internal class LimitedCouponClaimIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbc: JdbcTemplate,
         private val claims: LimitedCouponClaimService,
+        private val campaigns: LimitedCouponCampaignOperations,
+        private val transactions: TransactionTemplate,
+        private val meterRegistry: MeterRegistry,
     ) {
         private val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
 
@@ -89,6 +96,21 @@ internal class LimitedCouponClaimIntegrationTest
                     campaignId,
                 ),
             ).isEqualTo(now.plusSeconds(86_400))
+            assertThat(
+                meterRegistry
+                    .get("beanflow.promotion.limited_coupon.claim")
+                    .tag("outcome", "created")
+                    .counter()
+                    .count(),
+            ).isGreaterThanOrEqualTo(1.0)
+            assertThat(
+                meterRegistry
+                    .get("beanflow.promotion.limited_coupon.claim")
+                    .tag("outcome", "replayed")
+                    .counter()
+                    .count(),
+            ).isGreaterThanOrEqualTo(1.0)
+            assertThat(meterRegistry.get("beanflow.promotion.limited_coupon.lock_wait").timer().count()).isGreaterThanOrEqualTo(1)
         }
 
         @Test
@@ -176,6 +198,64 @@ internal class LimitedCouponClaimIntegrationTest
             assertThat(count("promotion_limited_coupon_claim")).isZero()
             assertThat(count("promotion_limited_coupon_claim_command")).isZero()
             assertThat(issuedCount(campaignId)).isZero()
+        }
+
+        @Test
+        fun `claim and stoppage preserve whichever campaign lock wins`() {
+            val campaignId = seedCampaign(quota = 1)
+            val start = CountDownLatch(1)
+            val executor = Executors.newFixedThreadPool(2)
+            try {
+                val claim =
+                    executor.submit(
+                        Callable {
+                            start.await(10, TimeUnit.SECONDS)
+                            try {
+                                claims.claim(UUID.randomUUID(), campaignId, "claim-stop-race-01", now)
+                                "CREATED"
+                            } catch (failure: DomainFailure) {
+                                failure.code.name
+                            }
+                        },
+                    )
+                val stop =
+                    executor.submit(
+                        Callable {
+                            start.await(10, TimeUnit.SECONDS)
+                            transactions
+                                .execute {
+                                    campaigns.stop(
+                                        StopLimitedCouponCampaignCommand(
+                                            actorId = UUID.randomUUID(),
+                                            idempotencyKey = "stop-claim-race-01",
+                                            campaignId = campaignId,
+                                            expectedVersion = 1,
+                                            reason = "동시 중단 검증",
+                                            now = now,
+                                        ),
+                                    )
+                                }.state.name
+                        },
+                    )
+                start.countDown()
+                val claimOutcome = claim.get(30, TimeUnit.SECONDS)
+
+                assertThat(stop.get(30, TimeUnit.SECONDS)).isEqualTo("STOPPED")
+                assertThat(claimOutcome).isIn("CREATED", FailureCode.CAMPAIGN_NOT_ISSUABLE.name)
+                assertThat(issuedCount(campaignId)).isEqualTo(if (claimOutcome == "CREATED") 1 else 0)
+                assertThat(
+                    jdbc.queryForObject(
+                        "SELECT state FROM promotion_limited_campaign WHERE campaign_id = ?",
+                        String::class.java,
+                        campaignId,
+                    ),
+                ).isEqualTo("STOPPED")
+                assertThat(
+                    jdbc.queryForObject("SELECT active FROM promotion_campaign WHERE id = ?", Boolean::class.java, campaignId),
+                ).isTrue()
+            } finally {
+                executor.shutdownNow()
+            }
         }
 
         private fun claimRequest(

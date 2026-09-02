@@ -7,6 +7,7 @@ import io.github.kdh949.beanflow.merchant.api.PreparedStorefrontImage
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageAccess
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
+import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -43,6 +44,7 @@ internal class OperatorCouponCampaignControllerTest
     constructor(
         private val mockMvc: MockMvc,
         private val jdbc: JdbcTemplate,
+        private val meterRegistry: MeterRegistry,
     ) {
         @MockitoBean
         private lateinit var storage: StorefrontImageStorageOperations
@@ -102,12 +104,35 @@ internal class OperatorCouponCampaignControllerTest
                     .andExpect(jsonPath("$.version").value(2))
             }
 
+            val stoppageBody = """{"expectedVersion":2,"reason":"예산 집행 긴급 중단"}"""
+            repeat(2) {
+                mockMvc
+                    .perform(
+                        post("$BASE/coupon-campaigns/$campaignId/stoppage")
+                            .with(operatorJwt())
+                            .header("Idempotency-Key", "campaign-stop-0001")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(stoppageBody),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.state").value("STOPPED"))
+                    .andExpect(jsonPath("$.version").value(3))
+            }
+
             assertThat(jdbc.queryForObject("SELECT active FROM promotion_campaign WHERE id = ?", Boolean::class.java, campaignId)).isTrue()
             assertThat(auditActions()).containsExactly(
                 "COUPON_CAMPAIGN_DRAFT_CREATED",
                 "COUPON_CAMPAIGN_BANNER_UPDATED",
                 "COUPON_CAMPAIGN_PUBLISHED",
+                "COUPON_CAMPAIGN_STOPPED",
             )
+            assertThat(
+                meterRegistry
+                    .get("beanflow.promotion.campaign.command")
+                    .tag("operation", "stop")
+                    .tag("outcome", "succeeded")
+                    .counter()
+                    .count(),
+            ).isGreaterThanOrEqualTo(1.0)
         }
 
         @Test

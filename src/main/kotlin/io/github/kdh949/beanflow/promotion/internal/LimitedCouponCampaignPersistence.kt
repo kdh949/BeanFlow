@@ -194,6 +194,38 @@ internal class LimitedCouponCampaignPersistence(
         return requireNotNull(find(campaignId))
     }
 
+    fun stop(
+        campaignId: UUID,
+        now: Instant,
+    ): LimitedCouponCampaignSnapshot {
+        jdbc.update(
+            """
+            UPDATE promotion_limited_campaign
+               SET state = 'STOPPED', stopped_at = ?, updated_at = ?, version = version + 1
+             WHERE campaign_id = ?
+            """.trimIndent(),
+            Timestamp.from(now),
+            Timestamp.from(now),
+            campaignId,
+        )
+        return requireNotNull(find(campaignId))
+    }
+
+    fun isBannerReferenced(key: String): Boolean =
+        requireNotNull(
+            jdbc.queryForObject(
+                """
+                SELECT EXISTS (
+                    SELECT 1 FROM promotion_limited_campaign
+                     WHERE banner_original_key = ? OR banner_thumbnail_key = ?
+                )
+                """.trimIndent(),
+                Boolean::class.java,
+                key,
+                key,
+            ),
+        )
+
     fun find(campaignId: UUID): LimitedCouponCampaignSnapshot? =
         jdbc
             .query(
@@ -287,6 +319,7 @@ internal class LimitedCouponCampaignPersistence(
         const val CREATE_OPERATION = "LIMITED_CAMPAIGN_CREATE_V1"
         const val BANNER_OPERATION = "LIMITED_CAMPAIGN_BANNER_REPLACE_V1"
         const val PUBLISH_OPERATION = "LIMITED_CAMPAIGN_PUBLISH_V1"
+        const val STOP_OPERATION = "LIMITED_CAMPAIGN_STOP_V1"
         val COMMAND_RETENTION: Duration = Duration.ofDays(90)
         val BASE_QUERY =
             """

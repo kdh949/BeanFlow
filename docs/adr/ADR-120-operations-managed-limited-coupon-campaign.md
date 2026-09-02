@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-09-02
 - **Supersedes:** [ADR-107](ADR-107-limited-coupon-issuance.md)
-- **Implementation owner:** [Limited coupon events ExecPlan](../exec-plans/active/limited-coupon-events.md)
+- **Implementation owner:** [Limited coupon events ExecPlan](../exec-plans/completed/limited-coupon-events.md)
 
 ## Context
 

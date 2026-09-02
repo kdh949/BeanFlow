@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.promotion.internal
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
@@ -65,6 +66,24 @@ internal data class CustomerCouponClaimResponse(
     val claimedAt: Instant,
     val couponExpiresAt: Instant,
 )
+
+internal data class LimitedCouponClaimExecution(
+    val outcome: StoredLimitedCouponClaimOutcome,
+    val replayed: Boolean,
+)
+
+@Component
+internal class LimitedCouponClaimMetrics(
+    private val meterRegistry: MeterRegistry,
+) {
+    fun outcome(value: String) {
+        meterRegistry.counter("beanflow.promotion.limited_coupon.claim", "outcome", value).increment()
+    }
+
+    fun lockWait(duration: Duration) {
+        meterRegistry.timer("beanflow.promotion.limited_coupon.lock_wait").record(duration)
+    }
+}
 
 @Component
 internal class LimitedCouponClaimPersistence(
@@ -224,6 +243,7 @@ internal class LimitedCouponClaimPersistence(
 internal class LimitedCouponClaimTransaction(
     private val persistence: LimitedCouponClaimPersistence,
     private val objectMapper: JsonMapper,
+    private val metrics: LimitedCouponClaimMetrics,
 ) {
     @Transactional
     fun execute(
@@ -231,26 +251,38 @@ internal class LimitedCouponClaimTransaction(
         campaignId: UUID,
         idempotencyKey: String,
         now: Instant,
-    ): StoredLimitedCouponClaimOutcome {
+    ): LimitedCouponClaimExecution {
         val requestHash = sha256(campaignId.toString())
         persistence.lockCommand(customerId, idempotencyKey)
         persistence.findCommand(customerId, idempotencyKey)?.let { existing ->
             if (existing.requestHash != requestHash) {
-                return StoredLimitedCouponClaimOutcome.rejected(
-                    campaignId,
-                    FailureCode.IDEMPOTENCY_KEY_REUSED,
-                    "Idempotency-Key was reused for another coupon campaign",
+                return LimitedCouponClaimExecution(
+                    StoredLimitedCouponClaimOutcome.rejected(
+                        campaignId,
+                        FailureCode.IDEMPOTENCY_KEY_REUSED,
+                        "Idempotency-Key was reused for another coupon campaign",
+                    ),
+                    replayed = false,
                 )
             }
-            return objectMapper.readValue(existing.responseBody, StoredLimitedCouponClaimOutcome::class.java)
+            return LimitedCouponClaimExecution(
+                objectMapper.readValue(existing.responseBody, StoredLimitedCouponClaimOutcome::class.java),
+                replayed = true,
+            )
         }
 
+        val lockStartedAt = System.nanoTime()
         val campaign =
-            persistence.lockCampaign(campaignId)
-                ?: return StoredLimitedCouponClaimOutcome.rejected(
-                    campaignId,
-                    FailureCode.CAMPAIGN_NOT_ISSUABLE,
-                    "Coupon campaign is not issuable",
+            persistence
+                .lockCampaign(campaignId)
+                .also { metrics.lockWait(Duration.ofNanos(System.nanoTime() - lockStartedAt)) }
+                ?: return LimitedCouponClaimExecution(
+                    StoredLimitedCouponClaimOutcome.rejected(
+                        campaignId,
+                        FailureCode.CAMPAIGN_NOT_ISSUABLE,
+                        "Coupon campaign is not issuable",
+                    ),
+                    replayed = false,
                 )
         val rejected = rejectCampaign(campaign, customerId, now)
         val outcome =
@@ -265,7 +297,7 @@ internal class LimitedCouponClaimTransaction(
             }
         val responseBody = objectMapper.writeValueAsString(outcome)
         persistence.saveCommand(customerId, idempotencyKey, requestHash, outcome, responseBody, now)
-        return outcome
+        return LimitedCouponClaimExecution(outcome, replayed = false)
     }
 
     private fun rejectCampaign(
@@ -304,6 +336,7 @@ internal class LimitedCouponClaimTransaction(
 @Service
 internal class LimitedCouponClaimService(
     private val transaction: LimitedCouponClaimTransaction,
+    private val metrics: LimitedCouponClaimMetrics,
 ) {
     fun claim(
         customerId: UUID,
@@ -314,6 +347,24 @@ internal class LimitedCouponClaimService(
         if (idempotencyKey.trim() != idempotencyKey || idempotencyKey.length !in 8..128 || idempotencyKey.any(Char::isISOControl)) {
             throw DomainFailure(FailureCode.INVALID_REQUEST, "Idempotency-Key is invalid")
         }
-        return transaction.execute(customerId, campaignId, idempotencyKey, now).response()
+        val execution =
+            try {
+                transaction.execute(customerId, campaignId, idempotencyKey, now)
+            } catch (failure: RuntimeException) {
+                metrics.outcome(if (failure is DomainFailure) outcome(failure.code) else "dependency_unavailable")
+                throw failure
+            }
+        metrics.outcome(if (execution.replayed) "replayed" else execution.outcome.failureCode?.let(::outcome) ?: "created")
+        return execution.outcome.response()
     }
+
+    private fun outcome(code: FailureCode): String =
+        when (code) {
+            FailureCode.CAMPAIGN_QUOTA_EXHAUSTED -> "quota_exhausted"
+            FailureCode.COUPON_ALREADY_ISSUED -> "already_issued"
+            FailureCode.CAMPAIGN_NOT_ISSUABLE -> "not_issuable"
+            FailureCode.IDEMPOTENCY_KEY_REUSED -> "key_reused"
+            FailureCode.DEPENDENCY_UNAVAILABLE -> "dependency_unavailable"
+            else -> "rejected"
+        }
 }

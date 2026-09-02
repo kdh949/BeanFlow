@@ -864,6 +864,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1{campaignId}~1banner"
   /operations/coupon-campaigns/{campaignId}/publication:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1{campaignId}~1publication"
+  /operations/coupon-campaigns/{campaignId}/stoppage:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1{campaignId}~1stoppage"
   /operations/coupon-campaigns/store-options:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1store-options"
   /operations/coupon-campaigns/store-options/{storeId}/menus:

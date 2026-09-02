@@ -174,6 +174,7 @@ internal class NotificationInboxMigrationTest : IsolatedPostgresSupport() {
         Flyway
             .configure()
             .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+            .target("68")
             .cleanDisabled(cleanDisabled)
             .load()
 }

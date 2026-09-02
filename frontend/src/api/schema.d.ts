@@ -2189,6 +2189,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/coupon-campaigns/{campaignId}/stoppage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * (운영팀) 선착순 쿠폰 신규 다운로드 중단
+         * @description PUBLISHED 캠페인을 STOPPED로 전환해 새로운 쿠폰 다운로드만 중단합니다. 일반 Campaign은
+         *     active 상태로 유지하므로 이미 발급된 쿠폰은 고정 만료 시각까지 쿠폰함·주문·복원 정책을
+         *     그대로 따릅니다. claim과 같은 Campaign root lock을 사용해 둘 중 먼저 잠금을 획득한
+         *     트랜잭션의 결과를 보존합니다. 동일 멱등 요청은 최초 중단 결과를 반환합니다.
+         */
+        post: operations["stopCouponCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/coupon-campaigns/store-options": {
         parameters: {
             query?: never;
@@ -7585,6 +7608,11 @@ export interface components {
             reason: components["schemas"]["OperationReason"];
         };
         PublishCouponCampaignRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            reason: components["schemas"]["OperationReason"];
+        };
+        StopCouponCampaignRequest: {
             /** Format: int64 */
             expectedVersion: number;
             reason: components["schemas"]["OperationReason"];
@@ -14247,6 +14275,44 @@ export interface operations {
         };
         responses: {
             /** @description 게시된 선착순 쿠폰 캠페인 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponCampaign"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    stopCouponCampaign: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                campaignId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StopCouponCampaignRequest"];
+            };
+        };
+        responses: {
+            /** @description 신규 다운로드가 중단된 캠페인 */
             200: {
                 headers: {
                     [name: string]: unknown;

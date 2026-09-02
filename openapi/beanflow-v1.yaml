@@ -2607,6 +2607,39 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /operations/coupon-campaigns/{campaignId}/stoppage:
+    post:
+      tags: [Operations]
+      operationId: stopCouponCampaign
+      summary: (운영팀) 선착순 쿠폰 신규 다운로드 중단
+      description: |
+        PUBLISHED 캠페인을 STOPPED로 전환해 새로운 쿠폰 다운로드만 중단합니다. 일반 Campaign은
+        active 상태로 유지하므로 이미 발급된 쿠폰은 고정 만료 시각까지 쿠폰함·주문·복원 정책을
+        그대로 따릅니다. claim과 같은 Campaign root lock을 사용해 둘 중 먼저 잠금을 획득한
+        트랜잭션의 결과를 보존합니다. 동일 멱등 요청은 최초 중단 결과를 반환합니다.
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Identifier' }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StopCouponCampaignRequest' }
+      responses:
+        '200':
+          description: 신규 다운로드가 중단된 캠페인
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CouponCampaign' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
   /operations/coupon-campaigns/store-options:
     get:
       tags: [Operations]
@@ -7543,6 +7576,13 @@ components:
         couponExpiresAt: { $ref: '#/components/schemas/DateTime' }
         reason: { $ref: '#/components/schemas/OperationReason' }
     PublishCouponCampaignRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, reason]
+      properties:
+        expectedVersion: { type: integer, format: int64, minimum: 0 }
+        reason: { $ref: '#/components/schemas/OperationReason' }
+    StopCouponCampaignRequest:
       type: object
       additionalProperties: false
       required: [expectedVersion, reason]

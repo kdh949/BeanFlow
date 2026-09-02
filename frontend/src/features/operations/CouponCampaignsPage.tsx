@@ -276,9 +276,11 @@ function CampaignCard({ campaign, onUpdated }: { campaign: Campaign; onUpdated: 
   const [reason, setReason] = useState("");
   const [uploading, setUploading] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [commandError, setCommandError] = useState<unknown>(null);
   const uploadIntent = useRef(new SubmissionIntent());
   const publishIntent = useRef(new SubmissionIntent());
+  const stopIntent = useRef(new SubmissionIntent());
 
   function selectFile(selected: File | null) {
     setFile(selected);
@@ -291,6 +293,7 @@ function CampaignCard({ campaign, onUpdated }: { campaign: Campaign; onUpdated: 
     setCommandError(null);
     uploadIntent.current.rotate();
     publishIntent.current.rotate();
+    stopIntent.current.rotate();
   }
 
   async function uploadBanner() {
@@ -350,6 +353,31 @@ function CampaignCard({ campaign, onUpdated }: { campaign: Campaign; onUpdated: 
     }
   }
 
+  async function stopCampaign() {
+    if (!reason.trim()) return;
+    const body = { expectedVersion: campaign.version, reason: reason.trim() };
+    const fingerprint = JSON.stringify({ campaignId: campaign.campaignId, ...body });
+    setStopping(true);
+    setCommandError(null);
+    try {
+      const updated = unwrap(await operationsApi.POST("/operations/coupon-campaigns/{campaignId}/stoppage", {
+        params: {
+          path: { campaignId: campaign.campaignId },
+          header: { "Idempotency-Key": stopIntent.current.keyFor(fingerprint) },
+        },
+        body,
+      }));
+      onUpdated(updated);
+      setReason("");
+      stopIntent.current.complete();
+    } catch (failure) {
+      if (failure instanceof ApiRequestError && failure.code === "IDEMPOTENCY_KEY_REUSED") stopIntent.current.rotate();
+      setCommandError(failure);
+    } finally {
+      setStopping(false);
+    }
+  }
+
   return (
     <article className="surface-card campaign-card">
       <div className="campaign-card-main">
@@ -373,6 +401,15 @@ function CampaignCard({ campaign, onUpdated }: { campaign: Campaign; onUpdated: 
           <div className="campaign-publication-actions">
             <Button variant="secondary" loading={uploading} disabled={!file || !reason.trim()} onClick={() => void uploadBanner()}>{campaign.banner ? "배너 교체" : "배너 업로드"}</Button>
             <Button loading={publishing} disabled={!campaign.banner || !reason.trim()} onClick={() => void publishCampaign()}>고객에게 게시</Button>
+          </div>
+        </section>
+      ) : null}
+      {campaign.state === "PUBLISHED" ? (
+        <section className="campaign-publication" aria-label={`${campaign.title} 다운로드 중단`}>
+          <TextAreaField label="중단 사유" description="중단하면 신규 다운로드만 막고 이미 받은 쿠폰은 만료일까지 유지됩니다." resize="none" rows={2} value={reason} onValueChange={changeReason} />
+          {commandError ? <ErrorState error={commandError} /> : null}
+          <div className="campaign-publication-actions">
+            <Button variant="danger" loading={stopping} disabled={!reason.trim()} onClick={() => void stopCampaign()}>신규 다운로드 중단</Button>
           </div>
         </section>
       ) : null}

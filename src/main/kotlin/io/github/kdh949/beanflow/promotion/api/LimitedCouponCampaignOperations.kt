@@ -101,6 +101,15 @@ data class PublishLimitedCouponCampaignCommand(
     val now: Instant,
 )
 
+data class StopLimitedCouponCampaignCommand(
+    val actorId: UUID,
+    val idempotencyKey: String,
+    val campaignId: UUID,
+    val expectedVersion: Long,
+    val reason: String,
+    val now: Instant,
+)
+
 data class LimitedCouponCampaignPage(
     val campaigns: List<LimitedCouponCampaignSnapshot>,
     val nextCreatedAt: Instant?,
@@ -123,4 +132,6 @@ interface LimitedCouponCampaignOperations {
     fun replaceBanner(command: ReplaceLimitedCouponCampaignBannerCommand): LimitedCouponCampaignSnapshot
 
     fun publish(command: PublishLimitedCouponCampaignCommand): LimitedCouponCampaignSnapshot
+
+    fun stop(command: StopLimitedCouponCampaignCommand): LimitedCouponCampaignSnapshot
 }

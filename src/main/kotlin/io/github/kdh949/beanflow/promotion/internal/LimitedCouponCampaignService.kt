@@ -10,13 +10,18 @@ import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignState
 import io.github.kdh949.beanflow.promotion.api.PublishLimitedCouponCampaignCommand
 import io.github.kdh949.beanflow.promotion.api.ReplaceLimitedCouponCampaignBannerCommand
 import io.github.kdh949.beanflow.promotion.api.ReplayLimitedCouponCampaignBannerCommand
+import io.github.kdh949.beanflow.promotion.api.StopLimitedCouponCampaignCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataAccessException
+import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import tools.jackson.databind.json.JsonMapper
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -24,14 +29,47 @@ import java.time.Instant
 import java.util.HexFormat
 import java.util.UUID
 
+@Component
+internal class LimitedCouponCampaignCommandMetrics(
+    private val meterRegistry: MeterRegistry,
+) {
+    fun afterCompletion(operation: String) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Campaign command transaction synchronization is unavailable")
+        }
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCompletion(status: Int) {
+                    record(operation, if (status == TransactionSynchronization.STATUS_COMMITTED) "succeeded" else "rolled_back")
+                }
+            },
+        )
+    }
+
+    fun rejected(
+        operation: String,
+        dependencyFailure: Boolean,
+    ) {
+        record(operation, if (dependencyFailure) "dependency_unavailable" else "rejected")
+    }
+
+    private fun record(
+        operation: String,
+        outcome: String,
+    ) {
+        meterRegistry.counter("beanflow.promotion.campaign.command", "operation", operation, "outcome", outcome).increment()
+    }
+}
+
 @Service
 internal class LimitedCouponCampaignService(
     private val persistence: LimitedCouponCampaignPersistence,
     private val objectMapper: JsonMapper,
+    private val metrics: LimitedCouponCampaignCommandMetrics,
 ) : LimitedCouponCampaignOperations {
     @Transactional(propagation = Propagation.MANDATORY)
     override fun createDraft(command: CreateLimitedCouponCampaignDraftCommand): LimitedCouponCampaignSnapshot =
-        dependencyBoundary {
+        commandBoundary("create") {
             val normalized = validate(command)
             val requestHash = requestHash(normalized)
             persistence.lockCommand(normalized.actorId, LimitedCouponCampaignPersistence.CREATE_OPERATION, normalized.idempotencyKey)
@@ -45,7 +83,7 @@ internal class LimitedCouponCampaignService(
                 if (previous.requestHash != requestHash) {
                     fail(FailureCode.IDEMPOTENCY_KEY_REUSED, "Idempotency key was already used for different campaign terms")
                 }
-                return@dependencyBoundary decode(previous)
+                return@commandBoundary decode(previous)
             }
             val created = persistence.createDraft(normalized)
             persistence.saveCommand(
@@ -89,7 +127,7 @@ internal class LimitedCouponCampaignService(
 
     @Transactional(propagation = Propagation.MANDATORY)
     override fun replaceBanner(command: ReplaceLimitedCouponCampaignBannerCommand): LimitedCouponCampaignSnapshot =
-        dependencyBoundary {
+        commandBoundary("banner") {
             validateMutation(command.idempotencyKey, command.expectedVersion, command.reason)
             if (!command.prepared.sha256.matches(SHA256_PATTERN) || command.prepared.originalKey.isBlank() ||
                 command.prepared.thumbnailKey.isBlank()
@@ -100,7 +138,7 @@ internal class LimitedCouponCampaignService(
                 bannerRequestHash(command.campaignId, command.expectedVersion, command.prepared.sha256, command.reason.trim())
             persistence.lockCommand(command.actorId, LimitedCouponCampaignPersistence.BANNER_OPERATION, command.idempotencyKey)
             replay(command.actorId, LimitedCouponCampaignPersistence.BANNER_OPERATION, command.idempotencyKey, requestHash)?.let {
-                return@dependencyBoundary it
+                return@commandBoundary it
             }
             val current = persistence.lockCampaign(command.campaignId) ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Campaign not found")
             requireDraftVersion(current, command.expectedVersion)
@@ -119,13 +157,13 @@ internal class LimitedCouponCampaignService(
 
     @Transactional(propagation = Propagation.MANDATORY)
     override fun publish(command: PublishLimitedCouponCampaignCommand): LimitedCouponCampaignSnapshot =
-        dependencyBoundary {
+        commandBoundary("publish") {
             validateMutation(command.idempotencyKey, command.expectedVersion, command.reason)
             val requestHash =
                 sha256(listOf(command.campaignId, command.expectedVersion, command.reason.trim()).joinToString("|"))
             persistence.lockCommand(command.actorId, LimitedCouponCampaignPersistence.PUBLISH_OPERATION, command.idempotencyKey)
             replay(command.actorId, LimitedCouponCampaignPersistence.PUBLISH_OPERATION, command.idempotencyKey, requestHash)?.let {
-                return@dependencyBoundary it
+                return@commandBoundary it
             }
             val current = persistence.lockCampaign(command.campaignId) ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Campaign not found")
             requireDraftVersion(current, command.expectedVersion)
@@ -147,6 +185,34 @@ internal class LimitedCouponCampaignService(
                 command.now,
             )
             published
+        }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun stop(command: StopLimitedCouponCampaignCommand): LimitedCouponCampaignSnapshot =
+        commandBoundary("stop") {
+            validateMutation(command.idempotencyKey, command.expectedVersion, command.reason)
+            val requestHash =
+                sha256(listOf(command.campaignId, command.expectedVersion, command.reason.trim()).joinToString("|"))
+            persistence.lockCommand(command.actorId, LimitedCouponCampaignPersistence.STOP_OPERATION, command.idempotencyKey)
+            replay(command.actorId, LimitedCouponCampaignPersistence.STOP_OPERATION, command.idempotencyKey, requestHash)?.let {
+                return@commandBoundary it
+            }
+            val current = persistence.lockCampaign(command.campaignId) ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Campaign not found")
+            if (current.state != LimitedCouponCampaignState.PUBLISHED) {
+                fail(FailureCode.ORDER_STATE_CONFLICT, "Only a published campaign can be stopped")
+            }
+            if (current.version != command.expectedVersion) fail(FailureCode.ORDER_STATE_CONFLICT, "Campaign version changed")
+            val stopped = persistence.stop(command.campaignId, command.now)
+            persistence.saveCommand(
+                command.actorId,
+                LimitedCouponCampaignPersistence.STOP_OPERATION,
+                command.idempotencyKey,
+                requestHash,
+                command.campaignId,
+                encode(stopped),
+                command.now,
+            )
+            stopped
         }
 
     private fun replay(
@@ -309,6 +375,21 @@ internal class LimitedCouponCampaignService(
         } catch (failure: DomainFailure) {
             throw failure
         } catch (failure: DataAccessException) {
+            logger.error("limited_coupon_campaign_persistence outcome=FAILED", failure)
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Campaign persistence is unavailable").also { it.initCause(failure) }
+        }
+
+    private fun <T> commandBoundary(
+        operation: String,
+        action: () -> T,
+    ): T =
+        try {
+            action().also { metrics.afterCompletion(operation) }
+        } catch (failure: DomainFailure) {
+            metrics.rejected(operation, failure.code == FailureCode.DEPENDENCY_UNAVAILABLE)
+            throw failure
+        } catch (failure: DataAccessException) {
+            metrics.rejected(operation, dependencyFailure = true)
             logger.error("limited_coupon_campaign_persistence outcome=FAILED", failure)
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Campaign persistence is unavailable").also { it.initCause(failure) }
         }

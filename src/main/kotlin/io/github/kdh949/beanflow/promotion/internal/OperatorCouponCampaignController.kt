@@ -154,6 +154,13 @@ data class PublishCouponCampaignRequest(
     val reason: String,
 )
 
+data class StopCouponCampaignRequest(
+    @field:Min(0)
+    val expectedVersion: Long,
+    @field:Size(min = 1, max = 200)
+    val reason: String,
+)
+
 data class CouponCampaignPageInfo(
     val nextCursor: String?,
 )
@@ -244,6 +251,22 @@ internal class OperatorCouponCampaignController(
     ): CouponCampaignResponse =
         CouponCampaignResponse.of(
             service.publish(
+                OperatorCouponCampaignCommandContext(actorId(actor), idempotencyKey, request.reason),
+                campaignId,
+                request.expectedVersion,
+            ),
+        )
+
+    @PostMapping("/{campaignId}/stoppage")
+    @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
+    fun stop(
+        actor: OperatorActor,
+        @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
+        @PathVariable campaignId: UUID,
+        @Valid @RequestBody request: StopCouponCampaignRequest,
+    ): CouponCampaignResponse =
+        CouponCampaignResponse.of(
+            service.stop(
                 OperatorCouponCampaignCommandContext(actorId(actor), idempotencyKey, request.reason),
                 campaignId,
                 request.expectedVersion,

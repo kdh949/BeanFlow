@@ -75,6 +75,7 @@ interface StorefrontImageStorageOperations {
     )
 
     fun listOrphanCandidates(
+        targets: Set<StorefrontImageTarget>,
         olderThan: Instant,
         limit: Int,
     ): List<String>

@@ -33,6 +33,8 @@ const listMenus = http.get("/api/v1/operations/coupon-campaigns/store-options/:s
 const uploadedCampaign = { ...campaign, banner: { url: "https://images.example.test/campaign.jpg", expiresAt: "2026-09-02T21:15:00+09:00" }, version: 1 };
 const replaceBanner = http.put(/\/api\/v1\/operations\/coupon-campaigns\/[^/]+\/banner(?:\?.*)?$/, () => HttpResponse.json(uploadedCampaign));
 const publishCampaign = http.post(/\/api\/v1\/operations\/coupon-campaigns\/[^/]+\/publication$/, () => HttpResponse.json({ ...uploadedCampaign, state: "PUBLISHED", version: 2 }));
+const publishedCampaign = { ...uploadedCampaign, state: "PUBLISHED" as const, version: 2 };
+const stopCampaign = http.post(/\/api\/v1\/operations\/coupon-campaigns\/[^/]+\/stoppage$/, () => HttpResponse.json({ ...publishedCampaign, state: "STOPPED", version: 3 }));
 
 const meta = {
   title: "Pages/Operations/Coupon campaigns",
@@ -41,7 +43,7 @@ const meta = {
   parameters: {
     docs: { description: { component: "운영팀이 선착순 쿠폰의 전체 조건과 고정 만료 시각을 초안으로 만들고 상태를 확인하는 화면입니다." }, story: { inline: false, height: "980px" } },
     routing: { path: "/ops/campaigns", initialEntry: "/ops/campaigns" },
-    msw: { handlers: [listCampaigns, createCampaign, listStores, listMenus, replaceBanner, publishCampaign] },
+    msw: { handlers: [listCampaigns, createCampaign, listStores, listMenus, replaceBanner, publishCampaign, stopCampaign] },
   },
 } satisfies Meta<typeof CouponCampaignsPage>;
 
@@ -75,6 +77,17 @@ export const BannerPublication: Story = {
     await expect(await canvas.findByAltText("노란 배경의 가을 라떼 쿠폰 배너")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "고객에게 게시" }));
     await expect(await canvas.findByText("PUBLISHED")).toBeVisible();
+  },
+};
+
+export const PublishedCampaignStoppage: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/operations/coupon-campaigns", () => HttpResponse.json({ items: [publishedCampaign], page: { nextCursor: null } })), listStores, stopCampaign] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("PUBLISHED")).toBeVisible();
+    await userEvent.type(canvas.getByLabelText("중단 사유"), "운영팀 긴급 중단 결정");
+    await userEvent.click(canvas.getByRole("button", { name: "신규 다운로드 중단" }));
+    await expect(await canvas.findByText("STOPPED")).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: "신규 다운로드 중단" })).not.toBeInTheDocument();
   },
 };
 

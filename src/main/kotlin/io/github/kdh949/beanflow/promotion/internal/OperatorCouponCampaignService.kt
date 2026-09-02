@@ -22,6 +22,7 @@ import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignSnapshot
 import io.github.kdh949.beanflow.promotion.api.PublishLimitedCouponCampaignCommand
 import io.github.kdh949.beanflow.promotion.api.ReplaceLimitedCouponCampaignBannerCommand
 import io.github.kdh949.beanflow.promotion.api.ReplayLimitedCouponCampaignBannerCommand
+import io.github.kdh949.beanflow.promotion.api.StopLimitedCouponCampaignCommand
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.CursorSortAdapter
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -219,6 +220,28 @@ internal class OperatorCouponCampaignService(
         return view(published)
     }
 
+    @Transactional
+    fun stop(
+        context: OperatorCouponCampaignCommandContext,
+        campaignId: UUID,
+        expectedVersion: Long,
+    ): OperatorCouponCampaignView {
+        authorizeWrite(context)
+        val stopped =
+            campaigns.stop(
+                StopLimitedCouponCampaignCommand(
+                    context.actorId,
+                    context.idempotencyKey,
+                    campaignId,
+                    expectedVersion,
+                    context.reason,
+                    clock.instant(),
+                ),
+            )
+        auditChange(context, stopped, STOPPED_ACTION)
+        return view(stopped)
+    }
+
     private fun view(
         campaign: LimitedCouponCampaignSnapshot,
         knownStoreName: String? = null,
@@ -334,6 +357,7 @@ internal class OperatorCouponCampaignService(
         const val CREATED_ACTION = "COUPON_CAMPAIGN_DRAFT_CREATED"
         const val BANNER_ACTION = "COUPON_CAMPAIGN_BANNER_UPDATED"
         const val PUBLISHED_ACTION = "COUPON_CAMPAIGN_PUBLISHED"
+        const val STOPPED_ACTION = "COUPON_CAMPAIGN_STOPPED"
         const val CURSOR_ENDPOINT = "operations-coupon-campaigns"
         const val DEFAULT_PAGE_SIZE = 20
         const val MAX_PAGE_SIZE = 100
