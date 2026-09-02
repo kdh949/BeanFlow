@@ -1,8 +1,13 @@
 package io.github.kdh949.beanflow.promotion.internal
 
+import io.github.kdh949.beanflow.merchant.api.PreparedStorefrontImage
 import io.github.kdh949.beanflow.merchant.api.StoreDisplaySnapshotOperations
 import io.github.kdh949.beanflow.merchant.api.StoreMenuQueryOperations
 import io.github.kdh949.beanflow.merchant.api.StoreMenuView
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageAccess
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageUpload
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
@@ -14,6 +19,9 @@ import io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization
 import io.github.kdh949.beanflow.promotion.api.CreateLimitedCouponCampaignDraftCommand
 import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignOperations
 import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignSnapshot
+import io.github.kdh949.beanflow.promotion.api.PublishLimitedCouponCampaignCommand
+import io.github.kdh949.beanflow.promotion.api.ReplaceLimitedCouponCampaignBannerCommand
+import io.github.kdh949.beanflow.promotion.api.ReplayLimitedCouponCampaignBannerCommand
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.CursorSortAdapter
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -40,6 +48,7 @@ internal data class OperatorCouponCampaignCommandContext(
 internal data class OperatorCouponCampaignView(
     val campaign: LimitedCouponCampaignSnapshot,
     val storeName: String,
+    val bannerAccess: StorefrontImageAccess?,
 )
 
 internal data class OperatorCouponCampaignPage(
@@ -68,6 +77,7 @@ internal class OperatorCouponCampaignService(
     private val auditQueries: AuditRecordQueryOperations,
     private val correlationIds: CorrelationIdSource,
     private val cursors: SignedCursorCodec,
+    private val storage: StorefrontImageStorageOperations,
     private val clock: Clock,
 ) {
     @Transactional
@@ -83,7 +93,7 @@ internal class OperatorCouponCampaignService(
                 command.copy(actorId = context.actorId, idempotencyKey = context.idempotencyKey, now = clock.instant()),
             )
         auditCreated(context, campaign)
-        return OperatorCouponCampaignView(campaign, store.name)
+        return view(campaign, store.name)
     }
 
     @Transactional
@@ -93,7 +103,7 @@ internal class OperatorCouponCampaignService(
     ): OperatorCouponCampaignView {
         authorization.requireActive(actorId, OperatorPermission.PROMOTION_CAMPAIGN_READ)
         val campaign = campaigns.find(campaignId) ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Campaign not found")
-        return OperatorCouponCampaignView(campaign, stores.require(campaign.storeId).name)
+        return view(campaign)
     }
 
     @Transactional
@@ -107,7 +117,7 @@ internal class OperatorCouponCampaignService(
         if (pageSize !in 1..MAX_PAGE_SIZE) invalid("limit must be between 1 and $MAX_PAGE_SIZE")
         val after = cursor?.let { cursors.verify(it, cursorScope()).sort }
         val page = campaigns.list(after?.createdAt, after?.campaignId, pageSize)
-        val views = page.campaigns.map { campaign -> OperatorCouponCampaignView(campaign, stores.require(campaign.storeId).name) }
+        val views = page.campaigns.map(::view)
         val nextCursor =
             if (page.nextCreatedAt != null && page.nextCampaignId != null) {
                 cursors.issue(
@@ -121,11 +131,11 @@ internal class OperatorCouponCampaignService(
         return OperatorCouponCampaignPage(views, nextCursor)
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun listStoreOptions(actorId: UUID) =
         authorization.requireActive(actorId, OperatorPermission.PROMOTION_CAMPAIGN_READ).let { stores.list(STORE_OPTION_LIMIT) }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun listMenuOptions(
         actorId: UUID,
         storeId: UUID,
@@ -136,6 +146,87 @@ internal class OperatorCouponCampaignService(
             OperatorCouponCampaignMenuOption(it.menuId, it.name, it.basePriceKrw)
         }
     }
+
+    @Transactional
+    fun authorizeBanner(context: OperatorCouponCampaignCommandContext) {
+        authorizeWrite(context)
+    }
+
+    @Transactional
+    fun replayBanner(
+        context: OperatorCouponCampaignCommandContext,
+        campaignId: UUID,
+        expectedVersion: Long,
+        sha256: String,
+    ): OperatorCouponCampaignView? {
+        authorizeWrite(context)
+        return campaigns
+            .replayBanner(
+                ReplayLimitedCouponCampaignBannerCommand(
+                    context.actorId,
+                    context.idempotencyKey,
+                    campaignId,
+                    expectedVersion,
+                    sha256,
+                    context.reason,
+                ),
+            )?.let(::view)
+    }
+
+    @Transactional
+    fun replaceBanner(
+        context: OperatorCouponCampaignCommandContext,
+        campaignId: UUID,
+        expectedVersion: Long,
+        prepared: PreparedStorefrontImage,
+    ): OperatorCouponCampaignView {
+        authorizeWrite(context)
+        val updated =
+            campaigns.replaceBanner(
+                ReplaceLimitedCouponCampaignBannerCommand(
+                    context.actorId,
+                    context.idempotencyKey,
+                    campaignId,
+                    expectedVersion,
+                    prepared,
+                    context.reason,
+                    clock.instant(),
+                ),
+            )
+        auditChange(context, updated, BANNER_ACTION)
+        return view(updated)
+    }
+
+    @Transactional
+    fun publish(
+        context: OperatorCouponCampaignCommandContext,
+        campaignId: UUID,
+        expectedVersion: Long,
+    ): OperatorCouponCampaignView {
+        authorizeWrite(context)
+        val published =
+            campaigns.publish(
+                PublishLimitedCouponCampaignCommand(
+                    context.actorId,
+                    context.idempotencyKey,
+                    campaignId,
+                    expectedVersion,
+                    context.reason,
+                    clock.instant(),
+                ),
+            )
+        auditChange(context, published, PUBLISHED_ACTION)
+        return view(published)
+    }
+
+    private fun view(
+        campaign: LimitedCouponCampaignSnapshot,
+        knownStoreName: String? = null,
+    ) = OperatorCouponCampaignView(
+        campaign,
+        knownStoreName ?: stores.require(campaign.storeId).name,
+        campaign.banner?.let { storage.access(it.thumbnailKey) },
+    )
 
     private fun verifyMenus(command: CreateLimitedCouponCampaignDraftCommand) {
         if (command.allMenusEligible) return
@@ -183,6 +274,34 @@ internal class OperatorCouponCampaignService(
         )
     }
 
+    private fun auditChange(
+        context: OperatorCouponCampaignCommandContext,
+        campaign: LimitedCouponCampaignSnapshot,
+        action: String,
+    ) {
+        val sourceReference = "coupon-campaign-command:${context.actorId}:${sha256(context.idempotencyKey)}:$action"
+        val key = AuditRecordKey(action, "LimitedCouponCampaign", campaign.campaignId, sourceReference)
+        if (auditQueries.exists(key)) return
+        auditRecords.appendAll(
+            listOf(
+                AppendAuditRecordCommand(
+                    actorId = context.actorId.toString(),
+                    actorType = AuditActorType.PLATFORM_OPERATOR,
+                    category = AuditCategory.OPERATIONS_POLICY,
+                    action = action,
+                    targetType = "LimitedCouponCampaign",
+                    targetId = campaign.campaignId,
+                    occurredAt = clock.instant(),
+                    reason = context.reason.trim(),
+                    beforeSummary = emptyMap(),
+                    afterSummary = mapOf("state" to campaign.state.name, "version" to campaign.version.toString()),
+                    correlationId = correlationIds.currentOrCreate(),
+                    sourceReference = sourceReference,
+                ),
+            ),
+        )
+    }
+
     private fun cursorScope() =
         SignedCursorScope(
             endpoint = CURSOR_ENDPOINT,
@@ -213,10 +332,32 @@ internal class OperatorCouponCampaignService(
 
     private companion object {
         const val CREATED_ACTION = "COUPON_CAMPAIGN_DRAFT_CREATED"
+        const val BANNER_ACTION = "COUPON_CAMPAIGN_BANNER_UPDATED"
+        const val PUBLISHED_ACTION = "COUPON_CAMPAIGN_PUBLISHED"
         const val CURSOR_ENDPOINT = "operations-coupon-campaigns"
         const val DEFAULT_PAGE_SIZE = 20
         const val MAX_PAGE_SIZE = 100
         const val STORE_OPTION_LIMIT = 100
         val CURSOR_TTL: Duration = Duration.ofMinutes(30)
+    }
+}
+
+@Service
+internal class OperatorCouponCampaignMediaService(
+    private val transactions: OperatorCouponCampaignService,
+    private val storage: StorefrontImageStorageOperations,
+) {
+    fun replaceBanner(
+        context: OperatorCouponCampaignCommandContext,
+        campaignId: UUID,
+        expectedVersion: Long,
+        upload: StorefrontImageUpload,
+    ): OperatorCouponCampaignView {
+        transactions.authorizeBanner(context)
+        val normalized = storage.normalizeCampaignBanner(upload)
+        transactions.replayBanner(context, campaignId, expectedVersion, normalized.sha256)?.let { return it }
+        val prepared = storage.store(StorefrontImageTarget.CAMPAIGN, campaignId, normalized)
+        storage.access(prepared.thumbnailKey)
+        return transactions.replaceBanner(context, campaignId, expectedVersion, prepared)
     }
 }

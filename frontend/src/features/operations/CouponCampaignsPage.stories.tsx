@@ -10,6 +10,7 @@ const campaign = {
   "title": "가을 라떼 선착순 쿠폰",
   summary: "선착순 100명에게 라떼 1,000원 할인",
   bannerAltText: "노란 배경의 가을 라떼 쿠폰 배너",
+  banner: null,
   discount: { discountType: "FIXED_KRW", fixedAmountKrw: 1000, rateBps: null, maximumDiscountKrw: null },
   minimumOrderKrw: 5000,
   allMenusEligible: true,
@@ -29,6 +30,9 @@ const listCampaigns = http.get("/api/v1/operations/coupon-campaigns", () => Http
 const createCampaign = http.post("/api/v1/operations/coupon-campaigns", () => HttpResponse.json(campaign, { status: 201 }));
 const listStores = http.get("/api/v1/operations/coupon-campaigns/store-options", () => HttpResponse.json([campaign.store]));
 const listMenus = http.get("/api/v1/operations/coupon-campaigns/store-options/:storeId/menus", () => HttpResponse.json([{ menuId: "7419fd51-d17d-43c0-bc16-0d9496c90d97", name: "시그니처 라떼", basePriceKrw: 5800 }]));
+const uploadedCampaign = { ...campaign, banner: { url: "https://images.example.test/campaign.jpg", expiresAt: "2026-09-02T21:15:00+09:00" }, version: 1 };
+const replaceBanner = http.put(/\/api\/v1\/operations\/coupon-campaigns\/[^/]+\/banner(?:\?.*)?$/, () => HttpResponse.json(uploadedCampaign));
+const publishCampaign = http.post(/\/api\/v1\/operations\/coupon-campaigns\/[^/]+\/publication$/, () => HttpResponse.json({ ...uploadedCampaign, state: "PUBLISHED", version: 2 }));
 
 const meta = {
   title: "Pages/Operations/Coupon campaigns",
@@ -37,7 +41,7 @@ const meta = {
   parameters: {
     docs: { description: { component: "운영팀이 선착순 쿠폰의 전체 조건과 고정 만료 시각을 초안으로 만들고 상태를 확인하는 화면입니다." }, story: { inline: false, height: "980px" } },
     routing: { path: "/ops/campaigns", initialEntry: "/ops/campaigns" },
-    msw: { handlers: [listCampaigns, createCampaign, listStores, listMenus] },
+    msw: { handlers: [listCampaigns, createCampaign, listStores, listMenus, replaceBanner, publishCampaign] },
   },
 } satisfies Meta<typeof CouponCampaignsPage>;
 
@@ -59,6 +63,18 @@ export const CompleteDraftForm: Story = {
     await userEvent.selectOptions(canvas.getByLabelText("매장"), campaign.store.storeId);
     await userEvent.type(canvas.getByLabelText("캠페인 제목"), "가을 라떼 선착순 쿠폰");
     await expect(canvas.getByLabelText("쿠폰 만료 시각")).toBeVisible();
+  },
+};
+
+export const BannerPublication: Story = {
+  play: async ({ canvas }) => {
+    const input = await canvas.findByLabelText("이벤트 배너");
+    await userEvent.upload(input, new File(["banner"], "campaign.png", { type: "image/png" }));
+    await userEvent.type(canvas.getByLabelText("변경 사유"), "배너와 혜택 조건 검수 완료");
+    await userEvent.click(canvas.getByRole("button", { name: "배너 업로드" }));
+    await expect(await canvas.findByAltText("노란 배경의 가을 라떼 쿠폰 배너")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "고객에게 게시" }));
+    await expect(await canvas.findByText("PUBLISHED")).toBeVisible();
   },
 };
 

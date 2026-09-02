@@ -8,6 +8,7 @@ enum class StorefrontImageTarget(
 ) {
     STORE("stores"),
     MENU("menus"),
+    CAMPAIGN("campaigns"),
 }
 
 data class StorefrontImageUpload(
@@ -56,6 +57,8 @@ data class MenuImageChange(
 /** External AIStor work. Callers must invoke it outside their database transaction. */
 interface StorefrontImageStorageOperations {
     fun normalize(upload: StorefrontImageUpload): NormalizedStorefrontImageUpload
+
+    fun normalizeCampaignBanner(upload: StorefrontImageUpload): NormalizedStorefrontImageUpload
 
     fun store(
         target: StorefrontImageTarget,

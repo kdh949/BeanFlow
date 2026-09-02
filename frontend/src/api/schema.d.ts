@@ -2100,6 +2100,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/coupon-campaigns/{campaignId}/banner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * (운영팀) 선착순 쿠폰 캠페인 배너 등록
+         * @description DRAFT 캠페인의 고객 노출 배너를 등록하거나 교체합니다. JPEG 또는 PNG 원본을
+         *     1200x450 JPEG로 정규화해 저장하며, 같은 운영자와 같은 Idempotency-Key로 동일한
+         *     이미지 요청을 반복하면 외부 저장소에 다시 쓰지 않고 최초 결과를 반환합니다.
+         */
+        put: operations["replaceCouponCampaignBanner"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/coupon-campaigns/{campaignId}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * (운영팀) 선착순 쿠폰 캠페인 게시
+         * @description 정규화된 배너가 등록된 DRAFT 캠페인을 PUBLISHED로 전환합니다. 게시 후 고객
+         *     이벤트 목록의 노출 기간과 다운로드 가능 여부는 캠페인의 다운로드 시작·종료
+         *     시각과 남은 수량으로 결정됩니다. 동일 멱등 요청은 최초 게시 결과를 반환합니다.
+         */
+        post: operations["publishCouponCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/coupon-campaigns/store-options": {
         parameters: {
             query?: never;
@@ -7403,6 +7447,11 @@ export interface components {
         };
         /** @enum {string} */
         CouponCampaignState: "DRAFT" | "PUBLISHED" | "STOPPED";
+        CouponCampaignBanner: {
+            /** Format: uri */
+            url: string;
+            expiresAt: components["schemas"]["DateTime"];
+        };
         CouponCampaignDiscount: {
             /** @enum {string} */
             discountType: "FIXED_KRW" | "RATE_BPS";
@@ -7425,6 +7474,7 @@ export interface components {
             title: string;
             summary: string;
             bannerAltText: string;
+            banner: components["schemas"]["CouponCampaignBanner"] | null;
             discount: components["schemas"]["CouponCampaignDiscount"];
             /** Format: int64 */
             minimumOrderKrw: number;
@@ -7463,6 +7513,11 @@ export interface components {
             claimStartsAt: components["schemas"]["DateTime"];
             claimEndsAt: components["schemas"]["DateTime"];
             couponExpiresAt: components["schemas"]["DateTime"];
+            reason: components["schemas"]["OperationReason"];
+        };
+        PublishCouponCampaignRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
             reason: components["schemas"]["OperationReason"];
         };
         CouponCampaignStoreOption: {
@@ -13982,6 +14037,91 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceCouponCampaignBanner: {
+        parameters: {
+            query: {
+                expectedVersion: number;
+            };
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                campaignId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description 최대 5MiB JPEG 또는 PNG 원본
+                     */
+                    image: string;
+                    reason: components["schemas"]["OperationReason"];
+                };
+            };
+        };
+        responses: {
+            /** @description 배너 접근 URL을 포함한 갱신된 DRAFT 캠페인 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponCampaign"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    publishCouponCampaign: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                campaignId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishCouponCampaignRequest"];
+            };
+        };
+        responses: {
+            /** @description 게시된 선착순 쿠폰 캠페인 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponCampaign"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

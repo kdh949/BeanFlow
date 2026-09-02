@@ -50,6 +50,25 @@ internal class StorefrontImageNormalizer {
         )
     }
 
+    fun normalizeCampaignBanner(
+        bytes: ByteArray,
+        declaredContentType: String?,
+    ): NormalizedStorefrontImage {
+        if (bytes.isEmpty() || bytes.size > MAX_UPLOAD_BYTES) invalid()
+        val format = ImageFormat.detect(bytes) ?: invalid()
+        if (declaredContentType?.trim()?.lowercase() != format.contentType) invalid()
+        val oriented = orient(decodeWithinLimits(bytes, format), exifOrientation(bytes))
+        val banner = wideBanner(oriented)
+        val encoded = encode(banner, ImageFormat.JPEG)
+        return NormalizedStorefrontImage(
+            original = encoded,
+            thumbnail = encoded,
+            contentType = ImageFormat.JPEG.contentType,
+            extension = ImageFormat.JPEG.extension,
+            sha256 = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(encoded)),
+        )
+    }
+
     private fun decodeWithinLimits(
         bytes: ByteArray,
         expectedFormat: ImageFormat,
@@ -131,6 +150,24 @@ internal class StorefrontImageNormalizer {
         return target
     }
 
+    private fun wideBanner(source: BufferedImage): BufferedImage {
+        val targetRatio = BANNER_WIDTH.toDouble() / BANNER_HEIGHT.toDouble()
+        val sourceRatio = source.width.toDouble() / source.height.toDouble()
+        val cropWidth = if (sourceRatio > targetRatio) (source.height * targetRatio).toInt() else source.width
+        val cropHeight = if (sourceRatio > targetRatio) source.height else (source.width / targetRatio).toInt()
+        val x = (source.width - cropWidth) / 2
+        val y = (source.height - cropHeight) / 2
+        val target = BufferedImage(BANNER_WIDTH, BANNER_HEIGHT, BufferedImage.TYPE_INT_RGB)
+        target.createGraphics().use { graphics ->
+            graphics.color = Color.WHITE
+            graphics.fillRect(0, 0, BANNER_WIDTH, BANNER_HEIGHT)
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+            graphics.drawImage(source, 0, 0, BANNER_WIDTH, BANNER_HEIGHT, x, y, x + cropWidth, y + cropHeight, null)
+        }
+        return target
+    }
+
     private fun encode(
         source: BufferedImage,
         format: ImageFormat,
@@ -181,6 +218,8 @@ internal class StorefrontImageNormalizer {
         const val MAX_DIMENSION = 4096
         const val MAX_PIXELS = 16_777_216L
         const val THUMBNAIL_SIZE = 512
+        const val BANNER_WIDTH = 1200
+        const val BANNER_HEIGHT = 450
         const val JPEG_QUALITY = 0.9f
     }
 

@@ -25,6 +25,7 @@ describe("CouponCampaignsPage", () => {
       campaignId: "8a8999bf-3432-4a5d-b599-43bbc3ddc2e9",
       store: { storeId: "5273704d-f924-59e0-8883-827535fb86ad", name: "빈플로우 성수" },
       state: "DRAFT", title: "가을 라떼 쿠폰", summary: "선착순 100명 할인", bannerAltText: "가을 라떼 배너",
+      banner: null,
       discount: { discountType: "FIXED_KRW", fixedAmountKrw: 1000, rateBps: null, maximumDiscountKrw: null },
       minimumOrderKrw: 5000, allMenusEligible: true, eligibleMenuIds: [], cost: { costBearer: "PLATFORM", platformShareBps: 10000, storeShareBps: 0 },
       totalQuota: 100, issuedCount: 0, claimStartsAt: "2026-10-01T00:00:00+09:00", claimEndsAt: "2026-10-10T23:59:59+09:00", couponExpiresAt: "2026-10-31T23:59:59+09:00",

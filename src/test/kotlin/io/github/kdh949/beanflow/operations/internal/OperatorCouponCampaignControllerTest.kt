@@ -1,29 +1,42 @@
 package io.github.kdh949.beanflow.operations.internal
 
-import io.github.kdh949.beanflow.BeanflowSharedDatabaseTest
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.merchant.api.NormalizedStorefrontImageUpload
+import io.github.kdh949.beanflow.merchant.api.PreparedStorefrontImage
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageAccess
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.reset
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.mock.web.MockMultipartFile
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import tools.jackson.databind.json.JsonMapper
+import java.time.Instant
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
-@BeanflowSharedDatabaseTest
+@BeanflowIsolatedSpringContext("verifies campaign commands and media pointer commits across transaction boundaries")
 @SpringBootTest
 internal class OperatorCouponCampaignControllerTest
     @Autowired
@@ -31,11 +44,15 @@ internal class OperatorCouponCampaignControllerTest
         private val mockMvc: MockMvc,
         private val jdbc: JdbcTemplate,
     ) {
+        @MockitoBean
+        private lateinit var storage: StorefrontImageStorageOperations
+
         private val actorId = UUID.fromString("76000000-0000-0000-0000-000000000001")
         private val jsonMapper = JsonMapper.builder().build()
 
         @BeforeEach
         fun reset() {
+            reset(storage)
             jdbc.update("DELETE FROM promotion_limited_campaign_command")
             jdbc.update("DELETE FROM promotion_limited_coupon_claim_command")
             jdbc.update("DELETE FROM promotion_limited_coupon_claim")
@@ -46,8 +63,69 @@ internal class OperatorCouponCampaignControllerTest
             jdbc.update("DELETE FROM promotion_campaign")
             jdbc.update("DELETE FROM operations_operator_permission_grant")
             jdbc.update("DELETE FROM operations_audit_record")
+            jdbc.update("DELETE FROM merchant_menu")
+            jdbc.update("DELETE FROM merchant_store_discovery_profile")
+            jdbc.update("DELETE FROM merchant_store")
             grant("PROMOTION_CAMPAIGN_READ")
             grant("PROMOTION_CAMPAIGN_WRITE")
+        }
+
+        @Test
+        fun `operator uploads a banner and publishes the draft exactly once`() {
+            val storeId = seedStore("빈플로우 잠실")
+            val menuId = seedMenu(storeId, "바닐라 라떼")
+            val createdBody = create(createBody(storeId, menuId), "campaign-media-create")
+            val campaignId = UUID.fromString(jsonMapper.readTree(createdBody).get("campaignId").stringValue())
+            stubStorage(campaignId)
+
+            uploadBanner(campaignId, "campaign-banner-01")
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.version").value(1))
+                .andExpect(jsonPath("$.banner.url").value(SIGNED_URL))
+
+            uploadBanner(campaignId, "campaign-banner-01")
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.version").value(1))
+            verify(storage, times(1)).store(StorefrontImageTarget.CAMPAIGN, campaignId, NORMALIZED)
+
+            val publicationBody = """{"expectedVersion":1,"reason":"배너와 혜택 조건 검수 완료"}"""
+            repeat(2) {
+                mockMvc
+                    .perform(
+                        post("$BASE/coupon-campaigns/$campaignId/publication")
+                            .with(operatorJwt())
+                            .header("Idempotency-Key", "campaign-publish-01")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(publicationBody),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.state").value("PUBLISHED"))
+                    .andExpect(jsonPath("$.version").value(2))
+            }
+
+            assertThat(jdbc.queryForObject("SELECT active FROM promotion_campaign WHERE id = ?", Boolean::class.java, campaignId)).isTrue()
+            assertThat(auditActions()).containsExactly(
+                "COUPON_CAMPAIGN_DRAFT_CREATED",
+                "COUPON_CAMPAIGN_BANNER_UPDATED",
+                "COUPON_CAMPAIGN_PUBLISHED",
+            )
+        }
+
+        @Test
+        fun `campaign cannot be published without a banner`() {
+            val storeId = seedStore("빈플로우 여의도")
+            val menuId = seedMenu(storeId, "플랫화이트")
+            val createdBody = create(createBody(storeId, menuId), "campaign-no-banner-create")
+            val campaignId = jsonMapper.readTree(createdBody).get("campaignId").stringValue()
+
+            mockMvc
+                .perform(
+                    post("$BASE/coupon-campaigns/$campaignId/publication")
+                        .with(operatorJwt())
+                        .header("Idempotency-Key", "campaign-no-banner-publish")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"expectedVersion":0,"reason":"게시 사전 검증"}"""),
+                ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("ORDER_STATE_CONFLICT"))
         }
 
         @Test
@@ -203,6 +281,33 @@ internal class OperatorCouponCampaignControllerTest
             }
             """.trimIndent()
 
+        private fun uploadBanner(
+            campaignId: UUID,
+            key: String,
+        ) = mockMvc.perform(
+            multipart("$BASE/coupon-campaigns/$campaignId/banner")
+                .file(MockMultipartFile("image", "campaign.png", MediaType.IMAGE_PNG_VALUE, byteArrayOf(1, 2, 3)))
+                .param("expectedVersion", "0")
+                .param("reason", "이벤트 배너 등록")
+                .header("Idempotency-Key", key)
+                .with { request ->
+                    request.method = "PUT"
+                    request
+                }.with(operatorJwt()),
+        )
+
+        private fun stubStorage(campaignId: UUID) {
+            `when`(storage.normalizeCampaignBanner(anyValue())).thenReturn(NORMALIZED)
+            `when`(storage.store(StorefrontImageTarget.CAMPAIGN, campaignId, NORMALIZED)).thenReturn(PREPARED)
+            `when`(storage.access(PREPARED.thumbnailKey)).thenReturn(StorefrontImageAccess(SIGNED_URL, ACCESS_EXPIRES_AT))
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        private fun <T> anyValue(): T {
+            org.mockito.Mockito.any<T>()
+            return null as T
+        }
+
         private fun seedStore(name: String): UUID =
             UUID.randomUUID().also { storeId ->
                 jdbc.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)", storeId)
@@ -250,5 +355,10 @@ internal class OperatorCouponCampaignControllerTest
 
         private companion object {
             const val BASE = "/api/v1/operations"
+            const val HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            const val SIGNED_URL = "https://media.beanflow.test/campaign-signed"
+            val ACCESS_EXPIRES_AT: Instant = Instant.parse("2026-09-02T12:15:00Z")
+            val NORMALIZED = NormalizedStorefrontImageUpload(byteArrayOf(1), byteArrayOf(1), "image/jpeg", "jpg", HASH)
+            val PREPARED = PreparedStorefrontImage("campaigns/id/$HASH/original.jpg", "campaigns/id/$HASH/thumbnail.jpg", HASH)
         }
     }

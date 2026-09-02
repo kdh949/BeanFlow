@@ -6,6 +6,10 @@ import io.github.kdh949.beanflow.promotion.api.CreateLimitedCouponCampaignDraftC
 import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignOperations
 import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignPage
 import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignSnapshot
+import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignState
+import io.github.kdh949.beanflow.promotion.api.PublishLimitedCouponCampaignCommand
+import io.github.kdh949.beanflow.promotion.api.ReplaceLimitedCouponCampaignBannerCommand
+import io.github.kdh949.beanflow.promotion.api.ReplayLimitedCouponCampaignBannerCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.slf4j.LoggerFactory
@@ -13,6 +17,7 @@ import org.springframework.dao.DataAccessException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.databind.json.JsonMapper
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Instant
@@ -22,6 +27,7 @@ import java.util.UUID
 @Service
 internal class LimitedCouponCampaignService(
     private val persistence: LimitedCouponCampaignPersistence,
+    private val objectMapper: JsonMapper,
 ) : LimitedCouponCampaignOperations {
     @Transactional(propagation = Propagation.MANDATORY)
     override fun createDraft(command: CreateLimitedCouponCampaignDraftCommand): LimitedCouponCampaignSnapshot =
@@ -39,10 +45,19 @@ internal class LimitedCouponCampaignService(
                 if (previous.requestHash != requestHash) {
                     fail(FailureCode.IDEMPOTENCY_KEY_REUSED, "Idempotency key was already used for different campaign terms")
                 }
-                return@dependencyBoundary persistence.find(previous.campaignId)
-                    ?: fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Stored campaign command result is unavailable")
+                return@dependencyBoundary decode(previous)
             }
-            persistence.createDraft(normalized, requestHash)
+            val created = persistence.createDraft(normalized)
+            persistence.saveCommand(
+                normalized.actorId,
+                LimitedCouponCampaignPersistence.CREATE_OPERATION,
+                normalized.idempotencyKey,
+                requestHash,
+                created.campaignId,
+                encode(created),
+                normalized.now,
+            )
+            created
         }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -61,6 +76,125 @@ internal class LimitedCouponCampaignService(
             val campaigns = fetched.take(limit)
             val boundary = campaigns.lastOrNull().takeIf { fetched.size > limit }
             LimitedCouponCampaignPage(campaigns, boundary?.createdAt, boundary?.campaignId)
+        }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun replayBanner(command: ReplayLimitedCouponCampaignBannerCommand): LimitedCouponCampaignSnapshot? =
+        dependencyBoundary {
+            validateMutation(command.idempotencyKey, command.expectedVersion, command.reason)
+            val requestHash = bannerRequestHash(command.campaignId, command.expectedVersion, command.sha256, command.reason.trim())
+            persistence.lockCommand(command.actorId, LimitedCouponCampaignPersistence.BANNER_OPERATION, command.idempotencyKey)
+            replay(command.actorId, LimitedCouponCampaignPersistence.BANNER_OPERATION, command.idempotencyKey, requestHash)
+        }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun replaceBanner(command: ReplaceLimitedCouponCampaignBannerCommand): LimitedCouponCampaignSnapshot =
+        dependencyBoundary {
+            validateMutation(command.idempotencyKey, command.expectedVersion, command.reason)
+            if (!command.prepared.sha256.matches(SHA256_PATTERN) || command.prepared.originalKey.isBlank() ||
+                command.prepared.thumbnailKey.isBlank()
+            ) {
+                invalid("Prepared campaign banner is invalid")
+            }
+            val requestHash =
+                bannerRequestHash(command.campaignId, command.expectedVersion, command.prepared.sha256, command.reason.trim())
+            persistence.lockCommand(command.actorId, LimitedCouponCampaignPersistence.BANNER_OPERATION, command.idempotencyKey)
+            replay(command.actorId, LimitedCouponCampaignPersistence.BANNER_OPERATION, command.idempotencyKey, requestHash)?.let {
+                return@dependencyBoundary it
+            }
+            val current = persistence.lockCampaign(command.campaignId) ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Campaign not found")
+            requireDraftVersion(current, command.expectedVersion)
+            val updated = persistence.replaceBanner(command.campaignId, command.prepared, command.now)
+            persistence.saveCommand(
+                command.actorId,
+                LimitedCouponCampaignPersistence.BANNER_OPERATION,
+                command.idempotencyKey,
+                requestHash,
+                command.campaignId,
+                encode(updated),
+                command.now,
+            )
+            updated
+        }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun publish(command: PublishLimitedCouponCampaignCommand): LimitedCouponCampaignSnapshot =
+        dependencyBoundary {
+            validateMutation(command.idempotencyKey, command.expectedVersion, command.reason)
+            val requestHash =
+                sha256(listOf(command.campaignId, command.expectedVersion, command.reason.trim()).joinToString("|"))
+            persistence.lockCommand(command.actorId, LimitedCouponCampaignPersistence.PUBLISH_OPERATION, command.idempotencyKey)
+            replay(command.actorId, LimitedCouponCampaignPersistence.PUBLISH_OPERATION, command.idempotencyKey, requestHash)?.let {
+                return@dependencyBoundary it
+            }
+            val current = persistence.lockCampaign(command.campaignId) ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Campaign not found")
+            requireDraftVersion(current, command.expectedVersion)
+            if (current.banner == null) fail(FailureCode.ORDER_STATE_CONFLICT, "Campaign banner is required before publication")
+            if (!command.now.isBefore(
+                    current.claimEndsAt,
+                )
+            ) {
+                fail(FailureCode.ORDER_STATE_CONFLICT, "Campaign claim period has already ended")
+            }
+            val published = persistence.publish(command.campaignId, command.now)
+            persistence.saveCommand(
+                command.actorId,
+                LimitedCouponCampaignPersistence.PUBLISH_OPERATION,
+                command.idempotencyKey,
+                requestHash,
+                command.campaignId,
+                encode(published),
+                command.now,
+            )
+            published
+        }
+
+    private fun replay(
+        actorId: UUID,
+        operation: String,
+        idempotencyKey: String,
+        requestHash: String,
+    ): LimitedCouponCampaignSnapshot? {
+        val previous = persistence.findCommand(actorId, operation, idempotencyKey) ?: return null
+        if (previous.requestHash != requestHash) {
+            fail(FailureCode.IDEMPOTENCY_KEY_REUSED, "Idempotency key was already used for different campaign terms")
+        }
+        return decode(previous)
+    }
+
+    private fun requireDraftVersion(
+        current: LimitedCouponCampaignSnapshot,
+        expectedVersion: Long,
+    ) {
+        if (current.state != LimitedCouponCampaignState.DRAFT) fail(FailureCode.ORDER_STATE_CONFLICT, "Published campaign is immutable")
+        if (current.version != expectedVersion) fail(FailureCode.ORDER_STATE_CONFLICT, "Campaign version changed")
+    }
+
+    private fun validateMutation(
+        idempotencyKey: String,
+        expectedVersion: Long,
+        reason: String,
+    ) {
+        val key = idempotencyKey.trim()
+        if (key.length !in 8..128 || key.any(Char::isISOControl)) invalid("Idempotency key is invalid")
+        if (expectedVersion < 0) invalid("Expected version must not be negative")
+        text(reason, "Campaign command reason", 200)
+    }
+
+    private fun bannerRequestHash(
+        campaignId: UUID,
+        expectedVersion: Long,
+        bannerSha256: String,
+        reason: String,
+    ) = sha256(listOf(campaignId, expectedVersion, bannerSha256, reason).joinToString("|"))
+
+    private fun encode(snapshot: LimitedCouponCampaignSnapshot): String = objectMapper.writeValueAsString(snapshot)
+
+    private fun decode(record: LimitedCampaignCommandRecord): LimitedCouponCampaignSnapshot =
+        try {
+            objectMapper.readValue(record.responseJson, LimitedCouponCampaignSnapshot::class.java)
+        } catch (failure: RuntimeException) {
+            fail(FailureCode.DEPENDENCY_UNAVAILABLE, "Stored campaign command response is unavailable")
         }
 
     private fun validate(command: CreateLimitedCouponCampaignDraftCommand): CreateLimitedCouponCampaignDraftCommand {
@@ -153,8 +287,11 @@ internal class LimitedCouponCampaignService(
                 command.couponExpiresAt,
                 command.reason,
             ).joinToString("|")
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray(StandardCharsets.UTF_8)))
+        return sha256(canonical)
     }
+
+    private fun sha256(value: String) =
+        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.toByteArray(StandardCharsets.UTF_8)))
 
     private fun text(
         raw: String,
@@ -185,6 +322,7 @@ internal class LimitedCouponCampaignService(
 
     private companion object {
         const val MAX_PAGE_SIZE = 100
+        val SHA256_PATTERN = Regex("^[0-9a-f]{64}$")
         val logger = LoggerFactory.getLogger(LimitedCouponCampaignService::class.java)
     }
 }

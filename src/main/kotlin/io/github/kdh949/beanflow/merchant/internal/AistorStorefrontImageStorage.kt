@@ -27,6 +27,11 @@ internal class AistorStorefrontImageStorage(
             NormalizedStorefrontImageUpload(it.original, it.thumbnail, it.contentType, it.extension, it.sha256)
         }
 
+    override fun normalizeCampaignBanner(upload: StorefrontImageUpload): NormalizedStorefrontImageUpload =
+        normalizer.normalizeCampaignBanner(upload.bytes, upload.contentType).let {
+            NormalizedStorefrontImageUpload(it.original, it.thumbnail, it.contentType, it.extension, it.sha256)
+        }
+
     override fun store(
         target: StorefrontImageTarget,
         targetId: UUID,
@@ -62,7 +67,7 @@ internal class AistorStorefrontImageStorage(
     ): List<String> {
         require(limit > 0)
         return external("list-orphans") {
-            StorefrontImageTarget.entries
+            sequenceOf(StorefrontImageTarget.STORE, StorefrontImageTarget.MENU)
                 .asSequence()
                 .flatMap { target -> client.list("${target.objectPrefix}/") }
                 .filter { stored -> stored.lastModifiedAt.isBefore(olderThan) }

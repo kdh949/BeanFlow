@@ -2471,6 +2471,83 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /operations/coupon-campaigns/{campaignId}/banner:
+    put:
+      tags: [Operations]
+      operationId: replaceCouponCampaignBanner
+      summary: (운영팀) 선착순 쿠폰 캠페인 배너 등록
+      description: |
+        DRAFT 캠페인의 고객 노출 배너를 등록하거나 교체합니다. JPEG 또는 PNG 원본을
+        1200x450 JPEG로 정규화해 저장하며, 같은 운영자와 같은 Idempotency-Key로 동일한
+        이미지 요청을 반복하면 외부 저장소에 다시 쓰지 않고 최초 결과를 반환합니다.
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Identifier' }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: expectedVersion
+          in: query
+          required: true
+          schema: { type: integer, format: int64, minimum: 0 }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [image, reason]
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: 최대 5MiB JPEG 또는 PNG 원본
+                reason: { $ref: '#/components/schemas/OperationReason' }
+      responses:
+        '200':
+          description: 배너 접근 URL을 포함한 갱신된 DRAFT 캠페인
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CouponCampaign' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /operations/coupon-campaigns/{campaignId}/publication:
+    post:
+      tags: [Operations]
+      operationId: publishCouponCampaign
+      summary: (운영팀) 선착순 쿠폰 캠페인 게시
+      description: |
+        정규화된 배너가 등록된 DRAFT 캠페인을 PUBLISHED로 전환합니다. 게시 후 고객
+        이벤트 목록의 노출 기간과 다운로드 가능 여부는 캠페인의 다운로드 시작·종료
+        시각과 남은 수량으로 결정됩니다. 동일 멱등 요청은 최초 게시 결과를 반환합니다.
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Identifier' }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublishCouponCampaignRequest' }
+      responses:
+        '200':
+          description: 게시된 선착순 쿠폰 캠페인
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CouponCampaign' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
   /operations/coupon-campaigns/store-options:
     get:
       tags: [Operations]
@@ -7406,10 +7483,24 @@ components:
         claimEndsAt: { $ref: '#/components/schemas/DateTime' }
         couponExpiresAt: { $ref: '#/components/schemas/DateTime' }
         reason: { $ref: '#/components/schemas/OperationReason' }
+    PublishCouponCampaignRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, reason]
+      properties:
+        expectedVersion: { type: integer, format: int64, minimum: 0 }
+        reason: { $ref: '#/components/schemas/OperationReason' }
+    CouponCampaignBanner:
+      type: object
+      additionalProperties: false
+      required: [url, expiresAt]
+      properties:
+        url: { type: string, format: uri }
+        expiresAt: { $ref: '#/components/schemas/DateTime' }
     CouponCampaign:
       type: object
       additionalProperties: false
-      required: [campaignId, store, state, title, summary, bannerAltText, discount, minimumOrderKrw, allMenusEligible, eligibleMenuIds, cost, totalQuota, issuedCount, claimStartsAt, claimEndsAt, couponExpiresAt, createdAt, updatedAt, version]
+      required: [campaignId, store, state, title, summary, bannerAltText, banner, discount, minimumOrderKrw, allMenusEligible, eligibleMenuIds, cost, totalQuota, issuedCount, claimStartsAt, claimEndsAt, couponExpiresAt, createdAt, updatedAt, version]
       properties:
         campaignId: { $ref: '#/components/schemas/Identifier' }
         store: { $ref: '#/components/schemas/CouponCampaignStore' }
@@ -7417,6 +7508,10 @@ components:
         title: { type: string, minLength: 1, maxLength: 80 }
         summary: { type: string, minLength: 1, maxLength: 160 }
         bannerAltText: { type: string, minLength: 1, maxLength: 200 }
+        banner:
+          oneOf:
+            - $ref: '#/components/schemas/CouponCampaignBanner'
+            - type: 'null'
         discount: { $ref: '#/components/schemas/CouponCampaignDiscount' }
         minimumOrderKrw: { type: integer, format: int64, minimum: 0 }
         allMenusEligible: { type: boolean }

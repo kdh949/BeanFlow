@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.promotion.internal
 
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageUpload
 import io.github.kdh949.beanflow.promotion.api.CouponCostBearer
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
 import io.github.kdh949.beanflow.promotion.api.CreateLimitedCouponCampaignDraftCommand
@@ -15,17 +16,21 @@ import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.multipart.MultipartFile
 import java.time.Instant
 import java.util.UUID
 
@@ -88,6 +93,7 @@ data class CouponCampaignResponse(
     val title: String,
     val summary: String,
     val bannerAltText: String,
+    val banner: CouponCampaignBannerResponse?,
     val discount: LimitedCouponCampaignDiscount,
     val minimumOrderKrw: Long,
     val allMenusEligible: Boolean,
@@ -112,6 +118,7 @@ data class CouponCampaignResponse(
                 title = campaign.title,
                 summary = campaign.summary,
                 bannerAltText = campaign.bannerAltText,
+                banner = view.bannerAccess?.let { CouponCampaignBannerResponse(it.url, it.expiresAt) },
                 discount = campaign.discount,
                 minimumOrderKrw = campaign.minimumOrderKrw,
                 allMenusEligible = campaign.allMenusEligible,
@@ -135,6 +142,18 @@ data class CouponCampaignPageResponse(
     val page: CouponCampaignPageInfo,
 )
 
+data class CouponCampaignBannerResponse(
+    val url: String,
+    val expiresAt: Instant,
+)
+
+data class PublishCouponCampaignRequest(
+    @field:Min(0)
+    val expectedVersion: Long,
+    @field:Size(min = 1, max = 200)
+    val reason: String,
+)
+
 data class CouponCampaignPageInfo(
     val nextCursor: String?,
 )
@@ -155,6 +174,7 @@ data class CouponCampaignMenuOptionResponse(
 @RequestMapping("/api/v1/operations/coupon-campaigns")
 internal class OperatorCouponCampaignController(
     private val service: OperatorCouponCampaignService,
+    private val media: OperatorCouponCampaignMediaService,
 ) {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -194,6 +214,41 @@ internal class OperatorCouponCampaignController(
         @PathVariable storeId: UUID,
     ): List<CouponCampaignMenuOptionResponse> =
         service.listMenuOptions(actorId(actor), storeId).map { CouponCampaignMenuOptionResponse(it.menuId, it.name, it.basePriceKrw) }
+
+    @PutMapping("/{campaignId}/banner", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
+    @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
+    fun replaceBanner(
+        actor: OperatorActor,
+        @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
+        @PathVariable campaignId: UUID,
+        @RequestParam @Min(0) expectedVersion: Long,
+        @RequestParam @Size(min = 1, max = 200) reason: String,
+        @RequestPart("image") image: MultipartFile,
+    ): CouponCampaignResponse =
+        CouponCampaignResponse.of(
+            media.replaceBanner(
+                OperatorCouponCampaignCommandContext(actorId(actor), idempotencyKey, reason),
+                campaignId,
+                expectedVersion,
+                StorefrontImageUpload(image.bytes, image.contentType),
+            ),
+        )
+
+    @PostMapping("/{campaignId}/publication")
+    @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
+    fun publish(
+        actor: OperatorActor,
+        @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
+        @PathVariable campaignId: UUID,
+        @Valid @RequestBody request: PublishCouponCampaignRequest,
+    ): CouponCampaignResponse =
+        CouponCampaignResponse.of(
+            service.publish(
+                OperatorCouponCampaignCommandContext(actorId(actor), idempotencyKey, request.reason),
+                campaignId,
+                request.expectedVersion,
+            ),
+        )
 
     @GetMapping("/{campaignId}")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")

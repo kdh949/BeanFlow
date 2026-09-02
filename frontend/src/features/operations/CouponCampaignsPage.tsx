@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { Button, Checkbox, EmptyState, LoadingState, PageHeading, SelectField, TextAreaField, TextField } from "../../design-system";
+import { Button, Checkbox, EmptyState, FileField, LoadingState, PageHeading, SelectField, TextAreaField, TextField } from "../../design-system";
 import { shortDateTime } from "../../lib/format";
 import { ErrorState, StatusText } from "../../presentation/shared";
 
@@ -189,6 +189,10 @@ export function CouponCampaignsPage() {
       && (form.allMenusEligible || menuIds(form.eligibleMenuIds).length > 0),
   );
 
+  function updateCampaign(updated: Campaign) {
+    setCampaigns((current) => current.map((campaign) => campaign.campaignId === updated.campaignId ? updated : campaign));
+  }
+
   return (
     <div className="console-page coupon-campaign-page">
       <PageHeading
@@ -259,14 +263,93 @@ export function CouponCampaignsPage() {
           {loading ? <LoadingState label="쿠폰 캠페인을 조회하는 중" /> : null}
           {!loading && error ? <ErrorState error={error} retry={() => void load()} /> : null}
           {!loading && !error && campaigns.length === 0 ? <EmptyState title="등록된 캠페인이 없습니다" description="첫 선착순 쿠폰 캠페인 초안을 만들어 보세요." action={<Button onClick={() => setShowForm(true)}>첫 캠페인 만들기</Button>} /> : null}
-          {campaigns.length > 0 ? <div className="campaign-card-list">{campaigns.map((campaign) => <CampaignCard key={campaign.campaignId} campaign={campaign} />)}</div> : null}
+          {campaigns.length > 0 ? <div className="campaign-card-list">{campaigns.map((campaign) => <CampaignCard key={campaign.campaignId} campaign={campaign} onUpdated={updateCampaign} />)}</div> : null}
         </section>
       )}
     </div>
   );
 }
 
-function CampaignCard({ campaign }: { campaign: Campaign }) {
+function CampaignCard({ campaign, onUpdated }: { campaign: Campaign; onUpdated: (campaign: Campaign) => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
+  const [reason, setReason] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [commandError, setCommandError] = useState<unknown>(null);
+  const uploadIntent = useRef(new SubmissionIntent());
+  const publishIntent = useRef(new SubmissionIntent());
+
+  function selectFile(selected: File | null) {
+    setFile(selected);
+    setCommandError(null);
+    uploadIntent.current.rotate();
+  }
+
+  function changeReason(value: string) {
+    setReason(value);
+    setCommandError(null);
+    uploadIntent.current.rotate();
+    publishIntent.current.rotate();
+  }
+
+  async function uploadBanner() {
+    if (!file || !reason.trim()) return;
+    const fingerprint = `${campaign.campaignId}:${campaign.version}:${file.name}:${file.size}:${file.lastModified}:${reason.trim()}`;
+    const formData = new FormData();
+    formData.set("image", file);
+    formData.set("reason", reason.trim());
+    setUploading(true);
+    setCommandError(null);
+    try {
+      const updated = unwrap(await operationsApi.PUT("/operations/coupon-campaigns/{campaignId}/banner", {
+        params: {
+          path: { campaignId: campaign.campaignId },
+          query: { expectedVersion: campaign.version },
+          header: {
+            "Idempotency-Key": uploadIntent.current.keyFor(fingerprint),
+          },
+        },
+        body: { image: file.name, reason: reason.trim() },
+        bodySerializer: () => formData,
+      }));
+      onUpdated(updated);
+      setFile(null);
+      setFileInputKey((current) => current + 1);
+      uploadIntent.current.complete();
+    } catch (failure) {
+      if (failure instanceof ApiRequestError && failure.code === "IDEMPOTENCY_KEY_REUSED") uploadIntent.current.rotate();
+      setCommandError(failure);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function publishCampaign() {
+    if (!campaign.banner || !reason.trim()) return;
+    const body = { expectedVersion: campaign.version, reason: reason.trim() };
+    const fingerprint = JSON.stringify({ campaignId: campaign.campaignId, ...body });
+    setPublishing(true);
+    setCommandError(null);
+    try {
+      const updated = unwrap(await operationsApi.POST("/operations/coupon-campaigns/{campaignId}/publication", {
+        params: {
+          path: { campaignId: campaign.campaignId },
+          header: { "Idempotency-Key": publishIntent.current.keyFor(fingerprint) },
+        },
+        body,
+      }));
+      onUpdated(updated);
+      setReason("");
+      publishIntent.current.complete();
+    } catch (failure) {
+      if (failure instanceof ApiRequestError && failure.code === "IDEMPOTENCY_KEY_REUSED") publishIntent.current.rotate();
+      setCommandError(failure);
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   return (
     <article className="surface-card campaign-card">
       <div className="campaign-card-main">
@@ -279,6 +362,20 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
         <div><span>다운로드 종료</span><strong><CalendarClock size={15} aria-hidden="true" />{shortDateTime.format(new Date(campaign.claimEndsAt))}</strong></div>
         <div><span>쿠폰 만료</span><strong>{shortDateTime.format(new Date(campaign.couponExpiresAt))}</strong></div>
       </div>
+      {campaign.banner ? <img className="campaign-banner-preview" src={campaign.banner.url} alt={campaign.bannerAltText} /> : null}
+      {campaign.state === "DRAFT" ? (
+        <section className="campaign-publication" aria-label={`${campaign.title} 게시 설정`}>
+          <div className="campaign-publication-fields">
+            <FileField key={fileInputKey} label="이벤트 배너" description="JPEG 또는 PNG 원본, 최대 5MiB. 1200x450으로 정규화됩니다." accept="image/jpeg,image/png" onFileChange={selectFile} />
+            <TextAreaField label="변경 사유" description="배너 등록과 게시 감사 기록에 남습니다." resize="none" rows={2} value={reason} onValueChange={changeReason} />
+          </div>
+          {commandError ? <ErrorState error={commandError} /> : null}
+          <div className="campaign-publication-actions">
+            <Button variant="secondary" loading={uploading} disabled={!file || !reason.trim()} onClick={() => void uploadBanner()}>{campaign.banner ? "배너 교체" : "배너 업로드"}</Button>
+            <Button loading={publishing} disabled={!campaign.banner || !reason.trim()} onClick={() => void publishCampaign()}>고객에게 게시</Button>
+          </div>
+        </section>
+      ) : null}
     </article>
   );
 }

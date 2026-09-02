@@ -1,8 +1,10 @@
 package io.github.kdh949.beanflow.promotion.internal
 
+import io.github.kdh949.beanflow.merchant.api.PreparedStorefrontImage
 import io.github.kdh949.beanflow.promotion.api.CouponCostBearer
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
 import io.github.kdh949.beanflow.promotion.api.CreateLimitedCouponCampaignDraftCommand
+import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignBannerPointer
 import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignCost
 import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignDiscount
 import io.github.kdh949.beanflow.promotion.api.LimitedCouponCampaignSnapshot
@@ -19,6 +21,7 @@ import java.util.UUID
 internal data class LimitedCampaignCommandRecord(
     val requestHash: String,
     val campaignId: UUID,
+    val responseJson: String,
 )
 
 @Component
@@ -46,20 +49,23 @@ internal class LimitedCouponCampaignPersistence(
         jdbc
             .query(
                 """
-                SELECT request_hash, campaign_id
+                SELECT request_hash, campaign_id, response_json
                   FROM promotion_limited_campaign_command
                  WHERE actor_id = ? AND operation = ? AND idempotency_key = ?
                 """.trimIndent(),
-                { row, _ -> LimitedCampaignCommandRecord(row.getString("request_hash"), row.getObject("campaign_id", UUID::class.java)) },
+                { row, _ ->
+                    LimitedCampaignCommandRecord(
+                        row.getString("request_hash"),
+                        row.getObject("campaign_id", UUID::class.java),
+                        row.getString("response_json"),
+                    )
+                },
                 actorId,
                 operation,
                 idempotencyKey,
             ).singleOrNull()
 
-    fun createDraft(
-        command: CreateLimitedCouponCampaignDraftCommand,
-        requestHash: String,
-    ): LimitedCouponCampaignSnapshot {
+    fun createDraft(command: CreateLimitedCouponCampaignDraftCommand): LimitedCouponCampaignSnapshot {
         val campaignId = identifiers.next()
         jdbc.update(
             """
@@ -112,21 +118,78 @@ internal class LimitedCouponCampaignPersistence(
             campaignId,
             command.totalQuota,
         )
+        return requireNotNull(find(campaignId))
+    }
+
+    fun saveCommand(
+        actorId: UUID,
+        operation: String,
+        idempotencyKey: String,
+        requestHash: String,
+        campaignId: UUID,
+        responseJson: String,
+        now: Instant,
+    ) {
         jdbc.update(
             """
             INSERT INTO promotion_limited_campaign_command (
                 id, actor_id, operation, idempotency_key, request_hash, campaign_id,
-                created_at, retention_expires_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                response_json, created_at, retention_expires_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent(),
             identifiers.next(),
-            command.actorId,
-            CREATE_OPERATION,
-            command.idempotencyKey,
+            actorId,
+            operation,
+            idempotencyKey,
             requestHash,
             campaignId,
-            Timestamp.from(command.now),
-            Timestamp.from(command.now.plus(COMMAND_RETENTION)),
+            responseJson,
+            Timestamp.from(now),
+            Timestamp.from(now.plus(COMMAND_RETENTION)),
+        )
+    }
+
+    fun lockCampaign(campaignId: UUID): LimitedCouponCampaignSnapshot? {
+        jdbc.query("SELECT campaign_id FROM promotion_limited_campaign WHERE campaign_id = ? FOR UPDATE", { _, _ -> Unit }, campaignId)
+        return find(campaignId)
+    }
+
+    fun replaceBanner(
+        campaignId: UUID,
+        prepared: PreparedStorefrontImage,
+        now: Instant,
+    ): LimitedCouponCampaignSnapshot {
+        jdbc.update(
+            """
+            UPDATE promotion_limited_campaign
+               SET banner_original_key = ?, banner_thumbnail_key = ?, banner_sha256 = ?,
+                   banner_updated_at = ?, updated_at = ?, version = version + 1
+             WHERE campaign_id = ?
+            """.trimIndent(),
+            prepared.originalKey,
+            prepared.thumbnailKey,
+            prepared.sha256,
+            Timestamp.from(now),
+            Timestamp.from(now),
+            campaignId,
+        )
+        return requireNotNull(find(campaignId))
+    }
+
+    fun publish(
+        campaignId: UUID,
+        now: Instant,
+    ): LimitedCouponCampaignSnapshot {
+        jdbc.update("UPDATE promotion_campaign SET active = true, version = version + 1 WHERE id = ?", campaignId)
+        jdbc.update(
+            """
+            UPDATE promotion_limited_campaign
+               SET state = 'PUBLISHED', published_at = ?, updated_at = ?, version = version + 1
+             WHERE campaign_id = ?
+            """.trimIndent(),
+            Timestamp.from(now),
+            Timestamp.from(now),
+            campaignId,
         )
         return requireNotNull(find(campaignId))
     }
@@ -181,6 +244,15 @@ internal class LimitedCouponCampaignPersistence(
             title = getString("title"),
             summary = getString("summary"),
             bannerAltText = getString("banner_alt_text"),
+            banner =
+                getString("banner_original_key")?.let {
+                    LimitedCouponCampaignBannerPointer(
+                        originalKey = it,
+                        thumbnailKey = getString("banner_thumbnail_key"),
+                        sha256 = getString("banner_sha256"),
+                        updatedAt = getTimestamp("banner_updated_at").toInstant(),
+                    )
+                },
             discount =
                 LimitedCouponCampaignDiscount(
                     discountType = CouponDiscountType.valueOf(getString("discount_type")),
@@ -213,6 +285,8 @@ internal class LimitedCouponCampaignPersistence(
 
     internal companion object {
         const val CREATE_OPERATION = "LIMITED_CAMPAIGN_CREATE_V1"
+        const val BANNER_OPERATION = "LIMITED_CAMPAIGN_BANNER_REPLACE_V1"
+        const val PUBLISH_OPERATION = "LIMITED_CAMPAIGN_PUBLISH_V1"
         val COMMAND_RETENTION: Duration = Duration.ofDays(90)
         val BASE_QUERY =
             """
@@ -222,7 +296,8 @@ internal class LimitedCouponCampaignPersistence(
                    campaign.all_menus_eligible, campaign.cost_bearer,
                    campaign.platform_share_bps, campaign.store_share_bps,
                    limited.state AS limited_state, limited.title, limited.summary,
-                   limited.banner_alt_text, limited.claim_starts_at, limited.claim_ends_at,
+                   limited.banner_alt_text, limited.banner_original_key, limited.banner_thumbnail_key,
+                   limited.banner_sha256, limited.banner_updated_at, limited.claim_starts_at, limited.claim_ends_at,
                    limited.coupon_expires_at, limited.created_at, limited.updated_at,
                    limited.version AS limited_version, counter.total_quota, counter.issued_count
               FROM promotion_limited_campaign limited

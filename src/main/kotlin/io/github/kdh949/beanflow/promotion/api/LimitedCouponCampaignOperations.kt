@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.promotion.api
 
+import io.github.kdh949.beanflow.merchant.api.PreparedStorefrontImage
 import java.time.Instant
 import java.util.UUID
 
@@ -49,6 +50,7 @@ data class LimitedCouponCampaignSnapshot(
     val title: String,
     val summary: String,
     val bannerAltText: String,
+    val banner: LimitedCouponCampaignBannerPointer?,
     val discount: LimitedCouponCampaignDiscount,
     val minimumOrderKrw: Long,
     val allMenusEligible: Boolean,
@@ -62,6 +64,41 @@ data class LimitedCouponCampaignSnapshot(
     val createdAt: Instant,
     val updatedAt: Instant,
     val version: Long,
+)
+
+data class LimitedCouponCampaignBannerPointer(
+    val originalKey: String,
+    val thumbnailKey: String,
+    val sha256: String,
+    val updatedAt: Instant,
+)
+
+data class ReplaceLimitedCouponCampaignBannerCommand(
+    val actorId: UUID,
+    val idempotencyKey: String,
+    val campaignId: UUID,
+    val expectedVersion: Long,
+    val prepared: PreparedStorefrontImage,
+    val reason: String,
+    val now: Instant,
+)
+
+data class ReplayLimitedCouponCampaignBannerCommand(
+    val actorId: UUID,
+    val idempotencyKey: String,
+    val campaignId: UUID,
+    val expectedVersion: Long,
+    val sha256: String,
+    val reason: String,
+)
+
+data class PublishLimitedCouponCampaignCommand(
+    val actorId: UUID,
+    val idempotencyKey: String,
+    val campaignId: UUID,
+    val expectedVersion: Long,
+    val reason: String,
+    val now: Instant,
 )
 
 data class LimitedCouponCampaignPage(
@@ -80,4 +117,10 @@ interface LimitedCouponCampaignOperations {
         afterCampaignId: UUID?,
         limit: Int,
     ): LimitedCouponCampaignPage
+
+    fun replayBanner(command: ReplayLimitedCouponCampaignBannerCommand): LimitedCouponCampaignSnapshot?
+
+    fun replaceBanner(command: ReplaceLimitedCouponCampaignBannerCommand): LimitedCouponCampaignSnapshot
+
+    fun publish(command: PublishLimitedCouponCampaignCommand): LimitedCouponCampaignSnapshot
 }

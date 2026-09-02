@@ -21,7 +21,9 @@
 - [x] 2026-09-02: Slice 1의 V69 DB foundation, 운영 Campaign draft create/list/detail, 매장·메뉴
   picker, OpenAPI와 운영 화면을 구현했다. Testcontainers API·멱등성, Runtime OpenAPI parity,
   Spring Modulith, frontend unit/typecheck/product-copy, Storybook interaction/a11y를 통과했다.
-- [ ] Slice 2: Campaign banner upload와 publication.
+- [x] 2026-09-02: Slice 2의 1200x450 Campaign banner 정규화·저장, immutable pointer commit,
+  멱등 응답 저장(V70), publication, OpenAPI, 운영 화면과 canonical FileField를 구현했다. 외부 저장은 DB
+  트랜잭션 밖에서 수행하고 한국어 변경 사유는 multipart 본문으로 전달한다.
 - [ ] Slice 3: 로그인 고객 event campaign list.
 - [ ] Slice 4: atomic limited coupon claim과 기존 CouponIssuance 연계.
 - [ ] Slice 5: STOP, observability, full regression과 plan completion.
@@ -36,7 +38,7 @@ Operations는 persistent grant와 Audit API를 제공하고 Promotion이 이를 
 ## Plan of Work
 
 1. V69에 permission vocabulary, limited Campaign extension, counter, claim과 command tables를 additive하게
-   추가한다. 일반 Campaign은 backfill하지 않는다.
+   추가하고 V70에서 command 최초 응답을 저장한다. 일반 Campaign은 backfill하지 않는다.
 2. Operations draft API와 UI를 먼저 연결해 Campaign 조건을 생성·조회할 수 있게 한다.
 3. Media API를 추출하고 Campaign banner PUT과 publish command를 연결한다.
 4. 고객 event list와 banner presign을 추가한다.
