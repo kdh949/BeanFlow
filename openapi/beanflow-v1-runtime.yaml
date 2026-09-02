@@ -852,6 +852,14 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1brands"
   /operations/brands/{brandId}:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1brands~1{brandId}"
+  /operations/coupon-campaigns:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns"
+  /operations/coupon-campaigns/{campaignId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1{campaignId}"
+  /operations/coupon-campaigns/store-options:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1store-options"
+  /operations/coupon-campaigns/store-options/{storeId}/menus:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1store-options~1{storeId}~1menus"
   /operations/search-index/rebuild:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1search-index~1rebuild"
   /operations/stores/{storeId}/brand:

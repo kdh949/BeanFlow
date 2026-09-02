@@ -49,6 +49,8 @@ enum class OperatorPermission {
     MERCHANT_CREDENTIAL_MANAGE,
     STORE_BRAND_MANAGE,
     STORE_MEDIA_MANAGE,
+    PROMOTION_CAMPAIGN_READ,
+    PROMOTION_CAMPAIGN_WRITE,
 }
 
 interface OperatorPermissionAuthorization {
