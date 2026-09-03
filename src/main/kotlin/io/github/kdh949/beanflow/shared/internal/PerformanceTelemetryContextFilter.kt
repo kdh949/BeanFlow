@@ -54,6 +54,7 @@ internal class PerformanceTelemetryContextFilter : OncePerRequestFilter() {
         val SCENARIOS =
             setOf(
                 "quote-order",
+                "idempotency",
                 "board-polling",
                 "toss-success",
                 "toss-decline",
