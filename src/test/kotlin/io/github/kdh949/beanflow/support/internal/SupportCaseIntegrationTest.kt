@@ -133,6 +133,38 @@ internal class SupportCaseIntegrationTest
         }
 
         @Test
+        fun `support console queue is scoped to the current assignee and never cached`() {
+            grant(actorId, "SUPPORT_CASE_WRITE")
+            val created = createCase("support-console-queue-create-0001")
+
+            mockMvc
+                .perform(get("/api/v1/support/case-queue/summary").with(operatorJwt(actorId)))
+                .andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+
+            grant(actorId, "SUPPORT_CASE_READ")
+            mockMvc
+                .perform(get("/api/v1/support/case-queue/summary").with(operatorJwt(actorId)))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.active").value(1))
+                .andExpect(jsonPath("$.open").value(1))
+
+            mockMvc
+                .perform(get("/api/v1/support/case-queue").param("scope", "MINE").with(operatorJwt(actorId)))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].caseId").value(created.caseId.toString()))
+                .andExpect(jsonPath("$.items[0].primarySubject").doesNotExist())
+
+            mockMvc
+                .perform(get("/api/v1/support/case-queue").param("scope", "ALL").with(operatorJwt(actorId)))
+                .andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+        }
+
+        @Test
         fun `case lifecycle appends durable histories and rejects all closed case work`() {
             grant(actorId, "SUPPORT_CASE_WRITE")
             val created = createCase("support-lifecycle-create-0001")

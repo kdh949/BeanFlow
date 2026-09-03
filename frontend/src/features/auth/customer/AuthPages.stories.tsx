@@ -18,7 +18,7 @@ const meta = {
       },
       story: { inline: false, height: "560px" },
     },
-    routing: { path: "/app/login", initialEntry: "/app/login?next=%2Fapp%2Forders" },
+    routing: { surface: "customer", path: "/app/login", initialEntry: "/app/login?next=%2Fapp%2Forders" },
     msw: { handlers: unauthenticated },
   },
 } satisfies Meta<typeof CustomerLoginPage>;
@@ -96,10 +96,59 @@ export const RateLimited: Story = {
 export const SignUp: Story = {
   render: () => <CustomerSignupPage />,
   parameters: {
-    routing: { path: "/app/signup", initialEntry: "/app/signup" },
+    routing: { surface: "customer", path: "/app/signup", initialEntry: "/app/signup" },
   },
   play: async ({ canvas }) => {
     await expect(await canvas.findByLabelText("표시 이름")).toBeVisible();
     await expect(canvas.getByRole("button", { name: "가입하고 시작하기" })).toBeDisabled();
+  },
+};
+
+async function completeSignupForm(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) {
+  await userEvent.type(await canvas.findByLabelText("아이디"), "customer01");
+  await userEvent.type(canvas.getByLabelText("표시 이름"), "빈플로우 고객");
+  await userEvent.type(canvas.getByLabelText("비밀번호"), "correct-horse-battery");
+}
+
+export const DuplicateSignupId: Story = {
+  render: () => <CustomerSignupPage />,
+  parameters: {
+    routing: { surface: "customer", path: "/app/signup", initialEntry: "/app/signup" },
+    msw: {
+      handlers: [
+        ...unauthenticated,
+        http.post("/api/v1/auth/customer/registrations", () =>
+          HttpResponse.json({ code: "LOGIN_ID_UNAVAILABLE", message: "이미 사용 중인 아이디입니다." }, { status: 409 })),
+      ],
+    },
+  },
+  play: async ({ canvas }) => {
+    await completeSignupForm(canvas);
+    await userEvent.click(canvas.getByRole("button", { name: "가입하고 시작하기" }));
+    await expect(await canvas.findByText("이미 사용 중인 아이디입니다. 다른 아이디를 입력해 주세요.")).toBeVisible();
+    await expect(canvas.getByLabelText("아이디")).toHaveAttribute("aria-invalid", "true");
+  },
+};
+
+export const RegisteredThenLoginUnavailable: Story = {
+  render: () => <CustomerSignupPage />,
+  parameters: {
+    routing: { surface: "customer", path: "/app/signup", initialEntry: "/app/signup" },
+    msw: {
+      handlers: [
+        ...unauthenticated,
+        http.post("/api/v1/auth/customer/registrations", () => HttpResponse.json({ loginId: "customer01" }, { status: 201 })),
+        http.post("/api/v1/auth/customer/sessions", () =>
+          HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE", message: "인증 의존성을 사용할 수 없습니다." }, { status: 503 })),
+      ],
+    },
+  },
+  play: async ({ canvas }) => {
+    await completeSignupForm(canvas);
+    await userEvent.click(canvas.getByRole("button", { name: "가입하고 시작하기" }));
+    await expect(await canvas.findByText("가입은 완료됐지만 로그인하지 못했습니다. 비밀번호를 확인한 뒤 다시 시도해 주세요.")).toBeVisible();
+    await expect(canvas.getByText(/회원가입은 완료됐어요/)).toBeVisible();
+    await expect(canvas.getByLabelText("아이디")).toHaveAttribute("readonly");
+    await expect(canvas.getByRole("button", { name: "다시 로그인" })).toBeVisible();
   },
 };

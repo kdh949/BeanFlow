@@ -5,10 +5,103 @@ import {
   findCanonicalPatternStyleViolations,
   findDesignSystemDependencyViolations,
   findLegacyArtifactViolations,
+  findMerchantChromeOwnershipViolations,
+  findOperationsChromeOwnershipViolations,
+  findSupportChromeOwnershipViolations,
+  findWorkspaceFrameOwnershipViolations,
   findParallelControlStyleViolations,
   findPresentationBoundaryViolations,
   findRawControlViolations,
 } from "../scripts/presentation-boundary.mjs";
+
+test("keeps merchant sidebar and topbar under one presentation owner", () => {
+  assert.deepEqual(
+    findMerchantChromeOwnershipViolations(
+      "src/presentation/merchant-workspace/MerchantWorkspaceShell.tsx",
+      `<aside className="bf-merchant-sidebar" /><header className="bf-merchant-topbar" />`,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    findMerchantChromeOwnershipViolations(
+      "src/pages/console/AnotherStoreShell.tsx",
+      `<aside className="bf-merchant-sidebar" />`,
+    ).map(({ kind }) => kind),
+    ["merchant-chrome-outside-owner"],
+  );
+  assert.deepEqual(
+    findMerchantChromeOwnershipViolations(
+      "src/presentation/AppShells.tsx",
+      `export function ConsoleShell() { return <div />; }`,
+    ).map(({ kind }) => kind),
+    ["merchant-shell-composition-missing"],
+  );
+});
+
+test("keeps support sidebar and topbar under one presentation owner", () => {
+  assert.deepEqual(
+    findSupportChromeOwnershipViolations(
+      "src/presentation/support-workspace/SupportWorkspaceShell.tsx",
+      `<aside className="bf-support-sidebar" /><header className="bf-support-topbar" />`,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    findSupportChromeOwnershipViolations(
+      "src/features/support/AnotherSupportShell.tsx",
+      `<aside className="bf-support-sidebar" />`,
+    ).map(({ kind }) => kind),
+    ["support-chrome-outside-owner"],
+  );
+  assert.deepEqual(
+    findSupportChromeOwnershipViolations(
+      "src/presentation/AppShells.tsx",
+      `export function ConsoleShell() { return <div />; }`,
+    ).map(({ kind }) => kind),
+    ["support-shell-composition-missing"],
+  );
+});
+
+test("keeps operations sidebar and topbar under one presentation owner", () => {
+  assert.deepEqual(
+    findOperationsChromeOwnershipViolations(
+      "src/presentation/operations-workspace/OperationsWorkspaceShell.tsx",
+      `<aside className="bf-operations-sidebar" /><header className="bf-operations-topbar" />`,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    findOperationsChromeOwnershipViolations(
+      "src/pages/console/AnotherOperationsShell.tsx",
+      `<aside className="bf-operations-sidebar" />`,
+    ).map(({ kind }) => kind),
+    ["operations-chrome-outside-owner"],
+  );
+  assert.deepEqual(
+    findOperationsChromeOwnershipViolations(
+      "src/presentation/AppShells.tsx",
+      `export function ConsoleShell() { return <div />; }`,
+    ).map(({ kind }) => kind),
+    ["operations-shell-composition-missing"],
+  );
+});
+
+test("keeps workspace frame selectors inside the design-system owner", () => {
+  assert.deepEqual(
+    findWorkspaceFrameOwnershipViolations(
+      "src/design-system/patterns/navigation/WorkspaceFrame.tsx",
+      `<div className="bf-workspace-frame"><main className="bf-workspace-frame__content" /></div>`,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    findWorkspaceFrameOwnershipViolations(
+      "src/presentation/CopyFrame.tsx",
+      `<div className="bf-workspace-frame" />`,
+    ).map(({ kind }) => kind),
+    ["workspace-frame-outside-owner"],
+  );
+});
 
 test("allows presentation-neutral dependencies", () => {
   assert.deepEqual(
@@ -54,6 +147,49 @@ test("rejects target legacy route imports", () => {
   );
 
   assert.deepEqual(violations.map(({ kind }) => kind), ["legacy-route"]);
+});
+
+test("rejects legacy presentation imports from active reference pages and stories", () => {
+  assert.deepEqual(
+    findPresentationBoundaryViolations(
+      "src/features/customer/FavoriteStoresPage.tsx",
+      `import { StoreCard } from "../discovery/StoreCards";`,
+    ).map(({ kind }) => kind),
+    ["legacy-presentation"],
+  );
+  assert.deepEqual(
+    findPresentationBoundaryViolations(
+      "src/features/customer/FavoriteStoresPage.stories.tsx",
+      `import { customerStore } from "../../../.storybook/fixtures";
+       import { StoreCard } from "../discovery/StoreCards";`,
+    ).map(({ kind }) => kind),
+    ["legacy-presentation"],
+  );
+});
+
+test("auto-discovers the support-center presentation root and runtime routes", () => {
+  assert.deepEqual(
+    findPresentationBoundaryViolations(
+      "src/presentation/support-center/AnotherScreen.tsx",
+      `import { FormField } from "../../components/Ui";
+       import "../../styles.css";`,
+    ).map(({ kind }) => kind),
+    ["legacy-shared-presentation", "old-global-styles"],
+  );
+  assert.deepEqual(
+    findPresentationBoundaryViolations(
+      "src/features/support/SupportCenterRoutes.tsx",
+      `import { handlers } from "../../../.storybook/fixtures";`,
+    ).map(({ kind }) => kind),
+    ["story-fixture"],
+  );
+  assert.deepEqual(
+    findPresentationBoundaryViolations(
+      "src/features/support/SupportCenterRoutes.stories.tsx",
+      `import { HttpResponse, http } from "msw";`,
+    ),
+    [],
+  );
 });
 
 test("rejects retained target files and route-unused legacy CSS", () => {

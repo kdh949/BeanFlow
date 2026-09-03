@@ -874,10 +874,16 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1disputes"
   /support/searches:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1searches"
+  /support/case-queue/summary:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1case-queue~1summary"
+  /support/case-queue:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1case-queue"
   /support/cases:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases"
   /support/cases/{caseId}:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}"
+  /support/cases/{caseId}/overview:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1overview"
   /support/cases/{caseId}/assignments:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1assignments"
   /support/cases/{caseId}/status-transitions:
@@ -894,6 +900,18 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1timeline"
   /support/orders/{orderId}/timeline:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1orders~1{orderId}~1timeline"
+  /support/orders/{orderId}/overview:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1orders~1{orderId}~1overview"
+  /support/approval-tasks:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1approval-tasks"
+  /support/approval-tasks/{taskType}/{resourceId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1approval-tasks~1{taskType}~1{resourceId}"
+  /support/approval-tasks/{taskType}/{resourceId}/timeline:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1approval-tasks~1{taskType}~1{resourceId}~1timeline"
+  /support/compensations:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1compensations"
+  /support/profile-changes:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes"
   /support/cases/{caseId}/action-evaluations:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1action-evaluations"
   /support/cases/{caseId}/action-requests:

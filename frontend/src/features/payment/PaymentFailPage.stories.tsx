@@ -13,7 +13,7 @@ const meta = {
       description: { component: "provider callback 문구보다 server state를 우선하며, manual review에서는 공개 주문 추적과 도움말만 제공합니다." },
       story: { inline: false, height: "720px" },
     },
-    routing: { path: "/app/payments/:paymentId/fail", initialEntry: `/app/payments/${ids.payment}/fail?code=PAY_PROCESS_CANCELED` },
+    routing: { surface: "customer", path: "/app/payments/:paymentId/fail", initialEntry: `/app/payments/${ids.payment}/fail?code=PAY_PROCESS_CANCELED` },
   },
 } satisfies Meta<typeof PaymentFailPage>;
 

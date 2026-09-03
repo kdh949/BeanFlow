@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, waitFor } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { ids, merchantSignedInHandlers } from "../../../.storybook/fixtures";
 import { StoreDisputesPage } from "./StoreDisputesPage";
@@ -45,7 +45,7 @@ const meta = {
       },
       story: { inline: false, height: "700px" },
     },
-    routing: { path: "/store/disputes", initialEntry: "/store/disputes" },
+    routing: { surface: "store", path: "/store/disputes", initialEntry: "/store/disputes" },
     msw: { handlers: [...merchantSignedInHandlers, ownerStores, disputeHandler] },
   },
 } satisfies Meta<typeof StoreDisputesPage>;
@@ -79,7 +79,10 @@ export const NothingFiledYet: Story = {
     },
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText("접수한 이의제기가 없습니다")).toBeVisible();
+    await waitFor(() => {
+      const visibleEmptyStates = canvas.getAllByText("접수한 이의제기가 없습니다").filter((element) => element.checkVisibility());
+      expect(visibleEmptyStates).toHaveLength(1);
+    });
   },
 };
 

@@ -21,6 +21,10 @@ export type TextFieldType = "text" | "email" | "tel" | "password" | "number" | "
 
 export type TextFieldProps = FieldContentProps &
   Omit<InputHTMLAttributes<HTMLInputElement>, "className" | "style" | "size" | "type" | "value" | "onChange"> & {
+    /** Optional non-interactive icon or short adornment placed before the control. */
+    leading?: ReactNode;
+    /** Optional canonical action or status placed after the control. */
+    trailing?: ReactNode;
     type?: TextFieldType;
     value: string;
     onValueChange: (value: string) => void;
@@ -48,6 +52,8 @@ export function TextField({
   invalid = false,
   size = "md",
   labelVisibility = "visible",
+  leading,
+  trailing,
   type = "text",
   value,
   onValueChange,
@@ -58,7 +64,15 @@ export function TextField({
   const ids = useFieldIds(providedId, description, error, providedDescription);
   return (
     <FieldFrame label={label} labelVisibility={labelVisibility} inputId={ids.inputId} description={description} error={error} descriptionId={ids.descriptionId} errorId={ids.errorId}>
-      <input {...props} id={ids.inputId} className={`bf-field__control bf-field__control--${size}`} type={type} value={value} aria-invalid={error || invalid ? true : undefined} aria-describedby={ids.describedBy} onChange={(event) => onValueChange(event.target.value)} />
+      {leading || trailing ? (
+        <div className={`bf-field__control-frame bf-field__control-frame--${size}`}>
+          {leading ? <span className="bf-field__leading" aria-hidden="true">{leading}</span> : null}
+          <input {...props} id={ids.inputId} className="bf-field__control bf-field__control--framed" type={type} value={value} aria-invalid={error || invalid ? true : undefined} aria-describedby={ids.describedBy} onChange={(event) => onValueChange(event.target.value)} />
+          {trailing ? <span className="bf-field__trailing">{trailing}</span> : null}
+        </div>
+      ) : (
+        <input {...props} id={ids.inputId} className={`bf-field__control bf-field__control--${size}`} type={type} value={value} aria-invalid={error || invalid ? true : undefined} aria-describedby={ids.describedBy} onChange={(event) => onValueChange(event.target.value)} />
+      )}
     </FieldFrame>
   );
 }

@@ -15,3 +15,5 @@
 @import url("./components/forms/forms.css");
 @import url("./components/navigation/navigation.css");
 @import url("./patterns/layout/layout.css");
+@import url("./patterns/navigation/workspace-frame.css");
+@import url("./patterns/workspace/dense-workspace.css");

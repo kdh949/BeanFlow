@@ -60,7 +60,7 @@ const meta = {
       },
       story: { inline: false, height: "760px" },
     },
-    routing: { path: "/store/settlements", initialEntry: "/store/settlements" },
+    routing: { surface: "store", path: "/store/settlements", initialEntry: "/store/settlements" },
     msw: { handlers: [...merchantSignedInHandlers, ownerStores, batchHandler(), itemHandler] },
   },
 } satisfies Meta<typeof StoreSettlementsPage>;

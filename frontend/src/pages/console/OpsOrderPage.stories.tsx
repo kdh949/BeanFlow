@@ -12,7 +12,7 @@ const meta = {
   component: OpsOrderPage,
   tags: ["autodocs"],
   parameters: {
-    routing: { path: "/ops/orders", initialEntry: "/ops/orders" },
+    routing: { surface: "ops", path: "/ops/orders", initialEntry: "/ops/orders" },
     docs: {
       description: { component: "감사 사유가 있는 운영자 보상 조회와 불확실한 복구 단계를 표시하는 현재 route입니다." },
     },

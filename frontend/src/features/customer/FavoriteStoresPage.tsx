@@ -4,10 +4,9 @@ import type { components } from "../../api/schema";
 import { ApiRequestError, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
 import { EmptyState, LoadingState } from "../../design-system";
-import { PageHeading } from "../../design-system";
 import { Button, ButtonLink } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
-import { StoreCard } from "../discovery/StoreCards";
+import { CustomerReferencePage, RefreshStoreCard } from "../../presentation/beanflow-refresh";
 import { useResource } from "../shared/useResource";
 
 type CustomerStore = components["schemas"]["CustomerStore"];
@@ -42,8 +41,7 @@ export function FavoriteStoresPage() {
   }
 
   return (
-    <div className="customer-page favorite-stores-page">
-      <PageHeading title="즐겨찾기" />
+    <CustomerReferencePage title="즐겨찾기" description="자주 찾는 매장을 한눈에 확인하세요." layout="list">
       {favorites.state.status === "loading" ? <LoadingState label="즐겨찾기 매장을 불러오는 중" /> : null}
       {favorites.state.status === "failed" ? <ErrorState error={favorites.state.error} retry={favorites.reload} /> : null}
       {mutationError ? <ErrorState error={mutationError} /> : null}
@@ -58,7 +56,7 @@ export function FavoriteStoresPage() {
         <section className="favorite-store-list" aria-label="즐겨찾기 매장">
           {favorites.state.value.map((store) => (
             <article className="favorite-store-row" key={store.storeId}>
-              <StoreCard store={store} />
+              <RefreshStoreCard store={store} />
               <Button
                 variant="ghost"
                 loading={removing === store.storeId}
@@ -71,7 +69,7 @@ export function FavoriteStoresPage() {
           ))}
         </section>
       ) : null}
-    </div>
+    </CustomerReferencePage>
   );
 }
 

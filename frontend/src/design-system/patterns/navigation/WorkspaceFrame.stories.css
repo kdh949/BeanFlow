@@ -1,0 +1,34 @@
+.bf-workspace-story-sidebar {
+  min-height: 100svh;
+  padding: var(--sp-8) var(--sp-6);
+  border-right: var(--bw-hair) solid var(--divider);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-10);
+  background: var(--surface-card);
+  overflow: hidden;
+}
+
+.bf-workspace-story-sidebar nav { display: flex; flex-direction: column; gap: var(--sp-3); }
+.bf-workspace-story-sidebar a { min-height: var(--tap-min); display: flex; align-items: center; gap: var(--sp-4); white-space: nowrap; }
+
+.bf-workspace-story-topbar {
+  height: var(--workspace-topbar-h);
+  padding-inline: var(--gutter-desktop);
+  border-bottom: var(--bw-hair) solid var(--divider);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-4);
+  background: var(--surface-console-header);
+}
+
+.bf-workspace-story-content {
+  min-height: 520px;
+  padding: var(--sp-9);
+  border: var(--bw-hair) dashed var(--divider);
+  border-radius: var(--r-card);
+  background: var(--surface-card);
+}
+
+.bf-workspace-story-content p { margin-top: var(--sp-4); color: var(--text-muted); }

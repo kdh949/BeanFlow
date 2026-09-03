@@ -24,20 +24,6 @@
   background: var(--warning-fg);
 }
 
-.store-card { min-height: 104px; padding: var(--sp-4); border: 1px solid var(--border-hair); border-radius: var(--r-card); display: flex; align-items: center; gap: var(--sp-4); background: var(--surface-card); box-shadow: var(--sh-1); color: var(--text-body); }
-.store-card:hover { border-color: var(--border-accent); color: var(--text-body); box-shadow: var(--sh-2); }
-.store-card.is-unavailable { background: var(--surface-app); }
-.store-mark { width: 50px; height: 50px; flex: none; border-radius: var(--r-md); display: inline-flex; align-items: center; justify-content: center; background: var(--surface-brand-soft); color: var(--primary-bg-hover); }
-.store-thumbnail { width: var(--control-h-xl); height: var(--control-h-xl); flex: none; border-radius: var(--r-md); object-fit: cover; }
-.store-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
-.store-copy strong { overflow: hidden; color: var(--text-strong); text-overflow: ellipsis; white-space: nowrap; }
-.store-copy > span { display: flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: var(--fs-caption); }
-.availability { color: var(--text-faint); font-size: var(--fs-micro); font-weight: var(--fw-semibold); }
-.availability.is-open { color: var(--success-fg); }
-.store-state-copy { max-width: 132px; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-1); color: var(--text-faint); font-size: var(--fs-micro); text-align: right; }
-.store-state-copy > span { line-height: 1.35; }
-
-.store-copy > span em { font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .points-page { gap: var(--sp-5); }
 .points-balance { padding: var(--sp-7); display: flex; flex-direction: column; gap: var(--sp-3); }
 .points-balance .context-label { display: inline-flex; align-items: center; gap: var(--sp-2); }
@@ -327,9 +313,6 @@
 .favorite-action { position: relative; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); }
 .favorite-action .form-error { width: min(20rem, 80vw); margin: 0; }
 .favorite-store-list, .coupon-list { display: flex; flex-direction: column; gap: var(--sp-4); }
-.favorite-store-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); }
-.favorite-store-row > .store-card { min-width: 0; }
-.favorite-store-row > .bf-action { min-height: var(--control-h-lg); }
 .coupon-card { padding: var(--sp-5); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--sp-4); }
 .coupon-card.is-unavailable { background: var(--surface-sunken); }
 .coupon-icon { width: var(--control-h-md); height: var(--control-h-md); border-radius: var(--r-pill); display: grid; place-items: center; background: var(--surface-accent-soft); color: var(--text-accent); }

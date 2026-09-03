@@ -3,9 +3,9 @@ import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { merchantApi } from "../../api/merchantClient";
 import { EmptyState, LoadingState } from "../../design-system";
-import { PageHeading } from "../../design-system";
 import { Button } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
+import { WorkspaceReferencePage } from "../../presentation/beanflow-refresh";
 import { compactId, shortDateTime, won } from "../../lib/format";
 import { useMerchantStores } from "./useMerchantStores";
 import { StoreSelector } from "./StoreSelector";
@@ -33,7 +33,10 @@ export function StoreSettlementsPage() {
 
   const load = useCallback(async (cursor?: string, append = false) => {
     if (!storeId) {
-      setPage({ items: [], page: {} });
+      // The owned-store request settles before a store-scoped settlement request
+      // can begin. Keep the page in its neutral loading state during that handoff
+      // so an empty-settlement message never flashes for an unresolved store.
+      setPage(null);
       return;
     }
     if (append) setLoadingMore(true);
@@ -61,11 +64,7 @@ export function StoreSettlementsPage() {
   }
 
   return (
-    <div className="console-page">
-      <PageHeading
-        title="정산 내역"
-        action={<StoreSelector stores={stores} selected={selected} onSelect={(id) => { setOpenBatch(null); select(id); }} />}
-      />
+    <WorkspaceReferencePage title="정산 내역" description="정산 배치별 상세 내역과 금액을 확인하세요." action={<StoreSelector stores={stores} selected={selected} onSelect={(id) => { setOpenBatch(null); select(id); }} />}>
 
       {stores.length === 0 ? (
         <EmptyState
@@ -115,7 +114,7 @@ export function StoreSettlementsPage() {
           ) : null}
         </>
       )}
-    </div>
+    </WorkspaceReferencePage>
   );
 }
 

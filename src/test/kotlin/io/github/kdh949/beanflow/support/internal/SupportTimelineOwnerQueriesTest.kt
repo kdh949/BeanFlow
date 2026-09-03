@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.loyalty.api.LoyaltySupportTimelineOperations
 import io.github.kdh949.beanflow.notification.api.NotificationSupportTimelineOperations
 import io.github.kdh949.beanflow.operations.api.OperationsSupportTimelineOperations
 import io.github.kdh949.beanflow.ordering.api.OrderingSupportTimelineOperations
+import io.github.kdh949.beanflow.ordering.api.SupportOrderOverviewSnapshot
 import io.github.kdh949.beanflow.ordering.api.SupportOrderSnapshot
 import io.github.kdh949.beanflow.payment.api.PaymentSupportTimelineOperations
 import io.github.kdh949.beanflow.promotion.api.PromotionSupportTimelineOperations
@@ -105,6 +106,8 @@ class SupportTimelineOwnerQueriesTest {
         }
 
         override fun findOrderSnapshots(orderIds: Set<UUID>): List<SupportOrderSnapshot> = emptyList()
+
+        override fun findOrderOverviews(orderIds: Set<UUID>): List<SupportOrderOverviewSnapshot> = emptyList()
 
         private fun typeFor(source: SupportTimelineSource): SupportTimelineType =
             when (source) {

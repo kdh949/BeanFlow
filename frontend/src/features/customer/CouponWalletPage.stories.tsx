@@ -34,7 +34,7 @@ const meta = {
       },
       story: { inline: false, height: "720px" },
     },
-    routing: { path: "/app/coupons", initialEntry: `/app/coupons?storeId=${ids.store}` },
+    routing: { surface: "customer", path: "/app/coupons", initialEntry: `/app/coupons?storeId=${ids.store}` },
   },
   beforeEach: () => couponSelection.clear(),
 } satisfies Meta<typeof CouponWalletPage>;
@@ -87,7 +87,7 @@ export const Loading: Story = {
 
 export const StoreSelectionRequired: Story = {
   parameters: {
-    routing: { path: "/app/coupons", initialEntry: "/app/coupons" },
+    routing: { surface: "customer", path: "/app/coupons", initialEntry: "/app/coupons" },
     msw: { handlers: [] },
   },
   play: async ({ canvas }) => {

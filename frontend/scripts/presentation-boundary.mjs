@@ -25,6 +25,7 @@ const REMOVED_TARGET_FILES = [
   "src/features/merchant/StoreRefundPage.tsx",
   "src/pages/console/StoreOrderBoard.tsx",
   "src/pages/console/StoreOrderBoardView.tsx",
+  "src/features/discovery/StoreCards.tsx",
   "src/components/Ui.tsx",
   "src/components/Shells.tsx",
   "src/presentation/beanflow-refresh/RefreshPrimitives.tsx",
@@ -37,7 +38,42 @@ const REMOVED_TARGET_FILES = [
 const REMOVED_TARGET_SELECTORS = [
   ".home-page", ".store-search-page", ".store-profile", ".cart-lines",
   ".checkout-card", ".customer-order-detail-page", ".store-board-page", ".refund-lines",
+  ".store-card", ".store-mark", ".store-thumbnail", ".store-copy", ".availability", ".store-state-copy",
 ];
+
+const ACTIVE_REFERENCE_FILES = new Set([
+  "src/features/auth/customer/AuthPages.tsx",
+  "src/features/auth/customer/AuthPages.stories.tsx",
+  "src/features/auth/merchant/MerchantAuthPages.tsx",
+  "src/features/auth/merchant/MerchantAuthPages.stories.tsx",
+  "src/features/customer/CouponWalletPage.tsx",
+  "src/features/customer/CouponWalletPage.stories.tsx",
+  "src/features/customer/FavoriteStoresPage.tsx",
+  "src/features/customer/FavoriteStoresPage.stories.tsx",
+  "src/features/loyalty/PointsPage.tsx",
+  "src/features/loyalty/PointsPage.stories.tsx",
+  "src/features/merchant/StoreDisputesPage.tsx",
+  "src/features/merchant/StoreDisputesPage.stories.tsx",
+  "src/features/merchant/StoreRegionPage.tsx",
+  "src/features/merchant/StoreRegionPage.stories.tsx",
+  "src/features/merchant/StoreSettlementsPage.tsx",
+  "src/features/merchant/StoreSettlementsPage.stories.tsx",
+  "src/features/operations/MerchantAccountsPage.tsx",
+  "src/features/operations/MerchantAccountsPage.stories.tsx",
+  "src/features/operations/OperationsPolicyPage.tsx",
+  "src/features/operations/OperationsPolicyPage.stories.tsx",
+  "src/features/ordering/CustomerOrdersPage.tsx",
+  "src/features/ordering/CustomerOrdersPage.stories.tsx",
+  "src/features/payment/PaymentResultPages.tsx",
+  "src/features/payment/CustomerHelpPage.stories.tsx",
+  "src/features/payment/PaymentFailPage.stories.tsx",
+  "src/features/payment/PaymentSuccessPage.stories.tsx",
+  "src/pages/console/ConsolePages.tsx",
+  "src/pages/console/ConsolePages.stories.tsx",
+  "src/pages/console/OpsOrderPage.stories.tsx",
+  "src/presentation/AppShells.tsx",
+  "src/presentation/AppShells.stories.tsx",
+]);
 
 const DESIGN_SYSTEM_OWNED_SELECTORS = [
   ".context-label",
@@ -59,6 +95,19 @@ const DESIGN_SYSTEM_OWNED_SELECTORS = [
 const CANONICAL_PATTERN_SELECTORS = [
   ".bf-page-heading",
 ];
+
+const MERCHANT_CHROME_OWNER_SOURCE = "src/presentation/merchant-workspace/MerchantWorkspaceShell.tsx";
+const MERCHANT_CHROME_OWNER_STYLE = "src/presentation/merchant-workspace/merchant-workspace.css";
+const MERCHANT_CHROME_MARKER_PATTERN = /\bbf-merchant-(?:workspace|sidebar|topbar)\b/;
+const SUPPORT_CHROME_OWNER_SOURCE = "src/presentation/support-workspace/SupportWorkspaceShell.tsx";
+const SUPPORT_CHROME_OWNER_STYLE = "src/presentation/support-workspace/support-workspace.css";
+const SUPPORT_CHROME_MARKER_PATTERN = /\bbf-support-(?:workspace|sidebar|topbar)\b/;
+const OPERATIONS_CHROME_OWNER_SOURCE = "src/presentation/operations-workspace/OperationsWorkspaceShell.tsx";
+const OPERATIONS_CHROME_OWNER_STYLE = "src/presentation/operations-workspace/operations-workspace.css";
+const OPERATIONS_CHROME_MARKER_PATTERN = /\bbf-operations-(?:workspace|sidebar|topbar)\b/;
+const WORKSPACE_FRAME_OWNER_SOURCE = "src/design-system/patterns/navigation/WorkspaceFrame.tsx";
+const WORKSPACE_FRAME_OWNER_STYLE = "src/design-system/patterns/navigation/workspace-frame.css";
+const WORKSPACE_FRAME_MARKER_PATTERN = /\bbf-workspace-frame(?:__\w+)?\b/;
 
 const APPLICATION_LAYER_PREFIXES = [
   "src/api/",
@@ -99,8 +148,12 @@ function matchesOldGlobalStyles(normalized) {
 export function findPresentationBoundaryViolations(sourceFile, source) {
   const normalizedFile = sourceFile.replaceAll(path.sep, "/");
   const refreshSource = normalizedFile.startsWith("src/presentation/beanflow-refresh/");
+  const supportCenterSource = normalizedFile.startsWith("src/presentation/support-center/")
+    || normalizedFile === "src/features/support/SupportCenterRoutes.tsx"
+    || normalizedFile === "src/features/support/SupportCenterRoutes.stories.tsx";
   const routerSource = normalizedFile === "src/router.tsx";
-  if (!refreshSource && !routerSource) return [];
+  const activeReferenceSource = ACTIVE_REFERENCE_FILES.has(normalizedFile) || supportCenterSource;
+  if (!refreshSource && !routerSource && !activeReferenceSource) return [];
 
   const violations = [];
   for (const match of source.matchAll(IMPORT_PATTERN)) {
@@ -109,19 +162,19 @@ export function findPresentationBoundaryViolations(sourceFile, source) {
       ? normalizedImport(normalizedFile, importPath)
       : importPath;
 
-    if (refreshSource && matchesLegacySharedPresentation(normalized)) {
+    if ((refreshSource || activeReferenceSource) && matchesLegacySharedPresentation(normalized)) {
       violations.push({ kind: "legacy-shared-presentation", importPath });
       continue;
     }
-    if (refreshSource && matchesOldGlobalStyles(normalized)) {
+    if ((refreshSource || activeReferenceSource) && matchesOldGlobalStyles(normalized)) {
       violations.push({ kind: "old-global-styles", importPath });
       continue;
     }
-    if (refreshSource && (/\.stories(?:\.|$)/.test(importPath) || /(?:^|\/)fixtures?(?:\/|$)/.test(importPath))) {
+    if ((refreshSource || (activeReferenceSource && !normalizedFile.endsWith(".stories.tsx"))) && (/\.stories(?:\.|$)/.test(importPath) || /(?:^|\/)fixtures?(?:\/|$)/.test(importPath))) {
       violations.push({ kind: "story-fixture", importPath });
       continue;
     }
-    if (refreshSource && matchesLegacyTarget(normalized)) {
+    if ((refreshSource || activeReferenceSource) && matchesLegacyTarget(normalized)) {
       violations.push({ kind: "legacy-presentation", importPath });
       continue;
     }
@@ -190,6 +243,54 @@ export function findCanonicalPatternStyleViolations(sourceFile, styles) {
   return violations;
 }
 
+export function findMerchantChromeOwnershipViolations(sourceFile, source) {
+  const normalizedFile = sourceFile.replaceAll(path.sep, "/");
+  if (normalizedFile === MERCHANT_CHROME_OWNER_SOURCE || normalizedFile === MERCHANT_CHROME_OWNER_STYLE) return [];
+
+  const violations = [];
+  if (MERCHANT_CHROME_MARKER_PATTERN.test(source)) {
+    violations.push({ kind: "merchant-chrome-outside-owner" });
+  }
+  if (normalizedFile === "src/presentation/AppShells.tsx" && !/<MerchantWorkspaceShell\b/.test(source)) {
+    violations.push({ kind: "merchant-shell-composition-missing" });
+  }
+  return violations;
+}
+
+export function findSupportChromeOwnershipViolations(sourceFile, source) {
+  const normalizedFile = sourceFile.replaceAll(path.sep, "/");
+  if (normalizedFile === SUPPORT_CHROME_OWNER_SOURCE || normalizedFile === SUPPORT_CHROME_OWNER_STYLE) return [];
+
+  const violations = [];
+  if (SUPPORT_CHROME_MARKER_PATTERN.test(source)) {
+    violations.push({ kind: "support-chrome-outside-owner" });
+  }
+  if (normalizedFile === "src/presentation/AppShells.tsx" && !/<SupportWorkspaceShell\b/.test(source)) {
+    violations.push({ kind: "support-shell-composition-missing" });
+  }
+  return violations;
+}
+
+export function findOperationsChromeOwnershipViolations(sourceFile, source) {
+  const normalizedFile = sourceFile.replaceAll(path.sep, "/");
+  if (normalizedFile === OPERATIONS_CHROME_OWNER_SOURCE || normalizedFile === OPERATIONS_CHROME_OWNER_STYLE) return [];
+
+  const violations = [];
+  if (OPERATIONS_CHROME_MARKER_PATTERN.test(source)) {
+    violations.push({ kind: "operations-chrome-outside-owner" });
+  }
+  if (normalizedFile === "src/presentation/AppShells.tsx" && !/<OperationsWorkspaceShell\b/.test(source)) {
+    violations.push({ kind: "operations-shell-composition-missing" });
+  }
+  return violations;
+}
+
+export function findWorkspaceFrameOwnershipViolations(sourceFile, source) {
+  const normalizedFile = sourceFile.replaceAll(path.sep, "/");
+  if (normalizedFile === WORKSPACE_FRAME_OWNER_SOURCE || normalizedFile === WORKSPACE_FRAME_OWNER_STYLE) return [];
+  return WORKSPACE_FRAME_MARKER_PATTERN.test(source) ? [{ kind: "workspace-frame-outside-owner" }] : [];
+}
+
 export function findLegacyArtifactViolations(existingFiles, styles) {
   const violations = REMOVED_TARGET_FILES.filter((file) => existingFiles.has(file)).map((file) => ({ kind: "legacy-file", file }));
   for (const selector of REMOVED_TARGET_SELECTORS) {
@@ -223,9 +324,14 @@ function run() {
   const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const candidates = [
     path.join(frontendRoot, "src/router.tsx"),
+    ...[...ACTIVE_REFERENCE_FILES].map((file) => path.join(frontendRoot, file)),
     ...collectFiles(path.join(frontendRoot, "src/presentation/beanflow-refresh"))
       .filter((file) => /\.(?:ts|tsx)$/.test(file) && !/\.stories\.tsx$/.test(file)),
-  ];
+    ...collectFiles(path.join(frontendRoot, "src/presentation/support-center"))
+      .filter((file) => /\.(?:ts|tsx)$/.test(file)),
+    path.join(frontendRoot, "src/features/support/SupportCenterRoutes.tsx"),
+    path.join(frontendRoot, "src/features/support/SupportCenterRoutes.stories.tsx"),
+  ].filter((file, index, files) => fs.existsSync(file) && files.indexOf(file) === index);
   const violations = candidates.flatMap((file) => {
     const relative = path.relative(frontendRoot, file);
     return findPresentationBoundaryViolations(relative, fs.readFileSync(file, "utf8"))
@@ -242,7 +348,14 @@ function run() {
     .filter((file) => /\.tsx$/.test(file) && !/\.stories\.tsx$/.test(file));
   violations.push(...productSourceFiles.flatMap((file) => {
     const relative = path.relative(frontendRoot, file);
-    return findRawControlViolations(relative, fs.readFileSync(file, "utf8"))
+    const source = fs.readFileSync(file, "utf8");
+    return [
+      ...findRawControlViolations(relative, source),
+      ...findMerchantChromeOwnershipViolations(relative, source),
+      ...findSupportChromeOwnershipViolations(relative, source),
+      ...findOperationsChromeOwnershipViolations(relative, source),
+      ...findWorkspaceFrameOwnershipViolations(relative, source),
+    ]
       .map((violation) => ({ file: relative, ...violation }));
   }));
   const productStyleFiles = collectFiles(path.join(frontendRoot, "src"))
@@ -253,6 +366,10 @@ function run() {
     return [
       ...findParallelControlStyleViolations(relative, styles),
       ...findCanonicalPatternStyleViolations(relative, styles),
+      ...findMerchantChromeOwnershipViolations(relative, styles),
+      ...findSupportChromeOwnershipViolations(relative, styles),
+      ...findOperationsChromeOwnershipViolations(relative, styles),
+      ...findWorkspaceFrameOwnershipViolations(relative, styles),
     ].map((violation) => ({ file: relative, ...violation }));
   }));
   const existingFiles = new Set(collectFiles(path.join(frontendRoot, "src")).map((file) => path.relative(frontendRoot, file).replaceAll(path.sep, "/")));
@@ -265,7 +382,7 @@ function run() {
     process.exitCode = 1;
     return;
   }
-  console.log("presentation boundary: passed");
+  console.log(`presentation boundary: passed (legacy presentation imports 0 across ${candidates.length} active route/story/refresh sources)`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) run();

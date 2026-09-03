@@ -17,6 +17,20 @@
 .bf-field__control { width: 100%; min-width: 0; padding-inline: var(--sp-5); border: var(--bw-hair) solid var(--control-border); border-radius: var(--r-control); outline: 0; background: var(--control-bg); color: var(--control-text); font: inherit; transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard); }
 .bf-field__control--md { min-height: var(--control-h-md); }
 .bf-field__control--lg { min-height: var(--control-h-lg); }
+.bf-field__control-frame { width: 100%; min-width: 0; padding-inline: var(--sp-4); border: var(--bw-hair) solid var(--control-border); border-radius: var(--r-control); display: flex; align-items: center; gap: var(--sp-3); background: var(--control-bg); color: var(--control-text); transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard); }
+.bf-field__control-frame--md { min-height: var(--control-h-md); }
+.bf-field__control-frame--lg { min-height: var(--control-h-lg); }
+.bf-field__control-frame:hover:not(:has(input:disabled)):not(:has(input:read-only)) { border-color: var(--control-border-hover); }
+.bf-field__control-frame:focus-within { border-color: var(--control-border-focus); box-shadow: var(--control-focus); }
+.bf-field__control-frame:has(input[aria-invalid="true"]) { border-color: var(--control-invalid-border); }
+.bf-field__control-frame:has(input[aria-invalid="true"]):focus-within { box-shadow: var(--ring-danger); }
+.bf-field__control-frame:has(input:disabled) { border-color: var(--control-disabled-border); background: var(--control-disabled-bg); color: var(--control-disabled-text); }
+.bf-field__control--framed { min-height: calc(var(--control-h-md) - var(--sp-2)); padding: 0; flex: 1; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.bf-field__control-frame--lg .bf-field__control--framed { min-height: calc(var(--control-h-lg) - var(--sp-2)); }
+.bf-field__control--framed:focus-visible { border: 0; box-shadow: none; }
+.bf-field__leading { flex: none; display: grid; place-items: center; color: var(--text-muted); }
+.bf-field__trailing { flex: none; display: grid; place-items: center; }
+.bf-field__trailing .bf-icon-action { min-width: var(--tap-min); min-height: var(--tap-min); border: 0; background: transparent; box-shadow: none; }
 .bf-field__control:hover:not(:disabled):not(:read-only) { border-color: var(--control-border-hover); }
 .bf-field__control:focus-visible { border-color: var(--control-border-focus); box-shadow: var(--control-focus); }
 .bf-field__control[aria-invalid="true"] { border-color: var(--control-invalid-border); }

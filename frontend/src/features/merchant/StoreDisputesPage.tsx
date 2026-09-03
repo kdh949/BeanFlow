@@ -3,9 +3,9 @@ import type { components, paths } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { merchantApi } from "../../api/merchantClient";
 import { EmptyState, LoadingState } from "../../design-system";
-import { PageHeading } from "../../design-system";
 import { Button, ChipButton } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
+import { WorkspaceReferencePage } from "../../presentation/beanflow-refresh";
 import { compactId, shortDateTime, won } from "../../lib/format";
 import { useMerchantStores } from "./useMerchantStores";
 import { StoreSelector } from "./StoreSelector";
@@ -70,11 +70,7 @@ export function StoreDisputesPage() {
   }
 
   return (
-    <div className="console-page">
-      <PageHeading
-        title="정산 이의제기"
-        action={<StoreSelector stores={stores} selected={selected} onSelect={select} />}
-      />
+    <WorkspaceReferencePage title="정산 이의제기" description="정산 내역에 대한 이의제기를 접수하고 진행 상태를 확인하세요." action={<StoreSelector stores={stores} selected={selected} onSelect={select} />}>
 
       {stores.length === 0 ? (
         <EmptyState
@@ -133,6 +129,6 @@ export function StoreDisputesPage() {
           ) : null}
         </>
       )}
-    </div>
+    </WorkspaceReferencePage>
   );
 }

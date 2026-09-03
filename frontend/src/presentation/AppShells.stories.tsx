@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { HttpResponse, http } from "msw";
 import { expect } from "storybook/test";
+import { ids, merchantSignedInHandlers } from "../../.storybook/fixtures";
+import { merchantSession } from "../features/auth/merchant/merchantSession";
 import { ConsoleShell, CustomerShell, NotificationAction, RootRedirect } from "./AppShells";
 
 const meta = {
@@ -45,7 +47,26 @@ export const NotificationSummaryFailure: Story = {
 
 export const StoreChrome: Story = {
   render: () => <ConsoleShell kind="store" />,
-  parameters: { routing: { path: "/store", initialEntry: "/store" } },
+  parameters: {
+    layout: "fullscreen",
+    routing: { path: "/store/*", initialEntry: "/store/disputes" },
+    msw: {
+      handlers: [
+        ...merchantSignedInHandlers,
+        http.get("/api/v1/merchant/me/stores", () => HttpResponse.json([
+          { storeId: ids.store, storeName: "시청점", membershipRole: "OWNER" },
+        ])),
+      ],
+    },
+  },
+  beforeEach: async () => {
+    merchantSession.reset();
+    await merchantSession.refresh();
+  },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("link", { name: "이의제기" })).toHaveAttribute("aria-current", "page");
+    await expect(await canvas.findByLabelText("현재 매장 시청점")).toBeVisible();
+  },
 };
 
 export const OperationsChrome: Story = {
@@ -55,5 +76,9 @@ export const OperationsChrome: Story = {
 
 export const SupportChrome: Story = {
   render: () => <ConsoleShell kind="support" />,
-  parameters: { routing: { path: "/support", initialEntry: "/support" } },
+  parameters: { routing: { path: "/support/*", initialEntry: "/support/queue" } },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole("link", { name: "대기열" })).toHaveAttribute("aria-current", "page");
+    await expect(canvas.getByText("로그인 필요")).toBeVisible();
+  },
 };

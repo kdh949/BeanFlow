@@ -12,7 +12,7 @@ const meta = {
       description: { component: "server-owned ACTIVE/PAST classification과 공개 주문번호를 사용하는 고객 주문 목록입니다." },
       story: { inline: false, height: "720px" },
     },
-    routing: { path: "/app/orders", initialEntry: "/app/orders?status=ACTIVE&from=2026-07-17&to=2026-08-15" },
+    routing: { surface: "customer", path: "/app/orders", initialEntry: "/app/orders?status=ACTIVE&from=2026-07-17&to=2026-08-15" },
   },
 } satisfies Meta<typeof CustomerOrdersPage>;
 
@@ -28,7 +28,7 @@ export const ActiveOrder: Story = {
 
 export const PastOrder: Story = {
   parameters: {
-    routing: { path: "/app/orders", initialEntry: "/app/orders?status=PAST&from=2026-07-17&to=2026-08-15" },
+    routing: { surface: "customer", path: "/app/orders", initialEntry: "/app/orders?status=PAST&from=2026-07-17&to=2026-08-15" },
     msw: { handlers: orderListHandlers([{ ...orderSummary, status: "COMPLETED", allowedActions: [] }]) },
   },
 };

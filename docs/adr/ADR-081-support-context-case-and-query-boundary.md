@@ -13,6 +13,16 @@
 
 ## Alternatives Considered
 
+S130 Support Console은 같은 원칙을 queue/overview/approval read model에도 적용한다. Support-owned Case,
+interaction, subject link, action request, compensation과 profile-change table은 Support 전용 Query Repository가
+읽는다. Identity·Merchant·Ordering display fact는 owner의 공개 masked/bounded Query Port로만 조회한다.
+owner 또는 persistent permission 조회가 실패하면 empty나 부분 성공이 아니라
+`DEPENDENCY_UNAVAILABLE`로 실패한다. 이 read model은 owner state를 복제하지 않고 요청 시점 fact만 조합한다.
+
+Console 목록은 endpoint와 canonical filter에 결합된 signed cursor를 사용한다. queue `MINE`은 현재 actor의
+assignment, `ALL`은 `SUPPORT_CASE_ASSIGN`을 추가로 요구한다. approval task type은
+`DATA_ACCESS_GRANT | BREAK_GLASS | SUPPORT_ACTION | COMPENSATION | PROFILE_CHANGE`의 closed vocabulary다.
+
 - Operations 하위 기능: 권한/복구와 상담 생명주기가 결합되어 기각.
 - customer API impersonation: actor/audit 의미가 손상되어 기각.
 - write Aggregate 연관관계/Elasticsearch 선도입: 경계·운영비가 증명되지 않아 기각.
@@ -27,6 +37,9 @@ Case 감사 가능성과 owner 불변식을 보존하면서 modular monolith의 
 새 module/query surface가 필요하고 조합 조회 비용을 측정해야 한다. Support Console은 owner truth를 복제하지 않는다.
 
 ## Verification
+
+S130 projection은 새 쓰기 transaction이나 approval state를 소유하지 않으며 query-plan 근거 없는 index나
+범용 mirror table을 추가하지 않는다.
 
 Spring Modulith/ArchUnit dependency, Controller→Repository 금지, endpoint별 masked search/timeline contract와 dependency failure≠empty tests.
 

@@ -16,7 +16,7 @@ const meta = {
       },
       story: { inline: false, height: "720px" },
     },
-    routing: { path: "/app/points", initialEntry: "/app/points" },
+    routing: { surface: "customer", path: "/app/points", initialEntry: "/app/points" },
   },
 } satisfies Meta<typeof CustomerPointsPage>;
 

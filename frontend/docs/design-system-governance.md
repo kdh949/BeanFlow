@@ -189,6 +189,30 @@ Clarify user outcome and states
 
 A product route must compose the same components and patterns shown in Storybook. Do not build a parallel markup/CSS implementation that merely looks similar.
 
+### 9.1 Merchant workspace chrome lock
+
+- `src/presentation/merchant-workspace/MerchantWorkspaceShell.tsx` owns the only sidebar and topbar allowed under `/store`.
+- Store-page reference images may influence the content slot only. Their sidebar or topbar must not replace, fork, or override the canonical merchant chrome.
+- An unsupported destination remains visibly unavailable and does not receive a placeholder route or synthetic runtime data.
+- `presentation-boundary.mjs` rejects merchant chrome selectors outside the owner and rejects a store shell composition that omits `MerchantWorkspaceShell`.
+
+### 9.2 Workspace foundation and Support chrome lock
+
+- `WorkspaceFrame` owns only the standard/wide/compact sidebar columns, shared topbar height and content slot geometry.
+- Store and Support may compose `WorkspaceFrame`, but neither surface may import or restyle the other surface's sidebar/topbar.
+- `src/presentation/support-workspace/SupportWorkspaceShell.tsx` owns the only sidebar and topbar allowed under `/support`.
+- Support-page reference images may influence the content slot only. Their sidebar or topbar must not replace, fork, or override the canonical Support chrome.
+- Unsupported Support destinations remain visibly unavailable and do not receive placeholder routes or synthetic runtime data.
+- `presentation-boundary.mjs` rejects workspace frame selectors outside the design-system owner, Support chrome selectors outside its owner, and a Support shell composition that omits `SupportWorkspaceShell`.
+
+### 9.3 Operations chrome lock
+
+- `src/presentation/operations-workspace/OperationsWorkspaceShell.tsx` owns the only sidebar and topbar allowed under `/ops`.
+- Operations reference images may influence the content slot only. Their sidebar or topbar must not replace the canonical Operations chrome.
+- Store, Support and Operations share only `WorkspaceFrame` geometry and semantic tokens; navigation, actor and failure states stay surface-owned.
+- Unsupported Operations destinations remain visibly unavailable and do not receive placeholder routes or synthetic runtime data.
+- `presentation-boundary.mjs` rejects Operations chrome selectors outside the owner and rejects an Operations shell composition that omits `OperationsWorkspaceShell`.
+
 ## 10. Mandatory Storybook MCP protocol
 
 For any UI planning, implementation, review, or visual modification:

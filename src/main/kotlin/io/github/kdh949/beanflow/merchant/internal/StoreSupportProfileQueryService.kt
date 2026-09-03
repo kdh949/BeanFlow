@@ -28,6 +28,17 @@ internal class StoreSupportProfileQueryService(
             ).also { it.initCause(exception) }
         }
 
+    @Transactional(readOnly = true)
+    override fun findMaskedById(storeId: UUID): MaskedStoreSupportProfile? =
+        try {
+            repository.findMaskedById(storeId)?.also(::requireMasked)
+        } catch (exception: DataAccessException) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Store support profile query is unavailable",
+            ).also { it.initCause(exception) }
+        }
+
     private fun requireMasked(profile: MaskedStoreSupportProfile) {
         if ('*' !in profile.maskedDisplayName || '*' !in profile.maskedMatchedValue) {
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Store support profile projection is invalid")
@@ -39,6 +50,26 @@ internal class StoreSupportProfileQueryService(
 internal class StoreSupportProfileQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
+    fun findMaskedById(storeId: UUID): MaskedStoreSupportProfile? =
+        jdbcTemplate
+            .query(
+                """
+                SELECT store_id, masked_display_name,
+                       coalesce(masked_support_phone, masked_support_email) AS masked_matched_value
+                  FROM merchant_store_support_profile
+                 WHERE store_id = ?
+                   AND coalesce(masked_support_phone, masked_support_email) IS NOT NULL
+                """.trimIndent(),
+                { resultSet, _ ->
+                    MaskedStoreSupportProfile(
+                        storeId = resultSet.getObject("store_id", UUID::class.java),
+                        maskedDisplayName = resultSet.getString("masked_display_name"),
+                        maskedMatchedValue = resultSet.getString("masked_matched_value"),
+                    )
+                },
+                storeId,
+            ).singleOrNull()
+
     fun findByExactIndexes(query: ProtectedProfileExactQuery): List<MaskedStoreSupportProfile> {
         val requested = query.indexes.joinToString(",") { "(?, ?)" }
         val matchedColumn =

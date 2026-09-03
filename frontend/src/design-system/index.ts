@@ -22,4 +22,8 @@ export { Tab, TabList, TabPanel, Tabs } from "./components/navigation/Tabs";
 export type { TabListProps, TabPanelProps, TabProps, TabsProps } from "./components/navigation/Tabs";
 export { PageHeading } from "./patterns/layout/PageHeading";
 export type { PageHeadingProps } from "./patterns/layout/PageHeading";
+export { WorkspaceFrame } from "./patterns/navigation/WorkspaceFrame";
+export type { WorkspaceFrameProps, WorkspaceSidebarSize } from "./patterns/navigation/WorkspaceFrame";
+export { EventTimeline, FilterToolbar, MetricStrip, WorkflowStepper, WorkspaceDataTable } from "./patterns/workspace/DenseWorkspacePatterns";
+export type { EventTimelineItem, MetricStripItem, WorkflowStep, WorkspaceDataColumn, WorkspaceDataRow, WorkspaceDataTableProps } from "./patterns/workspace/DenseWorkspacePatterns";
 export { EmptyState, LoadingState, SuccessMark } from "./patterns/feedback/ResourceState";

@@ -3,8 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
-import { Button, EmptyState, LoadingState, PageHeading, RadioCard, RadioGroup, TextAreaField, TextField } from "../../design-system";
+import { Button, EmptyState, LoadingState, RadioCard, RadioGroup, TextAreaField, TextField } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
+import { WorkspaceReferencePage } from "../../presentation/beanflow-refresh";
 import { StoreSelector } from "./StoreSelector";
 import { useMerchantStores } from "./useMerchantStores";
 
@@ -115,11 +116,7 @@ export function StoreRegionPage() {
   }
 
   return (
-    <div className="console-page">
-      <PageHeading
-        title="매장 지역 설정"
-        action={<StoreSelector stores={stores} selected={selected} onSelect={select} />}
-      />
+    <WorkspaceReferencePage title="영업 지역 설정" description="주문을 받을 수 있는 기본 영업 지역을 설정해 주세요." action={<StoreSelector stores={stores} selected={selected} onSelect={select} />}>
 
       {stores.length === 0 ? (
         <EmptyState
@@ -234,6 +231,6 @@ export function StoreRegionPage() {
           </aside>
         </div>
       )}
-    </div>
+    </WorkspaceReferencePage>
   );
 }

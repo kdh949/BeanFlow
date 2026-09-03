@@ -1,7 +1,8 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { ApiRequestError } from "../../../api/client";
-import { Button, PageHeading, TextField } from "../../../design-system";
+import { Button, TextField } from "../../../design-system";
+import { ReferenceSection, WorkspaceReferencePage } from "../../../presentation/beanflow-refresh";
 import { merchantSession, sanitizeStoreReturnPath, useMerchantSession } from "./merchantSession";
 
 const PASSWORD_MIN_LENGTH = 15;
@@ -45,9 +46,10 @@ export function MerchantLoginPage() {
 
   const code = codeOf(failure);
   return (
-    <div className="console-auth">
-      <PageHeading title="매장 로그인" />
-      <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
+    <WorkspaceReferencePage title="점주 로그인" description="BeanFlow 점주 콘솔에 오신 것을 환영합니다.">
+      <div className="bfr-merchant-auth-grid">
+      <ReferenceSection>
+      <form className="bfr-auth-form" onSubmit={(event) => void submit(event)} noValidate>
         <TextField
           label="아이디"
           id="merchant-login-id"
@@ -86,8 +88,13 @@ export function MerchantLoginPage() {
           {submitting ? "로그인 중" : "로그인"}
         </Button>
       </form>
+      </ReferenceSection>
+      <ReferenceSection tone="soft" title="매장의 운영을 더 쉽고 효율적으로">
+        <p className="bfr-workspace-support-copy">주문 관리부터 정산과 이의제기까지, 계약으로 지원되는 업무를 한곳에서 처리할 수 있습니다.</p>
+      </ReferenceSection>
+      </div>
       <p className="auth-switch">계정 발급이나 비밀번호 초기화가 필요하면 운영팀에 문의해 주세요.</p>
-    </div>
+    </WorkspaceReferencePage>
   );
 }
 
@@ -125,9 +132,10 @@ export function MerchantPasswordChangePage() {
   const code = codeOf(failure);
   const tooShort = newPassword.length > 0 && newPassword.length < PASSWORD_MIN_LENGTH;
   return (
-    <div className="console-auth">
-      <PageHeading title="비밀번호 변경" />
-      <form className="surface-card auth-form" onSubmit={(event) => void submit(event)} noValidate>
+    <WorkspaceReferencePage title="최초 비밀번호 변경" description="보안을 위해 비밀번호를 변경해 주세요.">
+      <div className="bfr-password-workspace">
+      <ReferenceSection>
+      <form className="bfr-auth-form" onSubmit={(event) => void submit(event)} noValidate>
         <p className="form-footnote">비밀번호를 변경해야 매장 화면을 이용할 수 있습니다.</p>
         <TextField
           label="임시 비밀번호"
@@ -170,6 +178,11 @@ export function MerchantPasswordChangePage() {
           {submitting ? "변경 중" : "비밀번호 변경"}
         </Button>
       </form>
-    </div>
+      </ReferenceSection>
+      <ReferenceSection tone="soft" title="안전한 계정 사용">
+        <p className="bfr-workspace-support-copy">변경이 완료되면 매장 콘솔을 이용할 수 있습니다. 확인이 끝나기 전에는 완료로 표시하지 않습니다.</p>
+      </ReferenceSection>
+      </div>
+    </WorkspaceReferencePage>
   );
 }

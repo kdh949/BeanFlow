@@ -83,7 +83,7 @@ describe("customer order list", () => {
 
     renderAt("/app/orders");
 
-    expect(await screen.findByRole("heading", { name: "주문" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "주문 내역" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "진행 중" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "지난 주문" })).toBeInTheDocument();
     expect(screen.getByLabelText("조회 시작일")).toBeInTheDocument();
@@ -99,7 +99,7 @@ describe("customer order list", () => {
     const get = vi.spyOn(customerApi, "GET").mockResolvedValue(response({ items: [], page: {} }) as never);
     const user = userEvent.setup();
     renderAt("/app/orders");
-    await screen.findByRole("heading", { name: "주문" });
+    await screen.findByRole("heading", { name: "주문 내역" });
 
     await user.click(screen.getByRole("tab", { name: "지난 주문" }));
 
@@ -123,7 +123,7 @@ describe("customer order list", () => {
     const user = userEvent.setup();
 
     renderAt("/app/orders");
-    await screen.findByRole("heading", { name: "주문" });
+    await screen.findByRole("heading", { name: "주문 내역" });
     await user.click(screen.getByRole("tab", { name: "지난 주문" }));
 
     // The PAST tab the customer is now looking at answers first.

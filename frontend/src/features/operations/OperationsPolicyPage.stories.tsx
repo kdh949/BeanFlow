@@ -55,7 +55,7 @@ const meta = {
       },
       story: { inline: false, height: "980px" },
     },
-    routing: { path: "/ops/policies", initialEntry: "/ops/policies" },
+    routing: { surface: "ops", path: "/ops/policies", initialEntry: "/ops/policies" },
     msw: { handlers: [getPoint, updatePoint, getRestoration, updateRestoration, getBrands, createBrand, updateBrand] },
   },
 } satisfies Meta<typeof OperationsPolicyPage>;
