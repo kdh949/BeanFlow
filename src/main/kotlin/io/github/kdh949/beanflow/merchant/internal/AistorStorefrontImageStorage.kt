@@ -7,6 +7,10 @@ import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageUpload
 import io.github.kdh949.beanflow.shared.api.DomainFailure
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyCall
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyOperation
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyTelemetry
+import io.github.kdh949.beanflow.shared.api.ExternalProvider
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Component
@@ -21,6 +25,7 @@ internal class AistorStorefrontImageStorage(
     private val client: AistorObjectClient,
     private val metrics: AistorMediaMetrics,
     private val clock: Clock,
+    private val telemetry: ExternalDependencyTelemetry,
 ) : StorefrontImageStorageOperations {
     override fun normalize(upload: StorefrontImageUpload): NormalizedStorefrontImageUpload =
         normalizer.normalize(upload.bytes, upload.contentType).let {
@@ -41,7 +46,7 @@ internal class AistorStorefrontImageStorage(
     }
 
     override fun access(thumbnailKey: String): StorefrontImageAccess =
-        external("presign", providerObserved = false) {
+        external("presign", ExternalDependencyOperation.PRESIGN, providerObserved = false) {
             val issuedAt = clock.instant()
             StorefrontImageAccess(client.presignGet(thumbnailKey, URL_TTL.seconds.toInt()), issuedAt.plus(URL_TTL))
         }
@@ -50,7 +55,7 @@ internal class AistorStorefrontImageStorage(
         originalKey: String,
         thumbnailKey: String,
     ) {
-        external("delete") {
+        external("delete", ExternalDependencyOperation.DELETE) {
             client.delete(originalKey)
             client.delete(thumbnailKey)
         }
@@ -61,7 +66,7 @@ internal class AistorStorefrontImageStorage(
         limit: Int,
     ): List<String> {
         require(limit > 0)
-        return external("list-orphans") {
+        return external("list-orphans", ExternalDependencyOperation.LIST) {
             StorefrontImageTarget.entries
                 .asSequence()
                 .flatMap { target -> client.list("${target.objectPrefix}/") }
@@ -73,7 +78,7 @@ internal class AistorStorefrontImageStorage(
     }
 
     override fun deleteObject(key: String) {
-        external("delete-orphan") { client.delete(key) }
+        external("delete-orphan", ExternalDependencyOperation.DELETE) { client.delete(key) }
     }
 
     private fun putVerified(
@@ -83,12 +88,12 @@ internal class AistorStorefrontImageStorage(
         sha256: String,
     ) {
         try {
-            client.put(key, bytes, contentType, sha256)
+            telemetry.observe(AISTOR_PUT) { client.put(key, bytes, contentType, sha256) }
             metrics.success("put")
         } catch (putFailure: Exception) {
             val confirmed =
                 try {
-                    val status = client.stat(key)
+                    val status = telemetry.observe(AISTOR_HEAD) { client.stat(key) }
                     status.size == bytes.size.toLong() && status.sha256 == sha256
                 } catch (_: Exception) {
                     false
@@ -100,11 +105,14 @@ internal class AistorStorefrontImageStorage(
 
     private fun <T> external(
         operation: String,
+        telemetryOperation: ExternalDependencyOperation,
         providerObserved: Boolean = true,
         block: () -> T,
     ): T =
         try {
-            block().also { metrics.success(operation, providerObserved) }
+            telemetry
+                .observe(ExternalDependencyCall(ExternalProvider.AISTOR, telemetryOperation), block = block)
+                .also { metrics.success(operation, providerObserved) }
         } catch (failure: DomainFailure) {
             throw failure
         } catch (failure: Exception) {
@@ -123,6 +131,8 @@ internal class AistorStorefrontImageStorage(
 
     private companion object {
         val URL_TTL: Duration = Duration.ofMinutes(15)
+        val AISTOR_PUT = ExternalDependencyCall(ExternalProvider.AISTOR, ExternalDependencyOperation.PUT)
+        val AISTOR_HEAD = ExternalDependencyCall(ExternalProvider.AISTOR, ExternalDependencyOperation.HEAD)
     }
 }
 

@@ -3,7 +3,9 @@ package io.github.kdh949.beanflow.merchant.internal
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageUpload
 import io.github.kdh949.beanflow.shared.api.DomainFailure
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyOperation
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.RecordingExternalDependencyTelemetry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -18,6 +20,7 @@ import javax.imageio.ImageIO
 
 internal class AistorStorefrontImageStorageTest {
     private val now = Instant.parse("2026-08-24T00:00:00Z")
+    private val telemetry = RecordingExternalDependencyTelemetry()
 
     @Test
     fun `immutable keys hold normalized original and thumbnail`() {
@@ -32,6 +35,8 @@ internal class AistorStorefrontImageStorageTest {
         assertThat(prepared.thumbnailKey)
             .matches("stores/$targetId/${prepared.sha256}/[0-9a-f-]{36}/thumbnail\\.jpg")
         assertThat(client.objects.keys).containsExactlyInAnyOrder(prepared.originalKey, prepared.thumbnailKey)
+        assertThat(telemetry.records.map { it.call.operation })
+            .containsExactly(ExternalDependencyOperation.PUT, ExternalDependencyOperation.PUT)
     }
 
     @Test
@@ -106,6 +111,7 @@ internal class AistorStorefrontImageStorageTest {
             client,
             AistorMediaMetrics(SimpleMeterRegistry()),
             Clock.fixed(now, ZoneOffset.UTC),
+            telemetry,
         )
 
     private fun jpeg(): ByteArray =
