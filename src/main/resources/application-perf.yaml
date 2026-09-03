@@ -1,0 +1,33 @@
+logging:
+  structured:
+    format:
+      console: ecs
+
+management:
+  server:
+    port: ${BEANFLOW_MANAGEMENT_PORT:8081}
+    address: ${BEANFLOW_MANAGEMENT_ADDRESS:0.0.0.0}
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        beanflow.external.duration: true
+        beanflow.order.quote.duration: true
+        beanflow.order.creation.duration: true
+        beanflow.store.order.board.query.duration: true
+        beanflow.payment.approval.duration: true
+
+beanflow:
+  checkout:
+    frontend-base-url: ${BEANFLOW_FRONTEND_BASE_URL}
+  toss:
+    client-key: ${TOSS_PERF_CLIENT_KEY}
+    secret-key: ${TOSS_PERF_SECRET_KEY}
+    base-url: ${BEANFLOW_TOSS_PERF_BASE_URL:http://toss-driver:8080}

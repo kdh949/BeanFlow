@@ -46,21 +46,31 @@ internal class TossOneTimePaymentGatewayConfiguration {
         require(URI(baseUrl).let { it.scheme == "https" && it.host == "api.tosspayments.com" }) {
             "toss-sandbox requires the official HTTPS Toss API endpoint"
         }
-        return TossOneTimePaymentGateway(
-            restClient =
-                RestClient
-                    .builder()
-                    .baseUrl(baseUrl)
-                    .requestFactory(
-                        JdkClientHttpRequestFactory(
-                            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build(),
-                        ).apply { setReadTimeout(Duration.ofSeconds(8)) },
-                    ).defaultHeader(HttpHeaders.AUTHORIZATION, basicAuthorization(secretKey))
-                    .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
-                    .build(),
-            objectMapper = objectMapper,
-            telemetry = telemetry,
-        )
+        return tossGateway(baseUrl, secretKey, objectMapper, telemetry)
+    }
+}
+
+@Configuration(proxyBeanMethods = false)
+@Profile("toss-perf & !prod & !portfolio & !toss-sandbox")
+internal class TossPerfPaymentGatewayConfiguration {
+    @Bean
+    fun tossPerfPaymentGateway(
+        objectMapper: ObjectMapper,
+        telemetry: ExternalDependencyTelemetry,
+        @Value("\${beanflow.toss.client-key}") clientKey: String,
+        @Value("\${beanflow.toss.secret-key}") secretKey: String,
+        @Value("\${beanflow.toss.base-url}") baseUrl: String,
+    ): PaymentGateway {
+        require(clientKey.startsWith("test_ck_")) {
+            "toss-perf requires a non-live test client key (test_ck_)"
+        }
+        require(secretKey.startsWith("test_sk_")) {
+            "toss-perf requires a non-live test secret key (test_sk_)"
+        }
+        require(baseUrl == "http://toss-driver:8080") {
+            "toss-perf requires the fixed internal driver origin http://toss-driver:8080"
+        }
+        return tossGateway(baseUrl, secretKey, objectMapper, telemetry)
     }
 }
 
@@ -388,3 +398,25 @@ private fun basicAuthorization(secretKey: String): String {
         )
     return "Basic $encoded"
 }
+
+private fun tossGateway(
+    baseUrl: String,
+    secretKey: String,
+    objectMapper: ObjectMapper,
+    telemetry: ExternalDependencyTelemetry,
+): TossOneTimePaymentGateway =
+    TossOneTimePaymentGateway(
+        restClient =
+            RestClient
+                .builder()
+                .baseUrl(baseUrl)
+                .requestFactory(
+                    JdkClientHttpRequestFactory(
+                        HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build(),
+                    ).apply { setReadTimeout(Duration.ofSeconds(8)) },
+                ).defaultHeader(HttpHeaders.AUTHORIZATION, basicAuthorization(secretKey))
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .build(),
+        objectMapper = objectMapper,
+        telemetry = telemetry,
+    )

@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.payment.internal
 
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyTelemetry
+import io.github.kdh949.beanflow.shared.api.RecordingExternalDependencyTelemetry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
@@ -9,6 +11,7 @@ internal class TossOneTimePaymentGatewayConfigurationTest {
     private val contextRunner =
         ApplicationContextRunner()
             .withBean(ObjectMapper::class.java, { ObjectMapper() })
+            .withBean(ExternalDependencyTelemetry::class.java, { RecordingExternalDependencyTelemetry() })
             .withUserConfiguration(TossOneTimePaymentGatewayConfiguration::class.java)
             .withPropertyValues(
                 "spring.profiles.active=toss-sandbox",
