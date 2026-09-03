@@ -121,3 +121,4 @@
 | [ADR-117](ADR-117-store-customer-display-profile.md) | Accepted | Store 고객 표시 profile과 주문 가능성 분리 |
 | [ADR-118](ADR-118-merchant-transactional-catalog-lifecycle.md) | Accepted | 점주 거래 카탈로그 수명주기와 주문 직렬화 경계 |
 | [ADR-119](ADR-119-portfolio-deployment-runtime.md) | Accepted | 포트폴리오 배포 runtime과 sandbox 결제 경계 |
+| [ADR-120](ADR-120-performance-observability-and-trace-profile-correlation.md) | Accepted | 성능 관측성과 trace-profile 상관 경계 |
