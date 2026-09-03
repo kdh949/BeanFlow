@@ -159,10 +159,12 @@ RCA dashboard와 data source correlation은 이 순서를 직접 탐색하게 �
 - [x] 2026-09-02: repository 상태, 기존 metric/provider/deployment 경계 조사
 - [x] 2026-09-02: 관측성 방식과 exact/correlation 경계를 ADR-120에 기록
 - [x] 2026-09-04: 새 격리 worktree와 feature branch에서 P0/P1 전체 범위 재확인
-- [ ] application telemetry와 runtime 구현
-- [ ] perf infrastructure와 load scenarios 구현
-- [ ] dashboard/runbook 구현
-- [ ] 검증과 결과 기록
+- [x] 2026-09-04: application telemetry와 perf-only runtime 구현
+- [x] 2026-09-04: perf infrastructure, P1 PostgreSQL 진단과 load scenarios 구현
+- [x] 2026-09-04: dashboard, alert rules와 runbook 구현
+- [x] 2026-09-04: repository 정적·단위·통합·build 검증과 결과 기록
+- [ ] cAdvisor의 privileged host/container 경계 결정 및 선택적 구현
+- [ ] 전용 perf 서버에서 중앙 ingest, Grafana correlation과 실제 부하 실행 검증
 
 ## Surprises & Discoveries
 
@@ -170,6 +172,8 @@ RCA dashboard와 data source correlation은 이 순서를 직접 탐색하게 �
   경계를 재사용해야 하며 별도 fake configuration을 만들면 안 된다.
 - 기존 Toss sandbox configuration은 official HTTPS host만 허용한다. deterministic driver에는 production과
   portfolio에 겹칠 수 없는 별도 `toss-perf` profile과 startup guard가 필요하다.
+- Orbit의 cAdvisor 구성은 `privileged`와 host root, Docker data, kernel 경로 mount를 요구한다. 전용 perf
+  host가 아닌 곳에서는 blast radius가 크므로 명시적 보안 결정 없이 기본 Compose에 복제하지 않는다.
 
 ## Decision Log
 
@@ -184,9 +188,19 @@ RCA dashboard와 data source correlation은 이 순서를 직접 탐색하게 �
 
 ## Outcomes & Retrospective
 
-구현과 검증 후 갱신한다.
+- Passed: `./gradlew spotlessCheck test bootJar` — 48분 51초, 1,472 tests, failures 0, errors 0,
+  skipped 2, bootJar 생성 성공.
+- Passed: `bash scripts/perf/test-observability-contract.sh` — Compose merge, Alloy validate, Prometheus
+  7 rules, Grafana JSON/YAML, k6/Toss 9 contract tests와 shell syntax 통과.
+- Passed: `./scripts/verify-docs.sh` — 18 tests, 52 policies, 120 ADRs, 318 Markdown files,
+  79 ExecPlans와 OpenAPI semantic checks 통과.
+- Pending decision: cAdvisor는 privileged host/container 접근 승인이 있어야 추가한다. 제한형 node-exporter는
+  CPU, memory, disk, network의 host signal만 read-only `/proc`와 `/sys`에서 수집한다.
+- Not run: 전용 perf credential/fixture가 필요한 AIStor/Vault smoke, 중앙 Tempo/Loki/Pyroscope ingest,
+  Grafana exemplar → trace → log → profile UI 확인과 실제 k6 부하/용량 측정.
 
 ## Revision Notes
 
 - 2026-09-02: 최초 작성.
 - 2026-09-04: P0/P1 전체 구현 범위와 SQL 개인정보 경계 보강.
+- 2026-09-04: repository 구현과 검증 결과, cAdvisor 보안 결정 및 live 검증 경계 기록.
