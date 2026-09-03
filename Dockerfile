@@ -1,6 +1,12 @@
 FROM eclipse-temurin:21-jdk-jammy AS build
 
 WORKDIR /workspace
+ADD --checksum=sha256:bbf83c151b6400709e2f225bdd07a04f839d9d13b8b93464241333fd25d3e3ba \
+    https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.31.1/opentelemetry-javaagent.jar \
+    /workspace/opentelemetry-javaagent.jar
+ADD --checksum=sha256:319b9a669736d22c77a495925ebab999d0787a44286353feb98b24500b7e26c6 \
+    https://github.com/grafana/otel-profiling-java/releases/download/v2.1.2/pyroscope-otel-javaagent-extension.jar \
+    /workspace/pyroscope-otel-javaagent-extension.jar
 COPY gradle ./gradle
 COPY gradlew build.gradle.kts settings.gradle.kts gradle.properties ./
 COPY scripts/ci/test-class-weights.tsv ./scripts/ci/test-class-weights.tsv
@@ -26,6 +32,8 @@ RUN apt-get update \
 WORKDIR /opt/beanflow
 COPY --from=vault /bin/vault /usr/local/bin/vault
 COPY --from=build --chown=beanflow:beanflow /workspace/app.jar ./app.jar
+COPY --from=build --chown=beanflow:beanflow /workspace/opentelemetry-javaagent.jar ./opentelemetry-javaagent.jar
+COPY --from=build --chown=beanflow:beanflow /workspace/pyroscope-otel-javaagent-extension.jar ./pyroscope-otel-javaagent-extension.jar
 COPY --chown=root:root deploy/backend/entrypoint.sh /usr/local/bin/beanflow-entrypoint
 COPY --chown=root:root deploy/vault/proxy.hcl /etc/beanflow/vault-proxy.hcl
 

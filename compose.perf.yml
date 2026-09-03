@@ -1,0 +1,199 @@
+# Performance-only overlay. Render together with compose.portfolio.yml.
+# It keeps the production and portfolio profiles untouched while adding private monitoring ports,
+# a deterministic Toss contract driver, OTLP forwarding and PostgreSQL diagnostics.
+services:
+  postgres:
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - track_io_timing=on
+    environment:
+      POSTGRES_DB: beanflow_perf
+    volumes:
+      - ./deploy/postgres/init-perf-observability.sql:/docker-entrypoint-initdb.d/20-perf-observability.sql:ro
+
+  api:
+    environment:
+      SPRING_PROFILES_ACTIVE: perf
+      BEANFLOW_DB_URL: jdbc:postgresql://postgres:5432/beanflow_perf
+      BEANFLOW_MANAGEMENT_ADDRESS: 0.0.0.0
+      BEANFLOW_MANAGEMENT_PORT: 8081
+      BEANFLOW_AISTOR_BUCKET: ${BEANFLOW_PERF_AISTOR_BUCKET:-beanflow-perf}
+      BEANFLOW_VAULT_TRANSIT_MOUNT: ${BEANFLOW_PERF_VAULT_TRANSIT_MOUNT:-beanflow-perf-transit}
+      BEANFLOW_VAULT_PERSONAL_DATA_ENCRYPTION_KEY: ${BEANFLOW_PERF_VAULT_ENCRYPTION_KEY:-personal-data-encryption}
+      BEANFLOW_VAULT_PERSONAL_DATA_BLIND_INDEX_KEY: ${BEANFLOW_PERF_VAULT_BLIND_INDEX_KEY:-personal-data-blind-index}
+      TOSS_PERF_CLIENT_KEY: test_ck_beanflow_perf
+      TOSS_PERF_SECRET_KEY: test_sk_beanflow_perf
+      BEANFLOW_TOSS_PERF_BASE_URL: http://toss-driver:8080
+      JAVA_TOOL_OPTIONS: >-
+        -XX:MaxRAMPercentage=70
+        -XX:InitialRAMPercentage=25
+        -javaagent:/opt/beanflow/opentelemetry-javaagent.jar
+      OTEL_JAVAAGENT_EXTENSIONS: /opt/beanflow/pyroscope-otel-javaagent-extension.jar
+      OTEL_JAVAAGENT_ENABLED: ${BEANFLOW_OTEL_ENABLED:-true}
+      OTEL_SERVICE_NAME: beanflow
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=beanflow,deployment.environment.name=perf
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED: "true"
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: ${BEANFLOW_OTEL_TRACE_SAMPLE_RATIO:-1.0}
+      OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_MDC_ATTRIBUTES: beanflow_test_id,beanflow_scenario
+      OTEL_PYROSCOPE_START_PROFILING: ${BEANFLOW_PYROSCOPE_ENABLED:-true}
+      OTEL_PYROSCOPE_ROOT_SPAN_ONLY: "true"
+      OTEL_PYROSCOPE_ADD_SPAN_NAME: "false"
+      OTEL_PYROSCOPE_ADD_PROFILE_URL: "false"
+      OTEL_PYROSCOPE_ADD_PROFILE_BASELINE_URL: "false"
+      PYROSCOPE_APPLICATION_NAME: beanflow
+      PYROSCOPE_SERVER_ADDRESS: ${BEANFLOW_PYROSCOPE_SERVER_ADDRESS:?BEANFLOW_PYROSCOPE_SERVER_ADDRESS is required}
+      PYROSCOPE_FORMAT: jfr
+      PYROSCOPE_PROFILER_EVENT: ${BEANFLOW_PYROSCOPE_EVENT:-wall}
+      PYROSCOPE_PROFILING_INTERVAL: ${BEANFLOW_PYROSCOPE_INTERVAL:-10ms}
+      PYROSCOPE_PROFILER_LOCK: ${BEANFLOW_PYROSCOPE_LOCK_INTERVAL:-10ms}
+      PYROSCOPE_PROFILER_ALLOC: ${BEANFLOW_PYROSCOPE_ALLOC_INTERVAL:-512k}
+      PYROSCOPE_UPLOAD_INTERVAL: ${BEANFLOW_PYROSCOPE_UPLOAD_INTERVAL:-15s}
+    ports:
+      - name: management-from-vpn
+        target: 8081
+        published: "${BEANFLOW_PERF_MANAGEMENT_PORT:-18081}"
+        host_ip: ${BEANFLOW_MONITORING_BIND_ADDRESS:?BEANFLOW_MONITORING_BIND_ADDRESS is required}
+        protocol: tcp
+        app_protocol: http
+        mode: host
+    depends_on:
+      alloy:
+        condition: service_started
+      toss-driver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --show-error http://127.0.0.1:8081/actuator/health >/dev/null"]
+    networks:
+      observability: {}
+
+  toss-driver:
+    image: node:24.19.0-alpine3.24
+    command: ["node", "/opt/beanflow/toss-driver.mjs"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    volumes:
+      - ./infra/perf/toss-driver.mjs:/opt/beanflow/toss-driver.mjs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --output-document=/dev/null http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+      start_period: 2s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      observability: {}
+
+  alloy:
+    image: grafana/alloy:v1.13.2
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    environment:
+      BEANFLOW_TEMPO_OTLP_HTTP_ENDPOINT: ${BEANFLOW_TEMPO_OTLP_HTTP_ENDPOINT:?BEANFLOW_TEMPO_OTLP_HTTP_ENDPOINT is required}
+      BEANFLOW_LOKI_OTLP_HTTP_ENDPOINT: ${BEANFLOW_LOKI_OTLP_HTTP_ENDPOINT:?BEANFLOW_LOKI_OTLP_HTTP_ENDPOINT is required}
+    volumes:
+      - ./infra/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+    ports:
+      - name: alloy-metrics-from-vpn
+        target: 12345
+        published: "${BEANFLOW_PERF_ALLOY_PORT:-12345}"
+        host_ip: ${BEANFLOW_MONITORING_BIND_ADDRESS:?BEANFLOW_MONITORING_BIND_ADDRESS is required}
+        protocol: tcp
+        app_protocol: http
+        mode: host
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      observability: {}
+      egress: {}
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+    command:
+      - --collector.stat_statements
+      - --extend.query-path=/etc/postgres-exporter/queries.yaml
+      - --log.format=json
+      - --web.listen-address=:9187
+    restart: unless-stopped
+    read_only: true
+    environment:
+      DATA_SOURCE_URI: postgres:5432/beanflow_perf?sslmode=disable
+      DATA_SOURCE_USER: beanflow
+      DATA_SOURCE_PASS_FILE: /run/secrets/BEANFLOW_POSTGRES_PASSWORD
+      PG_EXPORTER_COLLECTION_TIMEOUT: 10s
+    secrets:
+      - source: postgres_password
+        target: BEANFLOW_POSTGRES_PASSWORD
+    volumes:
+      - ./infra/observability/postgres-queries.yaml:/etc/postgres-exporter/queries.yaml:ro
+    ports:
+      - name: postgres-metrics-from-vpn
+        target: 9187
+        published: "${BEANFLOW_PERF_POSTGRES_EXPORTER_PORT:-19187}"
+        host_ip: ${BEANFLOW_MONITORING_BIND_ADDRESS:?BEANFLOW_MONITORING_BIND_ADDRESS is required}
+        protocol: tcp
+        app_protocol: http
+        mode: host
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      backend: {}
+
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.12.1
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.disable-defaults
+      - --collector.cpu
+      - --collector.diskstats
+      - --collector.loadavg
+      - --collector.meminfo
+      - --collector.netdev
+      - --collector.stat
+    restart: unless-stopped
+    read_only: true
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    ports:
+      - name: node-metrics-from-vpn
+        target: 9100
+        published: "${BEANFLOW_PERF_NODE_EXPORTER_PORT:-19100}"
+        host_ip: ${BEANFLOW_MONITORING_BIND_ADDRESS:?BEANFLOW_MONITORING_BIND_ADDRESS is required}
+        protocol: tcp
+        app_protocol: http
+        mode: host
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      observability: {}
+
+volumes:
+  alloy-data: {}
+
+networks:
+  observability:
+    internal: true
