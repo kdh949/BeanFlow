@@ -69,7 +69,9 @@ PostgreSQL wait, 실제 외부 Provider child span, 느린 trace, 같은 요청 
 - Micrometer/Actuator가 Prometheus metric을 pull 방식으로 제공한다.
 - OTel Java agent가 OTLP/gRPC로 local Alloy에 trace를 전송하고 Alloy가 중앙 Tempo로 전달한다.
 - Pyroscope OTel extension이 profile을 중앙 Pyroscope로 직접 전송하고 trace span에 profile ID를 기록한다.
-- application stdout ECS JSON을 Alloy가 tail하고 중앙 Loki로 전달한다.
+- application은 운영자가 로컬에서도 읽을 수 있는 ECS JSON stdout을 유지하고, OTel Java agent의
+  Logback appender가 같은 log event와 trace context를 OTLP로 Alloy에 전달한다. Docker socket이나
+  host log directory를 Alloy에 마운트하지 않는다.
 - Tempo metrics-generator의 span-metrics/service-graphs는 중앙 Prometheus remote-write receiver로 보낸다.
 - provider instrumentation은 기존 adapter 바깥 또는 안쪽에서 시간을 재지만 호출·transaction 순서는
   바꾸지 않는다.

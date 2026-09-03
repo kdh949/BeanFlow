@@ -1,0 +1,178 @@
+{
+  "annotations": {"list": []},
+  "description": "BeanFlow performance RCA. Metrics→trace, trace→log and trace→profile are exact links. Hikari and PostgreSQL panels are time-window correlation unless running the controlled db-lock scenario.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "text",
+      "title": "진단 순서와 증거 경계",
+      "id": 1,
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "1. route p95/오류의 exemplar를 열어 Tempo trace로 이동합니다. 2. JDBC와 Toss·AIStor·Vault child span을 확인합니다. 3. 같은 시간의 Hikari/PostgreSQL wait는 상관 증거로 확인합니다. 4. trace 상세의 Logs와 Profiles for this span으로 정확히 이동합니다. `dropped_iterations`는 목표 도착률을 처리하지 못한 용량 증거이며 성공으로 보지 않습니다."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Route p95 (exemplar → Tempo)",
+      "id": 2,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])))", "legendFormat": "{{uri}}"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Route error ratio",
+      "id": 3,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "sum by (uri) (rate(http_server_requests_seconds_count{job=\"beanflow\",uri=~\"$route\",status=~\"4..|5..\"}[$__rate_interval])) / clamp_min(sum by (uri) (rate(http_server_requests_seconds_count{job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])), 0.000001)", "legendFormat": "{{uri}}"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Hikari active / max / pending",
+      "id": 4,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 12},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "targets": [
+        {"refId": "A", "expr": "hikaricp_connections_active{job=\"beanflow\"}", "legendFormat": "active"},
+        {"refId": "B", "expr": "hikaricp_connections_max{job=\"beanflow\"}", "legendFormat": "max"},
+        {"refId": "C", "expr": "hikaricp_connections_pending{job=\"beanflow\"}", "legendFormat": "pending"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "PostgreSQL waiting sessions (correlated)",
+      "id": 5,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 12},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "sum by (wait_event_type, wait_event) (beanflow_pg_wait_sessions{job=\"beanflow-postgres\"}) or vector(0)", "legendFormat": "{{wait_event_type}} / {{wait_event}}"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "PostgreSQL ungranted locks (correlated)",
+      "id": 6,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 12},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "beanflow_pg_ungranted_locks{job=\"beanflow-postgres\"}", "legendFormat": "ungranted"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "External provider p95",
+      "id": 7,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "histogram_quantile(0.95, sum by (le, provider, operation) (rate(beanflow_external_duration_seconds_bucket{job=\"beanflow\"}[$__rate_interval])))", "legendFormat": "{{provider}} / {{operation}}"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "External provider outcomes",
+      "id": 8,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "sum by (provider, operation, outcome) (rate(beanflow_external_calls_total{job=\"beanflow\"}[$__rate_interval]))", "legendFormat": "{{provider}} / {{operation}} / {{outcome}}"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "k6 request p95",
+      "id": 9,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 28},
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "k6_http_req_duration_p95{testid=\"$test_id\"}", "legendFormat": "{{name}}"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "k6 errors / dropped iterations",
+      "id": 10,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 28},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "targets": [
+        {"refId": "A", "expr": "k6_http_req_failed_rate{testid=\"$test_id\"}", "legendFormat": "failed rate"},
+        {"refId": "B", "expr": "increase(k6_dropped_iterations_total{testid=\"$test_id\"}[$__range])", "legendFormat": "dropped"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM CPU / GC pause",
+      "id": 11,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 28},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0}, "overrides": []},
+      "targets": [
+        {"refId": "A", "expr": "process_cpu_usage{job=\"beanflow\"}", "legendFormat": "process CPU"},
+        {"refId": "B", "expr": "rate(jvm_gc_pause_seconds_sum{job=\"beanflow\"}[$__rate_interval])", "legendFormat": "GC pause seconds/s"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Host CPU busy",
+      "id": 15,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 36},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{job=\"beanflow-node\",mode=\"idle\"}[$__rate_interval]))", "legendFormat": "{{instance}}"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Host memory used",
+      "id": 16,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 36},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "1 - (node_memory_MemAvailable_bytes{job=\"beanflow-node\"} / node_memory_MemTotal_bytes{job=\"beanflow-node\"})", "legendFormat": "{{instance}}"}]
+    },
+    {
+      "type": "traces",
+      "title": "Slow traces",
+      "id": 12,
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 44},
+      "targets": [{"refId": "A", "queryType": "traceql", "query": "{ resource.service.name = \"beanflow\" && duration > 1s }"}]
+    },
+    {
+      "type": "logs",
+      "title": "BeanFlow logs (select trace for exact filter)",
+      "id": 13,
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 44},
+      "targets": [{"refId": "A", "expr": "{service_name=\"beanflow\"} | trace_id != \"\""}]
+    },
+    {
+      "type": "flamegraph",
+      "title": "JVM wall flame graph (time-correlated overview)",
+      "id": 14,
+      "datasource": {"type": "grafana-pyroscope-datasource", "uid": "pyroscope"},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 53},
+      "targets": [{"refId": "A", "queryType": "profile", "profileTypeId": "process_cpu:wall:nanoseconds:wall:nanoseconds", "labelSelector": "{service_name=\"beanflow\"}"}]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 42,
+  "tags": ["beanflow", "performance", "rca"],
+  "templating": {
+    "list": [
+      {"name": "route", "label": "Route", "type": "query", "datasource": {"type": "prometheus", "uid": "prometheus"}, "query": {"query": "label_values(http_server_requests_seconds_count{job=\"beanflow\"}, uri)", "refId": "Prometheus-route-Variable-Query"}, "includeAll": true, "allValue": ".*", "refresh": 1, "current": {"text": "All", "value": "$__all"}},
+      {"name": "test_id", "label": "k6 test id", "type": "textbox", "query": "", "current": {"text": "select-test-id", "value": "select-test-id"}}
+    ]
+  },
+  "time": {"from": "now-30m", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "BeanFlow / Performance RCA",
+  "uid": "beanflow-performance-rca",
+  "version": 1
+}
