@@ -74,6 +74,7 @@
 - [Nearby Store Discovery Runbook](operations/nearby-store-discovery-runbook.md)
 - [Store Keyword Search Runbook](operations/store-keyword-search-runbook.md)
 - [Local Demo Runbook](operations/local-demo-runbook.md)
+- [Portfolio Server Deployment Runbook](operations/portfolio-deployment-runbook.md)
 
 ## Execution Plans
 
@@ -135,5 +136,6 @@
 - [Nearby Store Discovery Runbook](operations/nearby-store-discovery-runbook.md)
 - [Store Keyword Search Runbook](operations/store-keyword-search-runbook.md)
 - [Local Demo Runbook](operations/local-demo-runbook.md)
+- [Portfolio Server Deployment Runbook](operations/portfolio-deployment-runbook.md)
 - [Support Planned Operational Procedures](operations/support-planned-operational-procedures.md)
 - [Planned Support Observability](operations/observability.md)

@@ -11,7 +11,10 @@ import org.springframework.core.annotation.Order
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator
+import org.springframework.security.oauth2.jwt.JwtAudienceValidator
 import org.springframework.security.oauth2.jwt.JwtDecoder
+import org.springframework.security.oauth2.jwt.JwtValidators
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter
@@ -31,7 +34,17 @@ internal class SecurityConfiguration {
     @ConditionalOnMissingBean(JwtDecoder::class)
     fun jwtDecoder(
         @Value("\${beanflow.security.jwk-set-uri}") jwkSetUri: String,
-    ): JwtDecoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build()
+        @Value("\${beanflow.operations-oidc.issuer-uri}") issuerUri: String,
+        @Value("\${beanflow.operations-oidc.client-id}") audience: String,
+    ): JwtDecoder =
+        NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build().apply {
+            setJwtValidator(
+                DelegatingOAuth2TokenValidator(
+                    JwtValidators.createDefaultWithIssuer(issuerUri),
+                    JwtAudienceValidator(audience),
+                ),
+            )
+        }
 
     @Bean
     @Order(0)

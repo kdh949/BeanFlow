@@ -54,3 +54,26 @@ __pycache__/
 **/demo-identity.env
 **/workload-token.txt
 **/jwks.json
+
+### Deployment secrets ###
+.env
+.env.*
+!.env.example
+!*.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+**/BEANFLOW_POSTGRES_PASSWORD
+**/BEANFLOW_KEYCLOAK_DB_PASSWORD
+**/BEANFLOW_KEYCLOAK_ADMIN_PASSWORD
+**/BEANFLOW_AUTH_ATTEMPT_HMAC_KEY_BASE64_URL
+**/BEANFLOW_CURSOR_HMAC_SECRET_BASE64_URL
+**/BEANFLOW_AISTOR_ACCESS_KEY
+**/BEANFLOW_AISTOR_SECRET_KEY
+**/BEANFLOW_VAULT_ROLE_ID
+**/BEANFLOW_VAULT_SECRET_ID
+**/BEANFLOW_VAULT_CA_PEM
+**/TOSS_CLIENT_KEY
+**/TOSS_SECRET_KEY

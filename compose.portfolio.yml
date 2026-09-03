@@ -1,0 +1,234 @@
+name: ${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME is required}
+
+services:
+  postgres:
+    image: postgis/postgis:17-3.5
+    platform: ${BEANFLOW_POSTGRES_PLATFORM:-linux/amd64}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: beanflow
+      POSTGRES_USER: beanflow
+      POSTGRES_PASSWORD_FILE: /run/secrets/BEANFLOW_POSTGRES_PASSWORD
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    secrets:
+      - source: postgres_password
+        target: BEANFLOW_POSTGRES_PASSWORD
+      - source: keycloak_db_password
+        target: BEANFLOW_KEYCLOAK_DB_PASSWORD
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres/init-keycloak-database.sh:/docker-entrypoint-initdb.d/10-keycloak-database.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username beanflow --dbname beanflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 30s
+    mem_limit: 1536m
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      backend: {}
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.2
+    restart: unless-stopped
+    entrypoint: ["/bin/bash", "/opt/beanflow/start.sh"]
+    environment:
+      BEANFLOW_KEYCLOAK_ADMIN_USERNAME: ${BEANFLOW_KEYCLOAK_ADMIN_USERNAME:-beanflow-admin}
+      BEANFLOW_PUBLIC_ORIGIN: ${BEANFLOW_PUBLIC_ORIGIN:?BEANFLOW_PUBLIC_ORIGIN is required}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME: ${BEANFLOW_PUBLIC_ORIGIN:?BEANFLOW_PUBLIC_ORIGIN is required}/auth
+      KC_HOSTNAME_STRICT: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "false"
+      JAVA_OPTS_KC_HEAP: -XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=65
+    secrets:
+      - source: keycloak_db_password
+        target: BEANFLOW_KEYCLOAK_DB_PASSWORD
+      - source: keycloak_admin_password
+        target: BEANFLOW_KEYCLOAK_ADMIN_PASSWORD
+    volumes:
+      - ./deploy/keycloak/start.sh:/opt/beanflow/start.sh:ro
+      - ./deploy/keycloak/beanflow-realm.json:/opt/keycloak/data/import/beanflow-realm.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - /bin/bash
+        - -ec
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000;
+          printf 'GET /auth/health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
+          grep -q '200 OK' <&3
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    stop_grace_period: 30s
+    mem_limit: 1536m
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      backend: {}
+
+  api:
+    image: ${BEANFLOW_API_IMAGE_REPOSITORY:?BEANFLOW_API_IMAGE_REPOSITORY is required}:${BEANFLOW_IMAGE_TAG:?BEANFLOW_IMAGE_TAG is required}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: ${BEANFLOW_PULL_POLICY:-missing}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+      - /run/beanflow-vault:rw,noexec,nosuid,size=1m,mode=0700
+    environment:
+      SPRING_PROFILES_ACTIVE: portfolio
+      SPRING_CONFIG_IMPORT: configtree:/run/secrets/
+      SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE: 30s
+      SERVER_SHUTDOWN: graceful
+      JAVA_TOOL_OPTIONS: ${BEANFLOW_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=25}
+      BEANFLOW_DB_URL: jdbc:postgresql://postgres:5432/beanflow
+      BEANFLOW_DB_USERNAME: beanflow
+      BEANFLOW_FRONTEND_BASE_URL: ${BEANFLOW_PUBLIC_ORIGIN:?BEANFLOW_PUBLIC_ORIGIN is required}
+      BEANFLOW_JWK_SET_URI: http://keycloak:8080/auth/realms/beanflow/protocol/openid-connect/certs
+      BEANFLOW_OPERATIONS_OIDC_ISSUER_URI: ${BEANFLOW_PUBLIC_ORIGIN:?BEANFLOW_PUBLIC_ORIGIN is required}/auth/realms/beanflow
+      BEANFLOW_OPERATIONS_OIDC_AUTHORIZATION_SERVER_URL: ${BEANFLOW_PUBLIC_ORIGIN:?BEANFLOW_PUBLIC_ORIGIN is required}/auth
+      BEANFLOW_OPERATIONS_OIDC_REALM: beanflow
+      BEANFLOW_OPERATIONS_OIDC_CLIENT_ID: beanflow-operations
+      BEANFLOW_OPERATIONS_OIDC_REDIRECT_URI: ${BEANFLOW_PUBLIC_ORIGIN:?BEANFLOW_PUBLIC_ORIGIN is required}/ops/auth/callback
+      BEANFLOW_OPERATIONS_OIDC_POST_LOGOUT_REDIRECT_URI: ${BEANFLOW_PUBLIC_ORIGIN:?BEANFLOW_PUBLIC_ORIGIN is required}/ops
+      BEANFLOW_OPERATIONS_OIDC_SCOPES: openid,profile,email
+      BEANFLOW_AUTH_TRUSTED_PROXY_CIDRS: ${BEANFLOW_AUTH_TRUSTED_PROXY_CIDRS:?BEANFLOW_AUTH_TRUSTED_PROXY_CIDRS is required}
+      BEANFLOW_AISTOR_ENDPOINT: ${BEANFLOW_AISTOR_ENDPOINT:?BEANFLOW_AISTOR_ENDPOINT is required}
+      BEANFLOW_AISTOR_PUBLIC_ENDPOINT: ${BEANFLOW_AISTOR_PUBLIC_ENDPOINT:?BEANFLOW_AISTOR_PUBLIC_ENDPOINT is required}
+      BEANFLOW_AISTOR_BUCKET: ${BEANFLOW_AISTOR_BUCKET:?BEANFLOW_AISTOR_BUCKET is required}
+      BEANFLOW_AISTOR_REGION: ${BEANFLOW_AISTOR_REGION:-us-east-1}
+      BEANFLOW_CURSOR_HMAC_ACTIVE_KEY_ID: ${BEANFLOW_CURSOR_HMAC_ACTIVE_KEY_ID:?BEANFLOW_CURSOR_HMAC_ACTIVE_KEY_ID is required}
+      BEANFLOW_VAULT_PROXY_BASE_URI: http://127.0.0.1:8100
+      BEANFLOW_VAULT_TRANSIT_MOUNT: ${BEANFLOW_VAULT_TRANSIT_MOUNT:-transit}
+      BEANFLOW_VAULT_PERSONAL_DATA_ENCRYPTION_KEY: ${BEANFLOW_VAULT_PERSONAL_DATA_ENCRYPTION_KEY:-beanflow-personal-data}
+      BEANFLOW_VAULT_PERSONAL_DATA_BLIND_INDEX_KEY: ${BEANFLOW_VAULT_PERSONAL_DATA_BLIND_INDEX_KEY:-beanflow-blind-index}
+      BEANFLOW_VAULT_BLIND_INDEX_WRITE_VERSION: ${BEANFLOW_VAULT_BLIND_INDEX_WRITE_VERSION:?BEANFLOW_VAULT_BLIND_INDEX_WRITE_VERSION is required}
+      BEANFLOW_VAULT_BLIND_INDEX_SEARCH_VERSIONS: ${BEANFLOW_VAULT_BLIND_INDEX_SEARCH_VERSIONS:?BEANFLOW_VAULT_BLIND_INDEX_SEARCH_VERSIONS is required}
+      BEANFLOW_VAULT_UPSTREAM_ADDR: ${BEANFLOW_VAULT_ADDR:?BEANFLOW_VAULT_ADDR is required}
+    secrets:
+      - source: postgres_password
+        target: BEANFLOW_DB_PASSWORD
+      - source: auth_attempt_hmac_key
+        target: BEANFLOW_AUTH_ATTEMPT_HMAC_KEY_BASE64_URL
+      - source: cursor_hmac_key
+        target: BEANFLOW_CURSOR_HMAC_SECRET_BASE64_URL
+      - source: aistor_access_key
+        target: BEANFLOW_AISTOR_ACCESS_KEY
+      - source: aistor_secret_key
+        target: BEANFLOW_AISTOR_SECRET_KEY
+      - source: toss_client_key
+        target: TOSS_CLIENT_KEY
+      - source: toss_secret_key
+        target: TOSS_SECRET_KEY
+      - source: vault_role_id
+        target: /run/beanflow-vault-bootstrap/BEANFLOW_VAULT_ROLE_ID
+      - source: vault_secret_id
+        target: /run/beanflow-vault-bootstrap/BEANFLOW_VAULT_SECRET_ID
+      - source: vault_ca_pem
+        target: /run/beanflow-vault-bootstrap/BEANFLOW_VAULT_CA_PEM
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    stop_grace_period: 45s
+    mem_limit: 2g
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      backend: {}
+      egress: {}
+
+  frontend:
+    image: ${BEANFLOW_WEB_IMAGE_REPOSITORY:?BEANFLOW_WEB_IMAGE_REPOSITORY is required}:${BEANFLOW_IMAGE_TAG:?BEANFLOW_IMAGE_TAG is required}
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    pull_policy: ${BEANFLOW_PULL_POLICY:-missing}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    ports:
+      - name: https-from-sophos
+        target: 8080
+        published: "${BEANFLOW_HTTP_PORT:-8080}"
+        host_ip: ${BEANFLOW_BIND_ADDRESS:?BEANFLOW_BIND_ADDRESS is required}
+        protocol: tcp
+        app_protocol: http
+        mode: host
+    depends_on:
+      api:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --output-document=/dev/null http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    stop_grace_period: 15s
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      backend: {}
+      edge: {}
+
+volumes:
+  postgres-data: {}
+
+networks:
+  backend:
+    internal: true
+  edge: {}
+  egress: {}
+
+secrets:
+  postgres_password:
+    file: ${BEANFLOW_SECRETS_DIR:?BEANFLOW_SECRETS_DIR is required}/BEANFLOW_POSTGRES_PASSWORD
+  keycloak_db_password:
+    file: ${BEANFLOW_SECRETS_DIR:?BEANFLOW_SECRETS_DIR is required}/BEANFLOW_KEYCLOAK_DB_PASSWORD
+  keycloak_admin_password:
+    file: ${BEANFLOW_SECRETS_DIR:?BEANFLOW_SECRETS_DIR is required}/BEANFLOW_KEYCLOAK_ADMIN_PASSWORD
+  auth_attempt_hmac_key:
+    file: ${BEANFLOW_SECRETS_DIR:?BEANFLOW_SECRETS_DIR is required}/BEANFLOW_AUTH_ATTEMPT_HMAC_KEY_BASE64_URL
+  cursor_hmac_key:
+    file: ${BEANFLOW_SECRETS_DIR:?BEANFLOW_SECRETS_DIR is required}/BEANFLOW_CURSOR_HMAC_SECRET_BASE64_URL
+  aistor_access_key:
+    file: ${BEANFLOW_SECRETS_DIR:?BEANFLOW_SECRETS_DIR is required}/BEANFLOW_AISTOR_ACCESS_KEY
+  aistor_secret_key:
+    file: ${BEANFLOW_SECRETS_DIR:?BEANFLOW_SECRETS_DIR is required}/BEANFLOW_AISTOR_SECRET_KEY
+  toss_client_key:
+    file: ${BEANFLOW_SECRETS_DIR:?BEANFLOW_SECRETS_DIR is required}/TOSS_CLIENT_KEY
+  toss_secret_key:
+    file: ${BEANFLOW_SECRETS_DIR:?BEANFLOW_SECRETS_DIR is required}/TOSS_SECRET_KEY
+  vault_role_id:
+    file: ${BEANFLOW_SECRETS_DIR:?BEANFLOW_SECRETS_DIR is required}/BEANFLOW_VAULT_ROLE_ID
+  vault_secret_id:
+    file: ${BEANFLOW_SECRETS_DIR:?BEANFLOW_SECRETS_DIR is required}/BEANFLOW_VAULT_SECRET_ID
+  vault_ca_pem:
+    file: ${BEANFLOW_SECRETS_DIR:?BEANFLOW_SECRETS_DIR is required}/BEANFLOW_VAULT_CA_PEM

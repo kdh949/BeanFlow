@@ -107,6 +107,15 @@ jobs:
           scripts/ci/run-and-capture.sh .ci-artifacts/document-verification.log
           bash scripts/verify-docs.sh
 
+      - name: Verify deployment contracts
+        run: |
+          scripts/ci/run-and-capture.sh .ci-artifacts/backend-image-contract.log \
+            bash scripts/deploy/test-backend-image-contract.sh
+          scripts/ci/run-and-capture.sh .ci-artifacts/frontend-image-contract.log \
+            bash scripts/deploy/test-frontend-image-contract.sh
+          scripts/ci/run-and-capture.sh .ci-artifacts/deployment-contract.log \
+            bash scripts/deploy/test-deployment-contract.sh
+
       - name: Check whitespace errors
         run: >-
           scripts/ci/run-and-capture.sh .ci-artifacts/diff-check.log
@@ -133,7 +142,7 @@ jobs:
     needs: preflight
     if: needs.preflight.outputs.scope == 'frontend' || needs.preflight.outputs.scope == 'full'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
