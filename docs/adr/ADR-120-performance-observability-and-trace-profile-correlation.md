@@ -58,6 +58,18 @@ BeanFlow에는 HTTP Actuator health와 다수의 Micrometer domain metric이 있
 - OpenTelemetry와 Pyroscope agent는 container image에 버전 고정하며 runtime flag로 명시적으로
   활성화한다. 비활성 상태를 telemetry 성공으로 위장하지 않는다.
 
+### 5. cAdvisor는 전용 perf host에서만 명시적으로 활성화한다
+
+- 컨테이너별 CPU, memory와 filesystem signal이 필요한 실행에 한해 Compose의 `container-metrics`
+  profile로 cAdvisor를 활성화한다. 기본 perf 기동에는 포함하지 않는다.
+- cAdvisor가 요구하는 `privileged` 권한과 host root, `/var/run`, `/sys`, Docker data와 disk device의
+  read-only mount는 전용이며 폐기 가능한 perf host에서만 허용한다. production, portfolio 또는 다른
+  workload와 공유하는 host에서는 활성화하지 않는다.
+- exporter port는 VPN bind address에만 publish한다. 중앙 Prometheus의 cAdvisor scrape job도 profile을
+  활성화한 실행에서만 병합한다.
+- container name/image 같은 bounded infrastructure label만 dashboard에서 사용하고 container ID나 host
+  path를 애플리케이션 log/metric label에 복제하지 않는다.
+
 ## Alternatives Considered
 
 ### Spring tracing starter와 별도 Pyroscope agent
@@ -91,6 +103,9 @@ extension은 동일 trace/span ID를 profile sample에 기록해 지연 trace에
 - 중앙 Prometheus, Tempo, Loki, Pyroscope와 Grafana datasource 설정을 실제로 적용하기 전에는 정적
   repository 검증만 가능하며 진단 경로를 운영 가능하다고 주장하지 않는다.
 - Hikari/DB lock 패널은 명시적으로 correlated evidence이며 exact request causality가 아니다.
+- cAdvisor를 활성화하면 컨테이너가 host metadata를 광범위하게 읽을 수 있다. 해당 위험은 컨테이너별
+  포화 원인 분리의 이점과 함께 명시적으로 수용하며, profile을 제거하면 제한형 node-exporter와 JVM
+  metric만 남는 안전한 기본 상태로 돌아간다.
 
 ## Verification
 
@@ -119,6 +134,7 @@ extension은 동일 trace/span ID를 profile sample에 기록해 지연 trace에
 - agent/profile overhead가 기준선 분석을 방해할 때
 - 중앙 관측성 서버의 authentication, tenancy 또는 retention 계약이 바뀔 때
 - 실제 Toss 부하 테스트 계약과 별도 quota가 마련될 때
+- perf host가 전용·폐기 가능 환경이 아니게 되거나 rootless container metric 수집 방식이 마련될 때
 
 ## Related Decisions
 
