@@ -191,6 +191,38 @@ services:
     networks:
       observability: {}
 
+  # Explicit opt-in only: this service has privileged, host-wide read access.
+  # Run it exclusively on the dedicated disposable perf host documented in ADR-120.
+  cadvisor:
+    profiles: ["container-metrics"]
+    image: ghcr.io/google/cadvisor:v0.60.5
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=15s
+    restart: unless-stopped
+    privileged: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    devices:
+      - /dev/kmsg:/dev/kmsg:r
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    ports:
+      - name: container-metrics-from-vpn
+        target: 8080
+        published: "${BEANFLOW_PERF_CADVISOR_PORT:-18080}"
+        host_ip: ${BEANFLOW_MONITORING_BIND_ADDRESS:?BEANFLOW_MONITORING_BIND_ADDRESS is required}
+        protocol: tcp
+        app_protocol: http
+        mode: host
+    networks:
+      observability: {}
+
 volumes:
   alloy-data: {}
 

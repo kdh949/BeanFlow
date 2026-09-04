@@ -27,7 +27,8 @@ VPN load generator --HTTPS/WAF--> BeanFlow frontend/API
                                     |-- OTel trace + log --> local Alloy --> central Tempo/Loki
                                     |-- span profile ---------------------> central Pyroscope
                                     |-- PostgreSQL <-- postgres_exporter <-- central Prometheus
-                                    `-- host CPU/memory/I/O <-- node_exporter <-- central Prometheus
+                                    |-- host CPU/memory/I/O <-- node_exporter <-- central Prometheus
+                                    `-- container CPU/memory <-- cAdvisor (opt-in) <-- central Prometheus
 
 central Grafana --> Prometheus + Tempo + Loki + Pyroscope
 ```
@@ -42,6 +43,9 @@ metrics-generator만 Prometheus remote-write receiver를 사용한다.
 
 1. [prometheus-scrape.yml](../../infra/observability/central/prometheus-scrape.yml)의 네 target에서
    `BEANFLOW_PERF_VPN_HOST`를 실제 perf 서버 VPN 주소로 바꿔 `scrape_configs`에 병합한다.
+   cAdvisor를 활성화하는 실행에서만
+   [prometheus-cadvisor-scrape.yml](../../infra/observability/central/prometheus-cadvisor-scrape.yml)의 다섯 번째
+   target도 병합한다. cAdvisor를 끈 상태에서 이 job만 남겨 두면 target-down 경보가 발생한다.
 2. [성능 recording/alert rules](../../infra/observability/central/beanflow-performance.rules.yml)을 중앙
    Prometheus rule directory에 두고 `rule_files`에 병합한 뒤 `promtool check rules`를 실행한다. 이 기준은
    초기 부하 테스트 guardrail이며 측정된 운영 SLO가 아니다.
@@ -97,6 +101,27 @@ export BEANFLOW_PYROSCOPE_SERVER_ADDRESS=http://10.0.0.10:4040
 docker compose -f compose.portfolio.yml -f compose.perf.yml config --quiet
 docker compose -f compose.portfolio.yml -f compose.perf.yml build api
 docker compose -f compose.portfolio.yml -f compose.perf.yml up -d
+```
+
+컨테이너별 CPU와 memory가 필요한 경우에만 전용·폐기 가능 perf host에서 cAdvisor를 별도로 활성화한다.
+이 명령은 `privileged` 컨테이너에 host root, `/var/run`, `/sys`, Docker data와 disk device의 read-only
+접근을 허용한다. production, portfolio 또는 다른 workload와 공유하는 host에서는 실행하지 않는다.
+
+```bash
+docker compose --profile container-metrics \
+  -f compose.portfolio.yml -f compose.perf.yml \
+  up -d cadvisor
+
+curl --fail http://10.0.0.21:18080/metrics
+```
+
+중앙 Prometheus에 선택형 scrape 조각을 병합한 뒤 `up{job="beanflow-cadvisor"} == 1`을 확인한다.
+사용이 끝나면 cAdvisor만 먼저 중지할 수 있다.
+
+```bash
+docker compose --profile container-metrics \
+  -f compose.portfolio.yml -f compose.perf.yml \
+  stop cadvisor
 ```
 
 기존 perf PostgreSQL volume을 재사용한다면 init script가 다시 실행되지 않는다. 이 경우 PostgreSQL을
@@ -280,8 +305,10 @@ bash scripts/perf/postgres-wait-snapshot.sh
    `beanflow.outcome`을 확인한다.
 5. 같은 시간의 Hikari active/max/pending와 PostgreSQL waiting/ungranted lock을 확인한다. 임의 trace와
    DB backend PID가 exact하게 연결됐다고 표현하지 않는다.
-6. trace 상세의 Logs를 열어 같은 `trace_id` log만 남는지 확인한다.
-7. `pyroscope.profile.id`가 있는 root span의 `Profiles for this span`을 열어 해당 span profile flame graph를
+6. `container-metrics`를 활성화했다면 Container CPU/Memory 패널에서 처음 포화된 Compose service를
+   확인한다. 비활성 실행에서 이 두 패널이 `No data`인 것은 정상이다.
+7. trace 상세의 Logs를 열어 같은 `trace_id` log만 남는지 확인한다.
+8. `pyroscope.profile.id`가 있는 root span의 `Profiles for this span`을 열어 해당 span profile flame graph를
    확인한다. 짧은 span은 sampling 간격 때문에 profile이 없을 수 있으므로 DB lock 또는 Toss timeout처럼
    충분히 긴 제어 시나리오로 검증한다.
 
@@ -297,7 +324,7 @@ bash scripts/perf/test-observability-contract.sh
 fixture 보존/폐기 정책을 확인한 별도 승인 작업으로 수행하며 이 Runbook의 기본 종료에 포함하지 않는다.
 
 ```bash
-docker compose -f compose.portfolio.yml -f compose.perf.yml down
+docker compose --profile container-metrics -f compose.portfolio.yml -f compose.perf.yml down
 ```
 
 결과에는 `Passed`, `Failed`, `Pending`, `Not run`을 구분해 적는다. 단일 실행이나 정적 검증으로 SLA,

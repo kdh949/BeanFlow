@@ -164,7 +164,7 @@ RCA dashboard와 data source correlation은 이 순서를 직접 탐색하게 �
 - [x] 2026-09-04: dashboard, alert rules와 runbook 구현
 - [x] 2026-09-04: repository 정적·단위·통합·build 검증과 결과 기록
 - [x] 2026-09-04: cAdvisor의 privileged host/container 경계를 ADR-120에 기록하고 사용자 승인
-- [ ] cAdvisor opt-in Compose, scrape, dashboard와 contract 구현
+- [x] 2026-09-04: cAdvisor opt-in Compose, scrape, dashboard와 contract 구현
 - [ ] 전용 perf 서버에서 중앙 ingest, Grafana correlation과 실제 부하 실행 검증
 
 ## Surprises & Discoveries
@@ -197,13 +197,16 @@ RCA dashboard와 data source correlation은 이 순서를 직접 탐색하게 �
   7 rules, Grafana JSON/YAML, k6/Toss 9 contract tests와 shell syntax 통과.
 - Passed: `./scripts/verify-docs.sh` — 18 tests, 52 policies, 120 ADRs, 318 Markdown files,
   79 ExecPlans와 OpenAPI semantic checks 통과.
-- In progress: 승인된 cAdvisor를 기본 비활성 `container-metrics` profile로 구현한다. 제한형
-  node-exporter는 CPU, memory, disk, network의 host signal만 read-only `/proc`와 `/sys`에서 수집한다.
+- Passed: cAdvisor는 기본 Compose service 목록에서 제외되고 `container-metrics` profile에서만 포함되며,
+  선택형 Prometheus scrape, container CPU/memory dashboard와 target-down rule의 정적 계약이 통과했다.
+  제한형 node-exporter는 CPU, memory, disk, network의 host signal만 read-only `/proc`와 `/sys`에서 수집한다.
 - Not run: 전용 perf credential/fixture가 필요한 AIStor/Vault smoke, 중앙 Tempo/Loki/Pyroscope ingest,
-  Grafana exemplar → trace → log → profile UI 확인과 실제 k6 부하/용량 측정.
+  Grafana exemplar → trace → log → profile UI 확인, 실제 k6 부하/용량 측정과 전용 Linux perf host의
+  privileged cAdvisor 기동·scrape.
 
 ## Revision Notes
 
 - 2026-09-02: 최초 작성.
 - 2026-09-04: P0/P1 전체 구현 범위와 SQL 개인정보 경계 보강.
 - 2026-09-04: repository 구현과 검증 결과, cAdvisor 보안 결정 및 live 검증 경계 기록.
+- 2026-09-04: 승인된 cAdvisor opt-in profile과 정적 계약 구현 결과 기록.

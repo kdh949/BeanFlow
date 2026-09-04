@@ -49,7 +49,7 @@ groups:
           description: Compare Hikari pending with PostgreSQL waits and ungranted locks in the same time range.
 
       - alert: BeanFlowPerfTelemetryTargetDown
-        expr: up{job=~"beanflow(|-alloy|-postgres|-node)"} == 0
+        expr: up{job=~"beanflow(|-alloy|-postgres|-node|-cadvisor)"} == 0
         for: 2m
         labels:
           severity: warning

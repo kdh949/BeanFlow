@@ -125,6 +125,7 @@ extension은 동일 trace/span ID를 profile sample에 기록해 지연 trace에
 - Toss·AIStor·Vault operation duration/count by bounded outcome
 - k6 request/iteration/check/failure와 dropped iteration
 - JVM CPU, heap, GC와 profile upload 상태
+- 기본 host CPU/memory/I/O와 선택형 cAdvisor의 Compose service별 container CPU/memory
 
 실측 전에는 alert threshold, SLA 또는 처리 용량을 결정하지 않는다.
 

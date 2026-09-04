@@ -136,11 +136,31 @@
       "targets": [{"refId": "A", "expr": "1 - (node_memory_MemAvailable_bytes{job=\"beanflow-node\"} / node_memory_MemTotal_bytes{job=\"beanflow-node\"})", "legendFormat": "{{instance}}"}]
     },
     {
+      "type": "timeseries",
+      "title": "Container CPU cores",
+      "description": "Available only when the opt-in container-metrics profile and beanflow-cadvisor scrape job are enabled.",
+      "id": 17,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 44},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{job=\"beanflow-cadvisor\",image!=\"\",container_label_com_docker_compose_service!=\"\"}[$__rate_interval]))", "legendFormat": "{{container_label_com_docker_compose_service}}"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Container memory working set",
+      "description": "Available only when the opt-in container-metrics profile and beanflow-cadvisor scrape job are enabled.",
+      "id": 18,
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 44},
+      "fieldConfig": {"defaults": {"unit": "bytes", "min": 0}, "overrides": []},
+      "targets": [{"refId": "A", "expr": "sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job=\"beanflow-cadvisor\",image!=\"\",container_label_com_docker_compose_service!=\"\"})", "legendFormat": "{{container_label_com_docker_compose_service}}"}]
+    },
+    {
       "type": "traces",
       "title": "Slow traces",
       "id": 12,
       "datasource": {"type": "tempo", "uid": "tempo"},
-      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 44},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 52},
       "targets": [{"refId": "A", "queryType": "traceql", "query": "{ resource.service.name = \"beanflow\" && duration > 1s }"}]
     },
     {
@@ -148,7 +168,7 @@
       "title": "BeanFlow logs (select trace for exact filter)",
       "id": 13,
       "datasource": {"type": "loki", "uid": "loki"},
-      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 44},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 52},
       "targets": [{"refId": "A", "expr": "{service_name=\"beanflow\"} | trace_id != \"\""}]
     },
     {
@@ -156,7 +176,7 @@
       "title": "JVM wall flame graph (time-correlated overview)",
       "id": 14,
       "datasource": {"type": "grafana-pyroscope-datasource", "uid": "pyroscope"},
-      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 53},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 61},
       "targets": [{"refId": "A", "queryType": "profile", "profileTypeId": "process_cpu:wall:nanoseconds:wall:nanoseconds", "labelSelector": "{service_name=\"beanflow\"}"}]
     }
   ],

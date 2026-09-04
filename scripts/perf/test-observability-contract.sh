@@ -45,6 +45,12 @@ export BEANFLOW_PYROSCOPE_SERVER_ADDRESS=http://pyroscope.invalid:4040
 cd "$REPOSITORY_ROOT"
 
 docker compose -f compose.portfolio.yml -f compose.perf.yml config --quiet
+if docker compose -f compose.portfolio.yml -f compose.perf.yml config --services | rg -qx 'cadvisor'; then
+  echo 'cAdvisor must remain disabled in the default perf profile.' >&2
+  exit 1
+fi
+docker compose --profile container-metrics -f compose.portfolio.yml -f compose.perf.yml \
+  config --services | rg -qx 'cadvisor'
 docker run --rm \
   -e BEANFLOW_TEMPO_OTLP_HTTP_ENDPOINT \
   -e BEANFLOW_LOKI_OTLP_HTTP_ENDPOINT \
@@ -60,6 +66,8 @@ jq -e '
   any(.panels[]; .title == "Route p95 (exemplar → Tempo)") and
   any(.panels[]; .title | contains("Hikari")) and
   any(.panels[]; .title | contains("PostgreSQL waiting")) and
+  any(.panels[]; .title == "Container CPU cores") and
+  any(.panels[]; .title == "Container memory working set") and
   any(.panels[].targets[]?; .expr == "k6_http_req_duration_p95{testid=\"$test_id\"}") and
   any(.panels[].targets[]?; .expr == "k6_http_req_failed_rate{testid=\"$test_id\"}") and
   any(.panels[]; .title == "Slow traces") and
@@ -70,6 +78,7 @@ jq -e '
 ruby -e 'require "yaml"; ARGV.each { |path| YAML.safe_load(File.read(path), aliases: true) }' \
   infra/observability/postgres-queries.yaml \
   infra/observability/central/prometheus-scrape.yml \
+  infra/observability/central/prometheus-cadvisor-scrape.yml \
   infra/observability/central/beanflow-performance.rules.yml \
   infra/observability/central/tempo-metrics-generator.yml \
   infra/observability/central/loki-otlp.yml \
@@ -86,6 +95,8 @@ rg -q 'profileTypeId: process_cpu:wall:nanoseconds:wall:nanoseconds' \
 rg -q 'DATA_SOURCE_PASS_FILE' compose.perf.yml
 rg -q '^  node-exporter:' compose.perf.yml
 rg -q 'job_name: beanflow-node' infra/observability/central/prometheus-scrape.yml
+rg -q 'job_name: beanflow-cadvisor' infra/observability/central/prometheus-cadvisor-scrape.yml
+rg -q 'beanflow.*-cadvisor' infra/observability/central/beanflow-performance.rules.yml
 rg -q 'BeanFlowPerfDroppedIterations' infra/observability/central/beanflow-performance.rules.yml
 rg -q 'releases/download/v2.31.1/opentelemetry-javaagent.jar' Dockerfile
 rg -q 'releases/download/v2.1.2/pyroscope-otel-javaagent-extension.jar' Dockerfile
@@ -94,6 +105,22 @@ if rg -q -- '--collector.stat_statements.include_query' compose.perf.yml; then
   echo 'PostgreSQL exporter must not publish SQL query text.' >&2
   exit 1
 fi
+
+ruby -ryaml -e '
+  cadvisor = YAML.safe_load(File.read("compose.perf.yml"), aliases: true)
+    .fetch("services").fetch("cadvisor")
+  required_mounts = [
+    "/:/rootfs:ro",
+    "/var/run:/var/run:ro",
+    "/sys:/sys:ro",
+    "/var/lib/docker:/var/lib/docker:ro",
+    "/dev/disk:/dev/disk:ro"
+  ]
+  abort "cAdvisor profile boundary is invalid" unless cadvisor.fetch("profiles") == ["container-metrics"]
+  abort "cAdvisor privilege boundary is invalid" unless cadvisor.fetch("privileged") && cadvisor.fetch("read_only")
+  abort "cAdvisor host mounts must remain read-only" unless (required_mounts - cadvisor.fetch("volumes")).empty?
+  abort "cAdvisor kmsg access must remain read-only" unless cadvisor.fetch("devices") == ["/dev/kmsg:/dev/kmsg:r"]
+'
 
 node --test scripts/load/load-contract.test.mjs infra/perf/toss-driver.test.mjs
 bash -n scripts/perf/hold-pickup-slot-lock.sh scripts/perf/postgres-wait-snapshot.sh
