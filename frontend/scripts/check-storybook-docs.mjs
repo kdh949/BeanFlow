@@ -64,7 +64,6 @@ const statefulDocs = {
   "pages-refresh-store-order-board--docs": {
     "pages-refresh-store-order-board--active-orders": "A-142",
     "pages-refresh-store-order-board--empty-board": "대기 주문 없음",
-    "pages-refresh-store-order-board--transition-conflict": "다른 작업자가 먼저 처리했습니다",
     "pages-refresh-store-order-board--overflow-queue": "오래된 준비 완료 작업 2건 보기",
   },
   "pages-refresh-customer-home--docs": {

@@ -34,11 +34,13 @@ export const WithItems: Story = {
 };
 
 export const Empty: Story = {
+  tags: ["!autodocs"],
   beforeEach: () => cart.clear(),
   play: async ({ canvas }) => { await expect(await canvas.findByText("담은 메뉴가 없어요")).toBeVisible(); },
 };
 
 export const Corrupt: Story = {
+  tags: ["!autodocs"],
   beforeEach: () => { cart.clear(); localStorage.setItem(CART_STORAGE_KEY, "{not json"); },
   play: async ({ canvas }) => { await expect(await canvas.findByText("장바구니 정보를 읽지 못했어요")).toBeVisible(); },
 };
