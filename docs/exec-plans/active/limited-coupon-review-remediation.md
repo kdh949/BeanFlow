@@ -124,7 +124,8 @@ ADR-120의 draft update 표현을 create-only MVP로 바꾸고 customer cursor �
 - [x] 2026-09-06: PR #130 head, unresolved review scope, existing V69 retention index와 migration 부재 확인.
 - [x] 2026-09-06: Campaign lock 이후 Clock 경계, length-prefixed draft hash, mutable 메뉴 검증 전 replay를
   회귀 테스트로 RED 확인한 뒤 focused PostgreSQL/Controller test GREEN.
-- [ ] Milestone 2
+- [x] 2026-09-06: 두 Promotion command table의 90일 경계·100건 `SKIP LOCKED` 정리와 테이블별
+  실패 격리·재실행, AIStor `startAfter` 기반 Campaign banner sweep 진행성을 RED→GREEN으로 검증.
 - [ ] Milestone 3
 - [ ] Milestone 4
 

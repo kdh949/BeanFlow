@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.promotion.internal
 
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageOrphanCandidatePage
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -21,22 +22,32 @@ internal class LimitedCouponCampaignBannerOrphanSweepTest {
     private val sweep = LimitedCouponCampaignBannerOrphanSweep(storage, campaigns, metrics, Clock.fixed(now, ZoneOffset.UTC))
 
     @Test
-    fun `campaign sweep rechecks current pointers and deletes only an old orphan`() {
-        val referenced = "campaigns/id/hash/original.jpg"
+    fun `campaign sweep advances past a full referenced page and eventually deletes an old orphan`() {
+        val referenced = (1..100).map { "campaigns/id/hash/referenced-$it.jpg" }
         val orphan = "campaigns/id/hash/thumbnail.jpg"
         `when`(
-            storage.listOrphanCandidates(
-                setOf(StorefrontImageTarget.CAMPAIGN),
+            storage.listOrphanCandidatePage(
+                StorefrontImageTarget.CAMPAIGN,
                 now.minusSeconds(86_400),
+                null,
                 100,
             ),
-        ).thenReturn(listOf(referenced, orphan))
-        `when`(campaigns.isBannerReferenced(referenced)).thenReturn(true)
+        ).thenReturn(StorefrontImageOrphanCandidatePage(referenced, referenced.last()))
+        `when`(
+            storage.listOrphanCandidatePage(
+                StorefrontImageTarget.CAMPAIGN,
+                now.minusSeconds(86_400),
+                referenced.last(),
+                100,
+            ),
+        ).thenReturn(StorefrontImageOrphanCandidatePage(listOf(orphan), null))
+        referenced.forEach { `when`(campaigns.isBannerReferenced(it)).thenReturn(true) }
         `when`(campaigns.isBannerReferenced(orphan)).thenReturn(false)
 
         sweep.sweep()
+        sweep.sweep()
 
-        verify(storage, never()).deleteObject(referenced)
+        referenced.forEach { verify(storage, never()).deleteObject(it) }
         verify(storage).deleteObject(orphan)
         assertThat(
             metrics

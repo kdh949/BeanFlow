@@ -42,6 +42,11 @@ data class StorefrontImageAccess(
     val expiresAt: Instant,
 )
 
+data class StorefrontImageOrphanCandidatePage(
+    val candidateKeys: List<String>,
+    val nextStartAfter: String?,
+)
+
 data class StoreImageChange(
     val changed: Boolean,
     val current: StorefrontImagePointer?,
@@ -79,6 +84,13 @@ interface StorefrontImageStorageOperations {
         olderThan: Instant,
         limit: Int,
     ): List<String>
+
+    fun listOrphanCandidatePage(
+        target: StorefrontImageTarget,
+        olderThan: Instant,
+        startAfter: String?,
+        limit: Int,
+    ): StorefrontImageOrphanCandidatePage
 
     fun deleteObject(key: String)
 }

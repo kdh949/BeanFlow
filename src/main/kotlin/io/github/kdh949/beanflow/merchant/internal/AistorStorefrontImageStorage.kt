@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.merchant.internal
 import io.github.kdh949.beanflow.merchant.api.NormalizedStorefrontImageUpload
 import io.github.kdh949.beanflow.merchant.api.PreparedStorefrontImage
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageAccess
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageOrphanCandidatePage
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageUpload
@@ -77,6 +78,27 @@ internal class AistorStorefrontImageStorage(
                 .take(limit)
                 .map(AistorObjectSummary::key)
                 .toList()
+        }
+    }
+
+    override fun listOrphanCandidatePage(
+        target: StorefrontImageTarget,
+        olderThan: java.time.Instant,
+        startAfter: String?,
+        limit: Int,
+    ): StorefrontImageOrphanCandidatePage {
+        require(limit in 1..1000)
+        return external("list-orphan-page", metricTarget(target)) {
+            val scanned = client.list("${target.objectPrefix}/", startAfter, limit)
+            StorefrontImageOrphanCandidatePage(
+                candidateKeys =
+                    scanned
+                        .asSequence()
+                        .filter { stored -> stored.lastModifiedAt.isBefore(olderThan) }
+                        .map(AistorObjectSummary::key)
+                        .toList(),
+                nextStartAfter = scanned.lastOrNull()?.key.takeIf { scanned.size == limit },
+            )
         }
     }
 
