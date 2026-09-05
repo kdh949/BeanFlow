@@ -96,8 +96,42 @@ internal class AistorStorefrontImageStorageTest {
         client.listed += AistorObjectSummary("other/ignored", now.minusSeconds(300))
         client.listed += AistorObjectSummary("menus/new/thumbnail.jpg", now.minusSeconds(10))
 
-        assertThat(storage(client).listOrphanCandidates(now.minusSeconds(100), 1))
-            .containsExactly("stores/one/original.jpg")
+        assertThat(
+            storage(client).listOrphanCandidates(
+                setOf(StorefrontImageTarget.STORE, StorefrontImageTarget.MENU),
+                now.minusSeconds(100),
+                1,
+            ),
+        ).containsExactly("stores/one/original.jpg")
+    }
+
+    @Test
+    fun `orphan page resumes after the last scanned object and bounds raw object scanning`() {
+        val client = FakeAistorObjectClient()
+        client.listed += AistorObjectSummary("campaigns/001/referenced.jpg", now.minusSeconds(200))
+        client.listed += AistorObjectSummary("campaigns/002/new.jpg", now.minusSeconds(10))
+        client.listed += AistorObjectSummary("campaigns/003/orphan.jpg", now.minusSeconds(200))
+
+        val first =
+            storage(client).listOrphanCandidatePage(
+                StorefrontImageTarget.CAMPAIGN,
+                now.minusSeconds(100),
+                null,
+                2,
+            )
+        val second =
+            storage(client).listOrphanCandidatePage(
+                StorefrontImageTarget.CAMPAIGN,
+                now.minusSeconds(100),
+                first.nextStartAfter,
+                2,
+            )
+
+        assertThat(first.candidateKeys).containsExactly("campaigns/001/referenced.jpg")
+        assertThat(first.nextStartAfter).isEqualTo("campaigns/002/new.jpg")
+        assertThat(second.candidateKeys).containsExactly("campaigns/003/orphan.jpg")
+        assertThat(second.nextStartAfter).isNull()
+        assertThat(client.listStartAfter).containsExactly(null, "campaigns/002/new.jpg")
     }
 
     private fun storage(client: AistorObjectClient) =
@@ -126,6 +160,7 @@ internal class AistorStorefrontImageStorageTest {
         val objects = linkedMapOf<String, Stored>()
         val statCalls = mutableListOf<String>()
         val listed = mutableListOf<AistorObjectSummary>()
+        val listStartAfter = mutableListOf<String?>()
 
         override fun put(
             key: String,
@@ -157,6 +192,20 @@ internal class AistorStorefrontImageStorageTest {
         }
 
         override fun list(prefix: String): Sequence<AistorObjectSummary> = listed.asSequence().filter { it.key.startsWith(prefix) }
+
+        override fun list(
+            prefix: String,
+            startAfter: String?,
+            limit: Int,
+        ): List<AistorObjectSummary> {
+            listStartAfter += startAfter
+            return listed
+                .asSequence()
+                .filter { it.key.startsWith(prefix) }
+                .filter { startAfter == null || it.key > startAfter }
+                .take(limit)
+                .toList()
+        }
 
         override fun verifyBucket(): AistorBucketVerification = AistorBucketVerification.AVAILABLE
     }

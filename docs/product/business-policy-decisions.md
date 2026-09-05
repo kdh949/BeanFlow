@@ -2509,6 +2509,41 @@
 
 ---
 
+## BR-53 운영형 선착순 쿠폰 캠페인
+
+- **Status:** Accepted for MVP
+- **Decision:** 명시적 `PROMOTION_CAMPAIGN_WRITE` 권한을 가진 운영자는 선착순 쿠폰 캠페인을
+  `DRAFT`로 생성해 매장·대상 메뉴·할인·비용 부담·총 발급 수량·다운로드 기간·고정 쿠폰 만료일과
+  배너를 설정한다. 발행 시 모든 조건을 한 번에 고정하며 이후에는 신규 다운로드 중단만 허용한다.
+- **Claim Order:** 고객당 캠페인별 한 장만 허용한다. 별도 대기열이나 HTTP 도착 시각 순서를 만들지 않고,
+  Campaign root lock 아래의 claim·조건부 카운터 증가·CouponIssuance·멱등 응답이 한 local transaction으로
+  성공한 순서가 발급 순서다. 총량을 넘기거나 중복 발급한 요청은 명시적 409로 실패한다.
+- **Quota and Expiry:** `issued_count`는 발급 성공 때만 증가하며 주문 취소·미사용·쿠폰 만료로 감소하지
+  않는다. `claimStartsAt < claimEndsAt <= couponExpiresAt`을 강제하고 모든 발급 쿠폰은 캠페인의 동일한
+  절대 만료 시각을 snapshot한다. 고객 잔여 수량은 조회 시점의 근사값이며 발급 가능성의 권한 증명이 아니다.
+- **Lifecycle:** `DRAFT -> PUBLISHED -> STOPPED`만 허용한다. `STOPPED`와 다운로드 기간 종료는 새 발급만
+  막으며 기존 CouponIssuance는 만료일까지 기존 예약·사용·복원 정책을 따른다. 발행된 캠페인의 할인,
+  메뉴, 수량, 기간과 배너를 수정하거나 삭제하지 않는다.
+- **Media and Failure:** 배너는 private object storage에 저장하고 고객에게 짧은 presigned URL로 제공한다.
+  PUT 결과가 불명확하거나 필수 이미지 서명이 실패하면 이미지 없음·placeholder·부분 성공으로 대체하지
+  않는다. 초안 저장과 외부 배너 업로드 결과는 구분해 보고한다.
+- **Authorization and Audit:** 운영 조회와 변경은 각각 `PROMOTION_CAMPAIGN_READ`,
+  `PROMOTION_CAMPAIGN_WRITE` persistent grant를 요구한다. 역할·JWT permission claim은 fallback이 아니며,
+  변경 명령은 reason·Idempotency-Key·Audit를 같은 local transaction 경계에 둔다.
+- **Affected Contexts:** Promotion, Operations, Merchant, Media, Identity, Customer Web, Operations Web
+- **Affected Aggregates:** Campaign, LimitedCouponCampaign, CouponIssuance, OperatorPermissionGrant
+- **Required Tests:**
+  - 총량 N에 대한 2N 동시 claim에서 정확히 N개 성공과 중복·초과 발급 0건
+  - 같은 고객·같은/다른 Idempotency-Key 재시도와 counter 비증가
+  - claim과 STOP lock 경쟁에서 먼저 Campaign lock을 얻은 transaction의 결과 보존
+  - 발행 후 변경 거부, 고정 만료일, 기간 경계와 발급 카운터 비복원
+  - grant revoke·Audit·DB·media 실패의 명시적 오류와 부분 성공 부재
+- **ADR Required:** [ADR-120](../adr/ADR-120-operations-managed-limited-coupon-campaign.md)
+- **Revisit Conditions:** 측정된 Campaign lock 대기가 목표 처리량을 막거나, 발행 후 revision·증액·대기열이
+  실제 운영 요구로 승인될 때
+
+---
+
 # 정책 간 의존성과 우선 적용 순서
 
 1. `BR-01`, `BR-02`를 모든 시간·금액 Value Object의 기준으로 사용한다.
@@ -2549,6 +2584,8 @@
     `BR-27`을 함께 적용한다.
 31. 점주 Store 주문 정책과 Menu 거래 카탈로그 writer는 `BR-52`를 따르고, 최종 주문 quote·snapshot은
     `BR-49`, 검색 term 동기화는 `BR-47`, 이미지·표시 content는 `BR-48`, `BR-50`과 분리한다.
+32. 운영형 선착순 쿠폰은 `BR-53`을 따르고, 시간은 `BR-01`, 비용 부담은 `BR-19`, 멱등성과 보존은
+    `BR-25`, `BR-26`, 이미지 실패 의미는 `BR-48`과 같은 fail-closed 원칙을 적용한다.
 
 ---
 
@@ -2562,6 +2599,7 @@
 | 매장 수락 timeout과 보상 흐름 | [ADR-015](../adr/ADR-015-store-acceptance-timeout-compensation.md) |
 | 주문 가격·할인·포인트 스냅샷 | [ADR-004](../adr/ADR-004-order-price-snapshot.md), [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
 | 쿠폰 Campaign 계산 모델 | [ADR-024](../adr/ADR-024-coupon-calculation-model.md) |
+| 운영형 선착순 쿠폰 Campaign | [ADR-120](../adr/ADR-120-operations-managed-limited-coupon-campaign.md) |
 | 0원 혜택 결제 | [ADR-016](../adr/ADR-016-benefit-only-payment.md) |
 | 부분 환불 배분 | [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
 | PointLot·포인트 회수·복원·감사형 조정 | [ADR-011](../adr/ADR-011-point-lot-ledger.md), [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md), [ADR-065](../adr/ADR-065-refund-earned-point-recovery-ledger.md), [ADR-066](../adr/ADR-066-audited-loyalty-point-adjustment.md), [ADR-068](../adr/ADR-068-immutable-integration-event-snapshots.md), [ADR-069](../adr/ADR-069-operator-permission-grants-and-audited-policy-read.md), [ADR-071](../adr/ADR-071-settlement-input-snapshot-foundation.md) |

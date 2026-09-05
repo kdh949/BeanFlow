@@ -108,7 +108,7 @@
 | [ADR-104](ADR-104-notification-inbox.md) | Accepted | 고객 알림함과 거래·마케팅 수신 설정 |
 | [ADR-105](ADR-105-sandbox-settlement-payout.md) | Accepted | 실제 정산 지급을 Non-goal로 두고 sandbox 범위 명시 |
 | [ADR-106](ADR-106-support-verification-and-data-access-grant.md) | Accepted | opaque challenge verification과 audit-gated DataAccessGrant reveal |
-| [ADR-107](ADR-107-limited-coupon-issuance.md) | Accepted | 한정 쿠폰의 원자적 발급과 잔여 수량 표현 |
+| [ADR-107](ADR-107-limited-coupon-issuance.md) | Superseded | 한정 쿠폰의 원자적 발급과 잔여 수량 표현 |
 | [ADR-108](ADR-108-merchant-partial-refund-preview.md) | Accepted | 점주 부분 환불 preview와 공개 품목 식별 계약 |
 | [ADR-109](ADR-109-customer-point-account-provisioning.md) | Accepted | 고객 가입과 PointAccount 원자 provisioning |
 | [ADR-110](ADR-110-federated-operations-failure-queues.md) | Accepted | 소유 Context 기반 운영 실패 큐 연합 조회 |
@@ -121,3 +121,4 @@
 | [ADR-117](ADR-117-store-customer-display-profile.md) | Accepted | Store 고객 표시 profile과 주문 가능성 분리 |
 | [ADR-118](ADR-118-merchant-transactional-catalog-lifecycle.md) | Accepted | 점주 거래 카탈로그 수명주기와 주문 직렬화 경계 |
 | [ADR-119](ADR-119-portfolio-deployment-runtime.md) | Accepted | 포트폴리오 배포 runtime과 sandbox 결제 경계 |
+| [ADR-120](ADR-120-operations-managed-limited-coupon-campaign.md) | Accepted | 운영형 선착순 쿠폰 캠페인과 이벤트 배너 lifecycle |

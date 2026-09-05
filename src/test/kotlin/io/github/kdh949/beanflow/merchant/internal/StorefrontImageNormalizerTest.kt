@@ -54,6 +54,16 @@ internal class StorefrontImageNormalizerTest {
     }
 
     @Test
+    fun `campaign banner is center cropped and re-encoded as a 1200 by 450 JPEG`() {
+        val result = normalizer.normalizeCampaignBanner(image(width = 900, height = 900, format = "png"), "image/png")
+
+        assertThat(ImageIO.read(ByteArrayInputStream(result.original))).extracting("width", "height").containsExactly(1200, 450)
+        assertThat(result.thumbnail).isEqualTo(result.original)
+        assertThat(result.contentType).isEqualTo("image/jpeg")
+        assertThat(result.extension).isEqualTo("jpg")
+    }
+
+    @Test
     fun `oversized corrupt disguised and invalid resolution inputs are rejected`() {
         assertInvalid(ByteArray(StorefrontImageNormalizer.MAX_UPLOAD_BYTES + 1), "image/jpeg")
         assertInvalid("not-an-image".toByteArray(), "image/jpeg")
