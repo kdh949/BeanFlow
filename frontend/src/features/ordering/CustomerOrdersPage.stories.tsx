@@ -22,6 +22,7 @@ type Story = StoryObj<typeof meta>;
 export const ActiveOrder: Story = {
   parameters: { msw: { handlers: orderListHandlers() } },
   play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("heading", { name: "주문 내역" })).toBeVisible();
     await expect(await canvas.findByRole("link", { name: /아이스 아메리카노 외 1건/ })).toBeVisible();
   },
 };
@@ -30,6 +31,18 @@ export const PastOrder: Story = {
   parameters: {
     routing: { path: "/app/orders", initialEntry: "/app/orders?status=PAST&from=2026-07-17&to=2026-08-15" },
     msw: { handlers: orderListHandlers([{ ...orderSummary, status: "COMPLETED", allowedActions: [] }]) },
+  },
+};
+
+export const RefundOrder: Story = {
+  parameters: {
+    routing: { path: "/app/orders", initialEntry: "/app/orders?status=PAST&from=2026-07-17&to=2026-08-15" },
+    msw: { handlers: orderListHandlers([{ ...orderSummary, status: "CANCELLED", allowedActions: ["VIEW_REFUND"] }]) },
+  },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("heading", { name: "주문 내역" })).toBeVisible();
+    const order = await canvas.findByRole("link", { name: /환불 내역 확인/ });
+    await expect(order).toHaveAttribute("href", `/app/orders/${orderSummary.orderReference}`);
   },
 };
 

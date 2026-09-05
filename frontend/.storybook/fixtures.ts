@@ -36,7 +36,7 @@ export const unspecifiedCustomerDisplay = {
   operatingStatus: "UNSPECIFIED",
 } satisfies components["schemas"]["CustomerStoreDisplay"];
 
-export const orderSummary = {
+export const orderSummary: components["schemas"]["CustomerOrderSummary"] = {
   orderReference: "BF-7K3M-9Q2P",
   pickupNumber: "A-142",
   storeName: "시청점",
@@ -256,7 +256,7 @@ export function paymentHandlers(state: string) {
   return [http.get("/api/v1/payments/:paymentId", () => HttpResponse.json(payment(state)))];
 }
 
-export function orderListHandlers(items = [orderSummary]) {
+export function orderListHandlers(items: components["schemas"]["CustomerOrderSummary"][] = [orderSummary]) {
   return [http.get("/api/v1/me/orders", () => HttpResponse.json({ items, page: { nextCursor: null } }))];
 }
 

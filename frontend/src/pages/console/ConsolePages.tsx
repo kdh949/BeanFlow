@@ -1,7 +1,10 @@
 import {
   AlertTriangle,
   ArrowRight,
+  BadgeCheck,
   CheckCircle2,
+  FileClock,
+  ListChecks,
   RotateCcw,
   Search,
 } from "lucide-react";
@@ -10,7 +13,7 @@ import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { Button, EmptyState, LoadingState, PageHeading, TextField } from "../../design-system";
+import { Button, EmptyState, InlineNotice, LoadingState, PageHeading, TextField } from "../../design-system";
 import { compactId, shortDateTime } from "../../lib/format";
 import { ErrorState, StatusText } from "../../presentation/shared";
 
@@ -20,17 +23,31 @@ function OverviewCard({ icon, label, value, hint }: { icon: ReactNode; label: st
   return <article className="metric-card"><span>{icon}</span><small>{label}</small><strong>{value}</strong><p>{hint}</p></article>;
 }
 
-export function OpsDashboardPage() {
+export type OpsDashboardSummary = {
+  failureAttention: number;
+  settlementMismatch: number;
+  auditAccessToday: number;
+  refundApprovals: number;
+  campaignInProgress: number;
+  payoutReady: number;
+};
+
+export function OpsDashboardPage({ scenario = "contract-pending", summary }: { scenario?: "contract-pending" | "ready"; summary?: OpsDashboardSummary }) {
   return (
     <div className="console-page">
       <PageHeading title="플랫폼 운영 현황" />
-      <section className="metric-grid">
-        <OverviewCard icon={<RotateCcw />} label="환불" value="매장 콘솔" hint="주문번호와 품목으로 실행하고 운영 화면은 조회만 담당" />
-        <OverviewCard icon={<AlertTriangle />} label="미확정 결과" value="확인 필요" hint="확인 전까지 미확정 상태 유지" />
-        <OverviewCard icon={<CheckCircle2 />} label="감사 접근" value="사유 필수" hint="운영자 보상 조회 기록" />
-      </section>
+      {scenario === "contract-pending" || !summary ? <InlineNotice tone="danger" announce="assertive" title="운영 요약을 준비하고 있습니다" description="현재는 아래 업무별 화면에서 상태를 확인해 주세요." /> : <section className="metric-grid" aria-label="운영 상태 요약">
+        <OverviewCard icon={<AlertTriangle />} label="확인할 실패" value={`${summary.failureAttention}건`} hint="결제·알림·정산" />
+        <OverviewCard icon={<RotateCcw />} label="정산 금액 차이" value={`${summary.settlementMismatch}건`} hint="자동으로 바꾸지 않는 정산 차이" />
+        <OverviewCard icon={<CheckCircle2 />} label="오늘 정보 조회" value={`${summary.auditAccessToday}건`} hint="조회 사유가 기록된 건" />
+        <OverviewCard icon={<BadgeCheck />} label="승인할 환불" value={`${summary.refundApprovals}건`} hint="한도와 권한 확인 필요" />
+        <OverviewCard icon={<FileClock />} label="진행 중인 캠페인" value={`${summary.campaignInProgress}개`} hint="예약과 진행 상태" />
+        <OverviewCard icon={<ListChecks />} label="지급 파일 준비" value={`${summary.payoutReady}건`} hint="파일 생성은 지급 완료가 아닙니다" />
+      </section>}
       <section className="console-shortcuts">
-        <Link className="surface-card shortcut-card" to="/ops/orders"><Search /><div><strong>보상 조회</strong><span>감사 사유와 주문 번호로 상세 상태 확인</span></div><ArrowRight /></Link>
+        <Link className="surface-card shortcut-card" to="/ops/recovery"><AlertTriangle /><div><strong>문제와 정산 확인</strong><span>실패 업무, 정산 차이와 감사 기록 보기</span></div><ArrowRight /></Link>
+        <Link className="surface-card shortcut-card" to="/ops/control"><ListChecks /><div><strong>승인과 지급 준비</strong><span>환불 승인, 캠페인과 지급 파일 처리</span></div><ArrowRight /></Link>
+        <Link className="surface-card shortcut-card" to="/ops/orders"><Search /><div><strong>보상 내역 찾기</strong><span>주문 번호로 보상 상태 확인</span></div><ArrowRight /></Link>
       </section>
     </div>
   );

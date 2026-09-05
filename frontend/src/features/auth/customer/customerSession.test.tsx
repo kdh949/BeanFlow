@@ -54,6 +54,16 @@ describe("customer session route boundary", () => {
     expect(await screen.findByRole("heading", { name: "주문 목록" })).toBeInTheDocument();
   });
 
+  it("keeps refund access in orders and leaves coupon claims as a separate destination", async () => {
+    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+
+    renderApp("/app/me");
+
+    expect(await screen.findByRole("link", { name: "주문 내역" })).toHaveAttribute("href", "/app/orders");
+    expect(screen.getByRole("link", { name: "쿠폰 받기" })).toHaveAttribute("href", "/app/coupon-claims");
+    expect(screen.queryByRole("link", { name: "환불 내역" })).not.toBeInTheDocument();
+  });
+
   it("sends 401 to login with a sanitized same-origin return path", async () => {
     vi.spyOn(customerApi, "GET").mockResolvedValue(failure(401, "UNAUTHORIZED") as never);
 
