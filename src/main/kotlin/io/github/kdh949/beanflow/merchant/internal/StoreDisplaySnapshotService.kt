@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.merchant.api.StoreDisplaySnapshot
 import io.github.kdh949.beanflow.merchant.api.StoreDisplaySnapshotOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import org.springframework.dao.DataAccessException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
@@ -42,6 +43,40 @@ internal class StoreDisplaySnapshotService(
             unavailable("Verified store display profile is invalid")
         }
         return snapshot
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
+    override fun list(limit: Int): List<StoreDisplaySnapshot> {
+        if (limit !in 1..100) throw DomainFailure(FailureCode.INVALID_REQUEST, "Store display limit must be between 1 and 100")
+        return try {
+            jdbcTemplate
+                .query(
+                    """
+                    SELECT profile.store_id, profile.name, store.version AS store_version
+                      FROM merchant_store_discovery_profile profile
+                      JOIN merchant_store store ON store.id = profile.store_id
+                     ORDER BY profile.name, profile.store_id
+                     LIMIT ?
+                    """.trimIndent(),
+                    { resultSet, _ ->
+                        StoreDisplaySnapshot(
+                            storeId = resultSet.getObject("store_id", UUID::class.java),
+                            name = resultSet.getString("name"),
+                            storeVersion = resultSet.getLong("store_version"),
+                        )
+                    },
+                    limit,
+                ).onEach { snapshot ->
+                    if (snapshot.name.isBlank() || snapshot.name.length > 200 || snapshot.name != snapshot.name.trim()) {
+                        unavailable("Verified store display profile is invalid")
+                    }
+                }
+        } catch (failure: DataAccessException) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Verified store display profiles are unavailable",
+            ).also { it.initCause(failure) }
+        }
     }
 
     private fun unavailable(message: String): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)

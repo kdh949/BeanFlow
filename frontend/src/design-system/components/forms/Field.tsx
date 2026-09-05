@@ -17,7 +17,7 @@ type FieldContentProps = {
   labelVisibility?: FieldLabelVisibility;
 };
 
-export type TextFieldType = "text" | "email" | "tel" | "password" | "number" | "date";
+export type TextFieldType = "text" | "email" | "tel" | "password" | "number" | "date" | "datetime-local";
 
 export type TextFieldProps = FieldContentProps &
   Omit<InputHTMLAttributes<HTMLInputElement>, "className" | "style" | "size" | "type" | "value" | "onChange"> & {
@@ -40,7 +40,12 @@ export type SelectFieldProps = FieldContentProps &
     children: ReactNode;
   };
 
-/** Canonical controlled single-line field. Numeric and date values remain strings so empty input is never coerced. */
+export type FileFieldProps = FieldContentProps &
+  Omit<InputHTMLAttributes<HTMLInputElement>, "className" | "style" | "size" | "type" | "value" | "onChange"> & {
+    onFileChange: (file: File | null) => void;
+  };
+
+/** Canonical controlled single-line field. Numeric, date, and local date-time values remain strings so empty input is never coerced. */
 export function TextField({
   label,
   description,
@@ -108,6 +113,27 @@ export function SelectField({
       <select {...props} id={ids.inputId} className={`bf-field__control bf-field__control--${size} bf-field__select`} value={value} aria-invalid={error || invalid ? true : undefined} aria-describedby={ids.describedBy} onChange={(event) => onValueChange(event.target.value)}>
         {children}
       </select>
+    </FieldFrame>
+  );
+}
+
+/** Canonical single-file upload field. The browser owns the filename while product code owns the selected File. */
+export function FileField({
+  label,
+  description,
+  error,
+  invalid = false,
+  size = "md",
+  labelVisibility = "visible",
+  onFileChange,
+  id: providedId,
+  "aria-describedby": providedDescription,
+  ...props
+}: FileFieldProps) {
+  const ids = useFieldIds(providedId, description, error, providedDescription);
+  return (
+    <FieldFrame label={label} labelVisibility={labelVisibility} inputId={ids.inputId} description={description} error={error} descriptionId={ids.descriptionId} errorId={ids.errorId}>
+      <input {...props} id={ids.inputId} className={`bf-field__control bf-field__control--${size} bf-field__file`} type="file" aria-invalid={error || invalid ? true : undefined} aria-describedby={ids.describedBy} onChange={(event) => onFileChange(event.target.files?.item(0) ?? null)} />
     </FieldFrame>
   );
 }

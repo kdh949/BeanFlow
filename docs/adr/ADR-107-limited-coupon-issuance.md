@@ -1,6 +1,6 @@
 # ADR-107: 한정 쿠폰의 원자적 발급과 잔여 수량 표현
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-120](ADR-120-operations-managed-limited-coupon-campaign.md)
 - **Date:** 2026-08-12
 - **Implementation owner:** [Design and capability contract](../exec-plans/completed/productization-00-design-capability-contract.md)
 

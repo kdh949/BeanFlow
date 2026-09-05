@@ -29,11 +29,13 @@ import { OperationsRecoveryPage } from "./features/operations/OperationsRecovery
 import { SupportFollowUpPage } from "./features/support/SupportFollowUpPage";
 import { SupportWorkspacePage } from "./features/support/SupportWorkspacePage";
 import { OperationsPolicyPage } from "./features/operations/OperationsPolicyPage";
+import { CouponCampaignsPage } from "./features/operations/CouponCampaignsPage";
 import { NotificationInboxPage } from "./features/notification/NotificationInboxPage";
 import {
   RefreshCartPage,
   RefreshCheckoutPage,
   RefreshCustomerHomePage,
+  EventCampaignPage,
   RefreshCustomerOrderDetailPage,
   RefreshStoreDetailPage,
   RefreshStoreOrderBoardPage,
@@ -58,6 +60,7 @@ export const router = createBrowserRouter([
         element: <CustomerSessionGate />, children: [
           { element: <CustomerShell />, children: [
             { index: true, element: <RefreshCustomerHomePage /> },
+            { path: "events", element: <EventCampaignPage /> },
             { path: "stores", element: <RefreshStoreSearchPage /> },
             { path: "stores/:storeId", element: <RefreshStoreDetailPage /> },
             { path: "cart", element: <RefreshCartPage /> },
@@ -114,6 +117,7 @@ export const router = createBrowserRouter([
           { path: "recovery", element: <OperationsRecoveryPage /> },
           { path: "control", element: <OperationsControlPage /> },
           { path: "policies", element: <OperationsPolicyPage /> },
+          { path: "campaigns", element: <CouponCampaignsPage /> },
         ],
       },
     ],

@@ -272,6 +272,10 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1orders"
   /me/coupons:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1coupons"
+  /me/events:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1events"
+  /me/events/{campaignId}/claims:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1events~1{campaignId}~1claims"
   /me/orders/{orderReference}:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1orders~1{orderReference}"
   /me/orders/{orderReference}/cancellations:
@@ -852,6 +856,20 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1brands"
   /operations/brands/{brandId}:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1brands~1{brandId}"
+  /operations/coupon-campaigns:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns"
+  /operations/coupon-campaigns/{campaignId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1{campaignId}"
+  /operations/coupon-campaigns/{campaignId}/banner:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1{campaignId}~1banner"
+  /operations/coupon-campaigns/{campaignId}/publication:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1{campaignId}~1publication"
+  /operations/coupon-campaigns/{campaignId}/stoppage:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1{campaignId}~1stoppage"
+  /operations/coupon-campaigns/store-options:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1store-options"
+  /operations/coupon-campaigns/store-options/{storeId}/menus:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1coupon-campaigns~1store-options~1{storeId}~1menus"
   /operations/search-index/rebuild:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1search-index~1rebuild"
   /operations/stores/{storeId}/brand:

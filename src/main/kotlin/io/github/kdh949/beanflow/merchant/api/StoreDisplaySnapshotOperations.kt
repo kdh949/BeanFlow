@@ -14,4 +14,7 @@ interface StoreDisplaySnapshotOperations {
      * Missing, blank or mismatched owner data fails the caller transaction.
      */
     fun require(storeId: UUID): StoreDisplaySnapshot
+
+    /** Returns at most [limit] verified store display snapshots ordered by name and store ID. */
+    fun list(limit: Int): List<StoreDisplaySnapshot>
 }

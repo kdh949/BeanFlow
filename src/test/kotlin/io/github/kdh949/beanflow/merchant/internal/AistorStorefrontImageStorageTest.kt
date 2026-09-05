@@ -96,8 +96,13 @@ internal class AistorStorefrontImageStorageTest {
         client.listed += AistorObjectSummary("other/ignored", now.minusSeconds(300))
         client.listed += AistorObjectSummary("menus/new/thumbnail.jpg", now.minusSeconds(10))
 
-        assertThat(storage(client).listOrphanCandidates(now.minusSeconds(100), 1))
-            .containsExactly("stores/one/original.jpg")
+        assertThat(
+            storage(client).listOrphanCandidates(
+                setOf(StorefrontImageTarget.STORE, StorefrontImageTarget.MENU),
+                now.minusSeconds(100),
+                1,
+            ),
+        ).containsExactly("stores/one/original.jpg")
     }
 
     private fun storage(client: AistorObjectClient) =

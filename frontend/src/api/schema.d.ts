@@ -799,6 +799,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 현재 다운로드 가능한 선착순 쿠폰 이벤트 조회
+         * @description 게시 상태이고 현재 다운로드 기간 안에 있으며 잔여 수량이 있는 캠페인만 최근 게시순으로
+         *     최대 50개 반환합니다. `remainingCount`는 이 조회 시점의 참고값이며 실제 다운로드 성공은
+         *     다운로드 트랜잭션이 캠페인 잠금 아래 다시 결정합니다. 중단·품절·기간 밖 캠페인은 노출하지 않습니다.
+         */
+        get: operations["listCurrentCustomerEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/events/{campaignId}/claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 선착순 이벤트 쿠폰 다운로드
+         * @description 고객과 캠페인별로 한 장만 발급합니다. 별도 대기열이나 HTTP 도착 순서를 만들지 않으며,
+         *     Campaign root lock 아래에서 claim·조건부 카운터 증가·CouponIssuance·멱등 응답이 한
+         *     트랜잭션으로 성공한 순서가 발급 순서입니다. 같은 Idempotency-Key와 같은 캠페인은 최초
+         *     201 응답을 재생합니다. 잔여 수량은 이 트랜잭션에서 다시 확인합니다.
+         */
+        post: operations["claimCurrentCustomerLimitedCoupon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/orders/{orderReference}": {
         parameters: {
             query?: never;
@@ -2057,6 +2102,151 @@ export interface paths {
          *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         patch: operations["updateBrand"];
+        trace?: never;
+    };
+    "/operations/coupon-campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** (운영팀) 선착순 쿠폰 캠페인 목록 조회 */
+        get: operations["listCouponCampaigns"];
+        put?: never;
+        /**
+         * (운영팀) 선착순 쿠폰 캠페인 초안 생성
+         * @description 운영팀이 매장, 적용 메뉴, 할인·비용 부담, 선착순 수량, 다운로드 기간과 고정 쿠폰
+         *     만료 시각을 한 번에 설정해 DRAFT 캠페인을 생성합니다. DRAFT는 고객에게 노출되지
+         *     않으며 기존 주문 할인 계산에도 참여하지 않습니다. 같은 운영자와 같은
+         *     Idempotency-Key로 동일 요청을 반복하면 최초 결과를 반환합니다.
+         */
+        post: operations["createCouponCampaignDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/coupon-campaigns/{campaignId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** (운영팀) 선착순 쿠폰 캠페인 조회 */
+        get: operations["getCouponCampaign"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/coupon-campaigns/{campaignId}/banner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * (운영팀) 선착순 쿠폰 캠페인 배너 등록
+         * @description DRAFT 캠페인의 고객 노출 배너를 등록하거나 교체합니다. JPEG 또는 PNG 원본을
+         *     1200x450 JPEG로 정규화해 저장하며, 같은 운영자와 같은 Idempotency-Key로 동일한
+         *     이미지 요청을 반복하면 외부 저장소에 다시 쓰지 않고 최초 결과를 반환합니다.
+         */
+        put: operations["replaceCouponCampaignBanner"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/coupon-campaigns/{campaignId}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * (운영팀) 선착순 쿠폰 캠페인 게시
+         * @description 정규화된 배너가 등록된 DRAFT 캠페인을 PUBLISHED로 전환합니다. 게시 후 고객
+         *     이벤트 목록의 노출 기간과 다운로드 가능 여부는 캠페인의 다운로드 시작·종료
+         *     시각과 남은 수량으로 결정됩니다. 동일 멱등 요청은 최초 게시 결과를 반환합니다.
+         */
+        post: operations["publishCouponCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/coupon-campaigns/{campaignId}/stoppage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * (운영팀) 선착순 쿠폰 신규 다운로드 중단
+         * @description PUBLISHED 캠페인을 STOPPED로 전환해 새로운 쿠폰 다운로드만 중단합니다. 일반 Campaign은
+         *     active 상태로 유지하므로 이미 발급된 쿠폰은 고정 만료 시각까지 쿠폰함·주문·복원 정책을
+         *     그대로 따릅니다. claim과 같은 Campaign root lock을 사용해 둘 중 먼저 잠금을 획득한
+         *     트랜잭션의 결과를 보존합니다. 동일 멱등 요청은 최초 중단 결과를 반환합니다.
+         */
+        post: operations["stopCouponCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/coupon-campaigns/store-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * (운영팀) 캠페인 매장 선택지 조회
+         * @description 이름과 매장 ID 순으로 최대 100개 매장을 반환합니다.
+         */
+        get: operations["listCouponCampaignStoreOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/coupon-campaigns/store-options/{storeId}/menus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** (운영팀) 캠페인 메뉴 선택지 조회 */
+        get: operations["listCouponCampaignMenuOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/operations/search-index/rebuild": {
@@ -5679,6 +5869,48 @@ export interface components {
             items: components["schemas"]["CustomerCouponWalletItem"][];
             page: components["schemas"]["PageInfo"];
         };
+        CouponCampaignStore: {
+            storeId: components["schemas"]["Identifier"];
+            name: string;
+        };
+        CouponCampaignBanner: {
+            /** Format: uri */
+            url: string;
+            expiresAt: components["schemas"]["DateTime"];
+        };
+        CouponCampaignDiscount: {
+            /** @enum {string} */
+            discountType: "FIXED_KRW" | "RATE_BPS";
+            /** Format: int64 */
+            fixedAmountKrw: number | null;
+            rateBps: number | null;
+            /** Format: int64 */
+            maximumDiscountKrw: number | null;
+        };
+        CustomerEventCampaign: {
+            campaignId: components["schemas"]["Identifier"];
+            store: components["schemas"]["CouponCampaignStore"];
+            title: string;
+            summary: string;
+            bannerAltText: string;
+            banner: components["schemas"]["CouponCampaignBanner"];
+            benefit: components["schemas"]["CouponCampaignDiscount"];
+            /** Format: int64 */
+            minimumOrderKrw: number;
+            /** @description 조회 시점의 참고값이며 다운로드 성공을 보장하지 않습니다. */
+            remainingCount: number;
+            claimEndsAt: components["schemas"]["DateTime"];
+            couponExpiresAt: components["schemas"]["DateTime"];
+            /** @description 현재 고객이 이미 이 캠페인의 쿠폰을 발급받았는지 여부입니다. */
+            claimed: boolean;
+        };
+        CustomerCouponClaim: {
+            campaignId: components["schemas"]["Identifier"];
+            couponIssuanceId: components["schemas"]["Identifier"];
+            claimedAt: components["schemas"]["DateTime"];
+            /** @description 운영자가 캠페인 발행 전에 고정한 절대 만료 시각입니다. */
+            couponExpiresAt: components["schemas"]["DateTime"];
+        };
         /** @description 주문 생성 시 확정해 저장한 불변 가격 요약입니다. */
         CustomerOrderPricing: {
             subtotalKrw: components["schemas"]["MoneyKrw"];
@@ -7318,6 +7550,82 @@ export interface components {
             expectedVersion?: number | null;
             /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: components["schemas"]["OperationReason"];
+        };
+        /** @enum {string} */
+        CouponCampaignState: "DRAFT" | "PUBLISHED" | "STOPPED";
+        CouponCampaignCost: {
+            /** @enum {string} */
+            costBearer: "PLATFORM" | "STORE" | "SHARED";
+            platformShareBps: number;
+            storeShareBps: number;
+        };
+        CouponCampaign: {
+            campaignId: components["schemas"]["Identifier"];
+            store: components["schemas"]["CouponCampaignStore"];
+            state: components["schemas"]["CouponCampaignState"];
+            title: string;
+            summary: string;
+            bannerAltText: string;
+            banner: components["schemas"]["CouponCampaignBanner"] | null;
+            discount: components["schemas"]["CouponCampaignDiscount"];
+            /** Format: int64 */
+            minimumOrderKrw: number;
+            allMenusEligible: boolean;
+            eligibleMenuIds: components["schemas"]["Identifier"][];
+            cost: components["schemas"]["CouponCampaignCost"];
+            totalQuota: number;
+            issuedCount: number;
+            claimStartsAt: components["schemas"]["DateTime"];
+            claimEndsAt: components["schemas"]["DateTime"];
+            couponExpiresAt: components["schemas"]["DateTime"];
+            createdAt: components["schemas"]["DateTime"];
+            updatedAt: components["schemas"]["DateTime"];
+            /** Format: int64 */
+            version: number;
+        };
+        CouponCampaignPageInfo: {
+            nextCursor: string | null;
+        };
+        CouponCampaignPage: {
+            items: components["schemas"]["CouponCampaign"][];
+            page: components["schemas"]["CouponCampaignPageInfo"];
+        };
+        CreateCouponCampaignDraftRequest: {
+            storeId: components["schemas"]["Identifier"];
+            title: string;
+            summary: string;
+            bannerAltText: string;
+            discount: components["schemas"]["CouponCampaignDiscount"];
+            /** Format: int64 */
+            minimumOrderKrw: number;
+            allMenusEligible: boolean;
+            eligibleMenuIds: components["schemas"]["Identifier"][];
+            cost: components["schemas"]["CouponCampaignCost"];
+            totalQuota: number;
+            claimStartsAt: components["schemas"]["DateTime"];
+            claimEndsAt: components["schemas"]["DateTime"];
+            couponExpiresAt: components["schemas"]["DateTime"];
+            reason: components["schemas"]["OperationReason"];
+        };
+        PublishCouponCampaignRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            reason: components["schemas"]["OperationReason"];
+        };
+        StopCouponCampaignRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            reason: components["schemas"]["OperationReason"];
+        };
+        CouponCampaignStoreOption: {
+            storeId: components["schemas"]["Identifier"];
+            name: string;
+        };
+        CouponCampaignMenuOption: {
+            menuId: components["schemas"]["Identifier"];
+            name: string;
+            /** Format: int64 */
+            basePriceKrw: number;
         };
         /**
          * @description 매장 검색 색인 전체 재생성을 요청합니다. reason은 멱등성 해시의 일부입니다.
@@ -11818,6 +12126,75 @@ export interface operations {
             };
         };
     };
+    listCurrentCustomerEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 노출 가능한 이벤트 배너 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerEventCampaign"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    claimCurrentCustomerLimitedCoupon: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path: {
+                campaignId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 기존 쿠폰함과 주문에 즉시 사용할 수 있는 쿠폰 발급 완료 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerCouponClaim"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description `CAMPAIGN_QUOTA_EXHAUSTED`, `COUPON_ALREADY_ISSUED`, `CAMPAIGN_NOT_ISSUABLE`
+             *     또는 `IDEMPOTENCY_KEY_REUSED`입니다. 실패를 빈 성공으로 바꾸지 않습니다.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     getCurrentCustomerOrder: {
         parameters: {
             query?: never;
@@ -13735,6 +14112,270 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listCouponCampaigns: {
+        parameters: {
+            query?: {
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 생성 시각 역순의 캠페인 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponCampaignPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createCouponCampaignDraft: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCouponCampaignDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description 완전한 선착순 쿠폰 캠페인 초안 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponCampaign"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getCouponCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaignId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 캠페인 설정과 현재 발급 수량 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponCampaign"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceCouponCampaignBanner: {
+        parameters: {
+            query: {
+                expectedVersion: number;
+            };
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                campaignId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description 최대 5MiB JPEG 또는 PNG 원본
+                     */
+                    image: string;
+                    reason: components["schemas"]["OperationReason"];
+                };
+            };
+        };
+        responses: {
+            /** @description 배너 접근 URL을 포함한 갱신된 DRAFT 캠페인 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponCampaign"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    publishCouponCampaign: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                campaignId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishCouponCampaignRequest"];
+            };
+        };
+        responses: {
+            /** @description 게시된 선착순 쿠폰 캠페인 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponCampaign"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    stopCouponCampaign: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                campaignId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StopCouponCampaignRequest"];
+            };
+        };
+        responses: {
+            /** @description 신규 다운로드가 중단된 캠페인 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponCampaign"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listCouponCampaignStoreOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 캠페인 대상 매장 선택지 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponCampaignStoreOption"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listCouponCampaignMenuOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 사용 가능한 매장 메뉴 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponCampaignMenuOption"][];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

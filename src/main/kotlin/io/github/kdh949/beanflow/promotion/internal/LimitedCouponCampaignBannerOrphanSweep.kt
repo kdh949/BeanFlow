@@ -1,6 +1,5 @@
-package io.github.kdh949.beanflow.operations.internal
+package io.github.kdh949.beanflow.promotion.internal
 
-import io.github.kdh949.beanflow.merchant.api.StorefrontImageReferenceOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
 import io.micrometer.core.instrument.MeterRegistry
@@ -10,9 +9,9 @@ import java.time.Clock
 import java.time.Duration
 
 @Component
-internal class StorefrontImageOrphanSweep(
+internal class LimitedCouponCampaignBannerOrphanSweep(
     private val storage: StorefrontImageStorageOperations,
-    private val references: StorefrontImageReferenceOperations,
+    private val campaigns: LimitedCouponCampaignPersistence,
     private val meterRegistry: MeterRegistry,
     private val clock: Clock,
 ) {
@@ -23,7 +22,7 @@ internal class StorefrontImageOrphanSweep(
     fun sweep() {
         try {
             storage.listOrphanCandidates(TARGETS, clock.instant().minus(ORPHAN_GRACE), BATCH_SIZE).forEach { candidateKey ->
-                if (!references.isReferenced(candidateKey)) {
+                if (!campaigns.isBannerReferenced(candidateKey)) {
                     storage.deleteObject(candidateKey)
                     record("deleted")
                 }
@@ -36,12 +35,12 @@ internal class StorefrontImageOrphanSweep(
     }
 
     private fun record(outcome: String) {
-        meterRegistry.counter("beanflow.media.orphan", "outcome", outcome).increment()
+        meterRegistry.counter("beanflow.media.orphan", "target", "campaign_banner", "outcome", outcome).increment()
     }
 
     private companion object {
+        val TARGETS = setOf(StorefrontImageTarget.CAMPAIGN)
         val ORPHAN_GRACE: Duration = Duration.ofHours(24)
         const val BATCH_SIZE = 100
-        val TARGETS = setOf(StorefrontImageTarget.STORE, StorefrontImageTarget.MENU)
     }
 }

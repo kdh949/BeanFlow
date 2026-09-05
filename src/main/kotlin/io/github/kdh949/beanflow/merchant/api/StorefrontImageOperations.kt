@@ -8,6 +8,7 @@ enum class StorefrontImageTarget(
 ) {
     STORE("stores"),
     MENU("menus"),
+    CAMPAIGN("campaigns"),
 }
 
 data class StorefrontImageUpload(
@@ -57,6 +58,8 @@ data class MenuImageChange(
 interface StorefrontImageStorageOperations {
     fun normalize(upload: StorefrontImageUpload): NormalizedStorefrontImageUpload
 
+    fun normalizeCampaignBanner(upload: StorefrontImageUpload): NormalizedStorefrontImageUpload
+
     fun store(
         target: StorefrontImageTarget,
         targetId: UUID,
@@ -72,6 +75,7 @@ interface StorefrontImageStorageOperations {
     )
 
     fun listOrphanCandidates(
+        targets: Set<StorefrontImageTarget>,
         olderThan: Instant,
         limit: Int,
     ): List<String>
