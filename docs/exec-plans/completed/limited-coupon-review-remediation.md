@@ -1,11 +1,11 @@
 # 선착순 쿠폰 리뷰 차단 이슈를 수직 슬라이스로 해소한다
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** `docs/exec-plans/completed/limited-coupon-events.md`
-> **Completed-At:** —
+> **Completed-At:** `2026-09-06`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -105,7 +105,7 @@ Promotion 소유 service가 table별 독립 transaction으로 최대 100건을 �
 
 - focused Gradle integration/controller/unit tests
 - `./gradlew spotlessCheck test build`
-- `./scripts/verify-openapi-runtime.sh`
+- full Gradle test의 `RuntimeOpenApiParityTest`
 - `./scripts/verify-docs.sh`
 - frontend unit/typecheck/design/product-copy/build
 - Storybook MCP focused interaction/a11y 뒤 전체 story tests
@@ -128,13 +128,15 @@ ADR-120의 draft update 표현을 create-only MVP로 바꾸고 customer cursor �
   실패 격리·재실행, AIStor `startAfter` 기반 Campaign banner sweep 진행성을 RED→GREEN으로 검증.
 - [x] 2026-09-06: 고객 이벤트와 운영 캠페인·매장 선택지에 signed keyset cursor를 연결하고 API,
   프론트엔드, 컨트롤러 순회 테스트를 함께 갱신.
-- [ ] Milestone 4: 매장 메뉴 요청 generation 보호와 focused Storybook interaction/a11y 검증 완료.
-  전체 회귀 검증 뒤 완료 처리한다.
+- [x] 2026-09-06: 매장 메뉴 요청 generation 보호, 변경 영향권 14개와 전체 259개 Storybook
+  interaction/a11y, 백엔드 전체 test/build와 프론트·문서 품질 게이트 검증 완료.
 
 ## Surprises & Discoveries
 
 - `StorefrontImageStorageOperations.access()`는 object-store network 호출이 아닌 local signing이므로 STOP
   failure semantics는 이 corrective scope에서 변경하지 않는다.
+- 로컬 전체 Gradle suite는 테스트별 격리 PostgreSQL database migration으로 54분 19초가 걸렸지만
+  중단이나 실패 없이 완료됐다.
 
 ## Decision Log
 
@@ -143,8 +145,18 @@ ADR-120의 draft update 표현을 create-only MVP로 바꾸고 customer cursor �
 
 ## Outcomes & Retrospective
 
-완료 후 검증 결과와 최종 commit을 기록한다.
+- `1ac21ac`에서 post-lock Clock, 경계 보존 request hash, mutable 검증 전 terminal replay를 구현했다.
+- `544aa98`에서 90일 Promotion command retention과 continuation 기반 banner orphan sweep을 구현했다.
+- `3eb5922`에서 고객·운영 목록과 매장 picker cursor, 운영 UI 다음 페이지, 메뉴 응답 generation 보호를
+  API·UI·테스트와 함께 구현했다.
+- `./gradlew spotlessCheck test build`는 54분 19초에 성공했다.
+- `./scripts/verify-docs.sh`는 target 182 paths/199 operations, runtime 172 paths/189 operations와
+  84개 ExecPlan을 검증했다.
+- frontend `npm test`, `npm run typecheck`, `npm run check:design`, `npm run check:product-copy`,
+  `npm run build`가 통과했다. unit은 26 files/184 tests, Storybook MCP 전체 검증은 61 files/259 tests다.
+- 제외하기로 한 STOP/media 서명 결합과 운영·고객 N+1은 변경하지 않았다.
 
 ## Revision Notes
 
 - 2026-09-06: PR #130 corrective implementation plan 최초 작성.
+- 2026-09-06: 아홉 개 차단 리뷰 수정과 전체 검증 결과를 기록하고 plan 완료.
