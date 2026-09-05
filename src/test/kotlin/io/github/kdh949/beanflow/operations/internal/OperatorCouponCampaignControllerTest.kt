@@ -240,6 +240,47 @@ internal class OperatorCouponCampaignControllerTest
         }
 
         @Test
+        fun `create request hash preserves free text field boundaries`() {
+            val storeId = seedStore("빈플로우 해시")
+            val menuId = seedMenu(storeId, "카페 라떼")
+            val base = createBody(storeId, menuId)
+            val first =
+                base
+                    .replace("가을 라떼 선착순 쿠폰", "가을|라떼")
+                    .replace("선착순 100명에게 라떼 1,000원 할인", "할인")
+            val different =
+                base
+                    .replace("가을 라떼 선착순 쿠폰", "가을")
+                    .replace("선착순 100명에게 라떼 1,000원 할인", "라떼|할인")
+
+            create(first, "campaign-hash-boundary-01")
+            mockMvc
+                .perform(
+                    post("$BASE/coupon-campaigns")
+                        .with(operatorJwt())
+                        .header("Idempotency-Key", "campaign-hash-boundary-01")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(different),
+                ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"))
+        }
+
+        @Test
+        fun `create replay does not revalidate current menu availability`() {
+            val storeId = seedStore("빈플로우 재시도")
+            val menuId = seedMenu(storeId, "재시도 라떼")
+            val body = createBody(storeId, menuId)
+            val first = create(body, "campaign-menu-replay-01")
+            jdbc.update("UPDATE merchant_menu SET available = false WHERE id = ?", menuId)
+
+            val replay = create(body, "campaign-menu-replay-01")
+
+            assertThat(replay).isEqualTo(first)
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM promotion_limited_campaign", Long::class.java)).isOne()
+            assertThat(auditActions()).containsExactly("COUPON_CAMPAIGN_DRAFT_CREATED")
+        }
+
+        @Test
         fun `write grant and valid campaign period are required`() {
             val storeId = seedStore("빈플로우 홍대")
             val menuId = seedMenu(storeId, "콜드브루")

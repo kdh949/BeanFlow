@@ -14,8 +14,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.dao.DataAccessException
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
@@ -28,15 +31,19 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.transaction.support.TransactionTemplate
 import java.sql.Timestamp
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, LimitedCouponClaimTestClockConfiguration::class)
 @AutoConfigureMockMvc
 @BeanflowIsolatedSpringContext("verifies atomic limited coupon claims against PostgreSQL locks and constraints")
 @SpringBootTest
@@ -49,11 +56,13 @@ internal class LimitedCouponClaimIntegrationTest
         private val campaigns: LimitedCouponCampaignOperations,
         private val transactions: TransactionTemplate,
         private val meterRegistry: MeterRegistry,
+        private val testClock: LimitedCouponClaimTestClock,
     ) {
         private val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
 
         @BeforeEach
         fun resetDatabase() {
+            testClock.set(now)
             jdbc.execute("TRUNCATE TABLE promotion_campaign, merchant_store CASCADE")
         }
 
@@ -150,7 +159,7 @@ internal class LimitedCouponClaimIntegrationTest
                                 ready.countDown()
                                 start.await(10, TimeUnit.SECONDS)
                                 try {
-                                    claims.claim(UUID.randomUUID(), campaignId, "claim-race-${index.toString().padStart(4, '0')}", now)
+                                    claims.claim(UUID.randomUUID(), campaignId, "claim-race-${index.toString().padStart(4, '0')}")
                                     "CREATED"
                                 } catch (failure: DomainFailure) {
                                     failure.code.name
@@ -191,7 +200,7 @@ internal class LimitedCouponClaimIntegrationTest
             )
 
             assertThatThrownBy {
-                claims.claim(UUID.randomUUID(), campaignId, "claim-rollback-01", now)
+                claims.claim(UUID.randomUUID(), campaignId, "claim-rollback-01")
             }.isInstanceOf(DataAccessException::class.java)
 
             assertThat(count("promotion_coupon_issuance")).isZero()
@@ -211,7 +220,7 @@ internal class LimitedCouponClaimIntegrationTest
                         Callable {
                             start.await(10, TimeUnit.SECONDS)
                             try {
-                                claims.claim(UUID.randomUUID(), campaignId, "claim-stop-race-01", now)
+                                claims.claim(UUID.randomUUID(), campaignId, "claim-stop-race-01")
                                 "CREATED"
                             } catch (failure: DomainFailure) {
                                 failure.code.name
@@ -255,6 +264,54 @@ internal class LimitedCouponClaimIntegrationTest
                 ).isTrue()
             } finally {
                 executor.shutdownNow()
+            }
+        }
+
+        @Test
+        fun `new claim uses the time observed after the campaign lock is acquired`() {
+            val campaignId = seedCampaign(quota = 1)
+            val customerId = UUID.randomUUID()
+            val lockAcquired = CountDownLatch(1)
+            val releaseLock = CountDownLatch(1)
+            val lockExecutor = Executors.newSingleThreadExecutor()
+            val claimExecutor = Executors.newSingleThreadExecutor()
+            try {
+                val lockHolder =
+                    lockExecutor.submit {
+                        transactions.executeWithoutResult {
+                            jdbc.query(
+                                "SELECT campaign_id FROM promotion_limited_campaign WHERE campaign_id = ? FOR UPDATE",
+                                { _, _ -> Unit },
+                                campaignId,
+                            )
+                            lockAcquired.countDown()
+                            releaseLock.await(10, TimeUnit.SECONDS)
+                        }
+                    }
+                assertThat(lockAcquired.await(10, TimeUnit.SECONDS)).isTrue()
+
+                val response =
+                    claimExecutor.submit(
+                        Callable {
+                            mockMvc
+                                .perform(claimRequest(campaignId, customerId, "claim-after-period-01"))
+                                .andReturn()
+                                .response
+                        },
+                    )
+                assertThat(waitForCampaignLockWait()).isTrue()
+                testClock.set(now.plusSeconds(3_601))
+                releaseLock.countDown()
+
+                assertThat(response.get(30, TimeUnit.SECONDS).status).isEqualTo(409)
+                lockHolder.get(30, TimeUnit.SECONDS)
+                assertThat(count("promotion_coupon_issuance")).isZero()
+                assertThat(count("promotion_limited_coupon_claim")).isZero()
+                assertThat(issuedCount(campaignId)).isZero()
+            } finally {
+                releaseLock.countDown()
+                lockExecutor.shutdownNow()
+                claimExecutor.shutdownNow()
             }
         }
 
@@ -329,7 +386,51 @@ internal class LimitedCouponClaimIntegrationTest
                 ),
             )
 
+        private fun waitForCampaignLockWait(): Boolean {
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (System.nanoTime() < deadline) {
+                val waiting =
+                    jdbc.queryForObject(
+                        """
+                        SELECT count(*)
+                          FROM pg_stat_activity
+                         WHERE datname = current_database()
+                           AND pid <> pg_backend_pid()
+                           AND wait_event_type = 'Lock'
+                           AND query ILIKE '%promotion_limited_campaign%'
+                        """.trimIndent(),
+                        Long::class.java,
+                    ) ?: 0
+                if (waiting > 0) return true
+                Thread.sleep(10)
+            }
+            return false
+        }
+
         private companion object {
             const val HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         }
     }
+
+@TestConfiguration(proxyBeanMethods = false)
+internal class LimitedCouponClaimTestClockConfiguration {
+    @Bean
+    @Primary
+    fun limitedCouponClaimTestClock() = LimitedCouponClaimTestClock(Instant.now().truncatedTo(ChronoUnit.MICROS))
+}
+
+internal class LimitedCouponClaimTestClock(
+    initial: Instant,
+) : Clock() {
+    private val current = AtomicReference(initial)
+
+    fun set(value: Instant) {
+        current.set(value)
+    }
+
+    override fun instant(): Instant = current.get()
+
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId): Clock = Clock.fixed(instant(), zone)
+}

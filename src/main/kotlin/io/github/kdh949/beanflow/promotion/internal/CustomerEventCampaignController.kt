@@ -228,5 +228,5 @@ internal class CustomerEventCampaignController(
         actor: CustomerActor,
         @PathVariable campaignId: UUID,
         @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
-    ): CustomerCouponClaimResponse = claims.claim(actor.actorId, campaignId, idempotencyKey, clock.instant())
+    ): CustomerCouponClaimResponse = claims.claim(actor.actorId, campaignId, idempotencyKey)
 }

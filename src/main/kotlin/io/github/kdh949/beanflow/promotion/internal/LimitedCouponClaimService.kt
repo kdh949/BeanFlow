@@ -12,6 +12,7 @@ import tools.jackson.databind.json.JsonMapper
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.sql.Timestamp
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.HexFormat
@@ -244,13 +245,13 @@ internal class LimitedCouponClaimTransaction(
     private val persistence: LimitedCouponClaimPersistence,
     private val objectMapper: JsonMapper,
     private val metrics: LimitedCouponClaimMetrics,
+    private val clock: Clock,
 ) {
     @Transactional
     fun execute(
         customerId: UUID,
         campaignId: UUID,
         idempotencyKey: String,
-        now: Instant,
     ): LimitedCouponClaimExecution {
         val requestHash = sha256(campaignId.toString())
         persistence.lockCommand(customerId, idempotencyKey)
@@ -284,6 +285,7 @@ internal class LimitedCouponClaimTransaction(
                     ),
                     replayed = false,
                 )
+        val now = clock.instant()
         val rejected = rejectCampaign(campaign, customerId, now)
         val outcome =
             rejected ?: run {
@@ -342,14 +344,13 @@ internal class LimitedCouponClaimService(
         customerId: UUID,
         campaignId: UUID,
         idempotencyKey: String,
-        now: Instant,
     ): CustomerCouponClaimResponse {
         if (idempotencyKey.trim() != idempotencyKey || idempotencyKey.length !in 8..128 || idempotencyKey.any(Char::isISOControl)) {
             throw DomainFailure(FailureCode.INVALID_REQUEST, "Idempotency-Key is invalid")
         }
         val execution =
             try {
-                transaction.execute(customerId, campaignId, idempotencyKey, now)
+                transaction.execute(customerId, campaignId, idempotencyKey)
             } catch (failure: RuntimeException) {
                 metrics.outcome(if (failure is DomainFailure) outcome(failure.code) else "dependency_unavailable")
                 throw failure

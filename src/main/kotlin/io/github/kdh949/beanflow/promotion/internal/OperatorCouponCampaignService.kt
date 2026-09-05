@@ -87,12 +87,14 @@ internal class OperatorCouponCampaignService(
         command: CreateLimitedCouponCampaignDraftCommand,
     ): OperatorCouponCampaignView {
         authorizeWrite(context)
+        val prepared = command.copy(actorId = context.actorId, idempotencyKey = context.idempotencyKey, now = clock.instant())
+        campaigns.replayCreateDraft(prepared)?.let { replayed ->
+            auditCreated(context, replayed)
+            return view(replayed)
+        }
         val store = stores.require(command.storeId)
         verifyMenus(command)
-        val campaign =
-            campaigns.createDraft(
-                command.copy(actorId = context.actorId, idempotencyKey = context.idempotencyKey, now = clock.instant()),
-            )
+        val campaign = campaigns.createDraft(prepared)
         auditCreated(context, campaign)
         return view(campaign, store.name)
     }

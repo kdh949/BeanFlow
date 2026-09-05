@@ -68,6 +68,15 @@ internal class LimitedCouponCampaignService(
     private val metrics: LimitedCouponCampaignCommandMetrics,
 ) : LimitedCouponCampaignOperations {
     @Transactional(propagation = Propagation.MANDATORY)
+    override fun replayCreateDraft(command: CreateLimitedCouponCampaignDraftCommand): LimitedCouponCampaignSnapshot? =
+        dependencyBoundary {
+            val normalized = validate(command)
+            val requestHash = requestHash(normalized)
+            persistence.lockCommand(normalized.actorId, LimitedCouponCampaignPersistence.CREATE_OPERATION, normalized.idempotencyKey)
+            replay(normalized.actorId, LimitedCouponCampaignPersistence.CREATE_OPERATION, normalized.idempotencyKey, requestHash)
+        }
+
+    @Transactional(propagation = Propagation.MANDATORY)
     override fun createDraft(command: CreateLimitedCouponCampaignDraftCommand): LimitedCouponCampaignSnapshot =
         commandBoundary("create") {
             val normalized = validate(command)
@@ -332,7 +341,7 @@ internal class LimitedCouponCampaignService(
 
     private fun requestHash(command: CreateLimitedCouponCampaignDraftCommand): String {
         val canonical =
-            listOf(
+            canonicalValues(
                 command.storeId,
                 command.title,
                 command.summary,
@@ -343,7 +352,7 @@ internal class LimitedCouponCampaignService(
                 command.discount.maximumDiscountKrw,
                 command.minimumOrderKrw,
                 command.allMenusEligible,
-                command.eligibleMenuIds.joinToString(","),
+                command.eligibleMenuIds.toList(),
                 command.cost.costBearer,
                 command.cost.platformShareBps,
                 command.cost.storeShareBps,
@@ -352,8 +361,28 @@ internal class LimitedCouponCampaignService(
                 command.claimEndsAt,
                 command.couponExpiresAt,
                 command.reason,
-            ).joinToString("|")
+            )
         return sha256(canonical)
+    }
+
+    private fun canonicalValues(vararg values: Any?): String = buildString { values.forEach { appendCanonical(it) } }
+
+    private fun StringBuilder.appendCanonical(value: Any?) {
+        when (value) {
+            null -> {
+                append("N;")
+            }
+
+            is Iterable<*> -> {
+                append("L").append(value.count()).append(':')
+                value.forEach { appendCanonical(it) }
+            }
+
+            else -> {
+                val text = value.toString()
+                append("S").append(text.toByteArray(StandardCharsets.UTF_8).size).append(':').append(text)
+            }
+        }
     }
 
     private fun sha256(value: String) =

@@ -117,6 +117,8 @@ data class LimitedCouponCampaignPage(
 )
 
 interface LimitedCouponCampaignOperations {
+    fun replayCreateDraft(command: CreateLimitedCouponCampaignDraftCommand): LimitedCouponCampaignSnapshot?
+
     fun createDraft(command: CreateLimitedCouponCampaignDraftCommand): LimitedCouponCampaignSnapshot
 
     fun find(campaignId: UUID): LimitedCouponCampaignSnapshot?
