@@ -1,4 +1,5 @@
 import { ApiRequestError } from "../../api/client";
+import { orderConflictGuidance } from "./orderConflicts";
 
 const ITEM_REASONS: Record<string, string> = {
   SOURCE_OPTION_SELECTION_UNAVAILABLE: "옵션 정보를 다시 확인할 수 없어요",
@@ -37,6 +38,9 @@ export function reorderFailure(failure: unknown): ReorderFailure | null {
         description: "픽업이 끝났거나 종료된 주문만 다시 주문할 수 있어요.",
         items: [],
       };
+    case "COUPON_NOT_AVAILABLE":
+    case "POINT_BALANCE_INSUFFICIENT":
+      return { title: "혜택을 적용할 수 없어요", description: "쿠폰 또는 포인트 적용 조건을 확인한 뒤 다시 선택해 주세요.", items: [] };
     case "PICKUP_SLOT_FULL":
       return {
         title: "고른 픽업 시간이 방금 마감됐어요",
@@ -61,8 +65,10 @@ export function reorderFailure(failure: unknown): ReorderFailure | null {
         description: "같은 주문을 다시 보내지 마세요. 주문 내역에서 결과를 확인할 수 있어요.",
         items: [],
       };
-    default:
-      return null;
+    default: {
+      const guidance = orderConflictGuidance(failure);
+      return guidance ? { title: guidance.title, description: guidance.description, items: [] } : null;
+    }
   }
 }
 

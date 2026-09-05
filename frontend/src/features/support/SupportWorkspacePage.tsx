@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { Button, EmptyState, LoadingState, PageHeading, SelectField, TextField } from "../../design-system";
+import { Button, ButtonLink, EmptyState, LoadingState, PageHeading, SelectField, TextField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
 import { compactId, shortDateTime, won } from "../../lib/format";
 
@@ -418,7 +418,7 @@ export function SupportWorkspacePage() {
         <>
           <section className="surface-card support-case-header">
             <div><span className="context-label">진행 중인 상담 건</span><h2>상담 {supportCase.caseId}</h2><p>담당자 {compactId(supportCase.assigneeId)} · 버전 {supportCase.version}</p></div>
-            <div><StatusText state={supportCase.state} />{nextCaseState[supportCase.state] ? <Button variant="secondary" loading={transitioning} onClick={() => void transitionCase()}>다음 상태: {nextCaseState[supportCase.state]}</Button> : null}</div>
+            <div><StatusText state={supportCase.state} /><ButtonLink variant="secondary" to={`/support/follow-up?caseId=${encodeURIComponent(supportCase.caseId)}`}>상담 후속 업무</ButtonLink>{nextCaseState[supportCase.state] ? <Button variant="secondary" loading={transitioning} onClick={() => void transitionCase()}>다음 상태: {nextCaseState[supportCase.state]}</Button> : null}</div>
           </section>
           {caseError ? <ErrorState error={caseError} retry={() => void openCase(supportCase.caseId)} /> : null}
           <div className="support-control-grid">

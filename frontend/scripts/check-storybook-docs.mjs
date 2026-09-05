@@ -36,6 +36,7 @@ const expectedDocs = new Set([
   "pages-refresh-customer-cart--docs",
   "pages-customer-notifications--docs",
   "pages-customer-points--docs",
+  "patterns-customer-point-use--docs",
   "patterns-customer-session-gate--docs",
   "pages-shared-notfound--docs",
   "patterns-store-session-gate--docs",
@@ -64,7 +65,6 @@ const statefulDocs = {
   "pages-refresh-store-order-board--docs": {
     "pages-refresh-store-order-board--active-orders": "A-142",
     "pages-refresh-store-order-board--empty-board": "대기 주문 없음",
-    "pages-refresh-store-order-board--transition-conflict": "다른 작업자가 먼저 처리했습니다",
     "pages-refresh-store-order-board--overflow-queue": "오래된 준비 완료 작업 2건 보기",
   },
   "pages-refresh-customer-home--docs": {
@@ -77,7 +77,7 @@ const statefulDocs = {
     "pages-refresh-customer-store-detail--pickup-unavailable": "판매 중인 메뉴가 없어요",
   },
   "pages-refresh-customer-checkout--docs": {
-    "pages-refresh-customer-checkout--pending-payment": "Toss Payments 통합결제창에서 선택",
+    "pages-refresh-customer-checkout--pending-payment": "다음 결제창에서 카드·간편결제를 선택해 주세요.",
     "pages-refresh-customer-checkout--expired-order": "결제 시간이 만료됐어요",
   },
   "pages-customer-orders--docs": {

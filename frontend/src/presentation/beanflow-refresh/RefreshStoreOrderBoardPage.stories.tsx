@@ -53,6 +53,7 @@ export const EmptyBoard: Story = {
 };
 
 export const TransitionConflict: Story = {
+  tags: ["!autodocs"],
   parameters: { msw: { handlers: [...merchantSignedInHandlers, ...storeBoardHandlers(), http.post("/api/v1/stores/:storeId/orders/:orderReference/transitions", () => HttpResponse.json({ code: "ORDER_STATE_CONFLICT", message: "주문 상태가 변경되었습니다.", correlationId: "REQ-BOARD-409" }, { status: 409 }))] } },
   beforeEach: () => { document.cookie = "BEANFLOW_MERCHANT_XSRF=storybook-merchant-csrf; path=/"; },
   play: async ({ canvas }) => {

@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, redirect } from "react-router";
 import { ConsoleShell, CustomerShell, RootRedirect } from "./presentation/AppShells";
 import {
   CustomerHelpPage,
@@ -17,10 +17,16 @@ import { StoreDisputesPage } from "./features/merchant/StoreDisputesPage";
 import { OpsDashboardPage, OpsOrderPage } from "./pages/console/ConsolePages";
 import { ButtonLink } from "./design-system";
 import { CouponWalletPage } from "./features/customer/CouponWalletPage";
+import { CustomerCouponClaimsPage } from "./features/customer/CustomerCouponClaimsPage";
 import { FavoriteStoresPage } from "./features/customer/FavoriteStoresPage";
 import { StoreRegionPage } from "./features/merchant/StoreRegionPage";
+import { StoreDisputeDetailPage } from "./features/merchant/StoreDisputeDetailPage";
+import { StoreManagementPage } from "./features/merchant/StoreManagementPage";
 import { OperationsSessionGate } from "./features/auth/operations/OperationsSessionGate";
 import { MerchantAccountsPage } from "./features/operations/MerchantAccountsPage";
+import { OperationsControlPage } from "./features/operations/OperationsControlPage";
+import { OperationsRecoveryPage } from "./features/operations/OperationsRecoveryPage";
+import { SupportFollowUpPage } from "./features/support/SupportFollowUpPage";
 import { SupportWorkspacePage } from "./features/support/SupportWorkspacePage";
 import { OperationsPolicyPage } from "./features/operations/OperationsPolicyPage";
 import { NotificationInboxPage } from "./features/notification/NotificationInboxPage";
@@ -64,6 +70,8 @@ export const router = createBrowserRouter([
             { path: "orders", element: <CustomerOrdersPage /> },
             { path: "points", element: <CustomerPointsPage /> },
             { path: "coupons", element: <CouponWalletPage /> },
+            { path: "refunds", loader: () => redirect("/app/orders?status=PAST") },
+            { path: "coupon-claims", element: <CustomerCouponClaimsPage /> },
             { path: "favorites", element: <FavoriteStoresPage /> },
             { path: "notifications", element: <NotificationInboxPage /> },
             { path: "me", element: <CustomerMyPage /> },
@@ -87,6 +95,8 @@ export const router = createBrowserRouter([
           { element: <ConsoleShell kind="store" />, children: [
             { path: "settlements", element: <StoreSettlementsPage /> },
             { path: "disputes", element: <StoreDisputesPage /> },
+            { path: "disputes/:disputeId", element: <StoreDisputeDetailPage /> },
+            { path: "management", element: <StoreManagementPage /> },
             { path: "region", element: <StoreRegionPage /> },
           ] },
         ],
@@ -101,6 +111,8 @@ export const router = createBrowserRouter([
           { index: true, element: <OpsDashboardPage /> },
           { path: "orders", element: <OpsOrderPage /> },
           { path: "merchant-accounts", element: <MerchantAccountsPage /> },
+          { path: "recovery", element: <OperationsRecoveryPage /> },
+          { path: "control", element: <OperationsControlPage /> },
           { path: "policies", element: <OperationsPolicyPage /> },
         ],
       },
@@ -108,7 +120,10 @@ export const router = createBrowserRouter([
   },
   {
     path: "/support", element: <ConsoleShell kind="support" />, children: [
-      { element: <OperationsSessionGate />, children: [{ index: true, element: <SupportWorkspacePage /> }] },
+      { element: <OperationsSessionGate />, children: [
+        { index: true, element: <SupportWorkspacePage /> },
+        { path: "follow-up", element: <SupportFollowUpPage /> },
+      ] },
     ],
   },
   { path: "*", element: <NotFoundPage /> },

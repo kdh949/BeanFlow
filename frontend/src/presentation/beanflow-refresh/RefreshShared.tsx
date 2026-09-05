@@ -1,9 +1,10 @@
-import { ArrowLeft, ArrowRight, Bell, MapPin, Navigation, Store } from "lucide-react";
+import { ArrowLeft, ArrowRight, MapPin, Navigation, Store } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { nextPickupLabel, operatingStatusLabel } from "../../features/discovery/storeDisplay";
 import { BrandLockup, FeedbackState } from "../../design-system";
+import { NotificationAction } from "../AppShells";
 import { ErrorState } from "../shared";
 
 type StoreSearchItem = components["schemas"]["StoreSearchItem"];
@@ -16,7 +17,7 @@ export function RefreshMobileTopbar({ title, backTo, brand = false }: { title: s
     <header className="bfr-mobile-topbar">
       {backTo ? <Link to={backTo} aria-label="뒤로"><ArrowLeft size={19} aria-hidden="true" /></Link> : <span aria-hidden="true" />}
       {brand ? <BrandLockup /> : <h1>{title}</h1>}
-      <Link to="/app/notifications" aria-label="알림함 열기"><Bell size={18} aria-hidden="true" /><span aria-hidden="true" /></Link>
+      <NotificationAction />
     </header>
   );
 }
@@ -45,7 +46,7 @@ export function RefreshStoreCard({ store, caption }: { store: CardStore; caption
         <span className="bfr-store-card__title"><strong>{store.name}</strong><small>{store.orderingAvailable ? "주문 가능" : "주문 쉬는 중"}</small></span>
         {line ? <span className="bfr-store-card__caption">{line}</span> : null}
         <span className="bfr-store-card__meta">
-          <span><MapPin size={14} />{"distanceMeters" in store && store.distanceMeters ? `${Math.round(store.distanceMeters / 10) / 100}km` : operatingStatusLabel(store.customerDisplay.operatingStatus)}</span>
+          <span><MapPin size={14} />{"distanceMeters" in store && store.distanceMeters != null ? `${Math.round(store.distanceMeters / 10) / 100}km` : operatingStatusLabel(store.customerDisplay.operatingStatus)}</span>
           <span><Navigation size={14} />{nextPickupLabel(store.nextPickupWindow)}</span>
         </span>
       </span>

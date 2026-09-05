@@ -14,6 +14,10 @@ export type ConflictGuidance = {
 export function orderConflictGuidance(failure: unknown): ConflictGuidance | null {
   if (!(failure instanceof ApiRequestError)) return null;
   switch (failure.code) {
+    case "INVALID_REQUEST":
+      return failure.details?.some((detail) => detail.field === "pointsToUseKrw")
+        ? { title: "포인트 사용 금액을 확인해 주세요", description: "쿠폰 할인 후 남은 금액까지 사용할 수 있어요. 사용 금액을 수정해 주세요.", recovery: "retry" }
+        : null;
     case "PICKUP_SLOT_FULL":
       return {
         title: "고른 픽업 시간이 방금 마감됐어요",

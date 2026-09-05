@@ -44,7 +44,7 @@ const detail = {
     preparingAt: "2026-08-14T03:03:00Z",
     readyAt: "2026-08-14T03:04:00Z",
   },
-  allowedActions: ["CANCEL" as const],
+  allowedActions: [],
   lines: [
     { lineSequence: 0, menuName: "아이스 아메리카노", optionNames: ["ICE", "샷 추가"], quantity: 2, lineTotalKrw: 9_000 },
     { lineSequence: 1, menuName: "오트 라떼", optionNames: ["HOT"], quantity: 1, lineTotalKrw: 3_800 },
@@ -83,9 +83,11 @@ describe("customer order list", () => {
 
     renderAt("/app/orders");
 
-    expect(await screen.findByRole("heading", { name: "주문" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "주문 내역" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "진행 중" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "지난 주문" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("조회 시작일")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "기간 변경" }));
     expect(screen.getByLabelText("조회 시작일")).toBeInTheDocument();
     expect(screen.getByLabelText("조회 종료일")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("UUID 주문 번호")).not.toBeInTheDocument();
@@ -99,7 +101,7 @@ describe("customer order list", () => {
     const get = vi.spyOn(customerApi, "GET").mockResolvedValue(response({ items: [], page: {} }) as never);
     const user = userEvent.setup();
     renderAt("/app/orders");
-    await screen.findByRole("heading", { name: "주문" });
+    await screen.findByRole("heading", { name: "주문 내역" });
 
     await user.click(screen.getByRole("tab", { name: "지난 주문" }));
 
@@ -109,6 +111,18 @@ describe("customer order list", () => {
         expect.objectContaining({ params: { query: expect.objectContaining({ status: "PAST" }) } }),
       );
     });
+  });
+
+  it("shows refund access on the owning order without creating a separate refund lookup", async () => {
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response({
+      items: [{ ...summary, status: "CANCELLED", allowedActions: ["VIEW_REFUND"] }],
+      page: {},
+    }) as never);
+
+    renderAt("/app/orders?status=PAST");
+
+    const order = await screen.findByRole("link", { name: /환불 내역 확인/ });
+    expect(order).toHaveAttribute("href", "/app/orders/BF-7K3M-9Q2P");
   });
 
   it("discards a slower ACTIVE response that resolves after the customer has switched to PAST", async () => {
@@ -123,7 +137,7 @@ describe("customer order list", () => {
     const user = userEvent.setup();
 
     renderAt("/app/orders");
-    await screen.findByRole("heading", { name: "주문" });
+    await screen.findByRole("heading", { name: "주문 내역" });
     await user.click(screen.getByRole("tab", { name: "지난 주문" }));
 
     // The PAST tab the customer is now looking at answers first.
@@ -146,7 +160,7 @@ describe("customer order detail", () => {
 
     renderAt("/app/orders/BF-7K3M-9Q2P");
 
-    expect(await screen.findAllByText("A-142")).toHaveLength(2);
+    expect(await screen.findAllByText("A-142")).toHaveLength(1);
     expect(screen.getByText("강남 2호점")).toBeInTheDocument();
     expect(screen.getByText("아이스 아메리카노")).toBeInTheDocument();
     expect(screen.getByText("ICE · 샷 추가")).toBeInTheDocument();
@@ -156,7 +170,7 @@ describe("customer order detail", () => {
     expect(timeline.closest("section")).toHaveTextContent(/픽업 시간.*8\. 14\./);
     expect(screen.getByRole("heading", { name: "거래 요약" }).closest("section")).toHaveTextContent("상품 금액₩15,000");
     expect(screen.getByRole("heading", { name: "거래 요약" }).closest("section")).toHaveTextContent("결제 금액₩12,800");
-    expect(screen.getByRole("button", { name: "주문 취소" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "주문 취소" })).not.toBeInTheDocument();
     expect(get).toHaveBeenCalledWith("/me/orders/{orderReference}", {
       params: { path: { orderReference: "BF-7K3M-9Q2P" } },
     });
@@ -181,7 +195,7 @@ describe("customer order detail", () => {
     type Resolver = (value: unknown) => void;
     const resolvers: Resolver[] = [];
     vi.spyOn(customerApi, "GET").mockImplementation(
-      () => new Promise((resolve) => { resolvers.push(resolve as Resolver); }),
+      (path) => path === "/me/notification-summary" ? Promise.resolve(response({ hasUnread: false }) as never) : new Promise((resolve) => { resolvers.push(resolve as Resolver); }),
     );
 
     renderAt("/app/orders/BF-7K3M-9Q2P");
@@ -291,6 +305,7 @@ describe("customer order actions", () => {
     renderAt("/app/orders/BF-7K3M-9Q2P");
 
     expect(await screen.findByText("취소된 주문이에요")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "환불 내역" })).toBeInTheDocument();
     expect(screen.getByText("환불 확인이 지연되고 있어요")).toBeInTheDocument();
     expect(screen.getByText(/담당자가 결과를 확인하고 있습니다/)).toBeInTheDocument();
     expect(screen.queryByText("환불이 완료됐어요")).not.toBeInTheDocument();
@@ -308,6 +323,7 @@ describe("customer order actions", () => {
 
     renderAt("/app/orders/BF-7K3M-9Q2P");
 
+    expect(await screen.findByRole("heading", { name: "환불 내역" })).toBeInTheDocument();
     expect(await screen.findByText("환불이 완료됐어요")).toBeInTheDocument();
   });
 });

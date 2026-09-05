@@ -15,6 +15,15 @@ function ok<T>(data: T, status = 200) {
   return { data, response: new Response(null, { status }) };
 }
 
+function mockAuthenticatedReads() {
+  return vi.spyOn(customerApi, "GET").mockImplementation(async (path) => {
+    if (path === "/me") return ok(actor) as never;
+    if (path === "/me/points") return ok({ availablePointsKrw: 1500, recoveryPendingKrw: 0, currency: "KRW", expiring: [], expiringHasMore: false }) as never;
+    if (path === "/me/coupons") return ok({ items: [], page: {} }) as never;
+    throw new Error(`unexpected GET ${path}`);
+  });
+}
+
 function failure(status: number, code: string, message = "요청을 완료하지 못했습니다.") {
   return { error: { code, message }, response: new Response(null, { status }) };
 }
@@ -47,11 +56,21 @@ afterEach(() => {
 
 describe("customer session route boundary", () => {
   it("renders the protected route for an authenticated actor", async () => {
-    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+    mockAuthenticatedReads();
 
     renderApp("/app/orders");
 
     expect(await screen.findByRole("heading", { name: "주문 목록" })).toBeInTheDocument();
+  });
+
+  it("keeps refund access in orders and leaves coupon claims as a separate destination", async () => {
+    mockAuthenticatedReads();
+
+    renderApp("/app/me");
+
+    expect(await screen.findByRole("link", { name: "주문 내역" })).toHaveAttribute("href", "/app/orders");
+    expect(screen.getByRole("link", { name: "쿠폰 받기" })).toHaveAttribute("href", "/app/coupon-claims");
+    expect(screen.queryByRole("link", { name: "환불 내역" })).not.toBeInTheDocument();
   });
 
   it("sends 401 to login with a sanitized same-origin return path", async () => {
@@ -256,7 +275,7 @@ describe("customer logout", () => {
     sessionStorage.setItem("beanflow.idempotency.payment.order-1", "key");
     sessionStorage.setItem("beanflow.payment-attempt.payment-1", "{}");
     authToken.set("operator-access-token");
-    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+    mockAuthenticatedReads();
     const remove = vi.spyOn(customerApi, "DELETE").mockResolvedValue({ response: new Response(null, { status: 204 }) } as never);
 
     renderApp("/app/me");
@@ -272,7 +291,7 @@ describe("customer logout", () => {
   });
 
   it("blocks a protected route again after logout", async () => {
-    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+    mockAuthenticatedReads();
     vi.spyOn(customerApi, "DELETE").mockResolvedValue({ response: new Response(null, { status: 204 }) } as never);
     await customerSession.refresh();
 
@@ -283,7 +302,7 @@ describe("customer logout", () => {
   });
 
   it("keeps the browser authenticated when the server logout fails, so the customer can retry", async () => {
-    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+    mockAuthenticatedReads();
     const remove = vi.spyOn(customerApi, "DELETE")
       .mockResolvedValue(failure(503, "DEPENDENCY_UNAVAILABLE", "인증 의존성을 사용할 수 없습니다.") as never);
 
@@ -298,7 +317,7 @@ describe("customer logout", () => {
   });
 
   it("treats a 401 on session delete as already logged out server-side", async () => {
-    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+    mockAuthenticatedReads();
     vi.spyOn(customerApi, "DELETE").mockResolvedValue(failure(401, "UNAUTHORIZED") as never);
 
     renderApp("/app/me");

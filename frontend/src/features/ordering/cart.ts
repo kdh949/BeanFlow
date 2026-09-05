@@ -140,6 +140,19 @@ export const cart = {
     write({ ...state.cart, lines });
   },
 
+  /** Edit one configuration and merge quantities if it now matches another line. */
+  updateLine(index: number, replacement: CartLine) {
+    const state = read();
+    if (state.status !== "ready" || !state.cart.lines[index]) return;
+    const lines = state.cart.lines.filter((_, position) => position !== index);
+    const match = lines.findIndex((line) => sameLine(line, replacement));
+    if (match >= 0) {
+      const existing = lines[match]!;
+      lines[match] = { ...replacement, quantity: existing.quantity + replacement.quantity };
+    } else lines.splice(index, 0, replacement);
+    write({ ...state.cart, lines });
+  },
+
   clear() {
     localStorage.removeItem(CART_STORAGE_KEY);
     emit();
