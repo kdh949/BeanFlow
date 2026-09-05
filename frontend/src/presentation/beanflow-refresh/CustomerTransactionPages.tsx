@@ -1,5 +1,4 @@
 import {
-  Check,
   ChevronRight,
   Clock3,
   CreditCard,
@@ -9,7 +8,7 @@ import {
   Timer,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, idempotencyKey, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
@@ -21,8 +20,8 @@ import { attemptStorage } from "../../features/payment/paymentAttempt";
 import { pickupNumberNote } from "../../features/ordering/orderPresentation";
 import { reorderFailure } from "../../features/ordering/reorderFailures";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar } from "./RefreshShared";
-import { Button, RadioCard, RadioGroup, SelectField, TextAreaField } from "../../design-system";
-import { StatusText } from "../shared";
+import { Button, ButtonLink, RadioCard, RadioGroup, SelectField, TextAreaField } from "../../design-system";
+import { PointUseField, usePointUse } from "../../features/loyalty/PointUseField";
 
 type Order = components["schemas"]["Order"];
 type ReorderPriceComparison = components["schemas"]["ReorderPriceComparison"];
@@ -54,15 +53,15 @@ export function RefreshCheckoutPage() {
   return (
     <div className="bfr-page bfr-checkout bfr-has-page-topbar">
       <RefreshMobileTopbar title="결제" backTo={`/app/orders/${order.publicReference}`} />
-      {order.reservationExpiresAt ? <p className="bfr-lease" role="status"><Timer size={16} /><span><strong>예약 만료까지</strong>{shortDateTime.format(new Date(order.reservationExpiresAt))}</span></p> : null}
+      {order.state === "PENDING_PAYMENT" && order.reservationExpiresAt ? <p className="bfr-lease" role="status"><Timer size={16} /><span><strong>결제 가능 시간</strong>{shortDateTime.format(new Date(order.reservationExpiresAt))}까지 결제해 주세요.</span></p> : null}
       <section className="bfr-checkout-store"><div><strong>{order.storeName}</strong><span>픽업 시간 {shortTime.format(new Date(order.pickupWindowStart))}</span></div><Link to={`/app/orders/${order.publicReference}`}>주문 내역 <ChevronRight size={15} /></Link></section>
       {routeState?.reorderPriceComparison?.hasPriceChanges ? <section className="bfr-price-change" role="status"><strong>현재 가격으로 다시 계산했어요</strong><span>이전 {won.format(routeState.reorderPriceComparison.sourceSubtotalKrw)} → 현재 {won.format(routeState.reorderPriceComparison.currentSubtotalKrw)}</span></section> : null}
       <section className="bfr-checkout-card">
         <header><h2>주문 메뉴</h2><span>{order.lines.length}개 품목</span></header>
-        {order.lines.map((line) => <div className="bfr-checkout-line" key={line.orderLineId}><span><strong>{line.menuName}</strong><small>{line.optionNames.join(" · ") || "기본 옵션"} · {line.quantity}잔</small></span><b>{won.format(line.cashPaidKrw)}</b></div>)}
+        {order.lines.map((line) => <div className="bfr-checkout-line" key={line.orderLineId}><span><strong>{line.menuName}</strong><small>{line.optionNames.join(" · ") || "기본 옵션"} · {line.quantity}개</small></span><b>{won.format(line.cashPaidKrw)}</b></div>)}
         <Pricing pricing={{ subtotalKrw: order.subtotalKrw, couponDiscountKrw: order.couponDiscountKrw, pointsAppliedKrw: order.pointsAppliedKrw, payableKrw: order.payableKrw }} />
       </section>
-      <section className="bfr-payment-method"><header><h2>결제 수단</h2><Check size={17} /></header><div><span><CreditCard size={22} /></span><p><strong>카드 · 간편결제</strong><small>Toss Payments 통합결제창에서 선택</small></p><ChevronRight size={17} /></div><p><ShieldCheck size={14} />BeanFlow는 카드 번호를 저장하거나 처리하지 않습니다.</p></section>
+      <section className="bfr-payment-method"><header><h2>결제 수단</h2></header><div><span><CreditCard size={22} /></span><p><strong>다음 결제창에서 카드·간편결제를 선택해 주세요.</strong><small>Toss Payments 결제창으로 이동합니다.</small></p></div><p><ShieldCheck size={14} />BeanFlow는 카드 번호를 저장하거나 처리하지 않습니다.</p></section>
       {order.state === "EXPIRED" ? <p className="bfr-inline-status" role="alert">결제 시간이 만료됐어요. 주문 상태에서 새 주문이 필요한지 확인해 주세요.</p> : null}
       {failure ? <RefreshError error={failure} /> : null}
       <Button variant="brand" size="xl" block loading={paying} disabled={order.state !== "PENDING_PAYMENT"} onClick={() => void pay(order)}>{paying ? "Toss 결제창을 여는 중" : `${won.format(order.payableKrw)} 결제하기`}</Button>
@@ -98,13 +97,13 @@ export function RefreshCustomerOrderDetailPage() {
     <div className="bfr-page bfr-order-detail bfr-has-page-topbar">
       <RefreshMobileTopbar title="주문 상세" backTo="/app/orders" />
       <section className="bfr-order-summary-card">
-        <header className="bfr-order-status-head"><div><strong>{order.pickupNumber}</strong><span>{statusHeading(order.status)}</span><small>{order.storeName}</small></div><StatusText state={order.status} /></header>
+        <header className="bfr-order-status-head"><div><h2>{statusHeading(order.status)}</h2><Link to={`/app/stores/${order.storeId}`}>{order.storeName}</Link></div></header>
         <dl><div><dt>주문 일시</dt><dd>{shortDateTime.format(new Date(order.orderedAt))}</dd></div><div><dt>주문 번호</dt><dd>{order.orderReference}</dd></div></dl>
       </section>
       {pickupNote ? <section className="bfr-pickup-card"><div className="bfr-pickup-number"><small>픽업 번호</small><strong>{order.pickupNumber}</strong><p>{pickupNote}</p></div></section> : null}
       <section className="bfr-timeline-card"><OrderTimeline order={order} /><p><Clock3 size={13} />픽업 시간 {shortDateTime.format(new Date(order.pickupWindowStart))}–{shortTime.format(new Date(order.pickupWindowEnd))}</p></section>
       <section className="bfr-transaction-card bfr-order-menu-card"><header><h2>주문 메뉴</h2><span>{order.lines.length}개</span></header>{order.lines.map((line) => <div className="bfr-transaction-line" key={line.lineSequence}><span><b>{line.quantity}</b><span><strong>{line.menuName}</strong><small>{line.optionNames.join(" · ") || "기본 옵션"}</small></span></span><b>{won.format(line.lineTotalKrw)}</b></div>)}</section>
-      <section className="bfr-transaction-card bfr-order-pricing-card"><header><h2>거래 요약</h2><span>{shortDateTime.format(new Date(order.orderedAt))}</span></header><Pricing pricing={order.pricing} /></section>
+      <section className="bfr-transaction-card bfr-order-pricing-card"><header><h2>거래 요약</h2></header><Pricing pricing={order.pricing} /></section>
       {order.paymentRecovery ? <PaymentRecovery recovery={order.paymentRecovery} /> : null}
       {error ? <RefreshError error={error} retry={reload} /> : null}
       <div className="bfr-order-actions">
@@ -137,7 +136,11 @@ function RefreshCancelAction({ order, onDone }: { order: CustomerOrderDetail; on
 
 function RefreshReorderAction({ order }: { order: CustomerOrderDetail }) {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
+  const [params] = useSearchParams();
+  const [open, setOpen] = useState(params.get("reorder") === "1");
+  const points = usePointUse();
+  const reorderPanel = useRef<HTMLElement>(null);
+  useEffect(() => { if (open) reorderPanel.current?.focus(); }, [open]);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
@@ -145,8 +148,8 @@ function RefreshReorderAction({ order }: { order: CustomerOrderDetail }) {
   const coupon = useCouponSelection(order.storeId);
   const slots = useResource<PickupSlot[]>(useCallback(async () => unwrap(await customerApi.GET("/stores/{storeId}/pickup-slots", { params: { path: { storeId: order.storeId } } })).items, [order.storeId]));
   async function reorder() {
-    if (!selectedSlot) return;
-    const body = { pickupSlotId: selectedSlot, pointsToUseKrw: 0, ...(coupon ? { couponIssuanceId: coupon.couponIssuanceId } : {}) };
+    if (!selectedSlot || !points.valid || submitting) return;
+    const body = { pickupSlotId: selectedSlot, pointsToUseKrw: points.amount, ...(coupon ? { couponIssuanceId: coupon.couponIssuanceId } : {}) };
     setSubmitting(true); setFailure(null);
     try {
       const created = unwrap(await customerApi.POST("/me/orders/{orderReference}/reorders", { params: { path: { orderReference: order.orderReference }, header: { "Idempotency-Key": intent.current.keyFor(JSON.stringify({ orderReference: order.orderReference, ...body })), ...(await customerCsrfHeader()) } }, body }));
@@ -157,7 +160,7 @@ function RefreshReorderAction({ order }: { order: CustomerOrderDetail }) {
   if (!open) return <Button block variant="secondary" onClick={() => setOpen(true)}><RotateCcw size={16} />같은 메뉴로 다시 주문</Button>;
   const available = slots.state.status === "ready" ? slots.state.value.filter((slot) => slot.remainingCapacity > 0) : [];
   const guidance = reorderFailure(failure);
-  return <section className="bf-action-panel" aria-label="다시 주문"><h2>{order.storeName}에서 다시 주문할까요?</h2><p>메뉴와 옵션, 가격은 지금 판매 중인 조건으로 다시 확인합니다.</p>{slots.state.status === "loading" ? <RefreshLoading label="픽업 시간을 불러오는 중" /> : null}{slots.state.status === "failed" ? <RefreshError error={slots.state.error} retry={slots.reload} /> : null}{slots.state.status === "ready" && !available.length ? <RefreshEmpty title="고를 수 있는 픽업 시간이 없어요" description="잠시 뒤 다시 확인해 주세요." /> : null}{available.length ? <div className="bfr-slot-grid"><RadioGroup label="픽업 시간" value={selectedSlot} onValueChange={(value) => { intent.current.rotate(); setSelectedSlot(value); }}>{available.map((slot) => <RadioCard key={slot.pickupSlotId} value={slot.pickupSlotId} label={new Date(slot.startsAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} description={`${slot.remainingCapacity}잔 가능`} />)}</RadioGroup></div> : null}{guidance ? <div className="bfr-decision" role="alert"><strong>{guidance.title}</strong><p>{guidance.description}</p>{guidance.items.length ? <ul>{guidance.items.map((item) => <li key={`${item.lineSequence}-${item.reason}`}>{item.label}</li>)}</ul> : null}</div> : failure ? <RefreshError error={failure} /> : null}<div><Button variant="ghost" onClick={() => setOpen(false)}>닫기</Button><Button variant="brand" loading={submitting} disabled={!selectedSlot} onClick={() => void reorder()}>이 시간으로 주문</Button></div></section>;
+  return <section className="bf-action-panel" aria-label="다시 주문" ref={reorderPanel} tabIndex={-1}><h2>{order.storeName}에서 다시 주문할까요?</h2><p>메뉴와 옵션, 가격은 지금 판매 중인 조건으로 다시 확인합니다.</p>{slots.state.status === "loading" ? <RefreshLoading label="픽업 시간을 불러오는 중" /> : null}{slots.state.status === "failed" ? <RefreshError error={slots.state.error} retry={slots.reload} /> : null}{slots.state.status === "ready" && !available.length ? <RefreshEmpty title="고를 수 있는 픽업 시간이 없어요" description="잠시 뒤 다시 확인해 주세요." /> : null}{available.length ? <div className="bfr-slot-grid"><RadioGroup label="픽업 시간" value={selectedSlot} onValueChange={(value) => { intent.current.rotate(); setSelectedSlot(value); }}>{available.map((slot) => <RadioCard key={slot.pickupSlotId} value={slot.pickupSlotId} label={shortTime.format(new Date(slot.startsAt))} description={`${slot.remainingCapacity}잔 가능`} />)}</RadioGroup></div> : null}<section className="bfr-coupon-row"><span><small>쿠폰</small><strong>{coupon?.label ?? "선택하지 않음"}</strong></span>{coupon ? <Button variant="ghost" disabled={submitting} onClick={() => couponSelection.clear(order.storeId)}>선택 해제</Button> : <ButtonLink variant="ghost" to={`/app/coupons?storeId=${encodeURIComponent(order.storeId)}`}>쿠폰 보기</ButtonLink>}</section><PointUseField selection={points} disabled={submitting} allowFullUse={false} />{guidance ? <div className="bfr-decision" role="alert"><strong>{guidance.title}</strong><p>{guidance.description}</p>{guidance.items.length ? <ul>{guidance.items.map((item) => <li key={`${item.lineSequence}-${item.reason}`}>{item.label}</li>)}</ul> : null}</div> : failure ? <RefreshError error={failure} /> : null}<div><Button variant="ghost" onClick={() => setOpen(false)}>닫기</Button><Button variant="brand" loading={submitting} disabled={!selectedSlot || !points.valid} onClick={() => void reorder()}>이 시간으로 주문</Button></div></section>;
 }
 
 export function PaymentRecovery({ recovery }: { recovery: NonNullable<CustomerOrderDetail["paymentRecovery"]> }) {
@@ -169,7 +172,7 @@ function OrderTimeline({ order }: { order: CustomerOrderDetail }) {
   const steps = [["paidAt", "결제 완료"], ["acceptedAt", "주문 접수"], ["preparingAt", "제조 중"], ["readyAt", "픽업 준비"], ["completedAt", "픽업 완료"]] as const;
   const lastOccurred = steps.reduce((last, [field], index) => order.lifecycle?.[field] ? index : last, -1);
   if (lastOccurred < 0) return null;
-  return <ol className="bfr-order-timeline" aria-label="주문 진행 단계">{steps.map(([field, label], index) => { const timestamp = order.lifecycle?.[field]; return <li className={`${timestamp ? "is-complete" : ""} ${index === lastOccurred ? "is-current" : ""}`} aria-current={index === lastOccurred ? "step" : undefined} key={field}><span>{index + 1}</span><div><strong>{label}</strong><small>{timestamp ? shortTime.format(new Date(timestamp)) : "예정"}</small></div></li>; })}</ol>;
+  return <ol className="bfr-order-timeline" aria-label="주문 진행 단계">{steps.map(([field, label], index) => { const timestamp = order.lifecycle?.[field]; return <li className={`${timestamp ? "is-complete" : ""} ${index === lastOccurred ? "is-current" : ""}`} aria-current={index === lastOccurred ? "step" : undefined} key={field}><span>{index + 1}</span><div><strong>{label}</strong><small>{timestamp ? shortTime.format(new Date(timestamp)) : isLive(order.status) ? "예정" : "진행 기록 없음"}</small></div></li>; })}</ol>;
 }
 
 function Pricing({ pricing }: { pricing: { subtotalKrw: number; couponDiscountKrw: number; pointsAppliedKrw: number; payableKrw: number } }) {

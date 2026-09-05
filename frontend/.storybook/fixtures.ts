@@ -72,7 +72,7 @@ export const orderDetail = {
     preparingAt: "2026-08-15T03:00:00Z",
     readyAt: "2026-08-15T03:12:00Z",
   },
-  allowedActions: ["CANCEL"],
+  allowedActions: [],
   lines: [
     { lineSequence: 0, menuName: "아이스 아메리카노", optionNames: ["ICE", "샷 추가"], quantity: 2, lineTotalKrw: 9_000 },
     { lineSequence: 1, menuName: "오트 라떼", optionNames: ["HOT"], quantity: 1, lineTotalKrw: 3_800 },
@@ -356,10 +356,10 @@ export const favoriteHandlers = [
 
 export const homeHandlers = [
   ...signedInHandlers,
-  http.get("/api/v1/me/orders", () => HttpResponse.json({ items: [orderSummary], page: { nextCursor: null } })),
+  http.get("/api/v1/me/orders", ({ request }) => HttpResponse.json({ items: [new URL(request.url).searchParams.get("status") === "PAST" ? { ...orderSummary, status: "COMPLETED", allowedActions: ["REORDER"] } : orderSummary], page: {} })),
   http.get("/api/v1/me/store-recommendations", () => HttpResponse.json({
     items: [
-      { store: customerStore, reason: "RECENT" },
+      { store: { ...customerStore, image: { url: "/demo/catalog/store-01.webp" } }, reason: "RECENT" },
       {
         store: {
           storeId: "10000000-0000-4000-8000-000000000002",

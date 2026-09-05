@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 import { HttpResponse, http } from "msw";
-import { homeHandlers, orderListHandlers, signedInHandlers } from "../../../.storybook/fixtures";
+import { customerStore, homeHandlers, orderListHandlers, orderSummary, signedInHandlers } from "../../../.storybook/fixtures";
 import { RefreshCustomerHomePage } from "./CustomerDiscoveryPages";
 
 const meta = {
@@ -24,7 +24,10 @@ export const ActiveOrderAndRecommendations: Story = {
   play: async ({ canvas, canvasElement }) => {
     await expect(await canvas.findByRole("link", { name: /A-142 준비 완료/ })).toBeVisible();
     const recentStoreLabels = await canvas.findAllByText("최근 주문한 매장");
-    await expect(recentStoreLabels.length).toBeGreaterThan(0);
+    await expect(recentStoreLabels).toHaveLength(1);
+    await expect(canvas.getByText("광화문점")).toBeVisible();
+    await expect(canvas.getByText("주문 쉬는 중")).toBeVisible();
+    await expect(await canvas.findByRole("link", { name: "다시 주문" })).toHaveAttribute("href", `/app/orders/${orderSummary.orderReference}?reorder=1`);
     await expect(canvas.queryByText("IN PROGRESS")).not.toBeInTheDocument();
     await expect(canvas.queryByText("FOR YOU")).not.toBeInTheDocument();
     await expect(canvasElement.querySelector(".bf-status")).toBeNull();
@@ -48,4 +51,9 @@ export const RecommendationFailure: Story = {
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("alert")).toBeVisible();
   },
+};
+
+export const LongStoreName: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/me/store-recommendations", () => HttpResponse.json({ items: [{ store: { ...customerStore, name: "빈플로우 서울시청광장 테이크아웃 전문점", image: { url: "/demo/catalog/store-01.webp" } }, reason: "FAVORITE" }] })), ...homeHandlers] } },
+  play: async ({ canvas }) => { await expect(await canvas.findByText("자주 찾는 매장")).toBeVisible(); await expect(canvas.queryByText("최근 주문한 매장")).not.toBeInTheDocument(); },
 };

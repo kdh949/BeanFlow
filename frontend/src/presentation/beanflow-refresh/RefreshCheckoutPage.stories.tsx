@@ -20,9 +20,11 @@ type Story = StoryObj<typeof meta>;
 
 export const PendingPayment: Story = {
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText("Toss Payments 통합결제창에서 선택")).toBeVisible();
+    await expect(await canvas.findByText("다음 결제창에서 카드·간편결제를 선택해 주세요.")).toBeVisible();
     await expect(await canvas.findByRole("button", { name: /12,800.*결제하기/ })).toBeEnabled();
     await expect(canvas.queryByText(/저장된 카드/)).not.toBeInTheDocument();
+    await expect(canvas.getByText(/까지 결제해 주세요/)).toBeVisible();
+    await expect(canvas.queryByText("예약 만료까지")).not.toBeInTheDocument();
   },
 };
 
