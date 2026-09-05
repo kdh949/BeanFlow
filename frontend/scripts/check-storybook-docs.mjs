@@ -36,6 +36,7 @@ const expectedDocs = new Set([
   "pages-refresh-customer-cart--docs",
   "pages-customer-notifications--docs",
   "pages-customer-points--docs",
+  "patterns-customer-point-use--docs",
   "patterns-customer-session-gate--docs",
   "pages-shared-notfound--docs",
   "patterns-store-session-gate--docs",
@@ -76,7 +77,7 @@ const statefulDocs = {
     "pages-refresh-customer-store-detail--pickup-unavailable": "판매 중인 메뉴가 없어요",
   },
   "pages-refresh-customer-checkout--docs": {
-    "pages-refresh-customer-checkout--pending-payment": "Toss Payments 통합결제창에서 선택",
+    "pages-refresh-customer-checkout--pending-payment": "다음 결제창에서 카드·간편결제를 선택해 주세요.",
     "pages-refresh-customer-checkout--expired-order": "결제 시간이 만료됐어요",
   },
   "pages-customer-orders--docs": {

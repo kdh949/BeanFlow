@@ -101,7 +101,7 @@ describe("customer home", () => {
 
     renderHome();
 
-    expect(await screen.findByText("서비스 연결을 확인하고 있습니다")).toBeInTheDocument();
+    expect(await screen.findAllByText("서비스 연결을 확인하고 있습니다")).toHaveLength(2);
     expect(screen.queryByText("진행 중인 주문이 없어요")).not.toBeInTheDocument();
   });
 
@@ -125,7 +125,7 @@ describe("store search", () => {
     renderSearch();
 
     expect(await screen.findByText("찾고 싶은 매장을 알려주세요")).toBeInTheDocument();
-    expect(get).not.toHaveBeenCalled();
+    expect((get.mock.calls as unknown as Array<[string]>).some(([path]) => path === "/stores/search" || path === "/stores/nearby")).toBe(false);
   });
 
   it("lists matches with the matched menu names", async () => {

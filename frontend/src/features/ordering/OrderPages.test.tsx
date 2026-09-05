@@ -44,7 +44,7 @@ const detail = {
     preparingAt: "2026-08-14T03:03:00Z",
     readyAt: "2026-08-14T03:04:00Z",
   },
-  allowedActions: ["CANCEL" as const],
+  allowedActions: [],
   lines: [
     { lineSequence: 0, menuName: "아이스 아메리카노", optionNames: ["ICE", "샷 추가"], quantity: 2, lineTotalKrw: 9_000 },
     { lineSequence: 1, menuName: "오트 라떼", optionNames: ["HOT"], quantity: 1, lineTotalKrw: 3_800 },
@@ -86,6 +86,8 @@ describe("customer order list", () => {
     expect(await screen.findByRole("heading", { name: "주문 내역" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "진행 중" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "지난 주문" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("조회 시작일")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "기간 변경" }));
     expect(screen.getByLabelText("조회 시작일")).toBeInTheDocument();
     expect(screen.getByLabelText("조회 종료일")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("UUID 주문 번호")).not.toBeInTheDocument();
@@ -158,7 +160,7 @@ describe("customer order detail", () => {
 
     renderAt("/app/orders/BF-7K3M-9Q2P");
 
-    expect(await screen.findAllByText("A-142")).toHaveLength(2);
+    expect(await screen.findAllByText("A-142")).toHaveLength(1);
     expect(screen.getByText("강남 2호점")).toBeInTheDocument();
     expect(screen.getByText("아이스 아메리카노")).toBeInTheDocument();
     expect(screen.getByText("ICE · 샷 추가")).toBeInTheDocument();
@@ -168,7 +170,7 @@ describe("customer order detail", () => {
     expect(timeline.closest("section")).toHaveTextContent(/픽업 시간.*8\. 14\./);
     expect(screen.getByRole("heading", { name: "거래 요약" }).closest("section")).toHaveTextContent("상품 금액₩15,000");
     expect(screen.getByRole("heading", { name: "거래 요약" }).closest("section")).toHaveTextContent("결제 금액₩12,800");
-    expect(screen.getByRole("button", { name: "주문 취소" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "주문 취소" })).not.toBeInTheDocument();
     expect(get).toHaveBeenCalledWith("/me/orders/{orderReference}", {
       params: { path: { orderReference: "BF-7K3M-9Q2P" } },
     });
@@ -193,7 +195,7 @@ describe("customer order detail", () => {
     type Resolver = (value: unknown) => void;
     const resolvers: Resolver[] = [];
     vi.spyOn(customerApi, "GET").mockImplementation(
-      () => new Promise((resolve) => { resolvers.push(resolve as Resolver); }),
+      (path) => path === "/me/notification-summary" ? Promise.resolve(response({ hasUnread: false }) as never) : new Promise((resolve) => { resolvers.push(resolve as Resolver); }),
     );
 
     renderAt("/app/orders/BF-7K3M-9Q2P");

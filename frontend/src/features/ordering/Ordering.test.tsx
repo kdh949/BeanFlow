@@ -55,9 +55,15 @@ const quote = (payableKrw = 9_000, fingerprint = "a".repeat(64)) => ({
 });
 
 function routeGet(routes: Record<string, unknown>) {
+  const responses: Record<string, unknown> = {
+    "/me/points": ok({ availablePointsKrw: 1500, recoveryPendingKrw: 0, currency: "KRW", expiring: [], expiringHasMore: false }),
+    "/me/notification-summary": ok({ hasUnread: false }),
+    "/me/favorite-stores": ok({ items: [] }),
+    ...routes,
+  };
   return vi.spyOn(customerApi, "GET").mockImplementation(async (path: string) => {
-    if (!(path in routes)) throw new Error(`unexpected GET ${path}`);
-    return routes[path] as never;
+    if (!(path in responses)) throw new Error(`unexpected GET ${path}`);
+    return responses[path] as never;
   });
 }
 
@@ -110,6 +116,16 @@ describe("client cart", () => {
     const state = cart.read();
     expect(state.status === "ready" && state.cart.lines).toHaveLength(1);
     expect(state.status === "ready" && state.cart.lines[0]?.quantity).toBe(3);
+  });
+
+  it("merges edited options into the matching line without losing quantity or another menu", () => {
+    const store = { storeId: "store-1", storeName: "성수" };
+    cart.add(store, line("menu-1", 2));
+    cart.add(store, { ...line("menu-1", 3), optionIds: ["shot", "syrup"] });
+    cart.add(store, line("menu-2"));
+    const replacement = { ...line("menu-1", 2), optionIds: ["syrup", "shot"], display: { menuName: "현재 메뉴명", optionNames: ["시럽", "샷"], unitPriceKrw: 5500 } };
+    cart.updateLine(0, replacement);
+    expect(cart.read()).toMatchObject({ status: "ready", cart: { storeId: "store-1", lines: [{ ...replacement, quantity: 5 }, line("menu-2")] } });
   });
 
   it("reports a damaged cart instead of overwriting it with an empty one", () => {
@@ -377,5 +393,32 @@ describe("order creation conflicts", () => {
     expect(orderRequests[0]?.body).toMatchObject({ expectedQuoteFingerprint: "a".repeat(64) });
     expect(orderRequests[1]?.body).toMatchObject({ expectedQuoteFingerprint: "b".repeat(64) });
     expect(orderRequests[1]?.key).not.toBe(orderRequests[0]?.key);
+  });
+});
+
+describe("point use in order quotes", () => {
+  it("requotes point changes and submits the current amount and fingerprint", async () => {
+    cart.add({ storeId: "store-1", storeName: "성수" }, line("menu-1", 2));
+    document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
+    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
+    vi.spyOn(customerApi, "POST").mockImplementation(async (path: string, options: unknown) => {
+      const body = (options as { body: Record<string, unknown> }).body;
+      requests.push({ path, body });
+      if (path === "/me/order-quotes") {
+        const amount = body.pointsToUseKrw as number;
+        const result = quote(9000, amount ? "b".repeat(64) : "a".repeat(64));
+        return ok({ ...result, pricing: { ...result.pricing, pointsAppliedKrw: amount, payableKrw: 9000 - amount } }) as never;
+      }
+      return ok({ order: { orderId: "order-1", payableKrw: 7500 } }) as never;
+    });
+    renderCart();
+    await userEvent.click(await screen.findByRole("radio", { name: /가능/ }));
+    expect(await screen.findByRole("button", { name: /9,000.*주문하기/ })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "전액 사용" }));
+    expect(screen.getByRole("button", { name: "견적 확인 후 주문하기" })).toBeDisabled();
+    await userEvent.click(await screen.findByRole("button", { name: /7,500.*주문하기/ }));
+    expect(await screen.findByRole("heading", { name: "결제 화면" })).toBeInTheDocument();
+    expect(requests.at(-1)).toMatchObject({ path: "/orders", body: { pointsToUseKrw: 1500, expectedQuoteFingerprint: "b".repeat(64) } });
   });
 });
