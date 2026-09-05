@@ -1,5 +1,5 @@
 import {
-  BarChart3, Bell, ChevronDown, Headset, Home, LogOut, MapPin, PackageCheck, ReceiptText,
+  BarChart3, Bell, ChevronDown, CircleDotDashed, ClipboardCheck, Headset, Home, LifeBuoy, LogOut, MapPin, PackageCheck, ReceiptText,
   Search, Settings2, ShieldCheck, ShoppingBag, Store, UserRound, WalletCards,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -82,15 +82,21 @@ export function ConsoleShell({ kind }: { kind: ConsoleKind }) {
       { to: "/store/settlements", label: "정산 내역", icon: WalletCards, end: false },
       { to: "/store/disputes", label: "이의제기", icon: ReceiptText, end: false },
     ] : []),
+    { to: "/store/management", label: "매장 관리", icon: Settings2, end: false },
     { to: "/store/region", label: "매장 설정", icon: MapPin, end: false },
   ];
   const opsItems = [
     { to: "/ops", label: "운영 현황", icon: BarChart3, end: true },
     { to: "/ops/orders", label: "주문 조회", icon: Search, end: false },
     { to: "/ops/merchant-accounts", label: "점주 계정", icon: UserRound, end: false },
+    { to: "/ops/recovery", label: "문제 확인 및 복구", icon: LifeBuoy, end: false },
+    { to: "/ops/control", label: "운영 업무", icon: CircleDotDashed, end: false },
     { to: "/ops/policies", label: "정책 관리", icon: Settings2, end: false },
   ];
-  const supportItems = [{ to: "/support", label: "고객지원", icon: Headset, end: true }];
+  const supportItems = [
+    { to: "/support", label: "고객지원", icon: Headset, end: true },
+    { to: "/support/follow-up", label: "상담 후속 업무", icon: ClipboardCheck, end: false },
+  ];
   const items = kind === "store" ? storeItems : kind === "ops" ? opsItems : supportItems;
   const basePath = kind === "store" ? "/store" : kind === "ops" ? "/ops" : "/support";
   const context = kind === "store" ? "매장 운영" : kind === "ops" ? "플랫폼 운영" : "고객지원";

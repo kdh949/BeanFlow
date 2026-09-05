@@ -83,7 +83,7 @@ describe("customer order list", () => {
 
     renderAt("/app/orders");
 
-    expect(await screen.findByRole("heading", { name: "주문" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "주문 내역" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "진행 중" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "지난 주문" })).toBeInTheDocument();
     expect(screen.getByLabelText("조회 시작일")).toBeInTheDocument();
@@ -99,7 +99,7 @@ describe("customer order list", () => {
     const get = vi.spyOn(customerApi, "GET").mockResolvedValue(response({ items: [], page: {} }) as never);
     const user = userEvent.setup();
     renderAt("/app/orders");
-    await screen.findByRole("heading", { name: "주문" });
+    await screen.findByRole("heading", { name: "주문 내역" });
 
     await user.click(screen.getByRole("tab", { name: "지난 주문" }));
 
@@ -109,6 +109,18 @@ describe("customer order list", () => {
         expect.objectContaining({ params: { query: expect.objectContaining({ status: "PAST" }) } }),
       );
     });
+  });
+
+  it("shows refund access on the owning order without creating a separate refund lookup", async () => {
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response({
+      items: [{ ...summary, status: "CANCELLED", allowedActions: ["VIEW_REFUND"] }],
+      page: {},
+    }) as never);
+
+    renderAt("/app/orders?status=PAST");
+
+    const order = await screen.findByRole("link", { name: /환불 내역 확인/ });
+    expect(order).toHaveAttribute("href", "/app/orders/BF-7K3M-9Q2P");
   });
 
   it("discards a slower ACTIVE response that resolves after the customer has switched to PAST", async () => {
@@ -123,7 +135,7 @@ describe("customer order list", () => {
     const user = userEvent.setup();
 
     renderAt("/app/orders");
-    await screen.findByRole("heading", { name: "주문" });
+    await screen.findByRole("heading", { name: "주문 내역" });
     await user.click(screen.getByRole("tab", { name: "지난 주문" }));
 
     // The PAST tab the customer is now looking at answers first.
@@ -291,6 +303,7 @@ describe("customer order actions", () => {
     renderAt("/app/orders/BF-7K3M-9Q2P");
 
     expect(await screen.findByText("취소된 주문이에요")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "환불 내역" })).toBeInTheDocument();
     expect(screen.getByText("환불 확인이 지연되고 있어요")).toBeInTheDocument();
     expect(screen.getByText(/담당자가 결과를 확인하고 있습니다/)).toBeInTheDocument();
     expect(screen.queryByText("환불이 완료됐어요")).not.toBeInTheDocument();
@@ -308,6 +321,7 @@ describe("customer order actions", () => {
 
     renderAt("/app/orders/BF-7K3M-9Q2P");
 
+    expect(await screen.findByRole("heading", { name: "환불 내역" })).toBeInTheDocument();
     expect(await screen.findByText("환불이 완료됐어요")).toBeInTheDocument();
   });
 });

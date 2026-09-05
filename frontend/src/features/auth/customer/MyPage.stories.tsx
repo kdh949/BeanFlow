@@ -32,6 +32,9 @@ type Story = StoryObj<typeof meta>;
 export const SignedIn: Story = {
   play: async ({ canvas }) => {
     await expect(await canvas.findByText(customerIdentity.displayName)).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "주문 내역" })).toHaveAttribute("href", "/app/orders");
+    await expect(canvas.getByRole("link", { name: "쿠폰 받기" })).toHaveAttribute("href", "/app/coupon-claims");
+    await expect(canvas.queryByRole("link", { name: "환불 내역" })).not.toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: "로그아웃" })).toBeEnabled();
   },
 };

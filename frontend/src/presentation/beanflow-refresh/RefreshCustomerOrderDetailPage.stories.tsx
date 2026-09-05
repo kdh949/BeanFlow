@@ -47,8 +47,19 @@ export const Cancelled: Story = {
 export const RefundDelayed: Story = {
   parameters: { msw: { handlers: [...signedInHandlers, ...orderDetailHandlers({ status: "CANCELLED", allowedActions: ["VIEW_REFUND"], paymentRecovery: { state: "PROCESSING", noticeCode: "REFUND_DELAYED", cancellationRequestedRefundAmountKrw: 12_800 } })] } },
   play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("heading", { name: "환불 내역" })).toBeVisible();
     await expect(await canvas.findByText("환불 확인이 지연되고 있어요")).toBeVisible();
+    await expect(canvas.getByText("요청 금액 ₩12,800")).toBeVisible();
     await expect(canvas.getByText(/같은 요청을 다시 보내지 않아도/)).toBeVisible();
+  },
+};
+
+export const RefundCompleted: Story = {
+  parameters: { msw: { handlers: [...signedInHandlers, ...orderDetailHandlers({ status: "CANCELLED", allowedActions: ["VIEW_REFUND"], paymentRecovery: { state: "SUCCEEDED", cancellationRequestedRefundAmountKrw: 12_800, remainingRefundableAmountKrw: 0, lastUpdatedAt: "2026-08-15T03:12:00Z" } })] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("heading", { name: "환불 내역" })).toBeVisible();
+    await expect(canvas.getByText("환불이 완료됐어요")).toBeVisible();
+    await expect(canvas.getByText("요청 금액 ₩12,800")).toBeVisible();
   },
 };
 

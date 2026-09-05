@@ -162,7 +162,7 @@ function RefreshReorderAction({ order }: { order: CustomerOrderDetail }) {
 
 export function PaymentRecovery({ recovery }: { recovery: NonNullable<CustomerOrderDetail["paymentRecovery"]> }) {
   const copy = recovery.state === "SUCCEEDED" ? ["환불이 완료됐어요", "현금 환불 성공을 확인했습니다."] : recovery.state === "NOT_REQUIRED" ? ["추가 현금 환불이 없어요", "결제 전 취소 또는 이전 환불로 새 현금 환불이 필요하지 않습니다."] : recovery.noticeCode === "REFUND_DELAYED" ? ["환불 확인이 지연되고 있어요", "담당자가 결과를 확인하고 있습니다. 같은 요청을 다시 보내지 않아도 됩니다."] : ["환불 결과를 확인하고 있어요", "아직 성공도 실패도 아닙니다. 완료되면 주문 상태에 반영됩니다."];
-  return <section className="bfr-recovery" role="status"><Clock3 size={18} /><div><strong>{copy[0]}</strong><p>{copy[1]}</p>{recovery.cancellationRequestedRefundAmountKrw !== undefined ? <small>요청 금액 {won.format(recovery.cancellationRequestedRefundAmountKrw)}</small> : null}</div></section>;
+  return <section className="bfr-transaction-card" aria-labelledby="customer-refund-history-title"><header><h2 id="customer-refund-history-title">환불 내역</h2></header><div className="bfr-recovery" role="status"><Clock3 size={18} /><div><strong>{copy[0]}</strong><p>{copy[1]}</p>{recovery.cancellationRequestedRefundAmountKrw !== undefined ? <small>요청 금액 {won.format(recovery.cancellationRequestedRefundAmountKrw)}</small> : null}</div></div></section>;
 }
 
 function OrderTimeline({ order }: { order: CustomerOrderDetail }) {
