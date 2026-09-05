@@ -1,4 +1,4 @@
-import { ChevronRight, LocateFixed, MapPin, Search, ShoppingBag } from "lucide-react";
+import { ChevronRight, LocateFixed, MapPin, Search, ShoppingBag, TicketPercent } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
@@ -40,6 +40,8 @@ export function RefreshCustomerHomePage() {
         {activeOrders.state.status === "ready" && activeOrders.state.value.length === 0 ? <RefreshEmpty title="진행 중인 주문이 없어요" description="새 주문을 시작하면 픽업 번호와 준비 상태가 여기에 표시됩니다." /> : null}
         {activeOrders.state.status === "ready" ? <div className="bfr-active-orders">{activeOrders.state.value.map((order) => <Link key={order.orderReference} to={`/app/orders/${order.orderReference}`}><span className="bfr-pickup-symbol" aria-hidden="true"><ShoppingBag size={22} /></span><strong>{order.pickupNumber} {order.status === "READY" ? "준비 완료" : order.itemSummary}</strong><span>· {order.storeName}</span><ChevronRight size={22} aria-hidden="true" /></Link>)}</div> : null}
       </section>
+
+      <Link className="bfr-home-event-link" to="/app/events"><span><TicketPercent size={20} aria-hidden="true" /></span><strong>진행 중인 쿠폰 이벤트</strong><ChevronRight size={20} aria-hidden="true" /></Link>
 
       <section className="bfr-home-stores">
         <header className="bfr-section-heading"><h2>추천 매장</h2><Link to="/app/stores">전체 보기 <ChevronRight size={17} /></Link></header>

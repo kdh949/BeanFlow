@@ -79,7 +79,7 @@ PostgreSQL wait, 실제 외부 Provider child span, 느린 trace, 같은 요청 
 ## Alternatives Considered
 
 - SDK 직접 초기화, Pushgateway 기반 application metric, SQL trace ID 주입과 fake Provider 전체 대체는
-  [ADR-120](../../adr/ADR-120-performance-observability-and-trace-profile-correlation.md)의 이유로 제외한다.
+  [ADR-121](../../adr/ADR-121-performance-observability-and-trace-profile-correlation.md)의 이유로 제외한다.
 
 ## Failure Semantics
 
@@ -148,7 +148,7 @@ RCA dashboard와 data source correlation은 이 순서를 직접 탐색하게 �
 
 ## Documentation Updates
 
-- ADR-120
+- ADR-121
 - 이 ExecPlan
 - `docs/operations/performance-observability-runbook.md`
 - 중앙 monitoring server 적용 checklist와 datasource provisioning snippets
@@ -157,13 +157,13 @@ RCA dashboard와 data source correlation은 이 순서를 직접 탐색하게 �
 ## Progress
 
 - [x] 2026-09-02: repository 상태, 기존 metric/provider/deployment 경계 조사
-- [x] 2026-09-02: 관측성 방식과 exact/correlation 경계를 ADR-120에 기록
+- [x] 2026-09-02: 관측성 방식과 exact/correlation 경계를 ADR-121에 기록
 - [x] 2026-09-04: 새 격리 worktree와 feature branch에서 P0/P1 전체 범위 재확인
 - [x] 2026-09-04: application telemetry와 perf-only runtime 구현
 - [x] 2026-09-04: perf infrastructure, P1 PostgreSQL 진단과 load scenarios 구현
 - [x] 2026-09-04: dashboard, alert rules와 runbook 구현
 - [x] 2026-09-04: repository 정적·단위·통합·build 검증과 결과 기록
-- [x] 2026-09-04: cAdvisor의 privileged host/container 경계를 ADR-120에 기록하고 사용자 승인
+- [x] 2026-09-04: cAdvisor의 privileged host/container 경계를 ADR-121에 기록하고 사용자 승인
 - [x] 2026-09-04: cAdvisor opt-in Compose, scrape, dashboard와 contract 구현
 - [ ] 전용 perf 서버에서 중앙 ingest, Grafana correlation과 실제 부하 실행 검증
 
@@ -206,6 +206,8 @@ RCA dashboard와 data source correlation은 이 순서를 직접 탐색하게 �
 
 ## Revision Notes
 
+- 2026-09-06: main 병합 시 쿠폰 캠페인 ADR 번호와의 중복을 해소해 관측성 ADR을 ADR-121로 이동하고,
+  AIStor 외부 호출 계측과 캠페인 배너 대상별 metric 및 페이지 단위 정리를 함께 보존.
 - 2026-09-02: 최초 작성.
 - 2026-09-04: P0/P1 전체 구현 범위와 SQL 개인정보 경계 보강.
 - 2026-09-04: repository 구현과 검증 결과, cAdvisor 보안 결정 및 live 검증 경계 기록.

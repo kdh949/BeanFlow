@@ -8,6 +8,7 @@ enum class StorefrontImageTarget(
 ) {
     STORE("stores"),
     MENU("menus"),
+    CAMPAIGN("campaigns"),
 }
 
 data class StorefrontImageUpload(
@@ -41,6 +42,11 @@ data class StorefrontImageAccess(
     val expiresAt: Instant,
 )
 
+data class StorefrontImageOrphanCandidatePage(
+    val candidateKeys: List<String>,
+    val nextStartAfter: String?,
+)
+
 data class StoreImageChange(
     val changed: Boolean,
     val current: StorefrontImagePointer?,
@@ -57,6 +63,8 @@ data class MenuImageChange(
 interface StorefrontImageStorageOperations {
     fun normalize(upload: StorefrontImageUpload): NormalizedStorefrontImageUpload
 
+    fun normalizeCampaignBanner(upload: StorefrontImageUpload): NormalizedStorefrontImageUpload
+
     fun store(
         target: StorefrontImageTarget,
         targetId: UUID,
@@ -72,9 +80,17 @@ interface StorefrontImageStorageOperations {
     )
 
     fun listOrphanCandidates(
+        targets: Set<StorefrontImageTarget>,
         olderThan: Instant,
         limit: Int,
     ): List<String>
+
+    fun listOrphanCandidatePage(
+        target: StorefrontImageTarget,
+        olderThan: Instant,
+        startAfter: String?,
+        limit: Int,
+    ): StorefrontImageOrphanCandidatePage
 
     fun deleteObject(key: String)
 }

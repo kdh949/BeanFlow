@@ -27,6 +27,9 @@
 .bf-field__textarea--vertical { resize: vertical; }
 .bf-field__textarea--none { resize: none; }
 .bf-field__select { padding-right: var(--sp-8); }
+.bf-field__file { padding-block: var(--sp-2); }
+.bf-field__file::file-selector-button { min-height: var(--control-h-sm); margin-right: var(--sp-4); padding-inline: var(--sp-4); border: 0; border-radius: var(--r-control); background: var(--surface-sunken); color: var(--text-strong); font: inherit; font-weight: var(--fw-semibold); cursor: pointer; }
+.bf-field__file:disabled::file-selector-button { color: var(--control-disabled-text); cursor: not-allowed; }
 .bf-field__description,.bf-field__error { color: var(--text-muted); font-size: var(--fs-caption); line-height: var(--lh-body); }
 .bf-field__error { color: var(--danger-fg); font-weight: var(--fw-semibold); }
 .bf-check,.bf-switch,.bf-radio { min-height: var(--tap-min); display: flex; align-items: center; gap: var(--sp-5); color: var(--text-body); cursor: pointer; }

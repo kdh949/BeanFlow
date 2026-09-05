@@ -22,3 +22,16 @@ export const Invalid: Story = { args: { value: "bf", error: "로그인 ID는 5�
 export const ReadOnly: Story = { args: { value: "customer-1042", readOnly: true, description: "서버가 확정한 식별자입니다." } };
 export const Disabled: Story = { args: { value: "사용할 수 없음", disabled: true } };
 export const LargeCustomerControl: Story = { args: { size: "lg", value: "", placeholder: "휴대전화 번호" } };
+export const DateTimePicker: Story = {
+  args: {
+    label: "다운로드 시작 시각",
+    type: "datetime-local",
+    value: "2026-10-01T09:00",
+    description: "한국 시간(Asia/Seoul) 기준으로 선택합니다.",
+  },
+  play: async ({ canvas }) => {
+    const input = canvas.getByLabelText("다운로드 시작 시각");
+    await expect(input).toHaveAttribute("type", "datetime-local");
+    await expect(input).toHaveValue("2026-10-01T09:00");
+  },
+};

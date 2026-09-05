@@ -1,4 +1,4 @@
-# ADR-120: 성능 관측성과 trace-profile 상관 경계
+# ADR-121: 성능 관측성과 trace-profile 상관 경계
 
 - **Status:** Accepted
 - **Date:** 2026-09-04

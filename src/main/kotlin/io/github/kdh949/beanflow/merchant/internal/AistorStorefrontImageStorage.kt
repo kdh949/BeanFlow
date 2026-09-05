@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.merchant.internal
 import io.github.kdh949.beanflow.merchant.api.NormalizedStorefrontImageUpload
 import io.github.kdh949.beanflow.merchant.api.PreparedStorefrontImage
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageAccess
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageOrphanCandidatePage
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageUpload
@@ -32,6 +33,11 @@ internal class AistorStorefrontImageStorage(
             NormalizedStorefrontImageUpload(it.original, it.thumbnail, it.contentType, it.extension, it.sha256)
         }
 
+    override fun normalizeCampaignBanner(upload: StorefrontImageUpload): NormalizedStorefrontImageUpload =
+        normalizer.normalizeCampaignBanner(upload.bytes, upload.contentType).let {
+            NormalizedStorefrontImageUpload(it.original, it.thumbnail, it.contentType, it.extension, it.sha256)
+        }
+
     override fun store(
         target: StorefrontImageTarget,
         targetId: UUID,
@@ -40,13 +46,13 @@ internal class AistorStorefrontImageStorage(
         val base = "${target.objectPrefix}/$targetId/${normalized.sha256}/${UUID.randomUUID()}"
         val originalKey = "$base/original.${normalized.extension}"
         val thumbnailKey = "$base/thumbnail.${normalized.extension}"
-        putVerified(originalKey, normalized.original, normalized.contentType, normalized.sha256)
-        putVerified(thumbnailKey, normalized.thumbnail, normalized.contentType, normalized.sha256)
+        putVerified(target, originalKey, normalized.original, normalized.contentType, normalized.sha256)
+        putVerified(target, thumbnailKey, normalized.thumbnail, normalized.contentType, normalized.sha256)
         return PreparedStorefrontImage(originalKey, thumbnailKey, normalized.sha256)
     }
 
     override fun access(thumbnailKey: String): StorefrontImageAccess =
-        external("presign", ExternalDependencyOperation.PRESIGN, providerObserved = false) {
+        external("presign", ExternalDependencyOperation.PRESIGN, metricTarget(thumbnailKey), providerObserved = false) {
             val issuedAt = clock.instant()
             StorefrontImageAccess(client.presignGet(thumbnailKey, URL_TTL.seconds.toInt()), issuedAt.plus(URL_TTL))
         }
@@ -55,20 +61,23 @@ internal class AistorStorefrontImageStorage(
         originalKey: String,
         thumbnailKey: String,
     ) {
-        external("delete", ExternalDependencyOperation.DELETE) {
+        external("delete", ExternalDependencyOperation.DELETE, metricTarget(originalKey)) {
             client.delete(originalKey)
             client.delete(thumbnailKey)
         }
     }
 
     override fun listOrphanCandidates(
+        targets: Set<StorefrontImageTarget>,
         olderThan: java.time.Instant,
         limit: Int,
     ): List<String> {
+        require(targets.isNotEmpty())
         require(limit > 0)
-        return external("list-orphans", ExternalDependencyOperation.LIST) {
-            StorefrontImageTarget.entries
+        return external("list-orphans", ExternalDependencyOperation.LIST, metricTarget(targets)) {
+            targets
                 .asSequence()
+                .sortedBy(StorefrontImageTarget::ordinal)
                 .flatMap { target -> client.list("${target.objectPrefix}/") }
                 .filter { stored -> stored.lastModifiedAt.isBefore(olderThan) }
                 .take(limit)
@@ -77,11 +86,33 @@ internal class AistorStorefrontImageStorage(
         }
     }
 
+    override fun listOrphanCandidatePage(
+        target: StorefrontImageTarget,
+        olderThan: java.time.Instant,
+        startAfter: String?,
+        limit: Int,
+    ): StorefrontImageOrphanCandidatePage {
+        require(limit in 1..1000)
+        return external("list-orphan-page", ExternalDependencyOperation.LIST, metricTarget(target)) {
+            val scanned = client.list("${target.objectPrefix}/", startAfter, limit)
+            StorefrontImageOrphanCandidatePage(
+                candidateKeys =
+                    scanned
+                        .asSequence()
+                        .filter { stored -> stored.lastModifiedAt.isBefore(olderThan) }
+                        .map(AistorObjectSummary::key)
+                        .toList(),
+                nextStartAfter = scanned.lastOrNull()?.key.takeIf { scanned.size == limit },
+            )
+        }
+    }
+
     override fun deleteObject(key: String) {
-        external("delete-orphan", ExternalDependencyOperation.DELETE) { client.delete(key) }
+        external("delete-orphan", ExternalDependencyOperation.DELETE, metricTarget(key)) { client.delete(key) }
     }
 
     private fun putVerified(
+        target: StorefrontImageTarget,
         key: String,
         bytes: ByteArray,
         contentType: String,
@@ -89,7 +120,7 @@ internal class AistorStorefrontImageStorage(
     ) {
         try {
             telemetry.observe(AISTOR_PUT) { client.put(key, bytes, contentType, sha256) }
-            metrics.success("put")
+            metrics.success("put", metricTarget(target))
         } catch (putFailure: Exception) {
             val confirmed =
                 try {
@@ -98,36 +129,51 @@ internal class AistorStorefrontImageStorage(
                 } catch (_: Exception) {
                     false
                 }
-            if (!confirmed) unavailable("put", "AIStor image upload outcome is unresolved", putFailure)
-            metrics.success("put-confirmed-by-head")
+            if (!confirmed) unavailable("put", metricTarget(target), "AIStor image upload outcome is unresolved", putFailure)
+            metrics.success("put-confirmed-by-head", metricTarget(target))
         }
     }
 
     private fun <T> external(
         operation: String,
         telemetryOperation: ExternalDependencyOperation,
+        target: String,
         providerObserved: Boolean = true,
         block: () -> T,
     ): T =
         try {
             telemetry
                 .observe(ExternalDependencyCall(ExternalProvider.AISTOR, telemetryOperation), block = block)
-                .also { metrics.success(operation, providerObserved) }
+                .also { metrics.success(operation, target, providerObserved) }
         } catch (failure: DomainFailure) {
             throw failure
         } catch (failure: Exception) {
-            unavailable(operation, "AIStor image operation is unavailable", failure, providerObserved)
+            unavailable(operation, target, "AIStor image operation is unavailable", failure, providerObserved)
         }
 
     private fun unavailable(
         operation: String,
+        target: String,
         message: String,
         cause: Throwable,
         providerObserved: Boolean = true,
     ): Nothing {
-        metrics.failure(operation, providerObserved)
+        metrics.failure(operation, target, providerObserved)
         throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message).also { it.initCause(cause) }
     }
+
+    private fun metricTarget(target: StorefrontImageTarget): String =
+        when (target) {
+            StorefrontImageTarget.STORE -> "store_image"
+            StorefrontImageTarget.MENU -> "menu_image"
+            StorefrontImageTarget.CAMPAIGN -> "campaign_banner"
+        }
+
+    private fun metricTarget(targets: Set<StorefrontImageTarget>): String =
+        if (targets.size == 1) metricTarget(targets.single()) else "mixed"
+
+    private fun metricTarget(key: String): String =
+        StorefrontImageTarget.entries.firstOrNull { key.startsWith("${it.objectPrefix}/") }?.let(::metricTarget) ?: "unknown"
 
     private companion object {
         val URL_TTL: Duration = Duration.ofMinutes(15)
@@ -149,18 +195,20 @@ internal class AistorMediaMetrics(
 
     fun success(
         operation: String,
+        target: String,
         providerObserved: Boolean = true,
     ) {
         if (providerObserved) availability.set(1)
-        registry.counter("beanflow.media.operation", "operation", operation, "outcome", "success").increment()
+        registry.counter("beanflow.media.operation", "target", target, "operation", operation, "outcome", "success").increment()
     }
 
     fun failure(
         operation: String,
+        target: String,
         providerObserved: Boolean = true,
     ) {
         if (providerObserved) availability.set(0)
-        registry.counter("beanflow.media.operation", "operation", operation, "outcome", "failure").increment()
+        registry.counter("beanflow.media.operation", "target", target, "operation", operation, "outcome", "failure").increment()
     }
 
     fun startup(outcome: String) {

@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageReferenceOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -26,7 +27,13 @@ internal class StorefrontImageOrphanSweepTest {
     fun `sweep rechecks current references and deletes only an old orphan`() {
         val referenced = "stores/id/hash/original.jpg"
         val orphan = "menus/id/hash/thumbnail.jpg"
-        `when`(storage.listOrphanCandidates(now.minusSeconds(86_400), 100)).thenReturn(listOf(referenced, orphan))
+        `when`(
+            storage.listOrphanCandidates(
+                setOf(StorefrontImageTarget.STORE, StorefrontImageTarget.MENU),
+                now.minusSeconds(86_400),
+                100,
+            ),
+        ).thenReturn(listOf(referenced, orphan))
         `when`(references.isReferenced(referenced)).thenReturn(true)
         `when`(references.isReferenced(orphan)).thenReturn(false)
 
@@ -54,7 +61,11 @@ internal class StorefrontImageOrphanSweepTest {
     fun `sweep records and rethrows a provider failure`() {
         doThrow(IllegalStateException("AIStor list failed"))
             .`when`(storage)
-            .listOrphanCandidates(now.minusSeconds(86_400), 100)
+            .listOrphanCandidates(
+                setOf(StorefrontImageTarget.STORE, StorefrontImageTarget.MENU),
+                now.minusSeconds(86_400),
+                100,
+            )
 
         assertThatThrownBy(sweep::sweep).isInstanceOf(IllegalStateException::class.java)
         assertThat(

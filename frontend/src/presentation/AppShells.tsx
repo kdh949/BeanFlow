@@ -1,6 +1,7 @@
 import {
   BarChart3, Bell, ChevronDown, CircleDotDashed, ClipboardCheck, Headset, Home, LifeBuoy, LogOut, MapPin, PackageCheck, ReceiptText,
   Search, Settings2, ShieldCheck, ShoppingBag, Store, UserRound, WalletCards,
+  TicketPercent,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router";
@@ -92,6 +93,7 @@ export function ConsoleShell({ kind }: { kind: ConsoleKind }) {
     { to: "/ops/recovery", label: "문제 확인 및 복구", icon: LifeBuoy, end: false },
     { to: "/ops/control", label: "운영 업무", icon: CircleDotDashed, end: false },
     { to: "/ops/policies", label: "정책 관리", icon: Settings2, end: false },
+    { to: "/ops/campaigns", label: "쿠폰 캠페인", icon: TicketPercent, end: false },
   ];
   const supportItems = [
     { to: "/support", label: "고객지원", icon: Headset, end: true },

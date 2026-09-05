@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageUpload
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.ExternalDependencyOperation
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyOutcome
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.RecordingExternalDependencyTelemetry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -21,6 +22,7 @@ import javax.imageio.ImageIO
 internal class AistorStorefrontImageStorageTest {
     private val now = Instant.parse("2026-08-24T00:00:00Z")
     private val telemetry = RecordingExternalDependencyTelemetry()
+    private val registry = SimpleMeterRegistry()
 
     @Test
     fun `immutable keys hold normalized original and thumbnail`() {
@@ -67,6 +69,14 @@ internal class AistorStorefrontImageStorageTest {
             )
 
         assertThat(client.statCalls).containsExactly(prepared.originalKey, prepared.thumbnailKey)
+        assertThat(telemetry.records.map { it.call.operation })
+            .containsExactly(
+                ExternalDependencyOperation.PUT,
+                ExternalDependencyOperation.HEAD,
+                ExternalDependencyOperation.PUT,
+                ExternalDependencyOperation.HEAD,
+            )
+        assertThat(mediaCount("store_image", "put-confirmed-by-head", "success")).isEqualTo(2.0)
     }
 
     @Test
@@ -80,6 +90,38 @@ internal class AistorStorefrontImageStorageTest {
             .extracting("code")
             .isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
         assertThat(client.statCalls).hasSize(1)
+        assertThat(telemetry.records.map { it.outcome })
+            .containsExactly(ExternalDependencyOutcome.FAILURE, ExternalDependencyOutcome.FAILURE)
+        assertThat(mediaCount("store_image", "put", "failure")).isEqualTo(1.0)
+    }
+
+    @Test
+    fun `campaign banner upload access and deletion preserve provider telemetry and target metrics`() {
+        val client = FakeAistorObjectClient()
+        val storage = storage(client)
+        val prepared =
+            storage.store(
+                StorefrontImageTarget.CAMPAIGN,
+                UUID.randomUUID(),
+                storage.normalizeCampaignBanner(StorefrontImageUpload(jpeg(), "image/jpeg")),
+            )
+
+        val access = storage.access(prepared.thumbnailKey)
+        storage.delete(prepared.originalKey, prepared.thumbnailKey)
+
+        assertThat(prepared.originalKey).startsWith("campaigns/")
+        assertThat(access.expiresAt).isEqualTo(now.plusSeconds(900))
+        assertThat(client.objects).isEmpty()
+        assertThat(telemetry.records.map { it.call.operation })
+            .containsExactly(
+                ExternalDependencyOperation.PUT,
+                ExternalDependencyOperation.PUT,
+                ExternalDependencyOperation.PRESIGN,
+                ExternalDependencyOperation.DELETE,
+            )
+        assertThat(mediaCount("campaign_banner", "put", "success")).isEqualTo(2.0)
+        assertThat(mediaCount("campaign_banner", "presign", "success")).isEqualTo(1.0)
+        assertThat(mediaCount("campaign_banner", "delete", "success")).isEqualTo(1.0)
     }
 
     @Test
@@ -101,15 +143,78 @@ internal class AistorStorefrontImageStorageTest {
         client.listed += AistorObjectSummary("other/ignored", now.minusSeconds(300))
         client.listed += AistorObjectSummary("menus/new/thumbnail.jpg", now.minusSeconds(10))
 
-        assertThat(storage(client).listOrphanCandidates(now.minusSeconds(100), 1))
-            .containsExactly("stores/one/original.jpg")
+        assertThat(
+            storage(client).listOrphanCandidates(
+                setOf(StorefrontImageTarget.STORE, StorefrontImageTarget.MENU),
+                now.minusSeconds(100),
+                1,
+            ),
+        ).containsExactly("stores/one/original.jpg")
     }
+
+    @Test
+    fun `orphan page resumes after the last scanned object and bounds raw object scanning`() {
+        val client = FakeAistorObjectClient()
+        client.listed += AistorObjectSummary("campaigns/001/referenced.jpg", now.minusSeconds(200))
+        client.listed += AistorObjectSummary("campaigns/002/new.jpg", now.minusSeconds(10))
+        client.listed += AistorObjectSummary("campaigns/003/orphan.jpg", now.minusSeconds(200))
+
+        val first =
+            storage(client).listOrphanCandidatePage(
+                StorefrontImageTarget.CAMPAIGN,
+                now.minusSeconds(100),
+                null,
+                2,
+            )
+        val second =
+            storage(client).listOrphanCandidatePage(
+                StorefrontImageTarget.CAMPAIGN,
+                now.minusSeconds(100),
+                first.nextStartAfter,
+                2,
+            )
+
+        assertThat(first.candidateKeys).containsExactly("campaigns/001/referenced.jpg")
+        assertThat(first.nextStartAfter).isEqualTo("campaigns/002/new.jpg")
+        assertThat(second.candidateKeys).containsExactly("campaigns/003/orphan.jpg")
+        assertThat(second.nextStartAfter).isNull()
+        assertThat(client.listStartAfter).containsExactly(null, "campaigns/002/new.jpg")
+        assertThat(telemetry.records.map { it.call.operation })
+            .containsExactly(ExternalDependencyOperation.LIST, ExternalDependencyOperation.LIST)
+        assertThat(mediaCount("campaign_banner", "list-orphan-page", "success")).isEqualTo(2.0)
+    }
+
+    @Test
+    fun `failed campaign orphan page records failure and does not return an empty success`() {
+        val client = FakeAistorObjectClient(failList = true)
+
+        assertThatThrownBy {
+            storage(client).listOrphanCandidatePage(StorefrontImageTarget.CAMPAIGN, now, null, 2)
+        }.isInstanceOf(DomainFailure::class.java)
+            .extracting("code")
+            .isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
+        assertThat(telemetry.records.map { it.call.operation }).containsExactly(ExternalDependencyOperation.LIST)
+        assertThat(telemetry.records.map { it.outcome }).containsExactly(ExternalDependencyOutcome.FAILURE)
+        assertThat(mediaCount("campaign_banner", "list-orphan-page", "failure")).isEqualTo(1.0)
+        assertThat(registry.get("beanflow.media.availability").gauge().value()).isZero()
+    }
+
+    private fun mediaCount(
+        target: String,
+        operation: String,
+        outcome: String,
+    ): Double =
+        registry
+            .get("beanflow.media.operation")
+            .tags("target", target, "operation", operation, "outcome", outcome)
+            .counter()
+            .count()
 
     private fun storage(client: AistorObjectClient) =
         AistorStorefrontImageStorage(
             StorefrontImageNormalizer(),
             client,
-            AistorMediaMetrics(SimpleMeterRegistry()),
+            AistorMediaMetrics(registry),
             Clock.fixed(now, ZoneOffset.UTC),
             telemetry,
         )
@@ -123,6 +228,7 @@ internal class AistorStorefrontImageStorageTest {
     private class FakeAistorObjectClient(
         private val throwAfterPut: Boolean = false,
         private val failBeforePut: Boolean = false,
+        private val failList: Boolean = false,
     ) : AistorObjectClient {
         data class Stored(
             val bytes: ByteArray,
@@ -132,6 +238,7 @@ internal class AistorStorefrontImageStorageTest {
         val objects = linkedMapOf<String, Stored>()
         val statCalls = mutableListOf<String>()
         val listed = mutableListOf<AistorObjectSummary>()
+        val listStartAfter = mutableListOf<String?>()
 
         override fun put(
             key: String,
@@ -163,6 +270,21 @@ internal class AistorStorefrontImageStorageTest {
         }
 
         override fun list(prefix: String): Sequence<AistorObjectSummary> = listed.asSequence().filter { it.key.startsWith(prefix) }
+
+        override fun list(
+            prefix: String,
+            startAfter: String?,
+            limit: Int,
+        ): List<AistorObjectSummary> {
+            if (failList) throw IllegalStateException("object listing is unavailable")
+            listStartAfter += startAfter
+            return listed
+                .asSequence()
+                .filter { it.key.startsWith(prefix) }
+                .filter { startAfter == null || it.key > startAfter }
+                .take(limit)
+                .toList()
+        }
 
         override fun verifyBucket(): AistorBucketVerification = AistorBucketVerification.AVAILABLE
     }
