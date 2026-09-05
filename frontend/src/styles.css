@@ -292,9 +292,11 @@
 .campaign-form fieldset { min-width: 0; margin: 0; padding: var(--sp-5); border: var(--bw-hair) solid var(--border-hair); border-radius: var(--r-lg); display: flex; flex-direction: column; gap: var(--sp-4); }
 .campaign-form legend { padding: 0 var(--sp-2); color: var(--text-strong); font-size: var(--fs-body-sm); font-weight: var(--fw-bold); }
 .campaign-form-actions { display: flex; justify-content: flex-end; gap: var(--sp-3); }
+.campaign-option-pagination { display: flex; justify-content: flex-end; }
 .campaign-menu-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
 .campaign-menu-options > p { grid-column: 1 / -1; margin: 0; color: var(--text-muted); font-size: var(--fs-body-sm); }
 .campaign-card-list { display: grid; gap: var(--sp-4); }
+.campaign-list-pagination { margin-top: var(--sp-4); }
 .campaign-card { padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-5); }
 .campaign-card-main { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-5); }
 .campaign-card-title h2 { margin: var(--sp-1) 0 var(--sp-2); font-size: var(--fs-title-2); }

@@ -161,8 +161,9 @@ internal class OperatorCouponCampaignControllerTest
             mockMvc
                 .perform(get("$BASE/coupon-campaigns/store-options").with(operatorJwt()))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$[0].storeId").value(storeId.toString()))
-                .andExpect(jsonPath("$[0].name").value("빈플로우 성수"))
+                .andExpect(jsonPath("$.items[0].storeId").value(storeId.toString()))
+                .andExpect(jsonPath("$.items[0].name").value("빈플로우 성수"))
+                .andExpect(jsonPath("$.page.nextCursor").isEmpty)
             mockMvc
                 .perform(get("$BASE/coupon-campaigns/store-options/$storeId/menus").with(operatorJwt()))
                 .andExpect(status().isOk)
@@ -204,6 +205,38 @@ internal class OperatorCouponCampaignControllerTest
                 jdbc.queryForObject("SELECT active FROM promotion_campaign WHERE id = ?", Boolean::class.java, UUID.fromString(campaignId)),
             ).isFalse()
             assertThat(auditActions()).containsExactly("COUPON_CAMPAIGN_DRAFT_CREATED")
+        }
+
+        @Test
+        fun `operator can traverse all store options with a signed cursor`() {
+            val expected = setOf(seedStore("가 매장"), seedStore("나 매장"), seedStore("다 매장"))
+
+            val first =
+                mockMvc
+                    .perform(get("$BASE/coupon-campaigns/store-options?limit=2").with(operatorJwt()))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(2))
+                    .andExpect(jsonPath("$.page.nextCursor").isString)
+                    .andReturn()
+            val firstJson = jsonMapper.readTree(first.response.contentAsString)
+            val second =
+                mockMvc
+                    .perform(
+                        get("$BASE/coupon-campaigns/store-options")
+                            .param("limit", "2")
+                            .param("cursor", firstJson.get("page").get("nextCursor").stringValue())
+                            .with(operatorJwt()),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andExpect(jsonPath("$.page.nextCursor").isEmpty)
+                    .andReturn()
+            val secondJson = jsonMapper.readTree(second.response.contentAsString)
+            val actual =
+                (firstJson.get("items").toList() + secondJson.get("items").toList())
+                    .map { UUID.fromString(it.get("storeId").stringValue()) }
+
+            assertThat(actual).hasSize(3).doesNotHaveDuplicates()
+            assertThat(actual.toSet()).isEqualTo(expected)
         }
 
         @Test

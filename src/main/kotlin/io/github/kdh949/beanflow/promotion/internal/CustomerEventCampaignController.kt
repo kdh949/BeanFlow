@@ -3,9 +3,12 @@ package io.github.kdh949.beanflow.promotion.internal
 import io.github.kdh949.beanflow.merchant.api.StoreDisplaySnapshotOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
+import io.github.kdh949.beanflow.shared.api.CursorSortAdapter
 import io.github.kdh949.beanflow.shared.api.CustomerActor
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.SignedCursorCodec
+import io.github.kdh949.beanflow.shared.api.SignedCursorScope
 import jakarta.validation.constraints.Size
 import org.springframework.dao.DataAccessException
 import org.springframework.http.HttpStatus
@@ -20,11 +23,17 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.sql.Timestamp
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.format.DateTimeParseException
+import java.util.HexFormat
 import java.util.UUID
 
 internal data class CustomerEventCampaignRecord(
@@ -50,6 +59,16 @@ internal data class CustomerEventCampaignView(
     val storeName: String,
 )
 
+internal data class CustomerEventCampaignSort(
+    val claimEndsAt: Instant,
+    val campaignId: UUID,
+)
+
+internal data class CustomerEventCampaignViewPage(
+    val campaigns: List<CustomerEventCampaignView>,
+    val nextSort: CustomerEventCampaignSort?,
+)
+
 @Component
 internal class CustomerEventCampaignQueryRepository(
     private val jdbc: JdbcTemplate,
@@ -57,9 +76,18 @@ internal class CustomerEventCampaignQueryRepository(
     fun listAvailable(
         customerId: UUID,
         now: Instant,
+        after: CustomerEventCampaignSort?,
         limit: Int,
     ): List<CustomerEventCampaignRecord> =
         try {
+            val boundaryClause =
+                if (after == null) "" else "AND (limited.claim_ends_at, campaign.id) > (?, ?)"
+            val parameters = mutableListOf<Any>(customerId, Timestamp.from(now), Timestamp.from(now))
+            if (after != null) {
+                parameters.add(Timestamp.from(after.claimEndsAt))
+                parameters.add(after.campaignId)
+            }
+            parameters.add(limit)
             jdbc.query(
                 """
                 SELECT campaign.id AS campaign_id, campaign.store_id, limited.title, limited.summary,
@@ -81,7 +109,8 @@ internal class CustomerEventCampaignQueryRepository(
                    AND limited.claim_starts_at <= ?
                    AND limited.claim_ends_at > ?
                    AND counter.issued_count < counter.total_quota
-                 ORDER BY limited.published_at DESC, campaign.id DESC
+                   $boundaryClause
+                 ORDER BY limited.claim_ends_at, campaign.id
                  LIMIT ?
                 """.trimIndent(),
                 { row, _ ->
@@ -103,10 +132,7 @@ internal class CustomerEventCampaignQueryRepository(
                         claimed = row.getBoolean("claimed"),
                     )
                 },
-                customerId,
-                Timestamp.from(now),
-                Timestamp.from(now),
-                limit,
+                *parameters.toTypedArray(),
             )
         } catch (failure: DataAccessException) {
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Event campaigns are unavailable").also { it.initCause(failure) }
@@ -122,29 +148,83 @@ internal class CustomerEventCampaignReadTransaction(
     fun list(
         customerId: UUID,
         now: Instant,
-    ): List<CustomerEventCampaignView> =
-        repository.listAvailable(customerId, now, MAX_EVENTS).map { campaign ->
-            CustomerEventCampaignView(campaign, stores.require(campaign.storeId).name)
-        }
-
-    private companion object {
-        const val MAX_EVENTS = 50
+        after: CustomerEventCampaignSort?,
+        limit: Int,
+    ): CustomerEventCampaignViewPage {
+        val records = repository.listAvailable(customerId, now, after, limit + 1)
+        val hasMore = records.size > limit
+        val campaigns = records.take(limit)
+        val boundary = campaigns.lastOrNull().takeIf { hasMore }
+        return CustomerEventCampaignViewPage(
+            campaigns.map { campaign -> CustomerEventCampaignView(campaign, stores.require(campaign.storeId).name) },
+            boundary?.let { CustomerEventCampaignSort(it.claimEndsAt, it.campaignId) },
+        )
     }
 }
+
+internal data class CustomerEventCampaignPage(
+    val campaigns: List<CustomerEventCampaignResponse>,
+    val nextCursor: String?,
+)
 
 @Service
 internal class CustomerEventCampaignService(
     private val transactions: CustomerEventCampaignReadTransaction,
     private val storage: StorefrontImageStorageOperations,
+    private val cursors: SignedCursorCodec,
 ) {
     fun list(
         customerId: UUID,
         now: Instant,
-    ): List<CustomerEventCampaignResponse> =
-        transactions.list(customerId, now).map { view ->
-            val access = storage.access(view.campaign.bannerThumbnailKey)
-            CustomerEventCampaignResponse.of(view, access.url, access.expiresAt)
-        }
+        cursor: String?,
+        limit: Int?,
+    ): CustomerEventCampaignPage {
+        val pageSize = limit ?: DEFAULT_PAGE_SIZE
+        if (pageSize !in 1..MAX_PAGE_SIZE) invalid("limit must be between 1 and $MAX_PAGE_SIZE")
+        val scope = cursorScope(customerId)
+        val after = cursor?.let { cursors.verify(it, scope).sort }
+        val page = transactions.list(customerId, now, after, pageSize)
+        val responses =
+            page.campaigns.map { view ->
+                val access = storage.access(view.campaign.bannerThumbnailKey)
+                CustomerEventCampaignResponse.of(view, access.url, access.expiresAt)
+            }
+        val nextCursor = page.nextSort?.let { cursors.issue(scope, it, now.plus(CURSOR_TTL)) }
+        return CustomerEventCampaignPage(responses, nextCursor)
+    }
+
+    private fun cursorScope(customerId: UUID): SignedCursorScope<CustomerEventCampaignSort> =
+        SignedCursorScope(
+            endpoint = CURSOR_ENDPOINT,
+            filterHash = sha256("$CURSOR_ENDPOINT|$customerId"),
+            sortAdapter =
+                object : CursorSortAdapter<CustomerEventCampaignSort> {
+                    override fun encode(sort: CustomerEventCampaignSort) = listOf(sort.claimEndsAt.toString(), sort.campaignId.toString())
+
+                    override fun decode(values: List<String>): CustomerEventCampaignSort? {
+                        if (values.size != 2) return null
+                        return try {
+                            CustomerEventCampaignSort(Instant.parse(values[0]), UUID.fromString(values[1]))
+                        } catch (_: DateTimeParseException) {
+                            null
+                        } catch (_: IllegalArgumentException) {
+                            null
+                        }
+                    }
+                },
+        )
+
+    private fun sha256(text: String): String =
+        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.toByteArray(StandardCharsets.UTF_8)))
+
+    private fun invalid(message: String): Nothing = throw DomainFailure(FailureCode.INVALID_REQUEST, message)
+
+    private companion object {
+        const val CURSOR_ENDPOINT = "customer-event-campaigns"
+        const val DEFAULT_PAGE_SIZE = 20
+        const val MAX_PAGE_SIZE = 100
+        val CURSOR_TTL: Duration = Duration.ofMinutes(30)
+    }
 }
 
 internal data class CustomerEventStoreResponse(
@@ -209,6 +289,15 @@ internal data class CustomerEventCampaignResponse(
     }
 }
 
+internal data class CustomerEventCampaignPageResponse(
+    val items: List<CustomerEventCampaignResponse>,
+    val page: CustomerEventCampaignPageInfoResponse,
+)
+
+internal data class CustomerEventCampaignPageInfoResponse(
+    val nextCursor: String?,
+)
+
 @RestController
 @RequestMapping("/api/v1/me/events")
 @Validated
@@ -219,7 +308,14 @@ internal class CustomerEventCampaignController(
 ) {
     @GetMapping
     @PreAuthorize("hasRole('CUSTOMER')")
-    fun list(actor: CustomerActor): List<CustomerEventCampaignResponse> = service.list(actor.actorId, clock.instant())
+    fun list(
+        actor: CustomerActor,
+        @RequestParam(required = false) cursor: String?,
+        @RequestParam(required = false) limit: Int?,
+    ): CustomerEventCampaignPageResponse {
+        val page = service.list(actor.actorId, clock.instant(), cursor, limit)
+        return CustomerEventCampaignPageResponse(page.campaigns, CustomerEventCampaignPageInfoResponse(page.nextCursor))
+    }
 
     @PostMapping("/{campaignId}/claims")
     @ResponseStatus(HttpStatus.CREATED)

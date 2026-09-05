@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.promotion.internal
 
 import io.github.kdh949.beanflow.merchant.api.PreparedStorefrontImage
+import io.github.kdh949.beanflow.merchant.api.StoreDisplaySnapshot
 import io.github.kdh949.beanflow.merchant.api.StoreDisplaySnapshotOperations
 import io.github.kdh949.beanflow.merchant.api.StoreMenuQueryOperations
 import io.github.kdh949.beanflow.merchant.api.StoreMenuView
@@ -63,9 +64,19 @@ internal data class OperatorCouponCampaignMenuOption(
     val basePriceKrw: Long,
 )
 
+internal data class OperatorCouponCampaignStoreOptionPage(
+    val stores: List<StoreDisplaySnapshot>,
+    val nextCursor: String?,
+)
+
 internal data class OperatorCouponCampaignSort(
     val createdAt: Instant,
     val campaignId: UUID,
+)
+
+internal data class OperatorCouponCampaignStoreSort(
+    val name: String,
+    val storeId: UUID,
 )
 
 @Service
@@ -118,13 +129,13 @@ internal class OperatorCouponCampaignService(
         authorization.requireActive(actorId, OperatorPermission.PROMOTION_CAMPAIGN_READ)
         val pageSize = limit ?: DEFAULT_PAGE_SIZE
         if (pageSize !in 1..MAX_PAGE_SIZE) invalid("limit must be between 1 and $MAX_PAGE_SIZE")
-        val after = cursor?.let { cursors.verify(it, cursorScope()).sort }
+        val after = cursor?.let { cursors.verify(it, campaignCursorScope()).sort }
         val page = campaigns.list(after?.createdAt, after?.campaignId, pageSize)
         val views = page.campaigns.map(::view)
         val nextCursor =
             if (page.nextCreatedAt != null && page.nextCampaignId != null) {
                 cursors.issue(
-                    cursorScope(),
+                    campaignCursorScope(),
                     OperatorCouponCampaignSort(page.nextCreatedAt, page.nextCampaignId),
                     clock.instant().plus(CURSOR_TTL),
                 )
@@ -135,8 +146,25 @@ internal class OperatorCouponCampaignService(
     }
 
     @Transactional
-    fun listStoreOptions(actorId: UUID) =
-        authorization.requireActive(actorId, OperatorPermission.PROMOTION_CAMPAIGN_READ).let { stores.list(STORE_OPTION_LIMIT) }
+    fun listStoreOptions(
+        actorId: UUID,
+        cursor: String?,
+        limit: Int?,
+    ): OperatorCouponCampaignStoreOptionPage {
+        authorization.requireActive(actorId, OperatorPermission.PROMOTION_CAMPAIGN_READ)
+        val pageSize = limit ?: DEFAULT_PAGE_SIZE
+        if (pageSize !in 1..MAX_PAGE_SIZE) invalid("limit must be between 1 and $MAX_PAGE_SIZE")
+        val scope = storeOptionCursorScope()
+        val after = cursor?.let { cursors.verify(it, scope).sort }
+        val page = stores.list(after?.name, after?.storeId, pageSize)
+        val nextCursor =
+            if (page.nextName != null && page.nextStoreId != null) {
+                cursors.issue(scope, OperatorCouponCampaignStoreSort(page.nextName, page.nextStoreId), clock.instant().plus(CURSOR_TTL))
+            } else {
+                null
+            }
+        return OperatorCouponCampaignStoreOptionPage(page.stores, nextCursor)
+    }
 
     @Transactional
     fun listMenuOptions(
@@ -327,7 +355,7 @@ internal class OperatorCouponCampaignService(
         )
     }
 
-    private fun cursorScope() =
+    private fun campaignCursorScope() =
         SignedCursorScope(
             endpoint = CURSOR_ENDPOINT,
             filterHash = sha256(CURSOR_ENDPOINT),
@@ -350,6 +378,25 @@ internal class OperatorCouponCampaignService(
                 },
         )
 
+    private fun storeOptionCursorScope() =
+        SignedCursorScope(
+            endpoint = STORE_OPTION_CURSOR_ENDPOINT,
+            filterHash = sha256(STORE_OPTION_CURSOR_ENDPOINT),
+            sortAdapter =
+                object : CursorSortAdapter<OperatorCouponCampaignStoreSort> {
+                    override fun encode(sort: OperatorCouponCampaignStoreSort) = listOf(sort.name, sort.storeId.toString())
+
+                    override fun decode(values: List<String>): OperatorCouponCampaignStoreSort? {
+                        if (values.size != 2) return null
+                        return try {
+                            OperatorCouponCampaignStoreSort(values[0], UUID.fromString(values[1]))
+                        } catch (_: IllegalArgumentException) {
+                            null
+                        }
+                    }
+                },
+        )
+
     private fun sha256(text: String): String =
         HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.toByteArray(StandardCharsets.UTF_8)))
 
@@ -361,9 +408,9 @@ internal class OperatorCouponCampaignService(
         const val PUBLISHED_ACTION = "COUPON_CAMPAIGN_PUBLISHED"
         const val STOPPED_ACTION = "COUPON_CAMPAIGN_STOPPED"
         const val CURSOR_ENDPOINT = "operations-coupon-campaigns"
+        const val STORE_OPTION_CURSOR_ENDPOINT = "operations-coupon-campaign-store-options"
         const val DEFAULT_PAGE_SIZE = 20
         const val MAX_PAGE_SIZE = 100
-        const val STORE_OPTION_LIMIT = 100
         val CURSOR_TTL: Duration = Duration.ofMinutes(30)
     }
 }

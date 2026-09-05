@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageAccess
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
+import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.anyString
@@ -23,6 +24,8 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
@@ -61,17 +64,66 @@ internal class CustomerEventCampaignControllerTest
             mockMvc
                 .perform(get("/api/v1/me/events").with(customerJwt()))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].campaignId").value(visible.toString()))
-                .andExpect(jsonPath("$[0].store.name").value("빈플로우 성수"))
-                .andExpect(jsonPath("$[0].title").value("가을 라떼 쿠폰"))
-                .andExpect(jsonPath("$[0].banner.url").value(SIGNED_URL))
-                .andExpect(jsonPath("$[0].benefit.discountType").value("FIXED_KRW"))
-                .andExpect(jsonPath("$[0].benefit.fixedAmountKrw").value(1_000))
-                .andExpect(jsonPath("$[0].remainingCount").value(93))
-                .andExpect(jsonPath("$[0].claimed").value(false))
-                .andExpect(jsonPath("$[0].bannerThumbnailKey").doesNotExist())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].campaignId").value(visible.toString()))
+                .andExpect(jsonPath("$.items[0].store.name").value("빈플로우 성수"))
+                .andExpect(jsonPath("$.items[0].title").value("가을 라떼 쿠폰"))
+                .andExpect(jsonPath("$.items[0].banner.url").value(SIGNED_URL))
+                .andExpect(jsonPath("$.items[0].benefit.discountType").value("FIXED_KRW"))
+                .andExpect(jsonPath("$.items[0].benefit.fixedAmountKrw").value(1_000))
+                .andExpect(jsonPath("$.items[0].remainingCount").value(93))
+                .andExpect(jsonPath("$.items[0].claimed").value(false))
+                .andExpect(jsonPath("$.items[0].bannerThumbnailKey").doesNotExist())
+                .andExpect(jsonPath("$.page.nextCursor").isEmpty)
             verify(storage, times(1)).access("campaigns/$visible/thumbnail.jpg")
+        }
+
+        @Test
+        fun `customer can traverse event campaigns with a stable signed cursor`() {
+            val storeId = seedStore("빈플로우 커서")
+            val expected =
+                (1..3)
+                    .map { index ->
+                        seedCampaign(
+                            storeId,
+                            "커서 쿠폰 $index",
+                            true,
+                            "PUBLISHED",
+                            now.minusSeconds(60),
+                            now.plusSeconds(3_600),
+                            100,
+                            0,
+                        )
+                    }.toSet()
+            `when`(storage.access(anyString())).thenReturn(StorefrontImageAccess(SIGNED_URL, now.plusSeconds(900)))
+
+            val first =
+                mockMvc
+                    .perform(get("/api/v1/me/events?limit=2").with(customerJwt()))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(2))
+                    .andExpect(jsonPath("$.page.nextCursor").isString)
+                    .andReturn()
+            val mapper =
+                tools.jackson.databind.json.JsonMapper
+                    .builder()
+                    .build()
+            val firstJson = mapper.readTree(first.response.contentAsString)
+            val cursor = URLEncoder.encode(firstJson.get("page").get("nextCursor").stringValue(), StandardCharsets.UTF_8)
+            val second =
+                mockMvc
+                    .perform(get("/api/v1/me/events?limit=2&cursor=$cursor").with(customerJwt()))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andExpect(jsonPath("$.page.nextCursor").isEmpty)
+                    .andReturn()
+            val secondJson = mapper.readTree(second.response.contentAsString)
+            val actual =
+                (firstJson.get("items").toList() + secondJson.get("items").toList())
+                    .map { UUID.fromString(it.get("campaignId").stringValue()) }
+
+            assertThat(actual).hasSize(3).doesNotHaveDuplicates()
+            assertThat(actual.toSet()).isEqualTo(expected)
         }
 
         @Test

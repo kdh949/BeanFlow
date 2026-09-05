@@ -808,9 +808,9 @@ export interface paths {
         };
         /**
          * 현재 다운로드 가능한 선착순 쿠폰 이벤트 조회
-         * @description 게시 상태이고 현재 다운로드 기간 안에 있으며 잔여 수량이 있는 캠페인만 최근 게시순으로
-         *     최대 50개 반환합니다. `remainingCount`는 이 조회 시점의 참고값이며 실제 다운로드 성공은
-         *     다운로드 트랜잭션이 캠페인 잠금 아래 다시 결정합니다. 중단·품절·기간 밖 캠페인은 노출하지 않습니다.
+         * @description 게시 상태이고 현재 다운로드 기간 안에 있으며 잔여 수량이 있는 캠페인만 다운로드 종료 시각과
+         *     캠페인 ID 오름차순으로 반환합니다. `remainingCount`는 이 조회 시점의 참고값이며 실제 다운로드
+         *     성공은 다운로드 트랜잭션이 캠페인 잠금 아래 다시 결정합니다. 중단·품절·기간 밖 캠페인은 노출하지 않습니다.
          */
         get: operations["listCurrentCustomerEvents"];
         put?: never;
@@ -2221,7 +2221,7 @@ export interface paths {
         };
         /**
          * (운영팀) 캠페인 매장 선택지 조회
-         * @description 이름과 매장 ID 순으로 최대 100개 매장을 반환합니다.
+         * @description 이름과 매장 ID 순으로 매장 선택지 페이지를 반환합니다.
          */
         get: operations["listCouponCampaignStoreOptions"];
         put?: never;
@@ -5904,6 +5904,10 @@ export interface components {
             /** @description 현재 고객이 이미 이 캠페인의 쿠폰을 발급받았는지 여부입니다. */
             claimed: boolean;
         };
+        CustomerEventCampaignPage: {
+            items: components["schemas"]["CustomerEventCampaign"][];
+            page: components["schemas"]["PageInfo"];
+        };
         CustomerCouponClaim: {
             campaignId: components["schemas"]["Identifier"];
             couponIssuanceId: components["schemas"]["Identifier"];
@@ -7620,6 +7624,10 @@ export interface components {
         CouponCampaignStoreOption: {
             storeId: components["schemas"]["Identifier"];
             name: string;
+        };
+        CouponCampaignStoreOptionPage: {
+            items: components["schemas"]["CouponCampaignStoreOption"][];
+            page: components["schemas"]["PageInfo"];
         };
         CouponCampaignMenuOption: {
             menuId: components["schemas"]["Identifier"];
@@ -12128,22 +12136,28 @@ export interface operations {
     };
     listCurrentCustomerEvents: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 현재 노출 가능한 이벤트 배너 목록 */
+            /** @description 현재 노출 가능한 이벤트 배너 페이지 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CustomerEventCampaign"][];
+                    "application/json": components["schemas"]["CustomerEventCampaignPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
@@ -14331,22 +14345,28 @@ export interface operations {
     };
     listCouponCampaignStoreOptions: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 캠페인 대상 매장 선택지 */
+            /** @description 캠페인 대상 매장 선택지 페이지 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CouponCampaignStoreOption"][];
+                    "application/json": components["schemas"]["CouponCampaignStoreOptionPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];

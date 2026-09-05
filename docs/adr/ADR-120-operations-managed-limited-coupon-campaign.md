@@ -20,8 +20,9 @@ Promotion은 기존 Campaign과 1:1인 `LimitedCouponCampaign`을 소유한다. 
 비용 조건을, 확장은 `DRAFT | PUBLISHED | STOPPED`, 노출 문구·배너 포인터·다운로드 기간·쿠폰 만료일을
 소유한다. 일반 Campaign은 확장 행이 없으며 동작이 바뀌지 않는다.
 
-초안은 변경할 수 있지만 발행 뒤에는 immutable이다. 발행은 필수 배너와 모든 조건을 검증하고 기존
-Campaign을 active로 전환한다. STOP은 신규 claim만 막고 Campaign active와 이미 발급된 쿠폰은 유지한다.
+초기 MVP는 초안 생성 뒤 조건 수정 API를 제공하지 않는다. 잘못된 초안은 게시하지 않고 새 초안을 생성한다.
+발행 뒤에도 immutable이다. 발행은 필수 배너와 모든 조건을 검증하고 기존 Campaign을 active로 전환한다.
+STOP은 신규 claim만 막고 Campaign active와 이미 발급된 쿠폰은 유지한다.
 고객 화면의 `SCHEDULED | OPEN | SOLD_OUT | ENDED`는 저장 상태가 아니라 시간·카운터에서 계산한다.
 
 ### Atomic claim order
@@ -48,7 +49,7 @@ presign 또는 필수 pointer integrity 실패는 고객 이벤트 목록 전체
 
 ### Public contracts
 
-- Operations: draft create/list/detail/update, banner PUT, publication POST, stoppage POST와 매장·메뉴 picker.
+- Operations: draft create/list/detail, banner PUT, publication POST, stoppage POST와 매장·메뉴 picker.
 - Customer: signed-in event campaign list와 synchronous coupon issuance POST.
 - 고객 목록은 `(claimEndsAt, campaignId)` keyset cursor를 사용하고 매진·중단·기간 밖 Campaign을 숨긴다.
 - claim은 201 또는 `CAMPAIGN_QUOTA_EXHAUSTED`, `COUPON_ALREADY_ISSUED`,

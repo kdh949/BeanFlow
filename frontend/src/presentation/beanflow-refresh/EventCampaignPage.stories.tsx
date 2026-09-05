@@ -34,7 +34,7 @@ const meta = {
     docs: { description: { component: "게시 중이고 다운로드 가능한 선착순 쿠폰 배너를 고객 앱 프레임 안에 세로로 보여주는 이벤트 화면입니다." }, story: { inline: false, height: "920px" } },
     routing: { path: "/app/events", initialEntry: "/app/events", surface: "refresh-customer" },
     msw: { handlers: [
-      http.get("/api/v1/me/events", () => HttpResponse.json(events)),
+      http.get("/api/v1/me/events", () => HttpResponse.json({ items: events, page: { nextCursor: null } })),
       http.post("/api/v1/me/events/:campaignId/claims", async ({ params, request }) => {
         if (!request.headers.get("Idempotency-Key") || !request.headers.get("X-BEANFLOW-CSRF")) {
           return HttpResponse.json({ code: "INVALID_REQUEST", message: "required headers missing" }, { status: 400 });
@@ -62,7 +62,7 @@ export const ActiveEvents: Story = {
 };
 
 export const AlreadyClaimed: Story = {
-  parameters: { msw: { handlers: [http.get("/api/v1/me/events", () => HttpResponse.json([{ ...events[0], claimed: true }]))] } },
+  parameters: { msw: { handlers: [http.get("/api/v1/me/events", () => HttpResponse.json({ items: [{ ...events[0], claimed: true }], page: { nextCursor: null } }))] } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("link", { name: "쿠폰함 보기" })).toBeVisible();
     await expect(canvas.queryByRole("button", { name: "쿠폰 받기" })).not.toBeInTheDocument();
@@ -71,7 +71,7 @@ export const AlreadyClaimed: Story = {
 
 export const SoldOutDuringClaim: Story = {
   parameters: { msw: { handlers: [
-    http.get("/api/v1/me/events", () => HttpResponse.json([events[0]])),
+    http.get("/api/v1/me/events", () => HttpResponse.json({ items: [events[0]], page: { nextCursor: null } })),
     http.post("/api/v1/me/events/:campaignId/claims", () => HttpResponse.json({ code: "CAMPAIGN_QUOTA_EXHAUSTED", message: "quota exhausted" }, { status: 409 })),
   ] } },
   play: async ({ canvas }) => {
@@ -82,9 +82,24 @@ export const SoldOutDuringClaim: Story = {
 };
 
 export const EmptyEvents: Story = {
-  parameters: { msw: { handlers: [http.get("/api/v1/me/events", () => HttpResponse.json([]))] } },
+  parameters: { msw: { handlers: [http.get("/api/v1/me/events", () => HttpResponse.json({ items: [], page: { nextCursor: null } }))] } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("진행 중인 이벤트가 없어요")).toBeVisible();
+  },
+};
+
+export const PaginatedEvents: Story = {
+  parameters: { msw: { handlers: [
+    http.get("/api/v1/me/events", ({ request }) =>
+      new URL(request.url).searchParams.get("cursor")
+        ? HttpResponse.json({ items: [events[1]], page: { nextCursor: null } })
+        : HttpResponse.json({ items: [events[0]], page: { nextCursor: "events-next" } })),
+  ] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("heading", { name: events[0]!.title })).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "이벤트 더 보기" }));
+    await expect(await canvas.findByRole("heading", { name: events[1]!.title })).toBeVisible();
+    await expect(canvas.getAllByRole("article")).toHaveLength(2);
   },
 };
 

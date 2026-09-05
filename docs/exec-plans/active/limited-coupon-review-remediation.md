@@ -126,8 +126,10 @@ ADR-120의 draft update 표현을 create-only MVP로 바꾸고 customer cursor �
   회귀 테스트로 RED 확인한 뒤 focused PostgreSQL/Controller test GREEN.
 - [x] 2026-09-06: 두 Promotion command table의 90일 경계·100건 `SKIP LOCKED` 정리와 테이블별
   실패 격리·재실행, AIStor `startAfter` 기반 Campaign banner sweep 진행성을 RED→GREEN으로 검증.
-- [ ] Milestone 3
-- [ ] Milestone 4
+- [x] 2026-09-06: 고객 이벤트와 운영 캠페인·매장 선택지에 signed keyset cursor를 연결하고 API,
+  프론트엔드, 컨트롤러 순회 테스트를 함께 갱신.
+- [ ] Milestone 4: 매장 메뉴 요청 generation 보호와 focused Storybook interaction/a11y 검증 완료.
+  전체 회귀 검증 뒤 완료 처리한다.
 
 ## Surprises & Discoveries
 

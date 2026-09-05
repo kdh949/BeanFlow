@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
-import { HttpResponse, http } from "msw";
+import { HttpResponse, delay, http } from "msw";
 import { CouponCampaignsPage } from "./CouponCampaignsPage";
 
 const campaign = {
@@ -28,7 +28,7 @@ const campaign = {
 
 const listCampaigns = http.get("/api/v1/operations/coupon-campaigns", () => HttpResponse.json({ items: [campaign], page: { nextCursor: null } }));
 const createCampaign = http.post("/api/v1/operations/coupon-campaigns", () => HttpResponse.json(campaign, { status: 201 }));
-const listStores = http.get("/api/v1/operations/coupon-campaigns/store-options", () => HttpResponse.json([campaign.store]));
+const listStores = http.get("/api/v1/operations/coupon-campaigns/store-options", () => HttpResponse.json({ items: [campaign.store], page: { nextCursor: null } }));
 const listMenus = http.get("/api/v1/operations/coupon-campaigns/store-options/:storeId/menus", () => HttpResponse.json([{ menuId: "7419fd51-d17d-43c0-bc16-0d9496c90d97", name: "시그니처 라떼", basePriceKrw: 5800 }]));
 const uploadedCampaign = { ...campaign, banner: { url: "https://images.example.test/campaign.jpg", expiresAt: "2026-09-02T21:15:00+09:00" }, version: 1 };
 const replaceBanner = http.put(/\/api\/v1\/operations\/coupon-campaigns\/[^/]+\/banner(?:\?.*)?$/, () => HttpResponse.json(uploadedCampaign));
@@ -98,5 +98,49 @@ export const EmptyCampaigns: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText("등록된 캠페인이 없습니다")).toBeVisible();
+  },
+};
+
+export const PaginatedCampaignsAndStores: Story = {
+  parameters: { msw: { handlers: [
+    http.get("/api/v1/operations/coupon-campaigns", ({ request }) =>
+      new URL(request.url).searchParams.get("cursor")
+        ? HttpResponse.json({ items: [{ ...campaign, campaignId: "8a8999bf-3432-4a5d-b599-43bbc3ddc2f0", title: "겨울 모카 선착순 쿠폰" }], page: { nextCursor: null } })
+        : HttpResponse.json({ items: [campaign], page: { nextCursor: "campaigns-next" } })),
+    http.get("/api/v1/operations/coupon-campaigns/store-options", ({ request }) =>
+      new URL(request.url).searchParams.get("cursor")
+        ? HttpResponse.json({ items: [{ storeId: "5273704d-f924-59e0-8883-827535fb86ae", name: "빈플로우 잠실" }], page: { nextCursor: null } })
+        : HttpResponse.json({ items: [campaign.store], page: { nextCursor: "stores-next" } })),
+  ] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: "캠페인 더 보기" }));
+    await expect(await canvas.findByText("겨울 모카 선착순 쿠폰")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "새 캠페인" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "매장 더 보기" }));
+    await expect(await canvas.findByRole("option", { name: "빈플로우 잠실" })).toBeInTheDocument();
+  },
+};
+
+export const LatestStoreMenuWins: Story = {
+  parameters: { msw: { handlers: [
+    http.get("/api/v1/operations/coupon-campaigns", () => HttpResponse.json({ items: [], page: { nextCursor: null } })),
+    http.get("/api/v1/operations/coupon-campaigns/store-options", () => HttpResponse.json({
+      items: [campaign.store, { storeId: "5273704d-f924-59e0-8883-827535fb86ae", name: "빈플로우 잠실" }],
+      page: { nextCursor: null },
+    })),
+    http.get("/api/v1/operations/coupon-campaigns/store-options/:storeId/menus", async ({ params }) => {
+      const previousStore = params.storeId === campaign.store.storeId;
+      await delay(previousStore ? 180 : 10);
+      return HttpResponse.json([{ menuId: previousStore ? "7419fd51-d17d-43c0-bc16-0d9496c90d97" : "7419fd51-d17d-43c0-bc16-0d9496c90d98", name: previousStore ? "성수 라떼" : "잠실 라떼", basePriceKrw: 5800 }]);
+    }),
+  ] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: "첫 캠페인 만들기" }));
+    await userEvent.click(canvas.getByRole("checkbox", { name: /모든 메뉴에 적용/ }));
+    await userEvent.selectOptions(canvas.getByLabelText("매장"), campaign.store.storeId);
+    await userEvent.selectOptions(canvas.getByLabelText("매장"), "5273704d-f924-59e0-8883-827535fb86ae");
+    await expect(await canvas.findByText("잠실 라떼")).toBeVisible();
+    await delay(220);
+    await expect(canvas.queryByText("성수 라떼")).not.toBeInTheDocument();
   },
 };

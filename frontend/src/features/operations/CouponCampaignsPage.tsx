@@ -77,26 +77,33 @@ function discountLabel(campaign: Campaign) {
 
 export function CouponCampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [campaignCursor, setCampaignCursor] = useState<string | null>(null);
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
+  const [storeCursor, setStoreCursor] = useState<string | null>(null);
   const [menuOptions, setMenuOptions] = useState<MenuOption[]>([]);
   const [loadingMenus, setLoadingMenus] = useState(false);
+  const [loadingMoreCampaigns, setLoadingMoreCampaigns] = useState(false);
+  const [loadingMoreStores, setLoadingMoreStores] = useState(false);
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [form, setForm] = useState<DraftForm>(initialForm);
   const intent = useRef(new SubmissionIntent());
+  const menuRequestGeneration = useRef(0);
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const [page, stores] = await Promise.all([
+      const [page, storesPage] = await Promise.all([
         operationsApi.GET("/operations/coupon-campaigns", { params: { query: { limit: 100 } } }).then(unwrap),
-        operationsApi.GET("/operations/coupon-campaigns/store-options").then(unwrap),
+        operationsApi.GET("/operations/coupon-campaigns/store-options", { params: { query: { limit: 100 } } }).then(unwrap),
       ]);
       setCampaigns(page.items);
-      setStoreOptions(stores);
+      setCampaignCursor(page.page.nextCursor ?? null);
+      setStoreOptions(storesPage.items);
+      setStoreCursor(storesPage.page.nextCursor ?? null);
     } catch (failure) {
       setCampaigns([]);
       setError(failure);
@@ -106,6 +113,36 @@ export function CouponCampaignsPage() {
   }
 
   useEffect(() => { void load(); }, []);
+
+  async function loadMoreCampaigns() {
+    if (!campaignCursor) return;
+    setLoadingMoreCampaigns(true);
+    setError(null);
+    try {
+      const page = unwrap(await operationsApi.GET("/operations/coupon-campaigns", { params: { query: { cursor: campaignCursor, limit: 100 } } }));
+      setCampaigns((current) => [...current, ...page.items]);
+      setCampaignCursor(page.page.nextCursor ?? null);
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setLoadingMoreCampaigns(false);
+    }
+  }
+
+  async function loadMoreStores() {
+    if (!storeCursor) return;
+    setLoadingMoreStores(true);
+    setError(null);
+    try {
+      const page = unwrap(await operationsApi.GET("/operations/coupon-campaigns/store-options", { params: { query: { cursor: storeCursor, limit: 100 } } }));
+      setStoreOptions((current) => [...current, ...page.items]);
+      setStoreCursor(page.page.nextCursor ?? null);
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setLoadingMoreStores(false);
+    }
+  }
 
   function update<K extends keyof DraftForm>(key: K, value: DraftForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -124,17 +161,19 @@ export function CouponCampaignsPage() {
   }
 
   async function selectStore(storeId: string) {
+    const generation = ++menuRequestGeneration.current;
     update("storeId", storeId);
     setForm((current) => ({ ...current, storeId, eligibleMenuIds: "" }));
     setMenuOptions([]);
+    setLoadingMenus(Boolean(storeId));
     if (!storeId) return;
-    setLoadingMenus(true);
     try {
-      setMenuOptions(unwrap(await operationsApi.GET("/operations/coupon-campaigns/store-options/{storeId}/menus", { params: { path: { storeId } } })));
+      const menus = unwrap(await operationsApi.GET("/operations/coupon-campaigns/store-options/{storeId}/menus", { params: { path: { storeId } } }));
+      if (menuRequestGeneration.current === generation) setMenuOptions(menus);
     } catch (failure) {
-      setError(failure);
+      if (menuRequestGeneration.current === generation) setError(failure);
     } finally {
-      setLoadingMenus(false);
+      if (menuRequestGeneration.current === generation) setLoadingMenus(false);
     }
   }
 
@@ -215,6 +254,7 @@ export function CouponCampaignsPage() {
               <SelectField label="매장" value={form.storeId} onValueChange={(value) => void selectStore(value)}><option value="">대상 매장 선택</option>{storeOptions.map((store) => <option key={store.storeId} value={store.storeId}>{store.name}</option>)}</SelectField>
               <TextField label="캠페인 제목" value={form.title} onValueChange={(value) => update("title", value)} />
             </div>
+            {storeCursor ? <div className="campaign-option-pagination"><Button size="sm" variant="secondary" loading={loadingMoreStores} onClick={() => void loadMoreStores()}>매장 더 보기</Button></div> : null}
             <TextAreaField label="한 줄 혜택 설명" resize="none" rows={2} value={form.summary} onValueChange={(value) => update("summary", value)} />
             <TextAreaField label="배너 대체 텍스트" description="이미지 없이도 혜택을 이해할 수 있게 작성합니다." resize="none" rows={2} value={form.bannerAltText} onValueChange={(value) => update("bannerAltText", value)} />
           </fieldset>
@@ -269,6 +309,7 @@ export function CouponCampaignsPage() {
           {!loading && error ? <ErrorState error={error} retry={() => void load()} /> : null}
           {!loading && !error && campaigns.length === 0 ? <EmptyState title="등록된 캠페인이 없습니다" description="첫 선착순 쿠폰 캠페인 초안을 만들어 보세요." action={<Button onClick={() => setShowForm(true)}>첫 캠페인 만들기</Button>} /> : null}
           {campaigns.length > 0 ? <div className="campaign-card-list">{campaigns.map((campaign) => <CampaignCard key={campaign.campaignId} campaign={campaign} onUpdated={updateCampaign} />)}</div> : null}
+          {campaignCursor ? <div className="campaign-list-pagination"><Button block variant="secondary" loading={loadingMoreCampaigns} onClick={() => void loadMoreCampaigns()}>캠페인 더 보기</Button></div> : null}
         </section>
       )}
     </div>

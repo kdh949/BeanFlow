@@ -395,20 +395,21 @@ paths:
       operationId: listCurrentCustomerEvents
       summary: 현재 다운로드 가능한 선착순 쿠폰 이벤트 조회
       description: |
-        게시 상태이고 현재 다운로드 기간 안에 있으며 잔여 수량이 있는 캠페인만 최근 게시순으로
-        최대 50개 반환합니다. `remainingCount`는 이 조회 시점의 참고값이며 실제 다운로드 성공은
-        다운로드 트랜잭션이 캠페인 잠금 아래 다시 결정합니다. 중단·품절·기간 밖 캠페인은 노출하지 않습니다.
+        게시 상태이고 현재 다운로드 기간 안에 있으며 잔여 수량이 있는 캠페인만 다운로드 종료 시각과
+        캠페인 ID 오름차순으로 반환합니다. `remainingCount`는 이 조회 시점의 참고값이며 실제 다운로드
+        성공은 다운로드 트랜잭션이 캠페인 잠금 아래 다시 결정합니다. 중단·품절·기간 밖 캠페인은 노출하지 않습니다.
       x-beanflow-contract-status: TARGET
       security: [{ customerSession: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
       responses:
         "200":
-          description: 현재 노출 가능한 이벤트 배너 목록
+          description: 현재 노출 가능한 이벤트 배너 페이지
           content:
             application/json:
-              schema:
-                type: array
-                maxItems: 50
-                items: { $ref: "#/components/schemas/CustomerEventCampaign" }
+              schema: { $ref: "#/components/schemas/CustomerEventCampaignPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
@@ -2645,16 +2646,17 @@ paths:
       tags: [Operations]
       operationId: listCouponCampaignStoreOptions
       summary: (운영팀) 캠페인 매장 선택지 조회
-      description: 이름과 매장 ID 순으로 최대 100개 매장을 반환합니다.
+      description: 이름과 매장 ID 순으로 매장 선택지 페이지를 반환합니다.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: 캠페인 대상 매장 선택지
+          description: 캠페인 대상 매장 선택지 페이지
           content:
             application/json:
-              schema:
-                type: array
-                maxItems: 100
-                items: { $ref: '#/components/schemas/CouponCampaignStoreOption' }
+              schema: { $ref: '#/components/schemas/CouponCampaignStoreOptionPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '503': { $ref: '#/components/responses/DependencyUnavailable' }
@@ -7545,6 +7547,16 @@ components:
       properties:
         storeId: { $ref: '#/components/schemas/Identifier' }
         name: { type: string, minLength: 1, maxLength: 200 }
+    CouponCampaignStoreOptionPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/CouponCampaignStoreOption' }
+        page: { $ref: '#/components/schemas/PageInfo' }
     CouponCampaignMenuOption:
       type: object
       additionalProperties: false
@@ -8301,6 +8313,16 @@ components:
         claimed:
           type: boolean
           description: 현재 고객이 이미 이 캠페인의 쿠폰을 발급받았는지 여부입니다.
+    CustomerEventCampaignPage:
+      type: object
+      additionalProperties: false
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/CustomerEventCampaign" }
+        page: { $ref: "#/components/schemas/PageInfo" }
     CustomerCouponClaim:
       type: object
       additionalProperties: false

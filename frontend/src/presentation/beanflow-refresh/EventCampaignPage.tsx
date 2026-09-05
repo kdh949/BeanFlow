@@ -1,27 +1,50 @@
 import { TicketPercent } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
 import { Button, ButtonLink } from "../../design-system";
-import { useResource } from "../../features/shared/useResource";
 import { won } from "../../lib/format";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar } from "./RefreshShared";
 
 type EventCampaign = components["schemas"]["CustomerEventCampaign"];
+type EventCampaignPageResponse = components["schemas"]["CustomerEventCampaignPage"];
 
 export function EventCampaignPage() {
-  const events = useResource<EventCampaign[]>(useCallback(async () => unwrap(await customerApi.GET("/me/events")), []));
+  const [page, setPage] = useState<EventCampaignPageResponse | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const load = useCallback(async (cursor?: string, append = false) => {
+    if (append) setLoadingMore(true);
+    else setPage(null);
+    setError(null);
+    try {
+      const next = unwrap(await customerApi.GET("/me/events", { params: { query: { cursor, limit: 20 } } }));
+      setPage((current) => append && current ? { items: [...current.items, ...next.items], page: next.page } : next);
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
 
   return (
     <div className="bfr-page bfr-events bfr-has-page-topbar">
       <RefreshMobileTopbar title="이벤트" backTo="/app" />
-      {events.state.status === "loading" ? <RefreshLoading label="진행 중인 이벤트를 불러오는 중" /> : null}
-      {events.state.status === "failed" ? <RefreshError error={events.state.error} retry={events.reload} /> : null}
-      {events.state.status === "ready" && events.state.value.length === 0 ? <RefreshEmpty title="진행 중인 이벤트가 없어요" description="새로운 쿠폰 이벤트가 열리면 여기에 알려드릴게요." /> : null}
-      {events.state.status === "ready" && events.state.value.length > 0 ? (
+      {!page && !error ? <RefreshLoading label="진행 중인 이벤트를 불러오는 중" /> : null}
+      {!page && error ? <RefreshError error={error} retry={() => void load()} /> : null}
+      {page?.items.length === 0 ? <RefreshEmpty title="진행 중인 이벤트가 없어요" description="새로운 쿠폰 이벤트가 열리면 여기에 알려드릴게요." /> : null}
+      {page?.items.length ? (
         <section className="bfr-event-list" aria-label="진행 중인 쿠폰 이벤트">
-          {events.state.value.map((event) => <EventCard key={event.campaignId} event={event} />)}
+          {page.items.map((event) => <EventCard key={event.campaignId} event={event} />)}
+          {error ? <RefreshError error={error} retry={() => void load(page.page.nextCursor ?? undefined, true)} /> : null}
+          {page.page.nextCursor ? (
+            <Button block variant="secondary" loading={loadingMore} onClick={() => void load(page.page.nextCursor ?? undefined, true)}>
+              {loadingMore ? "이벤트를 더 불러오는 중" : "이벤트 더 보기"}
+            </Button>
+          ) : null}
         </section>
       ) : null}
     </div>

@@ -170,6 +170,11 @@ data class CouponCampaignStoreOptionResponse(
     val name: String,
 )
 
+data class CouponCampaignStoreOptionPageResponse(
+    val items: List<CouponCampaignStoreOptionResponse>,
+    val page: CouponCampaignPageInfo,
+)
+
 data class CouponCampaignMenuOptionResponse(
     val menuId: UUID,
     val name: String,
@@ -211,8 +216,17 @@ internal class OperatorCouponCampaignController(
 
     @GetMapping("/store-options")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
-    fun listStoreOptions(actor: OperatorActor): List<CouponCampaignStoreOptionResponse> =
-        service.listStoreOptions(actorId(actor)).map { CouponCampaignStoreOptionResponse(it.storeId, it.name) }
+    fun listStoreOptions(
+        actor: OperatorActor,
+        @RequestParam(required = false) cursor: String?,
+        @RequestParam(required = false) limit: Int?,
+    ): CouponCampaignStoreOptionPageResponse {
+        val page = service.listStoreOptions(actorId(actor), cursor, limit)
+        return CouponCampaignStoreOptionPageResponse(
+            page.stores.map { CouponCampaignStoreOptionResponse(it.storeId, it.name) },
+            CouponCampaignPageInfo(page.nextCursor),
+        )
+    }
 
     @GetMapping("/store-options/{storeId}/menus")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
