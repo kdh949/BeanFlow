@@ -38,6 +38,17 @@ secret 주입, 외부 노출 경계와 버전 롤백 절차가 하나의 검증 
 - `prod`와 `portfolio`는 모두 `vault-enforced`를 활성화한다.
 - 애플리케이션은 같은 컨테이너의 loopback Vault Proxy만 호출한다.
 - Vault Proxy는 AppRole auto-auth token을 강제 사용하고 외부 Vault의 Transit API만 전달한다.
+- **Secret binding clarification (2026-09-07):** `portfolio`/`perf`가 포함하는 `local` 설정의 개발용
+  인증 HMAC key는 `vault-enforced`와 함께 활성화하지 않는다. 배포는 `application.yaml`의 필수
+  secret placeholder를 사용하며, 누락 시 local 고정 키로 대체하지 않는다. standalone local/demo의
+  명시적 fixture key는 유지한다.
+- **Readiness amendment (2026-09-07):** JVM 실행 전 60초 이내에 Vault health와 AppRole을 통한
+  두 Transit key metadata 읽기가 모두 성공해야 한다. DR secondary(472)와 활성 노드에 연결할 수
+  없는 standby(474)는 준비 완료가 아니다. 정상 standby(429)/performance standby(473)는 실제
+  metadata 읽기 성공을 함께 요구한다. key type·version·policy 상세 검증은 기존 JVM startup
+  validator가 수행한다. 실패 시 마지막 단계별 HTTP 상태만 추가 기록하고 응답 body/token은
+  기록하지 않는다. 활성 노드 부재는 외부 Vault 운영 문제로 조사하며 앱의 timeout 연장이나
+  검증 우회로 해결하지 않는다.
 - encryption key와 blind-index key는 서로 다른 Transit key다. AppRole role ID와 secret ID, CA는
   저장소 밖 파일로 주입한다.
 - Vault 또는 Proxy가 준비되지 않았거나 Transit 계약이 틀리면 애플리케이션 시작은 실패한다.

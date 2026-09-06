@@ -50,6 +50,41 @@ attach the parser exception or raw body to startup/runtime exception chains.
 
 ## Runtime incident handling
 
+`local node not active but active cluster node not found` from AppRole login means the upstream Vault
+cannot find an active node to process the request. This response proves an HTTP connection to Vault,
+but does not prove that AppRole credentials are valid. A subsequent Proxy startup timeout and refused
+connection on application port 8080 are consequences: the JVM has not started.
+
+Inspect the **Vault server** container logs and `vault status -format=json`, not only BeanFlow Proxy logs.
+Use the configured TLS address and CA; do not disable certificate verification. Read `/v1/sys/health`
+and `/v1/sys/leader` from the same network path. Determine the storage backend and expected node count
+before diagnosing quorum, storage errors or cluster-port connectivity. [Vault health](https://developer.hashicorp.com/vault/api-docs/system/health) 474 means a standby
+cannot reach its active node; 503 is sealed and 501 is uninitialized. 429 alone is not proof of a usable
+leader. Do not initialize Vault again, delete its data volume or rewrite Raft peers as a generic fix.
+The application cannot repair external cluster leadership.
+
+If server logs show `write .../raft/raft.db: no space left on device`, storage exhaustion is the cause
+even when a single voter repeatedly wins elections. Identify the mount backing the Vault data directory
+with `docker inspect`, then check both free blocks (`df -h`) and inodes (`df -i`) inside that mount.
+Inspect `docker system df` before choosing disposable build-cache/image cleanup or disk expansion.
+Never delete `raft.db`, Raft snapshots or Vault volumes to make room. Preserve the deployed and rollback
+images. After restoring space, verify stable leadership, unsealed health and actual AppRole/Transit
+access before pulling another application image. If leadership does not recover, inspect fresh server
+logs before a controlled restart; a manual-seal deployment may need unseal after restarting.
+
+A CLI certificate error naming `127.0.0.1` can be separate from this storage failure: pass the configured
+Vault address whose host/IP is present in the certificate SAN, and retain the trusted CA. Monitor the
+backing filesystem's free bytes/inodes and set container-log rotation to prevent recurrence.
+
+The entrypoint allows at most 60 seconds for health (200/429/473) **and** authenticated reads of both
+configured Transit keys. DR secondary 472 is not usable. At timeout it prints the last HTTP status for
+health, encryption metadata and blind-index metadata, without bodies or tokens. Metadata 403 calls for
+an AppRole/policy check; repeated bad credentials can also trigger
+[AppRole user lockout](https://developer.hashicorp.com/vault/docs/concepts/user-lockout). Check that state
+after correcting credentials rather than disabling lockout. 404 calls for a mount/key check. The JVM
+then validates metadata contents under ADR-083. Restore the upstream dependency and repeat startup;
+do not extend the timeout to hide a persistent failure.
+
 Vault timeout, connection failure, permission denial, absent version or malformed response yields generic
 `503 DEPENDENCY_UNAVAILABLE`. Support search consumes the persistent rate attempt before the Vault call but writes no
 search result. Do not interpret 503 as no match, and do not query encrypted columns with a plaintext scan. Provider
@@ -117,7 +152,14 @@ against an isolated TLS Vault and the repository's AppRole policy. It checks sta
 and HMAC as the JVM user, alongside secret ownership checks. It separately characterizes Vault 2.0.4's rejected AAD
 rewrap as `DEPENDENCY_UNAVAILABLE`; it does not report successful rewrap. To check a newly built local artifact before
 image publication, supply its boot jar as the second argument. The script prints which artifact is under test.
-This does not verify the full application, server deployment or real external Vault configuration.
+It also checks real invalid AppRole, denied key metadata and sealed states, then recovery through HA
+step-down/re-election. A disposable PostgreSQL/PostGIS database runs all packaged Flyway migrations;
+the signed test workload identity invokes the real initial GLOBAL policy bootstrap. The full `portfolio`
+application must start, expose health/OIDC configuration, reject unauthenticated private access and restart
+against that same database. AIStor is intentionally unavailable under ADR-120; external Keycloak login,
+AIStor access and Toss payment are **not** verified. No test provider or bootstrap identity is installed
+in the production application. The image build workflow runs this suite before publishing the API image.
+Server deployment and real external Vault configuration still require separate evidence.
 
 Run the focused Vault/startup, normalization, owner PostgreSQL query and Support PII-leak tests from the S30 ExecPlan.
 The representative query-plan test compares the same 20,000-row fixture with and without the composite B-tree; it is

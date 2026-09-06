@@ -17,6 +17,7 @@ import kotlin.jvm.functions.Function0;
 import kotlin.jvm.functions.Function1;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.boot.env.ConfigTreePropertySource;
+import org.springframework.boot.context.config.ConfigDataEnvironmentPostProcessor;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
@@ -46,6 +47,13 @@ public class EntrypointProbe {
                 "spring.datasource.password", "${BEANFLOW_DB_PASSWORD}")));
         String password = Binder.get(environment).bind("spring.datasource.password", String.class).get();
         require(password.equals(expected("BEANFLOW_DB_PASSWORD")), "Datasource secret binding differs");
+        var deploymentEnvironment = new StandardEnvironment();
+        deploymentEnvironment.getPropertySources().addFirst(new MapPropertySource("deployment-profile", Map.of(
+                "spring.profiles.active", "portfolio")));
+        ConfigDataEnvironmentPostProcessor.applyTo(deploymentEnvironment);
+        require(expected("BEANFLOW_AUTH_ATTEMPT_HMAC_KEY_BASE64_URL").equals(
+                deploymentEnvironment.getProperty("beanflow.authentication.attempt-hmac-key-base64-url")),
+                "Packaged deployment profile replaced the injected authentication HMAC key");
         require(Files.getPosixFilePermissions(directory).equals(PosixFilePermissions.fromString("rwx------")),
                 "Runtime directory permissions differ");
         for (String name : NAMES) {

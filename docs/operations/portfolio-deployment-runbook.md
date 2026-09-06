@@ -97,10 +97,16 @@ sudo bash scripts/deploy/verify-deployment.sh staging \
 `/etc/beanflow`은 root 전용(0700/0600)이므로 이 단계부터 secret 또는 환경 파일을 읽는 모든 명령은
 `sudo`로 실행한다.
 
-`deployment preflight passed`가 아니면 배포하지 않는다. 특히 live Toss key, 빈 secret, 느슨한 파일 권한,
+`deployment preflight passed`가 아니면 배포하지 않는다. 특히 빈 secret, 느슨한 파일 권한,
 wildcard bind 주소와 `latest` tag는 실패해야 정상이다.
 
 ## 4. 이미지 빌드와 기동
+
+최초 DB에는 정상 앱 시작에 필요한 GLOBAL 포인트 적립 정책이 없다. PostgreSQL 기동 후
+[정책 bootstrap runbook](ordinary-point-accrual-policy-bootstrap-runbook.md)에 따라 승인된 정책 값과
+verified OIDC workload identity로 offline command를 먼저 실행한다. `APPLIED`와 version/head/Audit
+결합을 확인한 뒤 아래 정상 앱 기동을 진행한다. 기존 정책이 있는 환경에서는 bootstrap을 반복하지
+않는다. 직접 SQL seed, 임의 0% 기본값이나 startup precheck 제거는 허용되지 않는다.
 
 ```bash
 sudo docker compose \
@@ -216,6 +222,13 @@ sudo docker compose \
 - `postgres` unhealthy: secret·volume 권한과 init log 확인
 - `keycloak` unhealthy: DB 연결, `/auth/health/ready`, realm import 확인
 - `api` unhealthy: Vault Proxy/Transit, JWK, AIStor bucket, Flyway 확인
+- `local node not active but active cluster node not found`: 외부 Vault가 활성 노드를 찾지 못하는
+  상태다. Vault 서버 로그·seal/leader·storage·노드 구성을 먼저 조사한다. 앱의 8080 연결 거절은
+  Proxy 준비 실패로 JVM이 시작되지 않은 결과다. 앱 이미지 재빌드로 외부 Vault leader를 복구할 수
+  없다. [Vault 장애 진단](personal-data-vault-transit-runbook.md#runtime-incident-handling)을 따른다.
+- `GLOBAL ordinary point accrual policy must have exactly one complete current version`: 최초 GLOBAL
+  정책 bootstrap이 누락됐거나 정책 데이터가 불완전하다. 위 offline bootstrap과 read-only 검증을
+  수행한다. 기존 head가 있다면 원인을 조사하며 자동 덮어쓰기를 하지 않는다.
 - `http2: invalid Upgrade request header: ["h2c"]`: 앱의 Vault HTTP client가 보낸 HTTP/2 전환
   헤더 때문에 Proxy의 TLS upstream 호출이 실패했다. 앱→Proxy HTTP/1.1 지정이 포함된 이미지로
   갱신한다. Vault 주소·CA·AppRole 또는 Transit startup 검증을 우회하지 않는다.
@@ -234,11 +247,13 @@ entrypoint를 변경했다면 로컬 backend runtime 이미지로 다음 회귀 
 bash scripts/deploy/test-backend-entrypoint.sh <backend-runtime-image>
 ```
 
-호스트에는 Python 3과 JDK 21 이상이 필요하다. 현재 checkout의 entrypoint와 Proxy 설정을 이미지에
-read-only로 mount하고, 외부 네트워크가 없는 임시 컨테이너에서 실제 Vault TLS/AppRole 인증을 검사한다.
+호스트에는 Python 3과 JDK 21 이상이 필요하다. 이미지에 포함된 entrypoint와 Proxy 설정을 그대로
+실행하고, 외부 통신·호스트 포트 공개가 없는 내부 Docker network에서 실제 Vault TLS/AppRole 인증을 검사한다.
 이미지의 실제 JVM과 Spring 라이브러리로 datasource placeholder binding, 7개 secret의 byte 보존,
-UID 간 파일 접근 격리, 각 파일 누락·빈 값의 시작 실패를 검증한다. 전체 BeanFlow 애플리케이션과
-실제 외부 Provider의 기동·연결 검증은 별도로 수행한다. 같은 검증에서 실제 앱의 Transit 어댑터로
+UID 간 파일 접근 격리, 각 파일 누락·빈 값의 시작 실패를 검증한다. AppRole 오류, metadata 권한 거절,
+sealed 상태의 시작 실패와 복구를 확인한다. 임시 PostgreSQL/PostGIS에 전체 migration과 서명된 test
+identity의 실제 정책 bootstrap을 적용하고 전체 `portfolio` 앱 기동·재시작도 검사한다. 실제 외부
+Keycloak 로그인·AIStor·Toss 연결 검증은 별도로 수행한다. 같은 검증에서 실제 앱의 Transit 어댑터로
 TLS Vault의 키 metadata·암호화·복호화·HMAC을 호출한다. Vault 2.0.4의 AAD rewrap 거절은
 명시적 실패로 별도 검증하며 rewrap 성공으로 보고하지 않는다. 이미지에 포함된 앱을 기본으로
 검사하며, 새 로컬 `bootJar`를 검사하려면 두 번째 인자로 JAR 경로를 지정한다.

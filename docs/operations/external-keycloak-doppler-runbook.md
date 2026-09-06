@@ -12,6 +12,12 @@ API, frontend, PostgreSQL 세 서비스를 기동한다. 기존 bundled 배포�
 - 외부 Vault Transit/AppRole/CA, AIStor private bucket/credential, Toss sandbox test key
 - 빌드가 성공한 API/web GHCR 이미지와 같은 40자리 Git SHA의 clean checkout
 - 외부 Keycloak issuer를 애플리케이션 서버와 사용자 브라우저에서 HTTPS로 접근 가능
+- 정상 앱 기동 전 GLOBAL 포인트 적립 정책의 초기 bootstrap 완료
+
+새 DB를 처음 배포한다면 [정책 bootstrap runbook](ordinary-point-accrual-policy-bootstrap-runbook.md)의
+offline command를 먼저 수행한다. 승인된 적립률·발행자·유효기간과 verified OIDC workload identity가
+필요하며, command가 migration과 version/head/Audit 생성을 수행한다. Doppler에 앱 연결값만 넣고
+`up`을 실행하는 것으로는 이 초기화가 완료되지 않는다. 기존 정책이 있는 DB에는 반복 실행하지 않는다.
 
 ## 1. 외부 Keycloak client 확인
 
@@ -85,6 +91,7 @@ gh workflow run build-personal-staging-images.yml \
 ```
 
 API와 web 빌드가 모두 성공하면 Doppler의 `BEANFLOW_IMAGE_TAG`를 그 실행의 40자리 SHA로 설정한다.
+API 이미지는 게시 전에 실제 Vault TLS/AppRole 장애·복구와 전체 Spring 앱/DB 기동 검증을 통과해야 한다.
 서버에서는 지정 branch를 fetch한 뒤 같은 SHA를 checkout한다. 기존 checkout의 변경을 먼저 확인하고
 보존한다. 아래 예시는 `/srv/beanflow`를 배포 경로로 선택한 서버에서 실행한다.
 
@@ -130,6 +137,10 @@ doppler run --no-fallback -- bash -euc '
 ```
 
 - secret 파일 오류: `BEANFLOW_KEYCLOAK_MODE=external`과 새 배포 script가 적용됐는지 확인한다.
+- Vault의 `local node not active but active cluster node not found`: 외부 Vault leader/HA 상태를
+  [Vault runbook](personal-data-vault-transit-runbook.md#runtime-incident-handling)에 따라 조사한다.
+- `GLOBAL ordinary point accrual policy must have exactly one complete current version`: 위 최초
+  정책 bootstrap 또는 기존 head/version 정합성을 확인한다. startup precheck를 제거하지 않는다.
 - `AccessDeniedException: /run/secrets/BEANFLOW_DB_PASSWORD`: API의 JVM secret 소유권 전달
   수정이 필요하다. 수정 이미지와 같은 SHA의 Compose를 함께 배포한다. Doppler 비밀번호는 유지하며,
   앱은 host 원본 대신 UID 10001 전용 `/run/beanflow-secrets` tmpfs를 읽는다.

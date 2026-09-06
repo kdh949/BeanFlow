@@ -5,7 +5,13 @@ readonly root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly image="${1:?usage: test-backend-entrypoint.sh <backend-runtime-image> [boot-jar]}"
 readonly fixture_dir="$(mktemp -d)"
 image_container=""
+test_container=""
+database_container=""
+test_network=""
 cleanup_fixture() {
+  [[ -z "$test_container" ]] || docker rm -f "$test_container" >/dev/null 2>&1 || true
+  [[ -z "$database_container" ]] || docker rm -f "$database_container" >/dev/null 2>&1 || true
+  [[ -z "$test_network" ]] || docker network rm "$test_network" >/dev/null 2>&1 || true
   [[ -z "$image_container" ]] || docker rm "$image_container" >/dev/null
   rm -rf "$fixture_dir"
 }
@@ -37,11 +43,12 @@ with zipfile.ZipFile(root / "app.jar") as archive:
             target = root / "application" / name.removeprefix("BOOT-INF/classes/")
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(archive.read(name))
-(root / "app.jar").unlink()
 PY
 mkdir "$fixture_dir/classes" "$fixture_dir/bin"
+cp "$root/scripts/deploy/fixtures/full-application.sh" "$fixture_dir/full-application.sh"
+cp "$root/scripts/deploy/fixtures/vault-failures.sh" "$fixture_dir/vault-failures.sh"
 javac --release 21 -proc:none -cp "$fixture_dir/application:$fixture_dir/lib/*" -d "$fixture_dir/classes" \
-  "$root/scripts/deploy/fixtures/EntrypointProbe.java"
+  "$root/scripts/deploy/fixtures/EntrypointProbe.java" "$root/scripts/deploy/fixtures/BootstrapIdentityFixture.java"
 chmod 0755 "$fixture_dir"
 
 # Keep the production Java invocation contract, replacing only the application with the focused probe.
@@ -56,7 +63,29 @@ chmod 0755 "$fixture_dir/bin/java"
 
 config_import="$(sed -n 's/^ *SPRING_CONFIG_IMPORT: //p' "$root/compose.portfolio.yml")"
 
-docker run --rm --interactive --network none --read-only --user root \
+# A fresh database exercises all packaged Flyway migrations and real Spring startup.
+# The isolated internal network publishes no host ports and cannot reach real providers.
+fixture_id="beanflow-runtime-$(python3 -c 'import uuid; print(uuid.uuid4().hex[:12])')"
+database_password="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+test_network="$(docker network create --internal "$fixture_id")"
+database_container="$(docker run --detach --rm --network "$test_network" --network-alias postgres \
+  --tmpfs /var/lib/postgresql/data:rw,size=512m \
+  --env POSTGRES_DB=beanflow --env POSTGRES_USER=beanflow --env "POSTGRES_PASSWORD=$database_password" \
+  --health-cmd 'pg_isready -U beanflow -d beanflow' --health-interval 1s --health-timeout 3s --health-retries 60 \
+  postgis/postgis:17-3.5)"
+database_ready=false
+for attempt in {1..60}; do
+  if [[ "$(docker inspect --format '{{.State.Health.Status}}' "$database_container")" == healthy ]]; then
+    database_ready=true
+    break
+  fi
+  sleep 1
+done
+[[ "$database_ready" == true ]] || { echo 'Isolated PostgreSQL did not start' >&2; exit 1; }
+test_container="$fixture_id-api"
+
+docker run --rm --name "$test_container" --interactive --network "$test_network" --read-only --user root \
+  --memory 2g \
   --security-opt no-new-privileges:true \
   --tmpfs /tmp:rw,noexec,nosuid,size=128m \
   --tmpfs /run/beanflow-vault:rw,noexec,nosuid,size=1m,mode=0700 \
@@ -64,10 +93,10 @@ docker run --rm --interactive --network none --read-only --user root \
   --tmpfs /run/beanflow-secrets:rw,noexec,nosuid,size=1m,mode=0700 \
   --tmpfs /run/secrets:rw,noexec,nosuid,size=1m,mode=0755 \
   --env "SPRING_CONFIG_IMPORT=$config_import" \
-  --mount "type=bind,src=$root/deploy/backend/entrypoint.sh,dst=/usr/local/bin/beanflow-entrypoint,readonly" \
-  --mount "type=bind,src=$root/deploy/vault/proxy.hcl,dst=/etc/beanflow/vault-proxy.hcl,readonly" \
+  --env "BEANFLOW_RUNTIME_TEST_DB_PASSWORD=$database_password" \
   --mount "type=bind,src=$root/deploy/vault/beanflow-policy.hcl,dst=/etc/beanflow/fixture-policy.hcl,readonly" \
   --mount "type=bind,src=$fixture_dir,dst=/entrypoint-test,readonly" \
+  --mount "type=bind,src=$fixture_dir/app.jar,dst=/opt/beanflow/app.jar,readonly" \
   --entrypoint /bin/bash "$image" -se <<'CONTAINER'
 set -euo pipefail
 upstream_pid=""
@@ -77,7 +106,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -m 0700 /tmp/entrypoint-vault-tls
-vault server -dev -dev-tls -dev-no-store-token -dev-root-token-id=entrypoint-fixture-root \
+vault server -dev -dev-ha -dev-tls -dev-no-store-token -dev-root-token-id=entrypoint-fixture-root \
   -dev-tls-cert-dir=/tmp/entrypoint-vault-tls -log-level=error > /tmp/upstream.log 2>&1 &
 upstream_pid="$!"
 export VAULT_ADDR=https://127.0.0.1:8200
@@ -123,9 +152,13 @@ done
 unset VAULT_TOKEN
 export VAULT_CONFIG_PATH=/root/.vault
 export BEANFLOW_VAULT_UPSTREAM_ADDR="$VAULT_ADDR"
+export BEANFLOW_VAULT_TRANSIT_MOUNT=transit
+export BEANFLOW_VAULT_PERSONAL_DATA_ENCRYPTION_KEY=beanflow-personal-data
+export BEANFLOW_VAULT_PERSONAL_DATA_BLIND_INDEX_KEY=beanflow-blind-index
 export BEANFLOW_ENTRYPOINT_TEST_SETTING=preserved
 export JAVA_TOOL_OPTIONS=-Xms64m
-export PATH="/entrypoint-test/bin:$PATH"
+runtime_path="$PATH"
+export PATH="/entrypoint-test/bin:$runtime_path"
 set +e
 timeout 75s /bin/bash /usr/local/bin/beanflow-entrypoint > /tmp/entrypoint.log 2>&1
 status="$?"
@@ -166,4 +199,10 @@ for name in "${secret_names[@]}"; do
 done
 echo 'Entrypoint real JVM/Spring secrets, UID isolation, 14 missing/empty cases and production adapter Transit metadata/encrypt/decrypt/HMAC over Vault TLS/AppRole passed.'
 echo 'Known Vault 2.0.4 limitation: AAD rewrap fails; explicit DEPENDENCY_UNAVAILABLE verified, successful rewrap is not supported.'
+bash /entrypoint-test/vault-failures.sh
+export PATH="$runtime_path"
+bash /entrypoint-test/full-application.sh
 CONTAINER
+
+docker exec "$database_container" psql -U beanflow -d beanflow -Atc \
+  "SELECT 'Flyway applied migrations: ' || count(*) FROM flyway_schema_history WHERE success;"
