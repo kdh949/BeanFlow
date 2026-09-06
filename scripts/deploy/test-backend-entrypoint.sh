@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readonly root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-readonly image="${1:?usage: test-backend-entrypoint.sh <backend-runtime-image>}"
+readonly image="${1:?usage: test-backend-entrypoint.sh <backend-runtime-image> [boot-jar]}"
 readonly fixture_dir="$(mktemp -d)"
 image_container=""
 cleanup_fixture() {
@@ -11,12 +11,18 @@ cleanup_fixture() {
 }
 trap cleanup_fixture EXIT
 
-# Compile a small probe against the selected image's Spring libraries, then use its real Java 21 runtime.
+# Compile a probe against the selected boot jar's classes/libraries, then use the real Java 21 runtime.
 # Host prerequisites: Python 3 and JDK 21+; no real deployment credentials are used.
-image_container="$(docker create "$image")"
-docker cp "$image_container:/opt/beanflow/app.jar" "$fixture_dir/app.jar"
-docker rm "$image_container" >/dev/null
-image_container=""
+if [[ $# -eq 2 ]]; then
+  cp "$2" "$fixture_dir/app.jar"
+  echo 'Validating the supplied boot jar in the selected runtime image.'
+else
+  image_container="$(docker create "$image")"
+  docker cp "$image_container:/opt/beanflow/app.jar" "$fixture_dir/app.jar"
+  docker rm "$image_container" >/dev/null
+  image_container=""
+  echo 'Validating the application packaged in the selected runtime image.'
+fi
 python3 - "$fixture_dir" <<'PY'
 from pathlib import Path
 import sys
@@ -27,10 +33,14 @@ with zipfile.ZipFile(root / "app.jar") as archive:
     for name in archive.namelist():
         if name.startswith("BOOT-INF/lib/") and name.endswith(".jar"):
             (root / "lib" / Path(name).name).write_bytes(archive.read(name))
+        elif name.startswith("BOOT-INF/classes/") and not name.endswith("/"):
+            target = root / "application" / name.removeprefix("BOOT-INF/classes/")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(archive.read(name))
 (root / "app.jar").unlink()
 PY
 mkdir "$fixture_dir/classes" "$fixture_dir/bin"
-javac --release 21 -proc:none -cp "$fixture_dir/lib/*" -d "$fixture_dir/classes" \
+javac --release 21 -proc:none -cp "$fixture_dir/application:$fixture_dir/lib/*" -d "$fixture_dir/classes" \
   "$root/scripts/deploy/fixtures/EntrypointProbe.java"
 chmod 0755 "$fixture_dir"
 
@@ -40,7 +50,7 @@ cat > "$fixture_dir/bin/java" <<'JAVA'
 set -euo pipefail
 [[ "$(id -u)" == 10001 ]]
 [[ "$*" == '-jar /opt/beanflow/app.jar' ]]
-exec /opt/java/openjdk/bin/java -cp '/entrypoint-test/classes:/entrypoint-test/lib/*' EntrypointProbe
+exec /opt/java/openjdk/bin/java -cp '/entrypoint-test/classes:/entrypoint-test/application:/entrypoint-test/lib/*' EntrypointProbe
 JAVA
 chmod 0755 "$fixture_dir/bin/java"
 
@@ -56,6 +66,7 @@ docker run --rm --interactive --network none --read-only --user root \
   --env "SPRING_CONFIG_IMPORT=$config_import" \
   --mount "type=bind,src=$root/deploy/backend/entrypoint.sh,dst=/usr/local/bin/beanflow-entrypoint,readonly" \
   --mount "type=bind,src=$root/deploy/vault/proxy.hcl,dst=/etc/beanflow/vault-proxy.hcl,readonly" \
+  --mount "type=bind,src=$root/deploy/vault/beanflow-policy.hcl,dst=/etc/beanflow/fixture-policy.hcl,readonly" \
   --mount "type=bind,src=$fixture_dir,dst=/entrypoint-test,readonly" \
   --entrypoint /bin/bash "$image" -se <<'CONTAINER'
 set -euo pipefail
@@ -88,7 +99,11 @@ done
 [[ "$ready" == true ]] || { echo 'Ephemeral test Vault did not start' >&2; exit 1; }
 
 vault auth enable approle >/dev/null
-vault write auth/approle/role/entrypoint-test token_policies=default token_ttl=5m >/dev/null
+vault secrets enable transit >/dev/null
+vault write transit/keys/beanflow-personal-data type=aes256-gcm96 derived=false exportable=false >/dev/null
+vault write transit/keys/beanflow-blind-index type=hmac key_size=32 derived=false exportable=false >/dev/null
+vault policy write entrypoint-test /etc/beanflow/fixture-policy.hcl >/dev/null
+vault write auth/approle/role/entrypoint-test token_policies=entrypoint-test token_ttl=5m >/dev/null
 vault read -field=role_id auth/approle/role/entrypoint-test/role-id \
   > /run/beanflow-vault-bootstrap/BEANFLOW_VAULT_ROLE_ID
 vault write -field=secret_id -force auth/approle/role/entrypoint-test/secret-id \
@@ -121,7 +136,8 @@ if [[ "$status" != 0 || ! -f /tmp/beanflow-entrypoint-test-passed ]]; then
   else
     echo "Entrypoint runtime smoke failed with exit $status" >&2
     # Fixture values only: retain exception types and file paths without logging property values.
-    grep -E 'Exception|Caused by:|^Required ' /tmp/entrypoint.log >&2 || true
+    grep -E 'Exception|Caused by:|^Required |invalid Upgrade request header|at .*VaultTransitPersonalDataAdapter|at EntrypointProbe' \
+      /tmp/entrypoint.log >&2 || true
   fi
   exit 1
 fi
@@ -148,5 +164,6 @@ for name in "${secret_names[@]}"; do
   done
   install --mode=0600 /tmp/saved-secret "/run/secrets/$name"
 done
-echo 'Entrypoint real JVM/Spring secret binding, byte preservation, UID isolation, 14 missing/empty cases and Vault TLS/AppRole passed.'
+echo 'Entrypoint real JVM/Spring secrets, UID isolation, 14 missing/empty cases and production adapter Transit metadata/encrypt/decrypt/HMAC over Vault TLS/AppRole passed.'
+echo 'Known Vault 2.0.4 limitation: AAD rewrap fails; explicit DEPENDENCY_UNAVAILABLE verified, successful rewrap is not supported.'
 CONTAINER

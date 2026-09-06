@@ -12,6 +12,11 @@ The application talks only to a Vault Proxy bound to `127.0.0.1`, `localhost` or
 deployment identity, renews its token and forces that auto-auth token onto proxied API requests. The application neither
 receives nor sends `X-Vault-Token`; no token or key material belongs in BeanFlow environment variables, files or logs.
 
+The Vault-specific Java client explicitly uses HTTP/1.1 for the application-to-Proxy hop. An
+`http2: invalid Upgrade request header: ["h2c"]` Proxy error means the client attempted an HTTP/2 upgrade
+that cannot be forwarded to the TLS upstream. Deploy the image with this explicit protocol setting;
+keep external Vault HTTPS, CA verification, AppRole authentication and startup key validation enabled.
+
 Provision two distinct Transit keys at the configured mount:
 
 - encryption key: `aes256-gcm96`, derived/convergent/exportable/deletion disabled;
@@ -81,6 +86,11 @@ There is no implicit region failover. A regional switch requires an accepted rep
 
 ## Encryption-key rotation
 
+Known Vault 2.0.4 limitation: rewrap does not pass AAD to the cipher, so BeanFlow AAD ciphertext is rejected with
+HTTP 400 and `DEPENDENCY_UNAVAILABLE`. The intended rewrap procedure below is blocked on a Provider implementation
+verified to preserve AAD. Keep earlier decryption versions available; do not remove AAD or substitute application-side
+decrypt/encrypt. This limitation does not prevent startup metadata validation or ordinary encrypt/decrypt/HMAC.
+
 The encryption key may use a 90-day Vault rotation period. After rotation, owner-local maintenance calls Transit
 `rewrap` with the original AAD, validates the returned `vault:vN:` prefix and atomically updates ciphertext plus its key
 version. Coverage must reach zero stale rows before raising a minimum decryption version. Plaintext must never be
@@ -101,6 +111,13 @@ Partial owner coverage is not success. Never delete the old index rows or advanc
 writes use the new version.
 
 ## Validation
+
+`bash scripts/deploy/test-backend-entrypoint.sh <backend-runtime-image>` runs the image's actual Transit adapter
+against an isolated TLS Vault and the repository's AppRole policy. It checks startup key metadata, encrypt/decrypt
+and HMAC as the JVM user, alongside secret ownership checks. It separately characterizes Vault 2.0.4's rejected AAD
+rewrap as `DEPENDENCY_UNAVAILABLE`; it does not report successful rewrap. To check a newly built local artifact before
+image publication, supply its boot jar as the second argument. The script prints which artifact is under test.
+This does not verify the full application, server deployment or real external Vault configuration.
 
 Run the focused Vault/startup, normalization, owner PostgreSQL query and Support PII-leak tests from the S30 ExecPlan.
 The representative query-plan test compares the same 20,000-row fixture with and without the composite B-tree; it is

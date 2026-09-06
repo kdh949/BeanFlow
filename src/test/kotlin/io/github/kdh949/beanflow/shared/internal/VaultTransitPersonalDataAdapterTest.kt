@@ -47,6 +47,27 @@ internal class VaultTransitPersonalDataAdapterTest {
     }
 
     @Test
+    fun `startup key lookups use HTTP 1_1 without h2c upgrade headers`() {
+        listOf("aes256-gcm96", "hmac").forEach { type ->
+            responses +=
+                StubResponse(
+                    200,
+                    """{"data":{"type":"$type","derived":false,"exportable":false,
+                    "deletion_allowed":false,"latest_version":4,
+                    "min_encryption_version":0,"min_decryption_version":1}}""",
+                )
+        }
+
+        adapter.validateStartup()
+
+        assertThat(requests.map { it.path }).containsExactly(
+            "/v1/transit/keys/customer-profile",
+            "/v1/transit/keys/support-exact-index",
+        )
+        assertThat(requests).allSatisfy(::assertProxyProtocol)
+    }
+
+    @Test
     fun `encrypt and decrypt bind ciphertext to stable AAD without an application token`() {
         responses += StubResponse(200, """{"data":{"ciphertext":"vault:v7:opaque-ciphertext"}}""")
         responses +=
@@ -69,6 +90,7 @@ internal class VaultTransitPersonalDataAdapterTest {
         assertThat(captured).allSatisfy { request ->
             assertThat(request.tokenHeader).isNull()
             assertThat(request.authorizationHeader).isNull()
+            assertProxyProtocol(request)
         }
         val encryptBody = ObjectMapper().readTree(captured[0].body)
         assertThat(String(Base64.getDecoder().decode(encryptBody.path("plaintext").asText()))).isEqualTo("홍길동")
@@ -222,6 +244,9 @@ internal class VaultTransitPersonalDataAdapterTest {
                 body = exchange.requestBody.readAllBytes().toString(StandardCharsets.UTF_8),
                 tokenHeader = exchange.requestHeaders.getFirst("X-Vault-Token"),
                 authorizationHeader = exchange.requestHeaders.getFirst("Authorization"),
+                protocol = exchange.protocol,
+                upgradeHeader = exchange.requestHeaders.getFirst("Upgrade"),
+                http2SettingsHeader = exchange.requestHeaders.getFirst("HTTP2-Settings"),
             )
         val bytes = response.body.toByteArray(StandardCharsets.UTF_8)
         exchange.responseHeaders.add("Content-Type", "application/json")
@@ -240,7 +265,16 @@ internal class VaultTransitPersonalDataAdapterTest {
         val body: String,
         val tokenHeader: String?,
         val authorizationHeader: String?,
+        val protocol: String,
+        val upgradeHeader: String?,
+        val http2SettingsHeader: String?,
     )
+
+    private fun assertProxyProtocol(request: CapturedRequest) {
+        assertThat(request.protocol).isEqualTo("HTTP/1.1")
+        assertThat(request.upgradeHeader).isNull()
+        assertThat(request.http2SettingsHeader).isNull()
+    }
 
     private fun causeChain(failure: Throwable): String =
         generateSequence(failure) { it.cause }

@@ -37,6 +37,8 @@ internal class VaultTransitPersonalDataAdapter(
     private val httpClient: HttpClient by lazy {
         HttpClient
             .newBuilder()
+            // The loopback Proxy must not forward h2c Upgrade headers to its TLS upstream.
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(properties.validated().connectTimeout)
             .followRedirects(HttpClient.Redirect.NEVER)
             .build()

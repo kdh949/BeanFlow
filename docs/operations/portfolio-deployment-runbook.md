@@ -216,6 +216,9 @@ sudo docker compose \
 - `postgres` unhealthy: secret·volume 권한과 init log 확인
 - `keycloak` unhealthy: DB 연결, `/auth/health/ready`, realm import 확인
 - `api` unhealthy: Vault Proxy/Transit, JWK, AIStor bucket, Flyway 확인
+- `http2: invalid Upgrade request header: ["h2c"]`: 앱의 Vault HTTP client가 보낸 HTTP/2 전환
+  헤더 때문에 Proxy의 TLS upstream 호출이 실패했다. 앱→Proxy HTTP/1.1 지정이 포함된 이미지로
+  갱신한다. Vault 주소·CA·AppRole 또는 Transit startup 검증을 우회하지 않는다.
 - `AccessDeniedException: /run/secrets/BEANFLOW_DB_PASSWORD`: JVM이 host의 root 소유 원본을
   직접 읽는 이미지/Compose 조합이다. 앱 secret 전달 수정이 포함된 이미지와 같은 SHA의 Compose를
   함께 배포해 컨테이너를 재생성한다. host 비밀번호 변경이나 `chmod 0644`는 필요하지 않다.
@@ -235,7 +238,10 @@ bash scripts/deploy/test-backend-entrypoint.sh <backend-runtime-image>
 read-only로 mount하고, 외부 네트워크가 없는 임시 컨테이너에서 실제 Vault TLS/AppRole 인증을 검사한다.
 이미지의 실제 JVM과 Spring 라이브러리로 datasource placeholder binding, 7개 secret의 byte 보존,
 UID 간 파일 접근 격리, 각 파일 누락·빈 값의 시작 실패를 검증한다. 전체 BeanFlow 애플리케이션과
-실제 외부 Provider의 기동·연결 검증은 별도로 수행한다.
+실제 외부 Provider의 기동·연결 검증은 별도로 수행한다. 같은 검증에서 실제 앱의 Transit 어댑터로
+TLS Vault의 키 metadata·암호화·복호화·HMAC을 호출한다. Vault 2.0.4의 AAD rewrap 거절은
+명시적 실패로 별도 검증하며 rewrap 성공으로 보고하지 않는다. 이미지에 포함된 앱을 기본으로
+검사하며, 새 로컬 `bootJar`를 검사하려면 두 번째 인자로 JAR 경로를 지정한다.
 
 관련 결정: [ADR-119](../adr/ADR-119-portfolio-deployment-runtime.md),
 [Vault Transit Runbook](personal-data-vault-transit-runbook.md).

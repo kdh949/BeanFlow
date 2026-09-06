@@ -7,12 +7,21 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.Arrays;
+import io.github.kdh949.beanflow.shared.api.*;
+import io.github.kdh949.beanflow.shared.internal.VaultTransitPersonalDataAdapter;
+import io.github.kdh949.beanflow.shared.internal.VaultTransitPersonalDataProperties;
+import kotlin.jvm.functions.Function0;
+import kotlin.jvm.functions.Function1;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.boot.env.ConfigTreePropertySource;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
 
-/** Runs in the backend image under its real JVM and beanflow UID; no application providers start. */
+/** Runs real Spring binding and the production Transit adapter as the image's beanflow user. */
 public class EntrypointProbe {
     private static final String[] NAMES = {
         "BEANFLOW_DB_PASSWORD", "BEANFLOW_AUTH_ATTEMPT_HMAC_KEY_BASE64_URL",
@@ -64,7 +73,42 @@ public class EntrypointProbe {
             }
             require(authenticated, "Vault Proxy did not authenticate the JVM request with AppRole");
         }
+        validateProductionAdapter();
         Files.createFile(Path.of("/tmp/beanflow-entrypoint-test-passed"));
+    }
+
+    private static void validateProductionAdapter() {
+        var properties = new VaultTransitPersonalDataProperties(
+                URI.create("http://127.0.0.1:8100"), "transit", "beanflow-personal-data",
+                "beanflow-blind-index", 1, Set.of(1), Duration.ofSeconds(2), Duration.ofSeconds(3));
+        // Test-only telemetry: provider calls still execute through the production adapter and real TLS Vault.
+        var telemetry = new ExternalDependencyTelemetry() {
+            @Override
+            public <T> T observe(ExternalDependencyCall call,
+                    Function1<? super T, ? extends ExternalDependencyOutcome> outcomeOf,
+                    Function0<? extends T> block) {
+                return block.invoke();
+            }
+        };
+        var adapter = new VaultTransitPersonalDataAdapter(properties, new ObjectMapper(), telemetry);
+        adapter.validateStartup();
+        var context = new PersonalDataEncryptionContext(PersonalDataOwnerContext.IDENTITY,
+                UUID.fromString("123e4567-e89b-12d3-a456-426614174000"), PersonalDataField.DISPLAY_NAME, 1);
+        byte[] plaintext = "entrypoint-fixture".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var encrypted = adapter.encrypt(plaintext, context);
+        require(Arrays.equals(adapter.decrypt(encrypted, context), plaintext), "Transit round trip differs");
+        var value = PersonalDataNormalizer.INSTANCE.normalize(ExactSearchCriterionType.EMAIL, "fixture@example.test");
+        var indexes = adapter.generate(value, Set.of(1));
+        require(indexes.size() == 1 && indexes.get(0).digestBytes().length == 32, "Transit HMAC differs");
+        // Vault 2.0.4 rewrap does not pass AAD to its cipher. Preserve the explicit failure, never drop AAD.
+        boolean rewrapRejected = false;
+        try {
+            adapter.rewrap(encrypted, context);
+        } catch (DomainFailure failure) {
+            require(failure.getCode() == FailureCode.DEPENDENCY_UNAVAILABLE, "Unexpected rewrap failure");
+            rewrapRejected = true;
+        }
+        require(rewrapRejected, "Vault rewrap behavior changed; revalidate AAD compatibility before updating this test");
     }
 
     private static String expected(String name) {
