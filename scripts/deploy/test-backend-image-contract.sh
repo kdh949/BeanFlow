@@ -36,6 +36,7 @@ grep -Eq 'secret_id_file_path[[:space:]]*=[[:space:]]*"/run/beanflow-vault/BEANF
 bash -n "$entrypoint"
 grep -q 'wait -n' "$entrypoint" || fail "entrypoint must terminate when either child exits"
 grep -q 'setpriv --reuid=vault-proxy --regid=vault-proxy' "$entrypoint" || fail "Vault Proxy must run as its dedicated UID"
+grep -q 'setpriv --reuid=vault-proxy .*--reset-env' "$entrypoint" || fail "Vault Proxy must reset the inherited root environment"
 grep -q 'setpriv --reuid=beanflow --regid=beanflow' "$entrypoint" || fail "JVM must run as the beanflow UID"
 grep -q 'install --owner=vault-proxy --group=vault-proxy --mode=0400' "$entrypoint" || fail "Vault credentials must be copied with Proxy-only ownership"
 ! grep -q '/run/secrets/BEANFLOW_VAULT' "$entrypoint" || fail "entrypoint must not expose Vault credentials through the JVM config tree"

@@ -212,8 +212,21 @@ sudo docker compose \
 - `postgres` unhealthy: secret·volume 권한과 init log 확인
 - `keycloak` unhealthy: DB 연결, `/auth/health/ready`, realm import 확인
 - `api` unhealthy: Vault Proxy/Transit, JWK, AIStor bucket, Flyway 확인
+- `failed to get token helper: open /root/.vault: permission denied`: Vault Proxy UID 전환에 root의
+  홈 환경이 남은 이미지다. `setpriv --reset-env` 후 Vault 주소·CA를 전달하는 entrypoint가 포함된
+  이미지로 갱신한다. `/root` 권한을 열거나 AppRole 대신 수동 token을 주입하지 않는다.
 - Sophos 502: 서버 DMZ IP:8080 도달성과 frontend health 확인
 - 결제 오류: SDK와 키 유형, client/secret의 상점 일치, Toss 오류 응답을 확인한다. 배포에서는 접두사로 차단하지 않는다
+
+entrypoint를 변경했다면 로컬 backend runtime 이미지로 다음 회귀 검증을 실행한다.
+
+```bash
+bash scripts/deploy/test-backend-entrypoint.sh <backend-runtime-image>
+```
+
+현재 checkout의 entrypoint와 Proxy 설정을 이미지에 read-only로 mount하고, 외부 네트워크가 없는
+임시 컨테이너에서 실제 Vault TLS/AppRole 인증과 자식 UID·환경 전달을 검사한다. JVM은 검증용
+프로세스로 대체하므로 Spring 전체 기동이나 실제 외부 Vault 연결 검증은 별도로 수행한다.
 
 관련 결정: [ADR-119](../adr/ADR-119-portfolio-deployment-runtime.md),
 [Vault Transit Runbook](personal-data-vault-transit-runbook.md).

@@ -45,8 +45,8 @@ terminate_children() {
 
 trap terminate_children TERM INT EXIT
 
-VAULT_ADDR="$BEANFLOW_VAULT_UPSTREAM_ADDR" VAULT_CACERT="$ca_file" \
-  setpriv --reuid=vault-proxy --regid=vault-proxy --init-groups \
+setpriv --reuid=vault-proxy --regid=vault-proxy --init-groups --reset-env \
+  env VAULT_ADDR="$BEANFLOW_VAULT_UPSTREAM_ADDR" VAULT_CACERT="$ca_file" \
   vault proxy -config="$proxy_config" &
 proxy_pid="$!"
 unset BEANFLOW_VAULT_UPSTREAM_ADDR
