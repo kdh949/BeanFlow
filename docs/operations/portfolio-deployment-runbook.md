@@ -6,9 +6,12 @@ Keycloak DB/관리자 비밀번호를 준비하지 않고 API, frontend, Postgre
 
 ## 결론
 
-`staging`부터 올린 뒤 같은 절차를 `prod`에 반복한다. 두 환경 모두 **실결제가 아닌 Toss sandbox**이며,
+`staging`부터 올린 뒤 같은 절차를 `prod`에 반복한다. 두 환경 모두 **Toss 테스트 키로 운영하는 sandbox 배포**이며,
 Sophos WAF의 HTTPS 443만 외부에 공개한다. 서버에서는 frontend의 8080만 DMZ 주소에 bind되고 API,
 PostgreSQL, Keycloak 관리 포트는 공개되지 않는다.
+
+배포와 `toss-sandbox` 시작 시 키 접두사를 검사하지 않는다. 테스트 키 선택과 실제 결제 SDK 호환성은
+배포 운영자가 확인한다. preflight 통과만으로 테스트 결제 여부나 키 유효성을 보장하지 않는다.
 
 이 runbook은 단일 호스트 포트폴리오 배포용이다. 상용 운영, 무중단 배포, HA, 백업·복구, SLO와
 법률 검토를 보장하지 않는다.
@@ -19,7 +22,7 @@ PostgreSQL, Keycloak 관리 포트는 공개되지 않는다.
 - 배포 도메인과 Sophos에서 사용할 TLS 인증서
 - private HTTPS Vault와 Transit 사용 권한
 - licensed AIStor private endpoint, bucket과 전용 access key
-- Toss의 `test_ck_...` / `test_sk_...` 키
+- 현재 결제 SDK에 맞는 Toss 테스트 client/secret 키 한 쌍
 
 공식 PostGIS 17 이미지는 `linux/amd64`로 고정한다. 서버가 ARM이면 이 구성을 그대로 운영하지 말고
 PostGIS 이미지·성능을 별도로 검증한다.
@@ -210,7 +213,7 @@ sudo docker compose \
 - `keycloak` unhealthy: DB 연결, `/auth/health/ready`, realm import 확인
 - `api` unhealthy: Vault Proxy/Transit, JWK, AIStor bucket, Flyway 확인
 - Sophos 502: 서버 DMZ IP:8080 도달성과 frontend health 확인
-- 결제 오류: 반드시 `test_ck_` / `test_sk_`인지 확인. live key로 바꾸지 않는다
+- 결제 오류: SDK와 키 유형, client/secret의 상점 일치, Toss 오류 응답을 확인한다. 배포에서는 접두사로 차단하지 않는다
 
 관련 결정: [ADR-119](../adr/ADR-119-portfolio-deployment-runtime.md),
 [Vault Transit Runbook](personal-data-vault-transit-runbook.md).

@@ -87,15 +87,6 @@ for name in "${required_secrets[@]}"; do
   }
 done
 
-[[ "$(<"$secrets_dir/TOSS_CLIENT_KEY")" == test_ck_* ]] || {
-  echo "TOSS_CLIENT_KEY must be a Toss sandbox test client key" >&2
-  exit 1
-}
-[[ "$(<"$secrets_dir/TOSS_SECRET_KEY")" == test_sk_* ]] || {
-  echo "TOSS_SECRET_KEY must be a Toss sandbox test secret key" >&2
-  exit 1
-}
-
 compose=(docker compose --env-file "$env_file" --file "$root/compose.portfolio.yml" --file "$overlay")
 if [[ "$keycloak_mode" == external ]]; then
   compose+=(--file "$root/compose.external-keycloak.yml")

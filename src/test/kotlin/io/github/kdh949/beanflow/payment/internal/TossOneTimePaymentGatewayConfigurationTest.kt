@@ -19,74 +19,69 @@ internal class TossOneTimePaymentGatewayConfigurationTest {
             )
 
     @Test
-    fun `individual integration client and secret pair starts the sandbox gateway`() {
+    fun `nonblank keys start the sandbox gateway without prefix validation`() {
+        listOf(
+            "test_ck_api" to "test_sk_api",
+            "test_gck_widget" to "test_gsk_widget",
+            "test_gck_widget" to "test_sk_api",
+            "test_ck_api" to "test_gsk_widget",
+            "live_ck_api" to "live_sk_api",
+            "client_fixture" to "secret_fixture",
+        ).forEach { (clientKey, secretKey) ->
+            contextRunner
+                .withPropertyValues(
+                    "beanflow.toss.client-key=$clientKey",
+                    "beanflow.toss.secret-key=$secretKey",
+                ).run { context ->
+                    assertThat(context).hasNotFailed()
+                    assertThat(context).hasSingleBean(PaymentGateway::class.java)
+                }
+        }
+    }
+
+    @Test
+    fun `blank client key fails startup`() {
+        listOf("", " ").forEach { clientKey ->
+            contextRunner
+                .withPropertyValues(
+                    "beanflow.toss.client-key=$clientKey",
+                    "beanflow.toss.secret-key=secret_fixture",
+                ).run { context ->
+                    assertThat(context.startupFailure)
+                        .hasRootCauseMessage("toss-sandbox requires a non-blank client key")
+                }
+        }
+    }
+
+    @Test
+    fun `blank secret key fails startup`() {
+        listOf("", " ").forEach { secretKey ->
+            contextRunner
+                .withPropertyValues(
+                    "beanflow.toss.client-key=client_fixture",
+                    "beanflow.toss.secret-key=$secretKey",
+                ).run { context ->
+                    assertThat(context.startupFailure)
+                        .hasRootCauseMessage("toss-sandbox requires a non-blank secret key")
+                }
+        }
+    }
+
+    @Test
+    fun `missing client key fails startup`() {
         contextRunner
-            .withPropertyValues(
-                "beanflow.toss.client-key=test_ck_api",
-                "beanflow.toss.secret-key=test_sk_api",
-            ).run { context ->
-                assertThat(context).hasNotFailed()
-                assertThat(context).hasSingleBean(PaymentGateway::class.java)
+            .withPropertyValues("beanflow.toss.secret-key=secret_fixture")
+            .run { context ->
+                assertThat(context).hasFailed()
             }
     }
 
     @Test
-    fun `swapped client and secret roles fail startup`() {
+    fun `missing secret key fails startup`() {
         contextRunner
-            .withPropertyValues(
-                "beanflow.toss.client-key=test_sk_api",
-                "beanflow.toss.secret-key=test_ck_api",
-            ).run { context ->
-                assertThat(context.startupFailure)
-                    .hasRootCauseMessage("toss-sandbox requires a Toss API individual integration test client key (test_ck_)")
-            }
-    }
-
-    @Test
-    fun `arbitrary test prefixes fail startup`() {
-        contextRunner
-            .withPropertyValues(
-                "beanflow.toss.client-key=test_client_arbitrary",
-                "beanflow.toss.secret-key=test_secret_arbitrary",
-            ).run { context ->
-                assertThat(context.startupFailure)
-                    .hasRootCauseMessage("toss-sandbox requires a Toss API individual integration test client key (test_ck_)")
-            }
-    }
-
-    @Test
-    fun `live keys fail startup in sandbox`() {
-        contextRunner
-            .withPropertyValues(
-                "beanflow.toss.client-key=live_ck_api",
-                "beanflow.toss.secret-key=live_sk_api",
-            ).run { context ->
-                assertThat(context.startupFailure)
-                    .hasRootCauseMessage("toss-sandbox requires a Toss API individual integration test client key (test_ck_)")
-            }
-    }
-
-    @Test
-    fun `widget client key fails startup for the Standard Payment Window`() {
-        contextRunner
-            .withPropertyValues(
-                "beanflow.toss.client-key=test_gck_widget",
-                "beanflow.toss.secret-key=test_sk_api",
-            ).run { context ->
-                assertThat(context.startupFailure)
-                    .hasRootCauseMessage("toss-sandbox requires a Toss API individual integration test client key (test_ck_)")
-            }
-    }
-
-    @Test
-    fun `widget secret key fails startup for the Standard Payment Window`() {
-        contextRunner
-            .withPropertyValues(
-                "beanflow.toss.client-key=test_ck_api",
-                "beanflow.toss.secret-key=test_gsk_widget",
-            ).run { context ->
-                assertThat(context.startupFailure)
-                    .hasRootCauseMessage("toss-sandbox requires a Toss API individual integration test secret key (test_sk_)")
+            .withPropertyValues("beanflow.toss.client-key=client_fixture")
+            .run { context ->
+                assertThat(context).hasFailed()
             }
     }
 }

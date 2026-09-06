@@ -33,15 +33,15 @@ internal class TossOneTimePaymentGatewayConfiguration {
     fun tossOneTimePaymentGateway(
         objectMapper: ObjectMapper,
         telemetry: ExternalDependencyTelemetry,
-        @Value("\${beanflow.toss.client-key}") clientKey: String,
-        @Value("\${beanflow.toss.secret-key}") secretKey: String,
+        @Value("\${beanflow.toss.client-key:}") clientKey: String,
+        @Value("\${beanflow.toss.secret-key:}") secretKey: String,
         @Value("\${beanflow.toss.base-url:https://api.tosspayments.com}") baseUrl: String,
     ): PaymentGateway {
-        require(clientKey.startsWith("test_ck_")) {
-            "toss-sandbox requires a Toss API individual integration test client key (test_ck_)"
+        require(clientKey.isNotBlank()) {
+            "toss-sandbox requires a non-blank client key"
         }
-        require(secretKey.startsWith("test_sk_")) {
-            "toss-sandbox requires a Toss API individual integration test secret key (test_sk_)"
+        require(secretKey.isNotBlank()) {
+            "toss-sandbox requires a non-blank secret key"
         }
         require(URI(baseUrl).let { it.scheme == "https" && it.host == "api.tosspayments.com" }) {
             "toss-sandbox requires the official HTTPS Toss API endpoint"

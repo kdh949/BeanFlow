@@ -24,10 +24,6 @@ secret_names=(
 
 for name in "${secret_names[@]}"; do
   value="contract-test-$name"
-  case "$name" in
-    TOSS_CLIENT_KEY) value="test_ck_contract" ;;
-    TOSS_SECRET_KEY) value="test_sk_contract" ;;
-  esac
   printf '%s\n' "$value" >"$secrets_dir/$name"
   chmod 0600 "$secrets_dir/$name"
 done

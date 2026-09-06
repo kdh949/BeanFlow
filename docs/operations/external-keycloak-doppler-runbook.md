@@ -71,6 +71,10 @@ DB password는 기존 DB와 같아야 하고 HMAC key 두 개는 서로 다른 3
 Vault CA는 실제 줄바꿈이 있는 PEM이다. 준비 스크립트는 기존 credential과 Doppler 값이 다르면
 파일을 덮어쓰지 않고 중단한다. credential rotation이나 이전 잘못된 설정 복구를 배포 중에 추측하지 않는다.
 
+Toss client/secret 키는 필수지만 배포와 `toss-sandbox` 시작 시 접두사로 차단하지 않는다.
+테스트 키 선택과 실제 SDK/Provider 호환성은 배포 운영자가 확인한다. 이 검사를 제거해도
+Standard Payment Window가 Payment Widget으로 바뀌거나 위젯 키 호환성이 보장되지는 않는다.
+
 ## 3. 이미지 빌드와 서버 checkout
 
 GitHub Actions의 `Build personal staging images`에서 배포할 branch/ref를 선택한다. 예를 들어:

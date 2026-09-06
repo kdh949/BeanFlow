@@ -24,8 +24,10 @@ secret 주입, 외부 노출 경계와 버전 롤백 절차가 하나의 검증 
 ### 1. `portfolio`를 별도 공개 배포 profile로 둔다
 
 - `portfolio`는 `local`, `toss-sandbox`, `vault-enforced`를 조합한다.
-- Toss client/secret key는 기존 adapter의 `test_ck_`/`test_sk_` startup validation을 그대로 통과해야
-  한다. live key와 실제 자금 이동은 허용하지 않는다.
+- **Key validation amendment (2026-09-06):** Toss client/secret key 접두사 검사를 배포 preflight와
+  `toss-sandbox` startup에서 제거한다. 필수 key/secret 파일과 권한 검사는 유지한다. 테스트 키 선택은
+  배포 운영자의 책임이며, profile 이름이나 preflight 통과가 실제 자금 이동 부재를 보장하지 않는다.
+  포트폴리오 배포에는 테스트 키를 사용하고 live key와 실제 자금 이동은 허용하지 않는다.
 - notification과 결제수단 lifecycle은 현재 local/scripted 또는 명시적 unavailable 결과를 사용한다.
   UI와 운영 문서는 이 환경을 상용 운영으로 표현하지 않는다.
 - `prod` profile과 모든 production Provider guard는 변경하지 않는다. `portfolio`와 `prod`, `test`,
