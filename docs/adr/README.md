@@ -123,3 +123,4 @@
 | [ADR-119](ADR-119-portfolio-deployment-runtime.md) | Accepted | 포트폴리오 배포 runtime과 sandbox 결제 경계 |
 | [ADR-120](ADR-120-operations-managed-limited-coupon-campaign.md) | Accepted | 운영형 선착순 쿠폰 캠페인과 이벤트 배너 lifecycle |
 | [ADR-121](ADR-121-performance-observability-and-trace-profile-correlation.md) | Accepted | 성능 관측성과 trace-profile 상관 경계 |
+| [ADR-122](ADR-122-external-keycloak-deployment.md) | Accepted | 외부 Keycloak을 사용하는 배포 모드 |

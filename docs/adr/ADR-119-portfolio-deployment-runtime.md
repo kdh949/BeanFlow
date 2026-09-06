@@ -16,6 +16,11 @@ secret 주입, 외부 노출 경계와 버전 롤백 절차가 하나의 검증 
 
 ## Decision
 
+### Extension (2026-09-06)
+
+[ADR-122](ADR-122-external-keycloak-deployment.md)는 별도로 운영하는 Keycloak을 사용하는 명시적
+`external` 배포 모드를 추가한다. 아래 내장 Keycloak 결정은 기존 `bundled` 기본 배포에 유지된다.
+
 ### 1. `portfolio`를 별도 공개 배포 profile로 둔다
 
 - `portfolio`는 `local`, `toss-sandbox`, `vault-enforced`를 조합한다.

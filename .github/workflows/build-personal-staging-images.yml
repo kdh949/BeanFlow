@@ -27,7 +27,11 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Validate deployment contracts
-        run: bash scripts/deploy/test-deployment-contract.sh
+        run: |
+          bash scripts/deploy/test-deployment-contract.sh
+          python3 -m unittest discover -s scripts/deploy -p 'test_*.py'
+          bash -n scripts/deploy/deploy-staging-doppler.sh
+          bash scripts/deploy/test-external-keycloak-nginx.sh
 
   build:
     name: Build ${{ matrix.service }}

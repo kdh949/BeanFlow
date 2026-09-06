@@ -1,5 +1,9 @@
 # 포트폴리오 서버 배포 Runbook
 
+이 문서의 기본 명령은 Keycloak을 함께 설치하는 `bundled` 모드다. 이미 구축한 Keycloak과 Doppler를
+사용한다면 [외부 Keycloak 배포 Runbook](external-keycloak-doppler-runbook.md)을 따른다. 외부 모드에서는
+Keycloak DB/관리자 비밀번호를 준비하지 않고 API, frontend, PostgreSQL 세 서비스만 기동한다.
+
 ## 결론
 
 `staging`부터 올린 뒤 같은 절차를 `prod`에 반복한다. 두 환경 모두 **실결제가 아닌 Toss sandbox**이며,
