@@ -130,6 +130,9 @@ doppler run --no-fallback -- bash -euc '
 ```
 
 - secret 파일 오류: `BEANFLOW_KEYCLOAK_MODE=external`과 새 배포 script가 적용됐는지 확인한다.
+- `AccessDeniedException: /run/secrets/BEANFLOW_DB_PASSWORD`: API의 JVM secret 소유권 전달
+  수정이 필요하다. 수정 이미지와 같은 SHA의 Compose를 함께 배포한다. Doppler 비밀번호는 유지하며,
+  앱은 host 원본 대신 UID 10001 전용 `/run/beanflow-secrets` tmpfs를 읽는다.
 - discovery 404: realm 존재, 실제 context path, reverse proxy routing과 접근망을 확인한다. 임의로
   `/auth` prefix를 붙이거나 issuer를 추정하지 않는다.
 - TLS 실패: 서버와 브라우저가 신뢰하는 유효한 인증서 체인을 구성한다. 검증 비활성화를 사용하지 않는다.

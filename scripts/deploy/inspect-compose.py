@@ -47,8 +47,8 @@ if any(mount.get("type") == "tmpfs" and mount.get("target") == "/var/lib/postgre
 api_environment = services["api"].get("environment", {})
 if api_environment.get("SPRING_PROFILES_ACTIVE") != "portfolio":
     fail("API must activate only the portfolio profile group")
-if api_environment.get("SPRING_CONFIG_IMPORT") != "configtree:/run/secrets/":
-    fail("API must import file-backed secrets through config tree")
+if api_environment.get("SPRING_CONFIG_IMPORT") != "configtree:/run/beanflow-secrets/":
+    fail("API must import secrets through the JVM-owned runtime config tree")
 
 api_secret_targets = {secret.get("target") for secret in services["api"].get("secrets", [])}
 required_api_secrets = {
@@ -77,6 +77,8 @@ if vault_secret_targets != expected_vault_secret_targets:
     fail("Vault bootstrap secrets must be mounted outside the JVM config tree")
 
 api_tmpfs = services["api"].get("tmpfs", [])
+if "/run/beanflow-secrets:rw,noexec,nosuid,size=1m,mode=0700" not in api_tmpfs:
+    fail("JVM secrets require an isolated private runtime tmpfs")
 if not any(
     (isinstance(mount, str) and mount.split(":", 1)[0] == "/run/beanflow-vault")
     or (isinstance(mount, dict) and mount.get("target") == "/run/beanflow-vault")

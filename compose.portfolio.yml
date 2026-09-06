@@ -91,9 +91,10 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=128m
       - /run/beanflow-vault:rw,noexec,nosuid,size=1m,mode=0700
+      - /run/beanflow-secrets:rw,noexec,nosuid,size=1m,mode=0700
     environment:
       SPRING_PROFILES_ACTIVE: portfolio
-      SPRING_CONFIG_IMPORT: configtree:/run/secrets/
+      SPRING_CONFIG_IMPORT: configtree:/run/beanflow-secrets/
       SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE: 30s
       SERVER_SHUTDOWN: graceful
       JAVA_TOOL_OPTIONS: ${BEANFLOW_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=25}

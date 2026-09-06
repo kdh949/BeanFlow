@@ -39,6 +39,7 @@ grep -q 'setpriv --reuid=vault-proxy --regid=vault-proxy' "$entrypoint" || fail 
 grep -q 'setpriv --reuid=vault-proxy .*--reset-env' "$entrypoint" || fail "Vault Proxy must reset the inherited root environment"
 grep -q 'setpriv --reuid=beanflow --regid=beanflow' "$entrypoint" || fail "JVM must run as the beanflow UID"
 grep -q 'install --owner=vault-proxy --group=vault-proxy --mode=0400' "$entrypoint" || fail "Vault credentials must be copied with Proxy-only ownership"
+grep -q 'install --owner=beanflow --group=beanflow --mode=0400' "$entrypoint" || fail "App secrets must be copied with JVM-only ownership"
 ! grep -q '/run/secrets/BEANFLOW_VAULT' "$entrypoint" || fail "entrypoint must not expose Vault credentials through the JVM config tree"
 grep -q -- '--connect-timeout' "$entrypoint" || fail "Vault readiness probe requires a connect timeout"
 grep -q -- '--max-time' "$entrypoint" || fail "Vault readiness probe requires a total timeout"

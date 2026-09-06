@@ -4,6 +4,17 @@ set -euo pipefail
 readonly proxy_config="/etc/beanflow/vault-proxy.hcl"
 readonly bootstrap_dir="/run/beanflow-vault-bootstrap"
 readonly runtime_dir="/run/beanflow-vault"
+readonly app_secret_source_dir="/run/secrets"
+readonly app_secret_runtime_dir="/run/beanflow-secrets"
+readonly app_secret_names=(
+  BEANFLOW_DB_PASSWORD
+  BEANFLOW_AUTH_ATTEMPT_HMAC_KEY_BASE64_URL
+  BEANFLOW_CURSOR_HMAC_SECRET_BASE64_URL
+  BEANFLOW_AISTOR_ACCESS_KEY
+  BEANFLOW_AISTOR_SECRET_KEY
+  TOSS_CLIENT_KEY
+  TOSS_SECRET_KEY
+)
 readonly role_id_source="$bootstrap_dir/BEANFLOW_VAULT_ROLE_ID"
 readonly secret_id_source="$bootstrap_dir/BEANFLOW_VAULT_SECRET_ID"
 readonly ca_source="$bootstrap_dir/BEANFLOW_VAULT_CA_PEM"
@@ -27,6 +38,23 @@ for required_file in "$role_id_source" "$secret_id_source" "$ca_source"; do
     echo "Required Vault credential file is missing or empty" >&2
     exit 1
   }
+done
+
+for secret_name in "${app_secret_names[@]}"; do
+  required_file="$app_secret_source_dir/$secret_name"
+  [[ -f "$required_file" && -r "$required_file" && -s "$required_file" ]] || {
+    echo "Required application secret file is missing or empty: $secret_name" >&2
+    exit 1
+  }
+done
+
+# File-backed Compose secrets retain host ownership. Keep those sources unchanged and
+# hand the JVM only its allowlisted secrets in a private tmpfs, separate from AppRole.
+chown beanflow:beanflow "$app_secret_runtime_dir"
+chmod 0700 "$app_secret_runtime_dir"
+for secret_name in "${app_secret_names[@]}"; do
+  install --owner=beanflow --group=beanflow --mode=0400 \
+    "$app_secret_source_dir/$secret_name" "$app_secret_runtime_dir/$secret_name"
 done
 
 chown vault-proxy:vault-proxy "$runtime_dir"

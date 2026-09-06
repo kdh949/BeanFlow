@@ -61,6 +61,13 @@ external private dependencies: Vault server, licensed AIStor
 ### 4. secret과 버전은 배포 입력이다
 
 - secret은 저장소 밖 디렉터리의 파일을 Compose secret/config tree로 주입한다.
+- **File ownership clarification (2026-09-07):** Compose의 file-backed secret은 host 파일의
+  소유권을 유지하므로 root 소유 `0600` 파일을 JVM이 직접 읽지 않는다. root entrypoint가
+  DB·HMAC·AIStor·Toss의 명시된 secret 7개를 `/run/beanflow-secrets` tmpfs에 복사한다.
+  디렉터리는 `beanflow` UID 10001 소유 `0700`, 파일은 같은 사용자 소유 `0400`이며 Spring의
+  config tree는 이 디렉터리만 읽는다. host 파일과 DB가 공유하는 원본의 소유권·내용은 변경하지 않는다.
+  Vault AppRole 파일은 기존 UID 10002 전용 디렉터리에 유지한다. 누락·빈 파일·복사 실패는
+  자식 프로세스를 시작하기 전에 실패시키며 환경변수나 기본값으로 대체하지 않는다.
 - `.env`, private key, certificate key와 실제 secret 파일은 Git에서 차단한다.
 - 애플리케이션 이미지는 `BEANFLOW_IMAGE_TAG`로 명시하며 `latest`를 배포 계약에 사용하지 않는다.
 - rollback은 이전 image tag를 다시 선택하는 애플리케이션 rollback이다. Flyway migration은

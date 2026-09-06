@@ -27,7 +27,8 @@ RUN apt-get update \
     && groupadd --system --gid 10002 vault-proxy \
     && useradd --system --uid 10002 --gid vault-proxy --home-dir /nonexistent --shell /usr/sbin/nologin vault-proxy \
     && install --directory --owner=root --group=root --mode=0700 /run/beanflow-vault-bootstrap \
-    && install --directory --owner=root --group=root --mode=0700 /run/beanflow-vault
+    && install --directory --owner=root --group=root --mode=0700 /run/beanflow-vault \
+    && install --directory --owner=root --group=root --mode=0700 /run/beanflow-secrets
 
 WORKDIR /opt/beanflow
 COPY --from=vault /bin/vault /usr/local/bin/vault

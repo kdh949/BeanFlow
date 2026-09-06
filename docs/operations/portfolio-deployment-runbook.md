@@ -83,6 +83,10 @@ sudo find /etc/beanflow/staging -type d -exec chmod 0700 {} \;
 sudo find /etc/beanflow/staging -type f -exec chmod 0600 {} \;
 ```
 
+API entrypoint는 host 원본을 유지하면서 DB·HMAC·AIStor·Toss secret 7개를
+`/run/beanflow-secrets` tmpfs에 복사한다. 이 디렉터리는 JVM 사용자 소유 `0700`, 파일은 `0400`이며
+Spring은 `configtree:/run/beanflow-secrets/`를 읽는다. Vault 자격 증명은 별도 Proxy UID에만 전달한다.
+
 ## 3. 배포 전 검사
 
 ```bash
@@ -212,6 +216,9 @@ sudo docker compose \
 - `postgres` unhealthy: secret·volume 권한과 init log 확인
 - `keycloak` unhealthy: DB 연결, `/auth/health/ready`, realm import 확인
 - `api` unhealthy: Vault Proxy/Transit, JWK, AIStor bucket, Flyway 확인
+- `AccessDeniedException: /run/secrets/BEANFLOW_DB_PASSWORD`: JVM이 host의 root 소유 원본을
+  직접 읽는 이미지/Compose 조합이다. 앱 secret 전달 수정이 포함된 이미지와 같은 SHA의 Compose를
+  함께 배포해 컨테이너를 재생성한다. host 비밀번호 변경이나 `chmod 0644`는 필요하지 않다.
 - `failed to get token helper: open /root/.vault: permission denied`: Vault Proxy UID 전환에 root의
   홈 환경이 남은 이미지다. `setpriv --reset-env` 후 Vault 주소·CA를 전달하는 entrypoint가 포함된
   이미지로 갱신한다. `/root` 권한을 열거나 AppRole 대신 수동 token을 주입하지 않는다.
@@ -224,9 +231,11 @@ entrypoint를 변경했다면 로컬 backend runtime 이미지로 다음 회귀 
 bash scripts/deploy/test-backend-entrypoint.sh <backend-runtime-image>
 ```
 
-현재 checkout의 entrypoint와 Proxy 설정을 이미지에 read-only로 mount하고, 외부 네트워크가 없는
-임시 컨테이너에서 실제 Vault TLS/AppRole 인증과 자식 UID·환경 전달을 검사한다. JVM은 검증용
-프로세스로 대체하므로 Spring 전체 기동이나 실제 외부 Vault 연결 검증은 별도로 수행한다.
+호스트에는 Python 3과 JDK 21 이상이 필요하다. 현재 checkout의 entrypoint와 Proxy 설정을 이미지에
+read-only로 mount하고, 외부 네트워크가 없는 임시 컨테이너에서 실제 Vault TLS/AppRole 인증을 검사한다.
+이미지의 실제 JVM과 Spring 라이브러리로 datasource placeholder binding, 7개 secret의 byte 보존,
+UID 간 파일 접근 격리, 각 파일 누락·빈 값의 시작 실패를 검증한다. 전체 BeanFlow 애플리케이션과
+실제 외부 Provider의 기동·연결 검증은 별도로 수행한다.
 
 관련 결정: [ADR-119](../adr/ADR-119-portfolio-deployment-runtime.md),
 [Vault Transit Runbook](personal-data-vault-transit-runbook.md).
