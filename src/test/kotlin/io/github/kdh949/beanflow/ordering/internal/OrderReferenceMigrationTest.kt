@@ -15,8 +15,10 @@ import org.springframework.boot.builder.SpringApplicationBuilder
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DataSourceTransactionManager
 import org.springframework.jdbc.datasource.DriverManagerDataSource
+import org.springframework.transaction.support.TransactionTemplate
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import javax.sql.DataSource
@@ -58,6 +60,25 @@ internal class OrderReferenceMigrationTest : IsolatedPostgresSupport() {
         assertThatThrownBy { flyway(dataSource).load().migrate() }
             .isInstanceOf(FlywayException::class.java)
             .hasMessageContaining("public order reference backfill")
+    }
+
+    @Test
+    fun `missing counter reserves legacy rank range before new allocations`() {
+        val dataSource = database("order_reference_missing_counter")
+        flyway(dataSource).target("49").load().migrate()
+        val jdbc = JdbcTemplate(dataSource)
+        val fixture = insertLegacyOrder(jdbc)
+        insertLegacyOrder(jdbc, existing = fixture, createdAt = FIXED_NOW.plusSeconds(1))
+        flyway(dataSource).target("50").load().migrate()
+        jdbc.update("DELETE FROM ordering_pickup_counter WHERE store_id = ?", fixture.storeId)
+        val allocator = PickupSequenceAllocator(jdbc, SimpleMeterRegistry())
+        val transaction = TransactionTemplate(DataSourceTransactionManager(dataSource))
+        val businessDate = LocalDate.parse("2030-01-01")
+        assertThat(transaction.execute { allocator.next(fixture.storeId, businessDate) }).isEqualTo(3)
+        assertThat(transaction.execute { allocator.next(fixture.storeId, businessDate) }).isEqualTo(4)
+        jdbc.update("UPDATE ordering_order SET pickup_sequence = 10 WHERE id = ?", fixture.orderId)
+        jdbc.update("DELETE FROM ordering_pickup_counter WHERE store_id = ?", fixture.storeId)
+        assertThat(transaction.execute { allocator.next(fixture.storeId, businessDate) }).isEqualTo(11)
     }
 
     @Test
