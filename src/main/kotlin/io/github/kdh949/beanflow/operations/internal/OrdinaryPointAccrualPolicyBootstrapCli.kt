@@ -56,6 +56,7 @@ internal const val ORDINARY_POINT_ACCRUAL_POLICY_BOOTSTRAP_AUTO_CONFIGURATION_EX
 )
 @Import(
     AuditRecordService::class,
+    AuditRecordAppendRepository::class,
     DatabaseAdvisoryLock::class,
     RetentionPolicyService::class,
     OrdinaryPointAccrualPolicyBootstrapTransaction::class,
