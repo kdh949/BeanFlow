@@ -133,6 +133,11 @@ BR-49, ADR-123/ADR-116 status/ADR index, OpenAPI 설명, 기존 관측성 계획
 동일한 파일 패턴 검증을 기본 `grep`으로 바꾸고 local Docker에서 실제 smoke를 다시 통과시켰다.
 애플리케이션 변경은 없으며 이미지 workflow를 새 commit에서 다시 실행한다.
 
+재실행 `34136516228`은 exporter smoke를 통과한 뒤 Linux bind mount의 private `0700` fixture를
+promtool 기본 UID가 읽지 못해 실패했다. fixture의 private 권한은 유지하고 테스트 container를
+fixture 소유자인 host UID/GID로 실행하도록 수정한다. 이 차이는 macOS Docker Desktop 검증만으로
+드러나지 않았으며 최종 hosted workflow 통과를 배포 gate로 유지한다.
+
 첫 수정 후 검증은 기존 Kotlin 증분 classpath cache 파일 누락과 cache 등록 충돌로 compileTestKotlin에서
 실패했다. Java 21 및 `-Pkotlin.incremental=false`의 전체 재컴파일 후 동일 19개 테스트가 통과했다.
 소스나 도메인 테스트 실패를 무시한 것이 아니라 로컬 compiler cache 오류를 분리했다.
