@@ -39,7 +39,7 @@ for case_name in missing empty; do
     echo "Exporter incorrectly accepted $case_name password." >&2
     exit 1
   fi
-  rg -q 'requires a readable, non-empty DB password file' "$WORK_DIR/$case_name.log"
+  grep -q 'requires a readable, non-empty DB password file' "$WORK_DIR/$case_name.log"
 done
 
 docker network create --internal "$FIXTURE-internal" >/dev/null
@@ -72,12 +72,12 @@ docker start "$FIXTURE-exporter" >/dev/null
 port="$(docker port "$FIXTURE-exporter" 9187/tcp | cut -d: -f2)"
 for attempt in $(seq 1 30); do
   if curl -fsS --max-time 5 "http://127.0.0.1:$port/metrics" -o "$WORK_DIR/metrics" 2>/dev/null && \
-    rg -qx 'pg_up 1' "$WORK_DIR/metrics"; then break; fi
+    grep -qx 'pg_up 1' "$WORK_DIR/metrics"; then break; fi
   sleep 1
 done
-rg -qx 'pg_up 1' "$WORK_DIR/metrics"
-rg -qx 'pg_exporter_last_scrape_error 0' "$WORK_DIR/metrics"
-rg -q '^beanflow_pg_ungranted_locks(\{| )' "$WORK_DIR/metrics"
+grep -qx 'pg_up 1' "$WORK_DIR/metrics"
+grep -qx 'pg_exporter_last_scrape_error 0' "$WORK_DIR/metrics"
+grep -Eq '^beanflow_pg_ungranted_locks(\{| )' "$WORK_DIR/metrics"
 docker exec --user 65534:65534 "$FIXTURE-exporter" /bin/sh -ec '
   test ! -r /run/secrets/BEANFLOW_POSTGRES_PASSWORD
   test "$(stat -c %u:%g:%a /run/secrets/BEANFLOW_POSTGRES_PASSWORD)" = 0:0:600

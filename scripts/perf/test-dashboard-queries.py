@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -38,6 +39,7 @@ for name, up, pg, error, waiting, expected in [
                   "promql_expr_test": [{"expr": wait, "eval_time": "0m", "exp_samples": expected}]})
 with tempfile.TemporaryDirectory(prefix="beanflow-dashboard-queries-") as directory:
     Path(directory, "tests.yml").write_text(json.dumps({"rule_files": [], "evaluation_interval": "1m", "tests": tests}))
-    subprocess.run(["docker", "run", "--rm", "--entrypoint", "/bin/promtool", "-v", directory + ":/tests:ro",
+    # Linux bind mounts preserve the private fixture directory's owner and 0700 permissions.
+    subprocess.run(["docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}", "--entrypoint", "/bin/promtool", "-v", directory + ":/tests:ro",
                     "prom/prometheus:v3.14.0", "test", "rules", "/tests/tests.yml"], check=True)
 print("PASS: dashboard units, label isolation and seven DB wait availability cases")
