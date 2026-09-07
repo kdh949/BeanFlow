@@ -19,6 +19,22 @@ allocation timer의 평균과 p95다. 기존 63개 패널을 보존하고 2개�
 python3 scripts/perf/test-dashboard-queries.py
 ```
 
+### 평균 지연의 무관측 구간 검증 (2026-09-08)
+
+픽업번호 평균의 분모를 `clamp_min`으로 보정하면 호출이 없는 구간도 0초로 표시된다.
+분모에 `rate(count) > 0` 필터를 적용하여 호출이 관측된 인스턴스만 평균을 반환한다.
+`bool`을 사용하지 않아 양수인 count rate의 원래 값을 나눗셈에 유지한다.
+이는 [Prometheus 비교 연산자의 필터 동작](https://prometheus.io/docs/prometheus/latest/querying/operators/#comparison-binary-operators)을 따른다.
+
+Prometheus v3.14.0의 promtool로 dashboard JSON의 실제 쿼리를 평가했다. 새 6개 사례는
+최초 무호출, 이전 호출 후 유휴, 지표 누락, 정상 평균, 관측된 실제 0초, 유휴/활성 인스턴스 혼합이다.
+수정 전 쿼리에서 무호출 2개와 혼합 1개가 잘못된 0 샘플을 반환해 실패했고,
+수정 후 새 6개와 기존 DB wait 7개가 모두 통과했다. 정상 평균 0.5초와 관측된 0초는 유지된다.
+전체 관측성 계약(`test-observability-contract.sh`)과 문서/OpenAPI 검증도 통과했다.
+
+이 보강의 모니터링 서버 재배포와 부하 재측정은 **Not run**이다. 아래 Grafana 캡처는
+보강 전 쿼리로 확인한 과거 측정 증거이며, 새 무관측 처리의 검증은 위 promtool 회귀 테스트다.
+
 ## 실제 배포와 통합 부하 결과
 
 통합 revision `686ba07885ac0f7fece39da6a3569208c6bf1094`를 배포했다. 이미지 digest는

@@ -2544,7 +2544,7 @@
         "type": "prometheus",
         "uid": "beanflow-prometheus"
       },
-      "description": "카운터 증가와 초기화 SQL을 포함한 할당 시간입니다. owner 잠금 전체 보유 시간이나 SQL 순수 실행시간으로 해석하지 않습니다.",
+      "description": "카운터 증가와 초기화 SQL을 포함한 할당 시간입니다. 평균은 집계 구간에 호출이 있을 때만 표시합니다. owner 잠금 전체 보유 시간이나 SQL 순수 실행시간으로 해석하지 않습니다.",
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -2556,7 +2556,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(beanflow_order_pickup_sequence_allocation_duration_seconds_sum{job=\"beanflow\"}[$__rate_interval]) / clamp_min(rate(beanflow_order_pickup_sequence_allocation_duration_seconds_count{job=\"beanflow\"}[$__rate_interval]), 0.000001)",
+          "expr": "rate(beanflow_order_pickup_sequence_allocation_duration_seconds_sum{job=\"beanflow\"}[$__rate_interval]) / (rate(beanflow_order_pickup_sequence_allocation_duration_seconds_count{job=\"beanflow\"}[$__rate_interval]) > 0)",
           "legendFormat": "mean"
         },
         {
