@@ -121,9 +121,9 @@ test('capacity rejects new payments without evicting facts or blocking replay an
   const limited = createTossDriverServer({ maxRetainedPayments: 1 });
   await new Promise((resolve) => limited.listen(0, '127.0.0.1', resolve));
   const root = `http://127.0.0.1:${limited.address().port}`;
-  const headers = { ...authHeaders(), 'content-type': 'application/json', 'idempotency-key': 'capacity:test' };
+  const headers = { ...authHeaders(), 'content-type': 'application/json' };
   const submit = (suffix) => fetch(`${root}/v1/payments/confirm`, {
-    method: 'POST', headers,
+    method: 'POST', headers: { ...headers, 'idempotency-key': `capacity:confirm:${suffix}` },
     body: JSON.stringify({ paymentKey: `perf-success-${suffix}`, orderId: `bf_${suffix}`, amount: 1000 }),
   });
   try {
@@ -138,7 +138,8 @@ test('capacity rejects new payments without evicting facts or blocking replay an
     assert.deepEqual(await lookup.json(), original);
     assert.equal((await fetch(`${root}/v1/payments/perf-success-overflow`, { headers })).status, 404);
     const refund = await fetch(`${root}/v1/payments/perf-success-retained/cancel`, {
-      method: 'POST', headers, body: JSON.stringify({ cancelReason: 'capacity boundary refund' }),
+      method: 'POST', headers: { ...headers, 'idempotency-key': 'capacity:refund:retained' },
+      body: JSON.stringify({ cancelReason: 'capacity boundary refund' }),
     });
     assert.equal(refund.status, 200);
     assert.equal((await refund.json()).status, 'CANCELED');
