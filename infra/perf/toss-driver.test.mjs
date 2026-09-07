@@ -117,6 +117,36 @@ test('refund transaction references are distinct across payments', async () => {
   assert.equal(new Set(references).size, 2);
 });
 
+test('capacity rejects new payments without evicting facts or blocking replay and refund', async () => {
+  const limited = createTossDriverServer({ maxRetainedPayments: 1 });
+  await new Promise((resolve) => limited.listen(0, '127.0.0.1', resolve));
+  const root = `http://127.0.0.1:${limited.address().port}`;
+  const headers = { ...authHeaders(), 'content-type': 'application/json', 'idempotency-key': 'capacity:test' };
+  const submit = (suffix) => fetch(`${root}/v1/payments/confirm`, {
+    method: 'POST', headers,
+    body: JSON.stringify({ paymentKey: `perf-success-${suffix}`, orderId: `bf_${suffix}`, amount: 1000 }),
+  });
+  try {
+    const first = await submit('retained');
+    assert.equal(first.status, 200);
+    const original = await first.json();
+    const overflow = await submit('overflow');
+    assert.equal(overflow.status, 503);
+    assert.equal((await overflow.json()).code, 'DRIVER_CAPACITY_EXCEEDED');
+    assert.deepEqual(await (await submit('retained')).json(), original);
+    const lookup = await fetch(`${root}/v1/payments/orders/bf_retained`, { headers });
+    assert.deepEqual(await lookup.json(), original);
+    assert.equal((await fetch(`${root}/v1/payments/perf-success-overflow`, { headers })).status, 404);
+    const refund = await fetch(`${root}/v1/payments/perf-success-retained/cancel`, {
+      method: 'POST', headers, body: JSON.stringify({ cancelReason: 'capacity boundary refund' }),
+    });
+    assert.equal(refund.status, 200);
+    assert.equal((await refund.json()).status, 'CANCELED');
+  } finally {
+    await new Promise((resolve, reject) => limited.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
 function cancel(paymentKey, key, payload) {
   return fetch(`${baseUrl}/v1/payments/${paymentKey}/cancel`, {
     method: 'POST',

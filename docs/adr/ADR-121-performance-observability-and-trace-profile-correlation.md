@@ -188,3 +188,11 @@ extension은 동일 trace/span ID를 profile sample에 기록해 지연 trace에
 동일 key/payload 최초 응답 재생, 다른 payload 충돌, 잔여 취소 가능 금액 검증, 결제별 환불 reference
 유일성과 confirmation replay 시 취소 이력 보존을 유지한다. 실제 Toss의 자동 fallback이 아니다.
 검증은 [환불 계약 보고서](../quality/performance-perf-refund-contract-2026-09-08.md)에 기록한다.
+
+## 2026-09-08 perf 결제 이력 보관 경계
+
+기존 10,000개 초과 시 오래된 결제의 자동 삭제를 제거한다. 보관 한도는 50,000개이며
+가득 차면 새 결제만 `503 DRIVER_CAPACITY_EXCEEDED`로 거절하고 기존 lookup·confirmation replay·
+refund를 보존한다. 테스트용 `maxRetainedPayments`는 1~50,000 범위만 받는다.
+process 재시작에는 명시적 snapshot/restore 절차가 필요하며 persistence로 오인하지 않는다.
+검증은 [보관 한도 보고서](../quality/performance-driver-retention-2026-09-08.md)에 기록한다.
