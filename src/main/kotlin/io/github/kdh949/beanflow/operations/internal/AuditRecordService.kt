@@ -33,6 +33,7 @@ internal data class AuditRetentionPurgeResult(
 @Service
 internal class AuditRecordService(
     private val repository: AuditRecordJpaRepository,
+    private val appendRepository: AuditRecordAppendRepository,
     private val retentionPolicies: RetentionPolicyOperations,
     private val identifierSource: IdentifierSource,
     private val objectMapper: ObjectMapper,
@@ -74,7 +75,7 @@ internal class AuditRecordService(
                     retentionProvenance = AuditRetentionProvenance.APPEND_SNAPSHOT,
                 )
             }
-        repository.saveAllAndFlush(records)
+        appendRepository.appendAllAndFlush(records)
         return records.map(AuditRecordEntity::id)
     }
 

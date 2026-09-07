@@ -27,10 +27,12 @@ internal class OrdinaryPointAccrualPolicyBootstrapApplicationTest
     constructor(
         private val lifecycle: OrdinaryPointAccrualPolicyBootstrapLifecycle,
         private val retentionPolicies: RetentionPolicyOperations,
+        private val auditWriter: AuditRecordAppendRepository,
     ) {
         @Test
         fun `narrow bootstrap context includes audit retention dependencies`() {
             assertThat(lifecycle).isNotNull
             assertThat(retentionPolicies).isInstanceOf(RetentionPolicyService::class.java)
+            assertThat(auditWriter).isNotNull
         }
     }
