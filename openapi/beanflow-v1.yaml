@@ -9812,7 +9812,10 @@ components:
         quoteFingerprint:
           type: string
           pattern: "^[0-9a-f]{64}$"
-          description: order-quote-fingerprint/v1으로 생성한 opaque optimistic-concurrency precondition입니다.
+          description: >-
+            order-quote-fingerprint/v3으로 생성한 opaque 거래 조건 사전조건입니다.
+            공유 재고와 슬롯의 사용량 및 기술적 version은 비교하지 않으며 최종 주문의 잠금 아래에서
+            현재 가용성을 별도로 검증합니다. 가격·구성·혜택·픽업 시간/정원 변경은 재확인이 필요합니다.
         store:
           $ref: "#/components/schemas/OrderQuoteStore"
         pickupWindow:
