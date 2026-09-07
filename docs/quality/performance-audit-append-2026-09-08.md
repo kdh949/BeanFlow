@@ -85,3 +85,10 @@ perf driver 재시작 시 기존 결제 이력의 명시적 snapshot/restore 검
 ![감사 기록 append 전용 persist 경로 후](assets/audit-append/audit-after-pool.png)
 
 감사 SELECT 개수는 Grafana에 전용 지표가 없어 위 Hikari 패널은 전체 부하 문맥만 보여준다. 감사 수정 단독 효과는 SQL 회귀 테스트로 판단한다.
+
+## 캡처 파일의 CI 등록
+
+PR에 추가한 PNG가 기존 저장소 안전성 테스트의 명시적 바이너리 목록에 없어 CI가 실패했다.
+검토한 이 PR 시리즈의 Grafana PNG 14개 경로만 공통 목록에 등록했다. 새 확장자 전체를 제외하거나
+비밀 패턴 검사를 비활성화하지 않는다. `LocalDemoRepositorySafetyTest` 5개 테스트를 로컬에서
+통과시켰으며, 변경된 각 PR head의 전체 CI를 다시 실행한다.
