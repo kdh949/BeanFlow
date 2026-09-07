@@ -117,10 +117,11 @@
 | [ADR-113](ADR-113-partner-pos-integration.md) | Accepted | 외부 POS 파트너 연동 인증과 API 범위 |
 | [ADR-114](ADR-114-shared-spring-test-context-isolation.md) | Accepted | 공유 Spring 테스트 Context와 명시적 격리 예외 |
 | [ADR-115](ADR-115-store-and-menu-image-storage.md) | Accepted | 매장·메뉴 이미지의 AIStor 저장과 조회 경계 |
-| [ADR-116](ADR-116-non-reserving-order-quote.md) | Accepted | 비예약 주문 quote와 전체 fingerprint 사전조건 |
+| [ADR-116](ADR-116-non-reserving-order-quote.md) | Superseded | 비예약 주문 quote와 전체 fingerprint 사전조건 (ADR-123으로 대체) |
 | [ADR-117](ADR-117-store-customer-display-profile.md) | Accepted | Store 고객 표시 profile과 주문 가능성 분리 |
 | [ADR-118](ADR-118-merchant-transactional-catalog-lifecycle.md) | Accepted | 점주 거래 카탈로그 수명주기와 주문 직렬화 경계 |
 | [ADR-119](ADR-119-portfolio-deployment-runtime.md) | Accepted | 포트폴리오 배포 runtime과 sandbox 결제 경계 |
 | [ADR-120](ADR-120-operations-managed-limited-coupon-campaign.md) | Accepted | 운영형 선착순 쿠폰 캠페인과 이벤트 배너 lifecycle |
 | [ADR-121](ADR-121-performance-observability-and-trace-profile-correlation.md) | Accepted | 성능 관측성과 trace-profile 상관 경계 |
 | [ADR-122](ADR-122-external-keycloak-deployment.md) | Accepted | 외부 Keycloak을 사용하는 배포 모드 |
+| [ADR-123](ADR-123-order-quote-trade-terms-and-shared-availability.md) | Accepted | 주문 견적의 거래 조건과 공유 자원 잔여량 검증 분리 |

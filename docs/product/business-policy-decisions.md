@@ -2330,6 +2330,12 @@
   포함한다. Menu/Store의 표시·이미지와 함께 증가하는 coarse persistence version은 제외하고 거래를
   결정하는 canonical value 또는 분리된 trade version만 포함한다. `quotedAt`은 제외한다. fingerprint는
   금액, reservation ID, 인증·권한 token, Provider input 또는 client가 계산할 수 있는 authority가 아니다.
+- **2026-09-07 Shared Resource Amendment:** 다른 주문의 예약·확정·해제로 변하는 재고 잔여량,
+  예약량·확정량과 픽업 슬롯 예약 수·확정 수 및 이들과 함께 증가하는 기술적 version은 fingerprint에서
+  제외한다. 같은 메뉴 구성·필요 수량·가격·혜택·픽업 시간과 정원 정책이면 사용량 변화만으로 고객의
+  재확인을 요구하지 않는다. quote는 계속 비예약 계산이며 최종 주문 transaction의 owner lock 아래에서
+  현재 재고와 슬롯 잔여량을 검사한다. 부족하면 `STOCK_NOT_AVAILABLE` 또는 `PICKUP_SLOT_FULL`로
+  실패하고 거래 write를 rollback한다. 픽업 정원·시간 변경과 고객별 benefit provenance 비교는 유지한다.
 - **Final Order Boundary:** `POST /orders`는 editable input과 필수
   `expectedQuoteFingerprint`만 받으며 client money를 받지 않는다. 기존 lock 순서와 짧은 주문
   transaction에서 Store root shared lock을 먼저 획득해 현재 상태를 다시 계산하고 full fingerprint가
@@ -2360,7 +2366,10 @@
   - malformed/tampered fingerprint, client money 거부와 concurrent owner 변경
   - writer-first stale과 Order-first writer commit 대기의 실제 PostgreSQL 경합
   - Menu 표시 설명·분류와 Store/Menu 이미지 변경 뒤 fingerprint 불변
-- **ADR Required:** [ADR-116](../adr/ADR-116-non-reserving-order-quote.md)
+  - 공유 재고·슬롯 사용량이 변해도 잔여량이 충분한 사전 견적의 주문 성공
+  - 서로 다른 고객의 동시 주문 성공과 마지막 재고·슬롯의 단일 예약 및 명시적 부족 실패
+- **ADR Required:** [ADR-123](../adr/ADR-123-order-quote-trade-terms-and-shared-availability.md)
+  ([ADR-116](../adr/ADR-116-non-reserving-order-quote.md) 대체)
 - **Revisit Conditions:** 가격 보장 기간, persistent quote identity, cart hold, 사전 승인 또는 분산
   owner 저장소가 제품 요구가 될 때
 
