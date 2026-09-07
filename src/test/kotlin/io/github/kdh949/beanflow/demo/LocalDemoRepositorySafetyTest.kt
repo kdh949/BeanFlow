@@ -170,6 +170,21 @@ internal class LocalDemoRepositorySafetyTest {
         // source/configuration mistake rather than a reason to skip the secret scan.
         val ALLOWED_BINARY_FILES =
             setOf(
+                // Reviewed Grafana evidence shared by the performance PR series.
+                "docs/quality/assets/audit-append/audit-after-pool.png",
+                "docs/quality/assets/audit-append/audit-before-pool.png",
+                "docs/quality/assets/driver-retention/refund-after.png",
+                "docs/quality/assets/driver-retention/refund-before.png",
+                "docs/quality/assets/perf-diagnostic-panels/counter-after.png",
+                "docs/quality/assets/perf-diagnostic-panels/panels-after-axis.png",
+                "docs/quality/assets/perf-diagnostic-panels/panels-before-axis.png",
+                "docs/quality/assets/perf-diagnostic-panels/refund-after.png",
+                "docs/quality/assets/perf-refund-contract/refund-after.png",
+                "docs/quality/assets/perf-refund-contract/refund-before.png",
+                "docs/quality/assets/pickup-counter/counter-after.png",
+                "docs/quality/assets/pickup-counter/counter-before.png",
+                "docs/quality/assets/quote-stability/quote-after-failures.png",
+                "docs/quality/assets/quote-stability/quote-before-failures.png",
                 "frontend/public/brand/logo-full.png",
                 "frontend/public/brand/logo-mark.png",
                 "frontend/public/brand/logo-wordmark.png",

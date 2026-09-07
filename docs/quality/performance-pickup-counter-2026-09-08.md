@@ -89,3 +89,10 @@ perf driver 재시작 시 기존 결제 이력의 명시적 snapshot/restore 검
 ![픽업번호 카운터 정상 발급 경로 분리 후](assets/pickup-counter/counter-after.png)
 
 추가한 152번 패널은 이미 수집 중이던 timer로 과거 구간도 조회한다. 순수 SQL 실행시간과 패널 timer를 구분한다.
+
+## 캡처 파일의 CI 등록
+
+PR에 추가한 PNG가 기존 저장소 안전성 테스트의 명시적 바이너리 목록에 없어 CI가 실패했다.
+검토한 이 PR 시리즈의 Grafana PNG 14개 경로만 공통 목록에 등록했다. 새 확장자 전체를 제외하거나
+비밀 패턴 검사를 비활성화하지 않는다. `LocalDemoRepositorySafetyTest` 5개 테스트를 로컬에서
+통과시켰으며, 변경된 각 PR head의 전체 CI를 다시 실행한다.
