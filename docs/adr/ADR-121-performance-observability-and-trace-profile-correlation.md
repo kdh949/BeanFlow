@@ -181,3 +181,10 @@ extension은 동일 trace/span ID를 profile sample에 기록해 지연 trace에
 - [ADR-083](ADR-083-personal-data-encryption-and-blind-index.md)
 - [ADR-115](ADR-115-store-and-menu-image-storage.md)
 - [ADR-119](ADR-119-portfolio-deployment-runtime.md)
+
+## 2026-09-08 perf 환불 계약 보완
+
+앱이 생성하는 콜론 포함 환불 멱등키를 driver에서 수용한다. 공백 없는 printable ASCII 1~300자,
+동일 key/payload 최초 응답 재생, 다른 payload 충돌, 잔여 취소 가능 금액 검증, 결제별 환불 reference
+유일성과 confirmation replay 시 취소 이력 보존을 유지한다. 실제 Toss의 자동 fallback이 아니다.
+검증은 [환불 계약 보고서](../quality/performance-perf-refund-contract-2026-09-08.md)에 기록한다.

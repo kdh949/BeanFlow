@@ -54,6 +54,77 @@ test('missing test authorization is rejected', async () => {
   assert.equal(response.status, 401);
 });
 
+test('rejection refund accepts the application colon-delimited idempotency key and is replayable', async () => {
+  const paymentKey = 'perf-success-rejection-refund';
+  await confirm(paymentKey);
+  const key = 'refund:rejection:12345678-1234-4234-8234-123456789abc';
+  const first = await cancel(paymentKey, key, { cancelReason: 'BeanFlow refund [bf:test]', cancelAmount: 1000 });
+  assert.equal(first.status, 200);
+  const body = await first.json();
+  assert.equal(body.status, 'CANCELED');
+  assert.equal(body.cancels.length, 1);
+  const replay = await cancel(paymentKey, key, { cancelReason: 'BeanFlow refund [bf:test]', cancelAmount: 1000 });
+  assert.equal(replay.status, 200);
+  assert.deepEqual(await replay.json(), body);
+  const lookup = await fetch(`${baseUrl}/v1/payments/${paymentKey}`, { headers: authHeaders() });
+  assert.equal((await lookup.json()).cancels.length, 1);
+});
+
+test('same cancellation key with a changed payload is rejected without another cancellation', async () => {
+  const paymentKey = 'perf-success-refund-conflict';
+  await confirm(paymentKey);
+  assert.equal((await cancel(paymentKey, 'refund:conflict', { cancelReason: 'first', cancelAmount: 400 })).status, 200);
+  const conflict = await cancel(paymentKey, 'refund:conflict', { cancelReason: 'changed', cancelAmount: 600 });
+  assert.equal(conflict.status, 409);
+  const lookup = await fetch(`${baseUrl}/v1/payments/${paymentKey}`, { headers: authHeaders() });
+  const body = await lookup.json();
+  assert.equal(body.cancels.length, 1);
+  assert.equal(body.cancels[0].cancelAmount, 400);
+});
+
+test('confirmation retry preserves cancellation history and refund cannot exceed remaining amount', async () => {
+  const paymentKey = 'perf-success-refund-history';
+  await confirm(paymentKey);
+  const first = await cancel(paymentKey, 'refund:first', { cancelReason: 'first', cancelAmount: 400 });
+  assert.equal(first.status, 200);
+  await confirm(paymentKey);
+  const excessive = await cancel(paymentKey, 'refund:excessive', { cancelReason: 'excessive', cancelAmount: 1000 });
+  assert.equal(excessive.status, 400);
+  const lookup = await fetch(`${baseUrl}/v1/payments/${paymentKey}`, { headers: authHeaders() });
+  assert.equal((await lookup.json()).cancels.length, 1);
+  const rest = await cancel(paymentKey, 'refund:rest', { cancelReason: 'rest' });
+  const body = await rest.json();
+  assert.equal(body.status, 'CANCELED');
+  assert.deepEqual(body.cancels.map((entry) => entry.cancelAmount), [400, 600]);
+});
+
+test('idempotency key accepts 300 printable characters and rejects longer keys', async () => {
+  const paymentKey = 'perf-success-key-limit';
+  await confirm(paymentKey);
+  assert.equal((await cancel(paymentKey, 'r'.repeat(301), { cancelReason: 'too long' })).status, 400);
+  assert.equal((await cancel(paymentKey, 'r'.repeat(300), { cancelReason: 'valid' })).status, 200);
+});
+
+test('refund transaction references are distinct across payments', async () => {
+  const references = [];
+  for (const suffix of ['first', 'second']) {
+    const paymentKey = `perf-success-distinct-${suffix}`;
+    await confirm(paymentKey);
+    const response = await cancel(paymentKey, `refund:${suffix}`, { cancelReason: 'full refund' });
+    assert.equal(response.status, 200);
+    references.push((await response.json()).cancels[0].transactionKey);
+  }
+  assert.equal(new Set(references).size, 2);
+});
+
+function cancel(paymentKey, key, payload) {
+  return fetch(`${baseUrl}/v1/payments/${paymentKey}/cancel`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'content-type': 'application/json', 'idempotency-key': key },
+    body: JSON.stringify(payload),
+  });
+}
+
 function confirm(paymentKey) {
   return fetch(`${baseUrl}/v1/payments/confirm`, {
     method: 'POST',
