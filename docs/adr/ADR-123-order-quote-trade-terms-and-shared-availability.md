@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-09-07
 - **Supersedes:** [ADR-116](ADR-116-non-reserving-order-quote.md)
-- **Implementation owner:** [공유 자원 변동에 안정적인 주문 견적](../exec-plans/active/order-quote-shared-resource-stability.md)
+- **Implementation owner:** [공유 자원 변동에 안정적인 주문 견적](../exec-plans/completed/order-quote-shared-resource-stability.md)
 
 ## Context
 

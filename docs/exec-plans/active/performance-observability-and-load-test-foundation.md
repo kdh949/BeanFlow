@@ -19,7 +19,9 @@ PostgreSQL wait, 실제 외부 Provider child span, 느린 trace, 같은 요청 
 ## Current State
 
 2026-09-07 실측 후속: 공유 자원 사용량으로 인한 견적 stale 정책 개선은
-[공유 자원 변동에 안정적인 주문 견적](order-quote-shared-resource-stability.md)에서 구현·배포·재측정한다.
+[공유 자원 변동에 안정적인 주문 견적](../completed/order-quote-shared-resource-stability.md)에서 구현·배포·재측정을 완료했다.
+동일 5/s의 견적 충돌 37/450→0/450, 20/s의 실제 잠금 대기와 후속 범위는
+[2026-09-08 재측정](../../quality/performance-quote-stability-retest-2026-09-08.md)에 기록했다.
 관측성 자체의 범위와 거래 조건 변경을 구분하며 이 문서의 Non-goals를 소급 변경하지 않는다.
 
 2026-09-07 후속 단계는 승인된 app/monitoring 서버 반영을 포함한다. 아래 초기 상태는 최초 구현 전

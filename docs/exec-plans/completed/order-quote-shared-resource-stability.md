@@ -1,11 +1,11 @@
 # 공유 자원 변동에 안정적인 주문 견적 구현과 배포 검증
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-09-08`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -17,7 +17,7 @@
 
 ## Current State
 
-v2 fingerprint가 재고 quantity/version과 슬롯 count/version을 포함한다. 배포 중인 perf API의
+수정 전 v2 fingerprint는 재고 quantity/version과 슬롯 count/version을 포함했다. 당시 perf API의
 Toss-success 5 workflow/s, 90초 실행에서 450건 중 48건이 stale였다. 2회 견적 후 순차 주문하는
 별도 재현도 실패했다. Inventory/Fulfillment는 이미 최종 transaction의 row lock 아래에서 현재
 가용성을 검사하므로 fingerprint material만 좁혀도 초과 예약 보호를 유지할 수 있다.
@@ -112,7 +112,7 @@ CPU/memory와 trace를 확인한다. live rate를 최종 건수로 오인하거�
 ## Documentation Updates
 
 BR-49, ADR-123/ADR-116 status/ADR index, OpenAPI 설명, 기존 관측성 계획의 후속 범위 링크,
-운영 runbook의 배포 호환성과 `docs/quality/performance-load-rca-2026-09-07.md` 재측정 결과.
+운영 runbook의 배포 호환성과 `docs/quality/performance-quote-stability-retest-2026-09-08.md` 재측정 결과.
 
 ## Progress
 
@@ -121,21 +121,26 @@ BR-49, ADR-123/ADR-116 status/ADR index, OpenAPI 설명, 기존 관측성 계획
 - [x] BR-49, ADR-123과 계획 갱신
 - [x] v2에서 19개 중 새 회귀 3개 실패 확인: 재고만 갱신, 슬롯만 갱신, 충분한 자원 동시 주문
 - [x] v3의 동일 회귀 19개 통과, formatter와 문서/OpenAPI 검증 통과
-- [ ] Ordering/Inventory/Fulfillment/architecture 및 배포 키 관련 전체 검증 완료
+- [x] Ordering/Inventory/Fulfillment/architecture 및 배포 키 관련 77개 class, 368개 테스트 통과 (실패/skip 0)
+- [x] `spotlessCheck`, `bootJar`, 문서/OpenAPI, 관측성/배포/load tooling 계약 통과
 - [x] `643fe25` 관측성 보완, `1941c62` 견적 개선 커밋 및 feature 브랜치 push
-- [ ] 이미지 workflow 성공 (`34135909645` 첫 실행은 runner의 rg 미설치로 exporter 검증 실패)
-- [ ] API 배포·health/DB 확인
-- [ ] 재측정·Grafana 확인·분석 기록
+- [x] 전체 CI `34135925797` 성공 (`1941c62`의 backend 6 shards 및 frontend)
+- [x] 이미지 workflow `34136862007` 성공 (`5aaec528`의 packaged perf/portfolio smoke 및 API/web publish)
+- [x] `5aaec528` API 배포·health/AIStor/cursor 확인, DB 및 전체 의존 container identity 유지
+- [x] 서버 직접 재현: 두 사전 견적 모두 201, 첫 주문 후 두 번째 fingerprint 유지, 두 terminal replay 일치
+- [x] v3 예열/1/s/5/s 비교/5/s VU20/10/s/20/s 총 3,120건 승인, Grafana 직접 확인과 trace 분석
+- [x] DB 실행별 건수·재고/슬롯 counter 정합성, 부하 종료 후 회복 확인
+- [x] 최초 5/s 미투입 1건과 20/s 잠금 대기를 포함한 한계·후속 범위 기록
 
 ## Surprises & Discoveries
 
 이미지 workflow의 새 exporter smoke는 GitHub runner에 없는 `rg`를 사용해 exit 127로 실패했다.
 동일한 파일 패턴 검증을 기본 `grep`으로 바꾸고 local Docker에서 실제 smoke를 다시 통과시켰다.
-애플리케이션 변경은 없으며 이미지 workflow를 새 commit에서 다시 실행한다.
+애플리케이션 변경 없이 이미지 workflow를 새 commit에서 다시 실행했다.
 
 재실행 `34136516228`은 exporter smoke를 통과한 뒤 Linux bind mount의 private `0700` fixture를
 promtool 기본 UID가 읽지 못해 실패했다. fixture의 private 권한은 유지하고 테스트 container를
-fixture 소유자인 host UID/GID로 실행하도록 수정한다. 이 차이는 macOS Docker Desktop 검증만으로
+fixture 소유자인 host UID/GID로 실행하도록 수정했다. 이 차이는 macOS Docker Desktop 검증만으로
 드러나지 않았으며 최종 hosted workflow 통과를 배포 gate로 유지한다.
 
 첫 수정 후 검증은 기존 Kotlin 증분 classpath cache 파일 누락과 cache 등록 충돌로 compileTestKotlin에서
@@ -146,9 +151,13 @@ fixture 소유자인 host UID/GID로 실행하도록 수정한다. 이 차이는
 발생기에서 로컬 Gradle/contract 검증도 병행했으므로 지연/미투입의 발생기 간섭 가능성을 배제하지 못한다.
 배포 후 실행은 발생기 검증을 종료하고 진행하며 이 실행을 엄격한 지연 개선율 근거로 사용하지 않는다.
 
-OpenAPI는 v1, 구현은 v2라고 설명해 version 설명이 이미 어긋나 있었다. v3 배포와 함께 바로잡는다.
-앱의 sudo는 passwordless가 아니므로 root 소유 설정 반영은 검증된 배포 bundle의 1회 sudo 실행이
-필요할 수 있다. Doppler 배포 token은 읽기 전용이며 이 변경은 secret 쓰기를 요구하지 않는다.
+발생기 build/test 종료 후 새 v2 기준선 `bf-0908-v2-baseline-r5`는 같은 5/s·90초·VU 10/20에서
+450건 중 37건 stale, 미투입 1건이었다. 서버 quote conflict counter도 112→149로 37건 증가했다.
+HTTP p95 105.7ms, workflow p95 290.8ms이며 pending/미승인 lock은 수집 표본에서 0이었다.
+
+OpenAPI는 v1, 구현은 v2라고 설명해 version 설명이 이미 어긋나 있었다. v3 배포와 함께 바로잡았다.
+앱의 sudo는 passwordless가 아니므로 검증된 배포 bundle의 root 소유 설정 반영은 사용자가 실행했다.
+Doppler 배포 token은 읽기 전용이며 이 변경은 secret 쓰기를 요구하지 않는다.
 
 ## Decision Log
 
@@ -157,8 +166,27 @@ OpenAPI는 v1, 구현은 v2라고 설명해 version 설명이 이미 어긋나 �
 
 ## Outcomes & Retrospective
 
-구현·CI·배포·재측정은 Pending이다. 이전 실측은 원인과 기준 자료이며 새 코드의 개선 증거가 아니다.
+정책·구현·로컬 관련 368개 테스트·전체 CI·이미지 smoke와 build/publish·API 배포·부하 재측정을
+완료했다. API revision은 `5aaec5281dbebf88b7465dbc294152fb3003019c`, immutable manifest는
+`sha256:0e9439089dd6042ac824b22910e8b5b6e680474df18d4728ee56ce29535f00d5`다.
+기존 Doppler와 DB/volume을 유지했고 backup은 `/var/backups/beanflow-quote-v3-20260907T170039Z`다.
+
+동일 설정의 5/s에서 37/450 stale이 0/450이 됐다. 최초 실행의 미투입 1건은 그대로 Failed로
+남기고, VU 20개를 사전 확보한 후속 5/s에서는 450/450 승인·미투입 0을 확인했다.
+10/s·90초 900건, 20/s·60초 1,200건도 모두 승인됐다. 전체 v3 6회 3,120건/12,480 HTTP다.
+
+응답 속도 개선이나 capacity 상한은 주장하지 않는다. 20/s workflow p95는 1.52초이며 Hikari
+pending 최대 5와 재고/슬롯 DB 대기가 나타났다. 부하 종료 후 대기는 회복했고, read-only DB
+snapshot의 실행별 distinct order/승인 건수 및 재고/슬롯 카운터 정합성을 확인했다.
+5/s exact span profile은 DB 응답 대기를 뒷받침했지만 20/s 두 span profile 조회는 빈 결과여서
+CPU 원인 근거로 사용하지 않았다. 수집 결과가 없는 것을 0으로 대체하지 않았다.
+
+실행별 조건·실패·trace·한계와 후속 권고는
+[재측정 보고서](../../quality/performance-quote-stability-retest-2026-09-08.md)에 기록했다.
+Not run: 장시간 soak/capacity, 실제 결제망, 여러 자원을 분산한 workload, v3 timeout/unknown 재주입.
+이후 최적화에서는 원자적 잔여량·멱등성 보호를 유지하며 잠금 보유 transaction의 작업을 측정한다.
 
 ## Revision Notes
 
 - 2026-09-07: 관측성 실측으로 드러난 정책 문제의 후속 구현·배포·재측정 계획 추가.
+- 2026-09-08: API 배포와 동일 조건 비교·VU 조정·20/s까지 재측정 완료, 실측 한계와 후속 범위 기록.
