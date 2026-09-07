@@ -600,7 +600,8 @@
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "noValue": "데이터 없음"
+          "noValue": "데이터 없음",
+          "max": 1
         },
         "overrides": []
       },
@@ -2493,6 +2494,91 @@
             ]
           }
         ]
+      }
+    },
+    {
+      "id": 151,
+      "title": "환불 요청 / 조회 결과",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "전체 트래픽의 환불 시도율입니다. UNKNOWN 조회가 이어지면 지난 실행의 환불 재시도 부하가 현재 실행과 겹칩니다. 시도 counter이며 미완료 환불 건수가 아닙니다.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (mode, outcome) (rate(beanflow_payment_refund_attempts_total{job=\"beanflow\"}[$__rate_interval]))",
+          "legendFormat": "{{mode}} / {{outcome}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 200
+      }
+    },
+    {
+      "id": 152,
+      "title": "픽업번호 할당 지연",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "카운터 증가와 초기화 SQL을 포함한 할당 시간입니다. owner 잠금 전체 보유 시간이나 SQL 순수 실행시간으로 해석하지 않습니다.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(beanflow_order_pickup_sequence_allocation_duration_seconds_sum{job=\"beanflow\"}[$__rate_interval]) / clamp_min(rate(beanflow_order_pickup_sequence_allocation_duration_seconds_count{job=\"beanflow\"}[$__rate_interval]), 0.000001)",
+          "legendFormat": "mean"
+        },
+        {
+          "refId": "B",
+          "expr": "beanflow_order_pickup_sequence_allocation_duration_seconds{job=\"beanflow\",quantile=\"0.95\"}",
+          "legendFormat": "p95"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 200
       }
     }
   ],
