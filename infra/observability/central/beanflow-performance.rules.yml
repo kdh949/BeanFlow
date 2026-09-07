@@ -49,7 +49,7 @@ groups:
           description: Compare Hikari pending with PostgreSQL waits and ungranted locks in the same time range.
 
       - alert: BeanFlowPerfTelemetryTargetDown
-        expr: up{job=~"beanflow(|-alloy|-postgres|-node|-cadvisor)"} == 0
+        expr: up{job=~"beanflow(|-alloy|-postgres|-node|-cadvisor|-containers)"} == 0
         for: 2m
         labels:
           severity: warning
@@ -59,10 +59,32 @@ groups:
           description: A missing signal invalidates an RCA or capacity conclusion for this run.
 
       - alert: BeanFlowPerfDroppedIterations
-        expr: increase(k6_dropped_iterations_total[5m]) > 0
+        expr: increase(k6_dropped_iterations_total{application="beanflow"}[5m]) > 0
         labels:
           severity: warning
           environment: perf
         annotations:
           summary: k6 dropped one or more scheduled iterations
           description: The requested arrival rate was not delivered, so this run does not pass the capacity gate.
+
+      - alert: BeanFlowPerfMediaUnavailable
+        expr: beanflow_media_availability{job="beanflow"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          environment: perf
+        annotations:
+          summary: BeanFlow image storage is unavailable
+          description: API readiness excludes optional media; check AIStor endpoint and external provider errors.
+
+      - alert: BeanFlowPerfContainerCollectionFailed
+        expr: |
+          beanflow_container_collection_success{job="beanflow-containers"} == 0
+          or time() - beanflow_container_last_success_timestamp_seconds{job="beanflow-containers"} > 45
+        for: 1m
+        labels:
+          severity: warning
+          environment: perf
+        annotations:
+          summary: BeanFlow container stats collection is unavailable or stale
+          description: Check the host service. Old container samples must not be treated as current values.

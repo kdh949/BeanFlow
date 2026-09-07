@@ -27,7 +27,7 @@ test('payment load distinguishes deterministic Toss outcomes and queries unknown
 });
 
 test('load gates include latency, HTTP errors, dropped arrivals and exact idempotency replay', () => {
-  assert.match(suite, /http_req_duration: \['p\(95\)<1000'\]/);
+  assert.match(suite, /BEANFLOW_P95_MS \|\| '1000'/);
   assert.match(suite, /http_req_failed: \['rate<0\.01'\]/);
   assert.match(suite, /dropped_iterations: \['count==0'\]/);
   assert.match(suite, /'idempotency'/);

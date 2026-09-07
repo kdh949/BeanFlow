@@ -78,17 +78,18 @@ start_application() {
     kill -0 "$entrypoint_pid" 2>/dev/null || break
     # The HTTP listener alone can be up before ApplicationRunner prechecks finish.
     if grep -q 'ReadinessState.*ACCEPTING_TRAFFIC' /tmp/full-application.log && \
-      curl --noproxy '*' --fail --silent --max-time 2 http://127.0.0.1:8080/actuator/health \
+      curl --noproxy '*' --fail --silent --max-time 2 "http://127.0.0.1:${BEANFLOW_MANAGEMENT_PORT:-8080}/actuator/health" \
         > /tmp/application-health.json; then
       grep -q '"status":"UP"' /tmp/application-health.json
       return
     fi
     sleep 1
   done
-  echo 'Full packaged application failed startup' >&2
+  echo "Full packaged application failed startup (profile=$SPRING_PROFILES_ACTIVE)" >&2
   # All values belong to this isolated fixture; keep diagnostics focused on startup failures.
-  grep -E 'ERROR|Exception|Caused by:|Reason:|^Required |Vault Proxy did not|Description:|^[[:space:]]+at .*beanflow' \
+  grep -E 'ERROR|Exception|Caused by:|Reason:|^Required |Vault Proxy did not|Description:|Killed|ReadinessState|Started Beanflow|^[[:space:]]+at .*beanflow' \
     /tmp/full-application.log >&2 || true
+  [[ ! -r /sys/fs/cgroup/memory.events ]] || cat /sys/fs/cgroup/memory.events >&2
   return 1
 }
 
@@ -113,3 +114,37 @@ entrypoint_pid=''
 start_application
 echo 'Full portfolio application, PostgreSQL/PostGIS migrations, health, OIDC config, unauthenticated 401 and restart passed.'
 echo 'External Keycloak login, AIStor access and Toss payment are not exercised by this isolated startup test.'
+
+kill -TERM "$entrypoint_pid"
+wait "$entrypoint_pid" || true
+entrypoint_pid=''
+! pgrep -u beanflow java >/dev/null
+! pgrep -u vault-proxy vault >/dev/null
+source /entrypoint-test/perf-runtime.env
+# Keep the real agent/profiler active; central ingestion is outside this isolated startup fixture.
+export OTEL_TRACES_EXPORTER=none OTEL_LOGS_EXPORTER=none
+export PYROSCOPE_UPLOAD_INTERVAL=3600s
+start_application
+if grep -Eq 'OpenTelemetry Javaagent failed to start|UnsatisfiedLinkError|ExceptionInInitializerError' /tmp/full-application.log; then
+  echo 'Perf application started with a failed telemetry agent' >&2
+  exit 1
+fi
+grep -q 'opentelemetry-javaagent - version' /tmp/full-application.log || {
+  echo 'Perf JVM did not start the packaged OpenTelemetry agent' >&2
+  exit 1
+}
+perf_java_pid="$(pgrep -u beanflow -x java)"
+setpriv --reuid=beanflow --regid=beanflow --init-groups \
+  grep -q '/run/beanflow-jvm-tmp/.*-pyroscope.*/libasyncProfiler-' "/proc/$perf_java_pid/maps" || {
+    echo 'Perf JVM did not load the native profiler from its private executable tmpfs' >&2
+    exit 1
+  }
+curl --noproxy '*' --fail --silent --max-time 5 \
+  "http://127.0.0.1:$BEANFLOW_MANAGEMENT_PORT/actuator/prometheus" > /tmp/perf-metrics.txt
+grep -q '^jvm_memory_used_bytes{' /tmp/perf-metrics.txt && \
+  grep -q '^beanflow_pagination_cursor_startup_validation_count_total{outcome="valid"' /tmp/perf-metrics.txt || {
+    echo 'Perf Prometheus endpoint is missing JVM or successful cursor-key validation metrics' >&2
+    exit 1
+  }
+echo 'Full perf application, config-tree cursor HMAC, native profiler initialization and Prometheus endpoint passed.'
+echo 'Central trace/log/profile ingestion and load capacity are not exercised by this isolated startup test.'

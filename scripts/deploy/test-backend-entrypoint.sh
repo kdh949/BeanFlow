@@ -63,6 +63,44 @@ chmod 0755 "$fixture_dir/bin/java"
 
 config_import="$(sed -n 's/^ *SPRING_CONFIG_IMPORT: //p' "$root/compose.portfolio.yml")"
 
+# Use the actual merged perf mounts and agent options, not a second handwritten runtime contract.
+(
+  set -a
+  source "$root/deploy/env/staging.env.example"
+  source "$root/deploy/env/external-keycloak.env.example"
+  export BEANFLOW_SECRETS_DIR="$fixture_dir"
+  export BEANFLOW_MONITORING_BIND_ADDRESS=127.0.0.1
+  export BEANFLOW_TEMPO_OTLP_HTTP_ENDPOINT=http://tempo.invalid:4318
+  export BEANFLOW_LOKI_OTLP_HTTP_ENDPOINT=http://loki.invalid:3100/otlp
+  export BEANFLOW_PYROSCOPE_SERVER_ADDRESS=http://127.0.0.1:1
+  export BEANFLOW_OTEL_ENABLED=true BEANFLOW_PYROSCOPE_ENABLED=true
+  docker compose --env-file /dev/null \
+    -f "$root/compose.portfolio.yml" -f "$root/compose.staging.yml" \
+    -f "$root/compose.external-keycloak.yml" -f "$root/compose.perf.yml" \
+    config --format json > "$fixture_dir/perf-compose.json"
+)
+python3 - "$fixture_dir" <<'PY'
+import json
+import shlex
+import sys
+from pathlib import Path
+
+fixture = Path(sys.argv[1])
+api = json.loads((fixture / "perf-compose.json").read_text())["services"]["api"]
+environment = api["environment"]
+names = ("SPRING_PROFILES_ACTIVE", "JAVA_TOOL_OPTIONS", "TOSS_PERF_", "OTEL_", "PYROSCOPE_",
+         "BEANFLOW_MANAGEMENT_", "BEANFLOW_TOSS_PERF_BASE_URL")
+(fixture / "perf-runtime.env").write_text("".join(
+    f"export {name}={shlex.quote(value)}\n"
+    for name, value in environment.items() if name.startswith(names)
+))
+(fixture / "perf-tmpfs").write_text("\n".join(api["tmpfs"]) + "\n")
+PY
+perf_tmpfs_args=()
+while IFS= read -r mount; do
+  perf_tmpfs_args+=(--tmpfs "$mount")
+done < "$fixture_dir/perf-tmpfs"
+
 # A fresh database exercises all packaged Flyway migrations and real Spring startup.
 # The isolated internal network publishes no host ports and cannot reach real providers.
 fixture_id="beanflow-runtime-$(python3 -c 'import uuid; print(uuid.uuid4().hex[:12])')"
@@ -87,10 +125,8 @@ test_container="$fixture_id-api"
 docker run --rm --name "$test_container" --interactive --network "$test_network" --read-only --user root \
   --memory 2g \
   --security-opt no-new-privileges:true \
-  --tmpfs /tmp:rw,noexec,nosuid,size=128m \
-  --tmpfs /run/beanflow-vault:rw,noexec,nosuid,size=1m,mode=0700 \
+  "${perf_tmpfs_args[@]}" \
   --tmpfs /run/beanflow-vault-bootstrap:rw,noexec,nosuid,size=1m,mode=0700 \
-  --tmpfs /run/beanflow-secrets:rw,noexec,nosuid,size=1m,mode=0700 \
   --tmpfs /run/secrets:rw,noexec,nosuid,size=1m,mode=0755 \
   --env "SPRING_CONFIG_IMPORT=$config_import" \
   --env "BEANFLOW_RUNTIME_TEST_DB_PASSWORD=$database_password" \

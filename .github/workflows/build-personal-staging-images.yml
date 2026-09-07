@@ -26,12 +26,26 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Install pinned k6 for load contract verification
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/grafana/k6/releases/download/v2.2.0/k6-v2.2.0-linux-amd64.tar.gz \
+            -o "$RUNNER_TEMP/k6.tar.gz"
+          echo "b5a8003c86f35f5cd5ceef1490312c48e587696c94d998cefc6d7b3b4cb1597d  $RUNNER_TEMP/k6.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/k6.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/k6-v2.2.0-linux-amd64" >> "$GITHUB_PATH"
+
       - name: Validate deployment contracts
         run: |
           bash scripts/deploy/test-deployment-contract.sh
           python3 -m unittest discover -s scripts/deploy -p 'test_*.py'
           bash -n scripts/deploy/deploy-staging-doppler.sh
           bash scripts/deploy/test-external-keycloak-nginx.sh
+          bash scripts/perf/test-postgres-exporter-runtime.sh
+          python3 scripts/perf/test-container-stats-exporter.py
+          python3 scripts/perf/test-dashboard-queries.py
+          python3 scripts/load/run-contract.test.py
+          node --test scripts/load/load-contract.test.mjs scripts/load/k6-runtime.test.mjs infra/perf/toss-driver.test.mjs
 
   build:
     name: Build ${{ matrix.service }}
@@ -86,7 +100,7 @@ jobs:
           cache-from: type=gha,scope=personal-staging-${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=personal-staging-${{ matrix.service }}
 
-      - name: Verify packaged API startup and dependency failures
+      - name: Verify packaged portfolio and perf startup and dependency failures
         if: matrix.service == 'api'
         timeout-minutes: 15
         run: bash scripts/deploy/test-backend-entrypoint.sh "$REGISTRY/$IMAGE_NAMESPACE/${{ matrix.image }}:${{ github.sha }}"

@@ -15,6 +15,9 @@ services:
       - ./deploy/postgres/init-perf-observability.sql:/docker-entrypoint-initdb.d/20-perf-observability.sql:ro
 
   api:
+    # Pyroscope extracts a native library into java.io.tmpdir; the inherited /tmp stays noexec.
+    tmpfs:
+      - /run/beanflow-jvm-tmp:rw,exec,nosuid,nodev,size=128m,uid=10001,gid=10001,mode=0700
     environment:
       SPRING_PROFILES_ACTIVE: perf
       BEANFLOW_DB_URL: jdbc:postgresql://postgres:5432/beanflow_perf
@@ -30,6 +33,7 @@ services:
       JAVA_TOOL_OPTIONS: >-
         -XX:MaxRAMPercentage=70
         -XX:InitialRAMPercentage=25
+        -Djava.io.tmpdir=/run/beanflow-jvm-tmp
         -javaagent:/opt/beanflow/opentelemetry-javaagent.jar
       OTEL_JAVAAGENT_EXTENSIONS: /opt/beanflow/pyroscope-otel-javaagent-extension.jar
       OTEL_JAVAAGENT_ENABLED: ${BEANFLOW_OTEL_ENABLED:-true}
@@ -128,6 +132,9 @@ services:
 
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+    # Stage the root-owned deployment secret, then drop to the image's nobody UID.
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/opt/beanflow/postgres-exporter-entrypoint.sh"]
     command:
       - --collector.stat_statements
       - --extend.query-path=/etc/postgres-exporter/queries.yaml
@@ -135,15 +142,18 @@ services:
       - --web.listen-address=:9187
     restart: unless-stopped
     read_only: true
+    tmpfs:
+      - /run/beanflow-postgres-exporter:rw,noexec,nosuid,nodev,size=1m,uid=65534,gid=65534,mode=0700
     environment:
       DATA_SOURCE_URI: postgres:5432/beanflow_perf?sslmode=disable
       DATA_SOURCE_USER: beanflow
-      DATA_SOURCE_PASS_FILE: /run/secrets/BEANFLOW_POSTGRES_PASSWORD
+      DATA_SOURCE_PASS_FILE: /run/beanflow-postgres-exporter/password
       PG_EXPORTER_COLLECTION_TIMEOUT: 10s
     secrets:
       - source: postgres_password
         target: BEANFLOW_POSTGRES_PASSWORD
     volumes:
+      - ./scripts/perf/postgres-exporter-entrypoint.sh:/opt/beanflow/postgres-exporter-entrypoint.sh:ro
       - ./infra/observability/postgres-queries.yaml:/etc/postgres-exporter/queries.yaml:ro
     ports:
       - name: postgres-metrics-from-vpn
@@ -160,6 +170,7 @@ services:
       - no-new-privileges:true
     networks:
       backend: {}
+      egress: {}
 
   node-exporter:
     image: quay.io/prometheus/node-exporter:v1.12.1
@@ -190,9 +201,10 @@ services:
       - no-new-privileges:true
     networks:
       observability: {}
+      egress: {}
 
   # Explicit opt-in only: this service has privileged, host-wide read access.
-  # Run it exclusively on the dedicated disposable perf host documented in ADR-120.
+  # Run it exclusively on the dedicated disposable perf host documented in ADR-121.
   cadvisor:
     profiles: ["container-metrics"]
     image: ghcr.io/google/cadvisor:v0.60.5

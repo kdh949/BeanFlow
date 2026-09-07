@@ -1,0 +1,9 @@
+# Merge only when the host service scripts/perf/container-stats-exporter.py is enabled.
+scrape_configs:
+  - job_name: beanflow-containers
+    scrape_interval: 15s
+    scrape_timeout: 8s
+    static_configs:
+      - targets: ["BEANFLOW_PERF_VPN_HOST:19101"]
+        labels:
+          environment: perf

@@ -57,6 +57,20 @@ BeanFlow에는 HTTP Actuator health와 다수의 Micrometer domain metric이 있
 - AIStor와 Vault는 전용 bucket, Transit mount/key와 최소 권한 credential을 사용해 실제 요청한다.
 - OpenTelemetry와 Pyroscope agent는 container image에 버전 고정하며 runtime flag로 명시적으로
   활성화한다. 비활성 상태를 telemetry 성공으로 위장하지 않는다.
+- **Startup verification amendment (2026-09-07):** `perf`도 config tree의 필수 Cursor HMAC secret과
+  active key ID를 자체 profile에서 연결한다. `portfolio` profile을 함께 켜거나 fixture key로 대체하지
+  않는다. Pyroscope native library를 로드하기 위해 perf에 한해 JVM temporary directory를
+  `/run/beanflow-jvm-tmp`로 지정한다. 이 tmpfs는 UID/GID 10001 전용 `0700`, 최대 128MiB,
+  `exec,nosuid,nodev`이며 기존 `/tmp`와 secret tmpfs의 `noexec`는 유지한다. 이미지 배포 전 검증은
+  실제 병합한 perf Compose의 JVM 옵션·tmpfs로 packaged application을 시작하고 health, Prometheus와
+  agent 초기화 오류를 확인한다. 이 검증은 중앙 profile/trace/log ingest의 증거를 대신하지 않는다.
+- **Exporter runtime amendment (2026-09-07):** PostgreSQL exporter는 root 소유 `0600` 배포 secret을
+  startup에만 root로 읽고, 전용 `noexec,nosuid,nodev` tmpfs에 UID/GID 65534 전용 `0400` 사본을
+  만든 뒤 `nobody`로 권한을 내려 실행한다. 원본 secret의 소유권·권한과 DB credential은 변경하지
+  않으며, secret 누락·빈 값은 시작 실패다. node/PostgreSQL exporter는 사설 IP에 publish한 port가
+  동작하도록 기존 `egress` bridge에도 연결한다. `backend`와 `observability`의 `internal` 설정과
+  Toss driver의 내부 전용 연결은 유지한다. exporter에도 outbound 경로가 생기는 비용을 수용하며,
+  monitoring host에서만 접근하도록 기존 host/network firewall 경계를 유지한다.
 
 ### 5. cAdvisor는 전용 perf host에서만 명시적으로 활성화한다
 
@@ -69,6 +83,28 @@ BeanFlow에는 HTTP Actuator health와 다수의 Micrometer domain metric이 있
   활성화한 실행에서만 병합한다.
 - container name/image 같은 bounded infrastructure label만 dashboard에서 사용하고 container ID나 host
   path를 애플리케이션 log/metric label에 복제하지 않는다.
+
+### 6. 실행 판정과 공유 host 진단 (2026-09-07)
+
+- k6는 시작·완료 workflow 수, 시나리오 기대 결과 일치율, 실제 주문 생성·결제 승인 수를 분리한다.
+  `toss-decline`의 422만 해당 요청의 정상 응답으로 지정한다. UNKNOWN/RECONCILING은 승인 TPS에
+  포함하지 않는다. 중간 요청 실패와 JSON 오류도 workflow 실패를 한 번 기록한다.
+- 목표 arrival rate는 workflow/second이며 HTTP RPS와 다르다. p95/p99, VU, dropped iteration과
+  전체 workflow 소요 시간을 별도 단위로 표시한다. 기본 threshold는 기존 임시 guardrail이고 SLO가 아니다.
+- 실행 ID는 k6에만 붙이고 서버 metric에는 추가하지 않는다. 실행 manifest에 시작·종료, 코드/fixture
+  digest, 시나리오·목표·threshold·발생기 정보를 보존하고 같은 시간의 서버 지표와 비교한다.
+  baseline 비교는 manifest 조건이 같은 실행에 한하며 실행별 percentile을 평균내지 않는다.
+- DB wait의 빈 결과를 0으로 표현할 때는 exporter `up`, `pg_up`, scrape error를 함께 검증한다.
+  수집 실패는 0으로 대체하지 않는다. 프로파일 타입은 실제 ProfileTypes 응답의
+  `wall:wall:nanoseconds:wall:nanoseconds`이며 non-zero stack sample까지 검증한다.
+- 다른 workload가 있는 host에서는 cAdvisor를 켜지 않는다. 이미 Docker 관리 권한이 있는 배포 계정의
+  systemd service가 지정 Compose project의 Docker stats/inspect만 읽어 CPU·memory·limit·restart를
+  사설 port로 노출할 수 있다. 새 privileged container나 host filesystem mount를 추가하지 않는다.
+  이 계정의 Docker daemon 권한 자체는 높은 권한이며 입력을 project/service allowlist로 제한한다.
+  수집 실패 시 건강 상태와 수집 시각만 내보내고 이전 수치를 재사용하지 않는다.
+- 동일 perf host의 실제 AIStor가 HTTP listener이면 명시적으로 그 HTTP endpoint를 설정한다.
+  이는 TLS 실패에 대한 자동 downgrade가 아니다. 사설 host 통신에 한정하며 public presigned endpoint는
+  별도로 HTTPS를 유지한다. 서버를 분리하거나 신뢰 경계가 바뀌면 내부 TLS를 재검토한다.
 
 ## Alternatives Considered
 

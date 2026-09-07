@@ -45,6 +45,25 @@ export BEANFLOW_PYROSCOPE_SERVER_ADDRESS=http://pyroscope.invalid:4040
 cd "$REPOSITORY_ROOT"
 
 docker compose -f compose.portfolio.yml -f compose.perf.yml config --quiet
+docker compose -f compose.portfolio.yml -f compose.perf.yml config --format json | python3 -c '
+import json, sys
+config = json.load(sys.stdin)
+api = config["services"]["api"]
+assert "-Djava.io.tmpdir=/run/beanflow-jvm-tmp" in api["environment"]["JAVA_TOOL_OPTIONS"]
+assert "/run/beanflow-jvm-tmp:rw,exec,nosuid,nodev,size=128m,uid=10001,gid=10001,mode=0700" in api["tmpfs"]
+for path in ("/tmp", "/run/beanflow-vault", "/run/beanflow-secrets"):
+    assert any(mount.startswith(path + ":") and "noexec" in mount.split(":", 1)[1].split(",") for mount in api["tmpfs"])
+assert api["environment"]["SPRING_PROFILES_ACTIVE"] == "perf"
+exporter = config["services"]["postgres-exporter"]
+assert exporter["user"] == "0:0"
+assert exporter["entrypoint"] == ["/bin/sh", "/opt/beanflow/postgres-exporter-entrypoint.sh"]
+assert exporter["environment"]["DATA_SOURCE_PASS_FILE"] == "/run/beanflow-postgres-exporter/password"
+assert "/run/beanflow-postgres-exporter:rw,noexec,nosuid,nodev,size=1m,uid=65534,gid=65534,mode=0700" in exporter["tmpfs"]
+for service in ("postgres-exporter", "node-exporter"):
+    assert "egress" in config["services"][service]["networks"]
+assert set(config["services"]["toss-driver"]["networks"]) == {"observability"}
+assert config["networks"]["observability"]["internal"] is True
+'
 if docker compose -f compose.portfolio.yml -f compose.perf.yml config --services | rg -qx 'cadvisor'; then
   echo 'cAdvisor must remain disabled in the default perf profile.' >&2
   exit 1
@@ -63,13 +82,13 @@ docker run --rm --entrypoint /bin/promtool \
 
 jq -e '
   .uid == "beanflow-performance-rca" and
-  any(.panels[]; .title == "Route p95 (exemplar → Tempo)") and
+  any(.panels[]; .title == "Route p95 / p99 (exemplar → Tempo)") and
   any(.panels[]; .title | contains("Hikari")) and
   any(.panels[]; .title | contains("PostgreSQL waiting")) and
   any(.panels[]; .title == "Container CPU cores") and
   any(.panels[]; .title == "Container memory working set") and
-  any(.panels[].targets[]?; .expr == "k6_http_req_duration_p95{testid=\"$test_id\"}") and
-  any(.panels[].targets[]?; .expr == "k6_http_req_failed_rate{testid=\"$test_id\"}") and
+  any(.panels[].targets[]?; (.expr // "") | startswith("k6_http_req_duration_p95{")) and
+  any(.panels[].targets[]?; (.expr // "") | startswith("k6_beanflow_workflow_failures_rate{")) and
   any(.panels[]; .title == "Slow traces") and
   any(.panels[]; .type == "logs") and
   any(.panels[]; .type == "flamegraph")
@@ -79,6 +98,7 @@ ruby -e 'require "yaml"; ARGV.each { |path| YAML.safe_load(File.read(path), alia
   infra/observability/postgres-queries.yaml \
   infra/observability/central/prometheus-scrape.yml \
   infra/observability/central/prometheus-cadvisor-scrape.yml \
+  infra/observability/central/prometheus-container-stats-scrape.yml \
   infra/observability/central/beanflow-performance.rules.yml \
   infra/observability/central/tempo-metrics-generator.yml \
   infra/observability/central/loki-otlp.yml \
@@ -90,7 +110,7 @@ rg -q 'filterByTraceID: true' infra/observability/central/grafana/provisioning/d
 rg -q 'matcherType: label' infra/observability/central/grafana/provisioning/datasources/beanflow.yml
 rg -q 'peer_attributes: \[beanflow.provider, peer.service, db.name, db.system\]' \
   infra/observability/central/tempo-metrics-generator.yml
-rg -q 'profileTypeId: process_cpu:wall:nanoseconds:wall:nanoseconds' \
+rg -q 'profileTypeId: wall:wall:nanoseconds:wall:nanoseconds' \
   infra/observability/central/grafana/provisioning/datasources/beanflow.yml
 rg -q 'DATA_SOURCE_PASS_FILE' compose.perf.yml
 rg -q '^  node-exporter:' compose.perf.yml
@@ -122,7 +142,12 @@ ruby -ryaml -e '
   abort "cAdvisor kmsg access must remain read-only" unless cadvisor.fetch("devices") == ["/dev/kmsg:/dev/kmsg:r"]
 '
 
-node --test scripts/load/load-contract.test.mjs infra/perf/toss-driver.test.mjs
+node --test scripts/load/load-contract.test.mjs scripts/load/k6-runtime.test.mjs infra/perf/toss-driver.test.mjs
+python3 scripts/perf/test-container-stats-exporter.py
+python3 scripts/perf/test-dashboard-queries.py
+python3 scripts/load/run-contract.test.py
 bash -n scripts/perf/hold-pickup-slot-lock.sh scripts/perf/postgres-wait-snapshot.sh
+sh -n scripts/perf/postgres-exporter-entrypoint.sh
+bash scripts/perf/test-postgres-exporter-runtime.sh
 
 echo 'BeanFlow observability contract: PASS'
