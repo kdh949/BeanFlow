@@ -4,7 +4,7 @@
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
-> **Depends-On:** `—`
+> **Depends-On:** —
 > **Completed-At:** `2026-09-08`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
