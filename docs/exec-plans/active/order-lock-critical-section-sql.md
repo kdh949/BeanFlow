@@ -132,11 +132,16 @@ ADR-097 정상/초기 발급 분리, ADR-022 append 전용 저장 구현 명시,
 - [ ] 고립 기준선 및 regression 실패 증거.
 - [x] 기존 코드에서 정상 counter 이력 접근 및 audit SQL 수 regression 2건 실패 확인.
 - [x] 수정 후 14개 class/110개 test 통과 (failure/error/skipped 0), API bootJar 성공.
-- [x] driver 9개 test, observability contract, 문서 검증 통과.
+- [x] driver 10개 test, bootstrap/audit 관련 추가 23개 test, observability contract, 문서 검증 통과.
 - [ ] CI 검증.
 - [ ] 배포 및 Grafana 전후 검증.
 
 ## Surprises & Discoveries
+
+첫 image workflow `34150060626`는 패키지 GLOBAL bootstrap의 DEPENDENCY_UNAVAILABLE로 실패했다.
+새 `AuditRecordAppendRepository`가 웹 component scan에서는 등록되지만 두 offline bootstrap의
+명시적 import에는 빠져 있었다. 두 bootstrap import와 실제 append 검증을 추가하고 exact SHA의
+전체 CI/이미지 workflow를 다시 실행한다. 첫 실패 이미지는 배포/사용하지 않는다.
 
 3분 점주 접수 timeout이 앞선 테스트와 다음 테스트의 부하를 결합한다. Hikari pending 82는
 80 VU 이외의 background consumer도 공유 pool을 사용한다는 증거와 함께 해석해야 한다.
@@ -153,10 +158,14 @@ Toss 공식 [멱등키 헤더](https://docs.tosspayments.com/reference/using-api
 지원한다. driver는 HTTP에서 허용되는 비어 있지 않은 printable ASCII key를 300자까지 받고,
 같은 payment/key/payload의 취소는 최초 응답을 재생하며 다른 payload는 명시적 충돌로 종료한다.
 confirm 재시도 역시 저장된 취소 상태를 초기화하지 않는다. live driver 교체는 API와 별도 변경으로
-기록하며, 메모리 상태의 소실과 오래된 UNKNOWN을 전후 성능 비교의 제약으로 남긴다.
+기록한다. 교체 전 기존 합성 결제의 driver 응답을 백업하고 API를 정지한 구간에 동일 상태를 복원·조회
+검증한다. 오래된 UNKNOWN과 background는 전후 성능 비교의 제약으로 남긴다.
 
 ## Decision Log
 
+- 2026-09-08: 기존 driver 8,270건을 보존한 상태의 재측정이 10,000건 자동 eviction 한도를 넘는다.
+  ADR-121에 최대 50,000건과 신규 승인 503 거절을 먼저 기록한다. 기존 결제 조회·재시도·취소는
+  보존하며 작은 한도의 계약 테스트로 경계에서 사실이 삭제되지 않음을 검증한다.
 - 2026-09-08: 사용자 승인 범위에서 정합성 경계 대신 잠금 중 불필요한 SQL 두 경로를 줄인다.
   전체 latency의 유일한 원인이라고 주장하지 않고 직접 SQL 비용과 end-to-end를 각각 검증한다.
 

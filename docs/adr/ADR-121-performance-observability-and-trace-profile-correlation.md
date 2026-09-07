@@ -54,6 +54,10 @@ BeanFlow에는 HTTP Actuator health와 다수의 Micrometer domain metric이 있
   `local-demo`, `toss-sandbox`와 함께 활성화되면 시작을 거부한다.
 - Toss는 perf network 내부의 계약 드라이버를 사용한다. load path의 success, decline, timeout, unknown과
   driver contract의 malformed, 5xx를 결정적으로 재현한다.
+- **Driver retention amendment (2026-09-08):** 합성 결제 사실은 process 내 최대 50,000건을 보관한다.
+  한도 도달 시 새 확인 요청을 `503 DRIVER_CAPACITY_EXCEEDED`로 거절하며 기존 결제를 자동 삭제하지
+  않는다. 이미 기록한 결제의 재시도·조회·취소는 계속 허용한다. 한도를 넘는 시험은 명시적 데이터
+  수명주기 계획이 필요하며 process 재시작 전후 상태 보존 여부도 실행 증거에 기록한다.
 - AIStor와 Vault는 전용 bucket, Transit mount/key와 최소 권한 credential을 사용해 실제 요청한다.
 - OpenTelemetry와 Pyroscope agent는 container image에 버전 고정하며 runtime flag로 명시적으로
   활성화한다. 비활성 상태를 telemetry 성공으로 위장하지 않는다.

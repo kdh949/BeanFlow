@@ -2,9 +2,12 @@ import http from 'node:http';
 import { pathToFileURL } from 'node:url';
 
 const MAX_BODY_BYTES = 32 * 1024;
-const MAX_RETAINED_PAYMENTS = 10_000;
+const MAX_RETAINED_PAYMENTS = 50_000;
 
-export function createTossDriverServer({ timeoutDelayMs = 9000 } = {}) {
+export function createTossDriverServer({ timeoutDelayMs = 9000, maxRetainedPayments = MAX_RETAINED_PAYMENTS } = {}) {
+  if (!Number.isSafeInteger(maxRetainedPayments) || maxRetainedPayments < 1 || maxRetainedPayments > MAX_RETAINED_PAYMENTS) {
+    throw new RangeError('Invalid perf driver payment capacity');
+  }
   const paymentsByKey = new Map();
   const paymentKeyByOrder = new Map();
   const confirmationsByKey = new Map();
@@ -124,6 +127,11 @@ export function createTossDriverServer({ timeoutDelayMs = 9000 } = {}) {
       return;
     }
 
+    if (byKey.size >= maxRetainedPayments) {
+      json(response, 503, { code: 'DRIVER_CAPACITY_EXCEEDED' });
+      event('confirm', 'capacity_exceeded');
+      return;
+    }
     const payment = {
       paymentKey: payload.paymentKey,
       orderId: payload.orderId,
@@ -132,26 +140,14 @@ export function createTossDriverServer({ timeoutDelayMs = 9000 } = {}) {
       currency: 'KRW',
       cancels: [],
     };
-    retain(payment, byKey, byOrder);
+    byKey.set(payment.paymentKey, payment);
+    byOrder.set(payment.orderId, payment.paymentKey);
     confirmationsByKey.set(payment.paymentKey, structuredClone(payment));
     if (scenario === 'timeout') {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
     json(response, 200, payment);
     event('confirm', scenario === 'unknown' ? 'unknown' : 'success');
-  }
-
-  function retain(payment, byKey, byOrder) {
-    if (byKey.size >= MAX_RETAINED_PAYMENTS) {
-      const oldestKey = byKey.keys().next().value;
-      const oldest = byKey.get(oldestKey);
-      byKey.delete(oldestKey);
-      confirmationsByKey.delete(oldestKey);
-      cancellationsByKey.delete(oldestKey);
-      if (oldest) byOrder.delete(oldest.orderId);
-    }
-    byKey.set(payment.paymentKey, payment);
-    byOrder.set(payment.orderId, payment.paymentKey);
   }
 }
 
