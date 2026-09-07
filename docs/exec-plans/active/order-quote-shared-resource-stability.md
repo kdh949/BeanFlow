@@ -122,11 +122,16 @@ BR-49, ADR-123/ADR-116 status/ADR index, OpenAPI 설명, 기존 관측성 계획
 - [x] v2에서 19개 중 새 회귀 3개 실패 확인: 재고만 갱신, 슬롯만 갱신, 충분한 자원 동시 주문
 - [x] v3의 동일 회귀 19개 통과, formatter와 문서/OpenAPI 검증 통과
 - [ ] Ordering/Inventory/Fulfillment/architecture 및 배포 키 관련 전체 검증 완료
-- [ ] 커밋·push와 이미지 workflow 성공
+- [x] `643fe25` 관측성 보완, `1941c62` 견적 개선 커밋 및 feature 브랜치 push
+- [ ] 이미지 workflow 성공 (`34135909645` 첫 실행은 runner의 rg 미설치로 exporter 검증 실패)
 - [ ] API 배포·health/DB 확인
 - [ ] 재측정·Grafana 확인·분석 기록
 
 ## Surprises & Discoveries
+
+이미지 workflow의 새 exporter smoke는 GitHub runner에 없는 `rg`를 사용해 exit 127로 실패했다.
+동일한 파일 패턴 검증을 기본 `grep`으로 바꾸고 local Docker에서 실제 smoke를 다시 통과시켰다.
+애플리케이션 변경은 없으며 이미지 workflow를 새 commit에서 다시 실행한다.
 
 첫 수정 후 검증은 기존 Kotlin 증분 classpath cache 파일 누락과 cache 등록 충돌로 compileTestKotlin에서
 실패했다. Java 21 및 `-Pkotlin.incremental=false`의 전체 재컴파일 후 동일 19개 테스트가 통과했다.
