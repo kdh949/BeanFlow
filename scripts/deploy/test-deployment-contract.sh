@@ -24,10 +24,6 @@ secret_names=(
 
 for name in "${secret_names[@]}"; do
   value="contract-test-$name"
-  case "$name" in
-    TOSS_CLIENT_KEY) value="test_ck_contract" ;;
-    TOSS_SECRET_KEY) value="test_sk_contract" ;;
-  esac
   printf '%s\n' "$value" >"$secrets_dir/$name"
   chmod 0600 "$secrets_dir/$name"
 done
@@ -63,6 +59,44 @@ for environment in staging prod; do
 
   "$root/scripts/deploy/verify-deployment.sh" "$environment" --env-file "$env_file"
 done
+
+# External mode must work without either bundled Keycloak credential file.
+rm "$secrets_dir/BEANFLOW_KEYCLOAK_DB_PASSWORD" "$secrets_dir/BEANFLOW_KEYCLOAK_ADMIN_PASSWORD"
+for environment in staging prod; do
+  external_env_file="$runtime_dir/$environment-external.env"
+  cat "$runtime_dir/$environment.env" > "$external_env_file"
+  cat >> "$external_env_file" <<'ENV'
+BEANFLOW_KEYCLOAK_MODE=external
+BEANFLOW_OPERATIONS_OIDC_AUTHORIZATION_SERVER_URL=https://sso.example.test:5443
+BEANFLOW_OPERATIONS_OIDC_ISSUER_URI=https://sso.example.test:5443/realms/beanflow
+BEANFLOW_OPERATIONS_OIDC_REALM=beanflow
+BEANFLOW_OPERATIONS_OIDC_CLIENT_ID=beanflow
+BEANFLOW_JWK_SET_URI=https://sso.example.test:5443/realms/beanflow/protocol/openid-connect/certs
+ENV
+  "$root/scripts/deploy/verify-deployment.sh" "$environment" --env-file "$external_env_file"
+done
+
+expect_external_rejection() {
+  local key="$1" value="$2" expected_message="$3"
+  local invalid_env_file="$runtime_dir/invalid-external.env"
+  awk -v key="$key" 'index($0, key "=") != 1' "$runtime_dir/staging-external.env" > "$invalid_env_file"
+  printf '%s=%s\n' "$key" "$value" >> "$invalid_env_file"
+  if "$root/scripts/deploy/verify-deployment.sh" staging --env-file "$invalid_env_file" > "$runtime_dir/rejection.log" 2>&1; then
+    echo "external Keycloak contract unexpectedly accepted: $key" >&2
+    exit 1
+  fi
+  grep -q "$expected_message" "$runtime_dir/rejection.log" || {
+    echo "external Keycloak rejection did not match expected reason: $key" >&2
+    cat "$runtime_dir/rejection.log" >&2
+    exit 1
+  }
+}
+expect_external_rejection BEANFLOW_KEYCLOAK_MODE unknown 'must be bundled or external'
+expect_external_rejection BEANFLOW_OPERATIONS_OIDC_CLIENT_ID '' 'required for external Keycloak'
+expect_external_rejection BEANFLOW_OPERATIONS_OIDC_ISSUER_URI http://sso.example.test/realms/beanflow 'must be an absolute HTTPS URL'
+expect_external_rejection BEANFLOW_OPERATIONS_OIDC_REALM different 'issuer must match'
+expect_external_rejection BEANFLOW_JWK_SET_URI https://other.example.test/certs 'JWKS must belong'
+expect_external_rejection BEANFLOW_OPERATIONS_OIDC_AUTHORIZATION_SERVER_URL 'https://user:password@sso.example.test:5443' 'without credentials'
 
 validator="$root/scripts/deploy/validate-trusted-proxies.py"
 

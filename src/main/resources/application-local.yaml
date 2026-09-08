@@ -1,10 +1,16 @@
 beanflow:
-  authentication:
-    # Local/demo-only deterministic key. Production must supply its own deployment secret.
-    attempt-hmac-key-base64-url: bG9jYWwtZGVtby1hdHRlbXB0LWhtYWMta2V5LTMyLWJ5dGVzISE
   checkout:
     frontend-base-url: http://localhost:5173
   toss:
     client-key: test_ck_local_scripted
   notification:
     provider: scripted
+---
+spring:
+  config:
+    activate:
+      on-profile: "!vault-enforced"
+beanflow:
+  authentication:
+    # Standalone local/demo only. Deployed profile groups must use the required secret in application.yaml.
+    attempt-hmac-key-base64-url: bG9jYWwtZGVtby1hdHRlbXB0LWhtYWMta2V5LTMyLWJ5dGVzISE

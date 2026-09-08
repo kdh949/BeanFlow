@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.shared.internal
 
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyTelemetry
 import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
@@ -14,7 +15,8 @@ internal class VaultTransitPersonalDataConfiguration {
     fun vaultTransitPersonalDataAdapter(
         properties: VaultTransitPersonalDataProperties,
         objectMapper: ObjectMapper,
-    ): VaultTransitPersonalDataAdapter = VaultTransitPersonalDataAdapter(properties, objectMapper)
+        telemetry: ExternalDependencyTelemetry,
+    ): VaultTransitPersonalDataAdapter = VaultTransitPersonalDataAdapter(properties, objectMapper, telemetry)
 
     @Bean
     @Profile("vault-enforced")

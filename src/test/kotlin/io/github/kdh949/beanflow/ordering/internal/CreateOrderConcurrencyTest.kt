@@ -9,6 +9,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
@@ -70,6 +72,63 @@ internal class CreateOrderConcurrencyTest
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isEqualTo(1)
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isEqualTo(1)
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "inventory_stock_reservation")).isEqualTo(1)
+        }
+
+        @ParameterizedTest
+        @CsvSource("2, 2, 2, NONE", "2, 1, 1, STOCK_NOT_AVAILABLE", "1, 2, 1, PICKUP_SLOT_FULL")
+        fun `prequoted customers reserve available resources without overselling`(
+            slotCapacity: Long,
+            stockAvailable: Long,
+            expectedOrders: Long,
+            failureCode: String,
+        ) {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity, stockAvailable)
+            // Both quotes must precede either write, otherwise a fresh quote would hide false stale failures.
+            val commands =
+                listOf(fixture, fixture.copy(customerId = UUID.randomUUID())).map {
+                    orderQuoteUseCase.attachCurrentQuote(it.command())
+                }
+            val barrier = CyclicBarrier(2)
+            val executor = Executors.newFixedThreadPool(2)
+            val responses =
+                try {
+                    commands
+                        .mapIndexed { index, command ->
+                            executor.submit(
+                                Callable {
+                                    barrier.await(10, TimeUnit.SECONDS)
+                                    createOrderUseCase.create("prequoted-customer-$index", command)
+                                },
+                            )
+                        }.map { it.get(20, TimeUnit.SECONDS) }
+                } finally {
+                    executor.shutdownNow()
+                }
+
+            assertThat(responses.count { it.status == 201 }.toLong()).isEqualTo(expectedOrders)
+            responses.forEachIndexed { index, response ->
+                if (response.status != 201) {
+                    assertThat(response.status).isEqualTo(409)
+                    assertThat(response.body).contains("\"code\":\"$failureCode\"")
+                    assertThat(response.body).doesNotContain("ORDER_QUOTE_STALE")
+                }
+                val replay = createOrderUseCase.create("prequoted-customer-$index", commands[index])
+                assertThat(replay.status).isEqualTo(response.status)
+                assertThat(replay.body).isEqualTo(response.body)
+                assertThat(replay.replay).isTrue()
+            }
+            listOf("ordering_order", "fulfillment_pickup_reservation", "inventory_stock_reservation").forEach {
+                assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, it)).isEqualTo(expectedOrders)
+            }
+            assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_idempotency_record")).isEqualTo(2)
+            assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "payment_payment")).isZero()
+            assertThat(jdbcTemplate.queryForObject("SELECT reserved_count FROM fulfillment_pickup_slot", Long::class.java))
+                .isEqualTo(expectedOrders)
+            assertThat(jdbcTemplate.queryForObject("SELECT available_quantity FROM inventory_sellable_stock", Long::class.java))
+                .isEqualTo(stockAvailable - expectedOrders)
+            assertThat(jdbcTemplate.queryForObject("SELECT reserved_quantity FROM inventory_sellable_stock", Long::class.java))
+                .isEqualTo(expectedOrders)
         }
 
         @Test
