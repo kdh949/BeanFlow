@@ -39,38 +39,57 @@ internal class PickupSequenceAllocator(
     ): Long =
         requireNotNull(
             allocationTimer.recordCallable {
-                requireNotNull(
-                    jdbcTemplate.queryForObject(
-                        """
-                        WITH sequence_baseline AS (
-                            SELECT GREATEST(
-                                       count(*),
-                                       COALESCE(max(bean_order.pickup_sequence), 0)
-                                   ) + 1 AS next_sequence
-                              FROM ordering_order bean_order
-                              JOIN fulfillment_pickup_slot slot
-                                ON slot.id = bean_order.pickup_slot_id
-                               AND slot.store_id = bean_order.store_id
-                             WHERE bean_order.store_id = ?
-                               AND (slot.starts_at AT TIME ZONE 'Asia/Seoul')::date = ?
-                        )
-                        INSERT INTO ordering_pickup_counter (store_id, business_date, last_sequence)
-                        SELECT ?, ?, next_sequence FROM sequence_baseline
-                        ON CONFLICT (store_id, business_date) DO UPDATE
-                        SET last_sequence = GREATEST(
-                            ordering_pickup_counter.last_sequence + 1,
-                            EXCLUDED.last_sequence
-                        )
-                        RETURNING last_sequence
-                        """.trimIndent(),
-                        Long::class.java,
-                        storeId,
-                        businessDate,
-                        storeId,
-                        businessDate,
-                    ),
-                )
+                val next =
+                    jdbcTemplate
+                        .query(
+                            """
+                            UPDATE ordering_pickup_counter
+                               SET last_sequence = last_sequence + 1
+                             WHERE store_id = ? AND business_date = ?
+                            RETURNING last_sequence
+                            """.trimIndent(),
+                            { resultSet, _ -> resultSet.getLong("last_sequence") },
+                            storeId,
+                            businessDate,
+                        ).singleOrNull()
+                next ?: initialize(storeId, businessDate)
             },
+        )
+
+    private fun initialize(
+        storeId: UUID,
+        businessDate: LocalDate,
+    ): Long =
+        requireNotNull(
+            jdbcTemplate.queryForObject(
+                """
+                WITH sequence_baseline AS (
+                    SELECT GREATEST(
+                               count(*),
+                               COALESCE(max(bean_order.pickup_sequence), 0)
+                           ) + 1 AS next_sequence
+                      FROM ordering_order bean_order
+                      JOIN fulfillment_pickup_slot slot
+                        ON slot.id = bean_order.pickup_slot_id
+                       AND slot.store_id = bean_order.store_id
+                     WHERE bean_order.store_id = ?
+                       AND (slot.starts_at AT TIME ZONE 'Asia/Seoul')::date = ?
+                )
+                INSERT INTO ordering_pickup_counter (store_id, business_date, last_sequence)
+                SELECT ?, ?, next_sequence FROM sequence_baseline
+                ON CONFLICT (store_id, business_date) DO UPDATE
+                SET last_sequence = GREATEST(
+                    ordering_pickup_counter.last_sequence + 1,
+                    EXCLUDED.last_sequence
+                )
+                RETURNING last_sequence
+                """.trimIndent(),
+                Long::class.java,
+                storeId,
+                businessDate,
+                storeId,
+                businessDate,
+            ),
         )
 }
 
