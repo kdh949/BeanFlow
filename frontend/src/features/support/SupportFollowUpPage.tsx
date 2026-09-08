@@ -80,15 +80,18 @@ export function SupportFollowUpPage({
   const [workspace, setWorkspace] = useState<Workspace>(initialWorkspace);
   const [commandStatus, setCommandStatus] = useState("");
   const [busyCommand, setBusyCommand] = useState("");
+  const [commandFailed, setCommandFailed] = useState(false);
   const caseReference = supportCase?.caseId ?? searchParams.get("caseId");
 
   async function runCommand(command: string, reference: string, success: string) {
     if (!onCommand) return;
     setBusyCommand(`${command}:${reference}`);
-    setCommandStatus("");
+    setCommandStatus(""); setCommandFailed(false);
     try {
       await onCommand(command, reference);
       setCommandStatus(success);
+    } catch {
+      setCommandFailed(true);
     } finally {
       setBusyCommand("");
     }
@@ -127,6 +130,7 @@ export function SupportFollowUpPage({
         <StatusText state={supportCase.state} />
       </section>
       <InlineNotice tone="info" title="현재 상담 건으로 처리합니다" description="실행할 때 최신 상태와 권한을 다시 확인합니다." />
+      {commandFailed ? <InlineNotice tone="danger" announce="assertive" title="요청 결과를 확인하지 못했습니다" description="현재 상담 상태를 확인한 뒤 다시 시도해 주세요." /> : null}
       {commandStatus ? <p className="operation-success" role="status">{commandStatus}</p> : null}
       <Tabs value={workspace} onValueChange={(value) => { setWorkspace(value as Workspace); setCommandStatus(""); }}>
         <TabList label="상담 후속 업무 선택">

@@ -1,6 +1,6 @@
 import { useId, useState, type ReactNode } from "react";
 import { Link, NavLink } from "react-router";
-import { BarChart3, CircleDotDashed, ClipboardCheck, Headset, LifeBuoy, LogOut, MapPin, Menu, PackageCheck, ReceiptText, Search, Settings2, Store, TicketPercent, UserRound, WalletCards } from "lucide-react";
+import { BarChart3, CircleDotDashed, Headset, LifeBuoy, LogOut, MapPin, Menu, PackageCheck, ReceiptText, Search, Settings2, Store, TicketPercent, UserRound, WalletCards } from "lucide-react";
 import { BrandLockup, Button, InlineNotice } from "../design-system";
 import "./beanflow-refresh/refresh.css";
 
@@ -38,7 +38,7 @@ export function ConsoleFrame({ kind, access, actorLabel, ownsAnyStore = false, m
     { to: "/store/region", label: "매장 설정", icon: MapPin, end: false },
   ];
   const opsItems = [
-    { to: "/ops", label: "운영 현황", icon: BarChart3, end: true },
+    { to: "/ops", label: "운영 홈", icon: BarChart3, end: true },
     { to: "/ops/orders", label: "주문 보상 조회", icon: Search, end: false },
     { to: "/ops/merchant-accounts", label: "점주 계정", icon: UserRound, end: false },
     { to: "/ops/recovery", label: "문제 확인 및 복구", icon: LifeBuoy, end: false },
@@ -48,8 +48,8 @@ export function ConsoleFrame({ kind, access, actorLabel, ownsAnyStore = false, m
   ];
   const supportItems = [
     { to: "/support", label: "고객지원", icon: Headset, end: true },
-    { to: "/support/follow-up", label: "상담 후속 업무", icon: ClipboardCheck, end: false },
   ];
+  const unavailablePaths = new Set(["/store/management", "/ops/recovery", "/ops/control"]);
   const items = kind === "store" ? storeItems : kind === "ops" ? opsItems : supportItems;
 
   async function logOut() {
@@ -65,7 +65,7 @@ export function ConsoleFrame({ kind, access, actorLabel, ownsAnyStore = false, m
     {workspace ? <aside className="bfr-store-sidebar">
       <div className="bfr-store-brand-row"><BrandLockup to={basePath} /><div className="bfr-console-menu-toggle"><Button variant="secondary" aria-expanded={menuOpen} aria-controls={navigationId} onClick={() => setMenuOpen(!menuOpen)}><Menu size={18} aria-hidden="true" />업무 메뉴</Button></div></div>
       <div className="bfr-console-navigation" id={navigationId} data-open={menuOpen}>
-        <nav aria-label={`${context} 메뉴`}>{items.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} onClick={() => setMenuOpen(false)}><Icon size={18} aria-hidden="true" /><span>{label}</span></NavLink>)}</nav>
+        <nav aria-label={`${context} 메뉴`}>{items.map(({ to, label, icon: Icon, end }) => unavailablePaths.has(to) ? <span key={to} className="bfr-console-unavailable" role="link" aria-disabled="true"><Icon size={18} aria-hidden="true" /><span>{label}<small>준비 중</small></span></span> : <NavLink key={to} to={to} end={end} onClick={() => setMenuOpen(false)}><Icon size={18} aria-hidden="true" /><span>{label}</span></NavLink>)}</nav>
         {membershipState === "checking" ? <p className="bfr-membership-state" role="status">매장 권한 확인 중</p> : null}
         {membershipState === "failed" ? <InlineNotice tone="warning" announce="polite" title="매장 권한을 확인하지 못했습니다" description="정산·이의제기 메뉴를 확인하려면 다시 시도해 주세요." action={<Button variant="secondary" size="sm" onClick={onRetryMembership}>매장 권한 다시 확인</Button>} /> : null}
         <div className="bfr-store-sidebar-foot"><Link to="/app"><Store size={17} aria-hidden="true" />고객 앱</Link></div>

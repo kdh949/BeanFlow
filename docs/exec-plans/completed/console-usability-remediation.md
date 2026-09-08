@@ -1,11 +1,11 @@
 # 콘솔 인증·가독성·업무 의미와 조회 흐름 수정
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-09-09`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -115,8 +115,8 @@ fixture를 구별하여 보고한다.
 - [x] 인증·레이아웃 slice 구현과 로컬 검증. 첫 PR 작성.
 - [x] 업무 의미·환불 slice 구현/검증/PR.
 - [x] 주문 상세 조회 품목·옵션 계약 구현 및 검증.
-- [ ] 조회·제공 범위 slice 구현/검증/PR.
-- [ ] 전체 회귀, 시각 검증, stack ancestry와 원격 CI 확인.
+- [x] 조회·제공 범위 slice 구현/검증/PR.
+- [x] 전체 로컬 회귀, 시각 검증, stack ancestry와 원격 CI 상태 조회.
 
 ## Surprises & Discoveries
 
@@ -154,3 +154,12 @@ MCP 전체 267개 중 266개 통과 후 실패 fixture 1개를 수정하고 해�
 
 - 세 번째 slice: PostgreSQL 보드 통합 9개, 정책·ETag 5개, Runtime OpenAPI parity 1개 통과.
   frontend typecheck 및 문서/OpenAPI semantic 검사 통과. 상세만 옵션을 읽고 polling은 기존 응답을 보존한다.
+
+- 네 번째 slice: 후속 상담의 Case·timeline 조회/더 보기/복귀, 전체 제조 품목 펼치기,
+  준비 중 탐색 비활성화·안내 문구, 지역 지정 중 입력 고정과 이전 응답 차단을 반영했다.
+  typecheck, 단위 186개, presentation 10개, product-copy 11개, 디자인 검사,
+  새 Storybook 세션의 MCP 285개(a11y 포함), Docs smoke 67 docs/47 states, 제품 build·Sites 4개 통과.
+  첫 실행의 프로세스 메모리 종료와 이전 실패 상태가 남은 MCP 응답은 통과 근거에서 제외했다.
+- 로컬 PostgreSQL·정적 검증과 사용자 화면 fixture 검증 완료. 원격 CI는 각 PR checks에 별도로 표시한다.
+  실제 운영 OIDC·PG·배포는 Not run이고 픽셀 비교 자동 시각 회귀는 Not configured다.
+- 항목별 결과와 남은 기능 범위는 [콘솔 감사 수정 결과](../../../frontend/docs/console-usability-audit-remediation.md)에 기록했다.

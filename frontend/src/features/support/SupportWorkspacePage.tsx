@@ -8,6 +8,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
+import { SupportTimelinePanel } from "./SupportTimelinePanel";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
@@ -50,6 +52,12 @@ const fieldBySubject: Record<SubjectLink["subjectType"], PersonalField | null> =
  * Raw search criteria, challenge proofs and reveals never enter URL or storage.
  */
 export function SupportWorkspacePage() {
+  const [params] = useSearchParams();
+  const initialCaseId = params.get("caseId")?.trim() ?? "";
+  return <SupportWorkspace key={initialCaseId} initialCaseId={initialCaseId} />;
+}
+
+function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
   const [criterionType, setCriterionType] = useState<"PHONE" | "EMAIL">("PHONE");
   const [criterion, setCriterion] = useState("");
   const [subjectType, setSubjectType] = useState<"CUSTOMER" | "STORE" | "RIDER">("CUSTOMER");
@@ -61,7 +69,12 @@ export function SupportWorkspacePage() {
   const caseIntent = useRef(new SubmissionIntent());
   const linkIntent = useRef(new SubmissionIntent());
 
-  const [caseLookupId, setCaseLookupId] = useState("");
+  const [caseLookupId, setCaseLookupId] = useState(initialCaseId);
+  const caseGeneration = useRef(0);
+  useEffect(() => {
+    if (initialCaseId) void openCase(initialCaseId);
+    return () => { caseGeneration.current += 1; };
+  }, [initialCaseId]);
   const [supportCase, setSupportCase] = useState<SupportCase | null>(null);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [caseLoading, setCaseLoading] = useState(false);
@@ -124,6 +137,8 @@ export function SupportWorkspacePage() {
 
   async function openCase(caseId: string) {
     const normalized = caseId.trim();
+    if (!normalized) return;
+    const generation = ++caseGeneration.current;
     setCaseLoading(true);
     setCaseError(null);
     setSupportCase(null);
@@ -139,13 +154,16 @@ export function SupportWorkspacePage() {
           params: { path: { caseId: normalized }, query: { limit: 50 } },
         }),
       ]);
-      setSupportCase(unwrap(caseResponse));
-      setTimeline(unwrap(timelineResponse));
+      const loadedCase = unwrap(caseResponse);
+      const loadedTimeline = unwrap(timelineResponse);
+      if (generation !== caseGeneration.current) return;
+      setSupportCase(loadedCase);
+      setTimeline(loadedTimeline);
       setCaseLookupId(normalized);
     } catch (error) {
-      setCaseError(error);
+      if (generation === caseGeneration.current) setCaseError(error);
     } finally {
-      setCaseLoading(false);
+      if (generation === caseGeneration.current) setCaseLoading(false);
     }
   }
 
@@ -452,7 +470,8 @@ export function SupportWorkspacePage() {
               {reveal ? <RevealPanel reveal={reveal} onClear={() => setReveal(null)} /> : null}
             </section>
 
-            <TimelinePanel timeline={timeline} />
+            <SupportTimelinePanel timeline={timeline} />
+            {timeline?.nextCursor ? <ButtonLink variant="secondary" to={`/support/follow-up?caseId=${encodeURIComponent(supportCase.caseId)}`}>이력 더 보기</ButtonLink> : null}
           </div>
 
           <SupportCompensationPanel caseId={supportCase.caseId} verificationSessionId={verification?.sessionId ?? ""} disabled={terminal} />
@@ -472,18 +491,6 @@ function RevealPanel({ reveal, onClear }: { reveal: Reveal; onClear: () => void 
   );
 }
 
-function TimelinePanel({ timeline }: { timeline: Timeline | null }) {
-  return (
-    <section className="surface-card support-timeline-panel">
-      <div className="operation-heading"><Sparkles aria-hidden="true" /><div><strong>관련 이력 타임라인</strong></div></div>
-      {!timeline || timeline.items.length === 0 ? <EmptyState title="표시할 이력이 없습니다" description="연결된 주문·결제·보상 이력이 생기면 여기에 표시됩니다." /> : (
-        <ol className="support-timeline">
-          {timeline.items.map((item) => <li key={item.itemId}><span aria-hidden="true" /><div><small>{item.source} · {item.type}</small><strong>{item.summary}</strong><p><StatusText state={item.state} /> {shortDateTime.format(new Date(item.occurredAt))}{item.amountKrw !== null ? ` · ${won.format(item.amountKrw)}` : ""}</p></div></li>)}
-        </ol>
-      )}
-    </section>
-  );
-}
 
 function SupportCompensationPanel({ caseId, verificationSessionId, disabled }: { caseId: string; verificationSessionId: string; disabled: boolean }) {
   const [incidentId, setIncidentId] = useState("");

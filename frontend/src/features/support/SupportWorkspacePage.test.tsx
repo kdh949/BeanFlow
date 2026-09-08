@@ -44,6 +44,17 @@ afterEach(() => {
 });
 
 describe("SupportWorkspacePage", () => {
+  it("does not show an empty active case when a linked timeline fails", async () => {
+    vi.spyOn(operationsApi, "GET").mockImplementation((async (path: string) => {
+      if (path.endsWith("/timeline")) throw new Error("timeline unavailable");
+      return response(supportCase);
+    }) as never);
+    render(<MemoryRouter initialEntries={[`/support?caseId=${caseId}`]}><SupportWorkspacePage /></MemoryRouter>);
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(screen.queryByText(`상담 ID ${caseId}`)).not.toBeInTheDocument();
+    expect(screen.queryByText("표시할 이력이 없습니다")).not.toBeInTheDocument();
+  });
+
   it("sends exact PII only in a POST body and connects the masked candidate to a Case", async () => {
     const post = vi.spyOn(operationsApi, "POST").mockImplementation((async (path: string) => {
       if (path === "/support/searches") return response({

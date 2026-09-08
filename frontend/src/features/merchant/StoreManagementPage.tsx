@@ -81,7 +81,7 @@ export function StoreManagementPage({
         </TabPanel>
         <TabPanel value="hours">
           <WorkspaceSection eyebrow="한국 시간" title="영업시간과 픽업">
-            {scenario === "contract-pending" ? <ContractPending title="영업시간과 픽업 관리를 준비하고 있습니다" description="현재 영업시간은 볼 수 있지만 픽업 시간과 주문 접수 설정은 아직 바꿀 수 없습니다." />
+            {scenario === "contract-pending" ? <ContractPending title="영업시간과 픽업 관리를 준비하고 있습니다" description="이 화면에서는 영업시간·픽업 시간·주문 접수 설정을 아직 조회하거나 바꿀 수 없습니다." />
               : !pickupPolicy ? <EmptyState title="등록된 운영 설정이 없습니다" description="영업시간과 주문 접수 설정을 등록해 주세요." />
                 : <div className="console-detail-grid management-detail-grid"><section className="surface-card management-card"><div className="panel-heading"><div><span className="context-label">주간 영업시간</span><h3>고객에게 표시되는 시간</h3></div><StatusText state={`v${pickupPolicy.version}`} label={`${pickupPolicy.version}번째 설정`} /></div><dl className="schedule-list">{schedule.map((item) => <div key={item.day}><dt>{item.day}</dt><dd>{item.hours}</dd></div>)}</dl></section><section className="surface-card management-card"><div className="panel-heading"><div><span className="context-label">현재 설정</span><h3>주문과 픽업</h3></div><StatusText state={pickupPolicy.acceptingOrders && pickupPolicy.pickupEnabled ? "AVAILABLE" : "PAUSED"} label={pickupPolicy.acceptingOrders && pickupPolicy.pickupEnabled ? "주문 가능" : "주문 중지"} /></div><dl className="detail-list"><div><dt>주문 접수</dt><dd>{pickupPolicy.acceptingOrders ? "받는 중" : "중지"}</dd></div><div><dt>픽업</dt><dd>{pickupPolicy.pickupEnabled ? "가능" : "중지"}</dd></div><div><dt>다음 픽업 시간</dt><dd>{pickupPolicy.nextWindow}</dd></div></dl></section></div>}
           </WorkspaceSection>
@@ -110,5 +110,5 @@ function WorkspaceSection({ eyebrow, title, children }: { eyebrow: string; title
 }
 
 function ContractPending({ title, description }: { title: string; description: string }) {
-  return <InlineNotice tone="danger" announce="assertive" title={title} description={description} />;
+  return <InlineNotice tone="info" title={title} description={description} />;
 }

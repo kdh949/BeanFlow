@@ -323,3 +323,13 @@ body:has(.bfr-customer-stage) { min-width: 0; }
 
 .bfr-refund-outcome--success { background: var(--success-bg); border-color: var(--border-success-soft); }
 .bfr-refund-outcome--danger { background: var(--danger-bg); }
+
+.bfr-console-unavailable { min-height: var(--tap-min); padding: var(--sp-4); display: flex; gap: var(--sp-4); align-items: center; color: var(--text-muted); font-size: var(--fs-body-sm); }
+.bfr-console-unavailable svg { flex: none; }
+.bfr-console-unavailable small { display: block; font-size: var(--fs-caption); }
+.bfr-preparation-lines { list-style: none; padding: 0; margin: var(--sp-4) 0; display: grid; gap: var(--sp-4); }
+.bfr-preparation-lines li { padding: var(--sp-4) 0; border-bottom: var(--bw-hair) solid var(--divider); }
+.bfr-preparation-lines li > div { display: flex; justify-content: space-between; gap: var(--sp-4); align-items: baseline; }
+.bfr-preparation-lines strong { font-size: var(--fs-body-sm); overflow-wrap: anywhere; }
+.bfr-preparation-lines span { white-space: nowrap; font-size: var(--fs-body-sm); }
+.bfr-preparation-lines p { margin: var(--sp-2) 0 0; color: var(--text-muted); font-size: var(--fs-caption); overflow-wrap: anywhere; }

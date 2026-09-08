@@ -239,7 +239,7 @@
 .support-timeline li > span { width: var(--sp-5); height: var(--sp-5); margin-top: var(--sp-1); border: var(--bw-focus) solid var(--surface-card); outline: var(--bw-hair) solid var(--border-accent); border-radius: 50%; background: var(--primary-bg); }
 .support-timeline li:not(:last-child)::after { content: ""; width: var(--bw-hair); position: absolute; top: var(--sp-4); bottom: calc(var(--sp-4) * -1); left: var(--sp-3); background: var(--border-hair); }
 .support-timeline li > div { display: flex; flex-direction: column; gap: var(--sp-1); }
-.support-timeline small { color: var(--text-faint); font-size: var(--fs-micro); }
+.support-timeline small { color: var(--text-muted); font-size: var(--fs-caption); }
 .support-timeline strong { color: var(--text-strong); font-size: var(--fs-body-sm); }
 .support-timeline p { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; color: var(--text-muted); font-size: var(--fs-caption); }
 .support-compensation-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-4); }
@@ -487,3 +487,5 @@
 }
 
 .support-case-reference { overflow-wrap: anywhere; font-size: var(--fs-body-sm); }
+
+.support-timeline-panel > h2 { margin: 0; font-size: var(--fs-body); }

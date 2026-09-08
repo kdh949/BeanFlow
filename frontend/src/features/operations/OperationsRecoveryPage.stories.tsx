@@ -46,8 +46,9 @@ const meta = {
   tags: ["autodocs"],
   args: { scenario: "ready", failureSummary, failureItems, settlements, auditRecords },
   parameters: {
+    a11y: { test: "error" },
     docs: { description: { component: "운영팀이 실패한 업무, 정산 차이와 감사 기록을 확인하고 필요한 복구를 요청하는 화면입니다." }, story: { inline: false, height: "860px" } },
-    routing: { path: "/ops/recovery", initialEntry: "/ops/recovery" },
+    routing: { path: "/ops/merchant-accounts", initialEntry: "/ops/merchant-accounts" },
   },
 } satisfies Meta<typeof OperationsRecoveryPage>;
 
@@ -92,6 +93,6 @@ export const AuditTrail: Story = {
 export const ContractPending: Story = {
   args: { scenario: "contract-pending", initialWorkspace: "failures", failureSummary: [], failureItems: [], settlements: [], auditRecords: [] },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByRole("alert")).toHaveTextContent("문제 확인 화면을 준비하고 있습니다");
+    await expect(await canvas.findByText("문제 확인 화면을 준비하고 있습니다")).toBeVisible(); await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
   },
 };

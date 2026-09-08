@@ -1,5 +1,5 @@
 import { AlertTriangle, ArrowLeft, CalendarDays, Clock3, PackageCheck, RefreshCw, RotateCcw, Store } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
@@ -48,15 +48,30 @@ function RefreshOverflow({ entry, state, now }: { entry: StoreOrderBoardOverflow
 
 function RefreshOrderCard({ item, storeId, now, busy, rejecting, rejectionReason, onBeginReject, onCancelReject, onReasonChange, onAction }: { item: StoreOrderBoardItem; storeId: string; now: Date; busy: boolean; rejecting: boolean; rejectionReason: string; onBeginReject: () => void; onCancelReject: () => void; onReasonChange: (value: string) => void; onAction: (action: StoreOrderAction, reason?: string) => void }) {
   const elapsed = storeOrderElapsedLabel(item, now);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsId = useId();
   return <article className={`bfr-order-card ${item.acceptancePhase === "WARNING" ? "is-warning" : ""}`} aria-label={`주문 ${item.pickupNumber}`}>
     <header><div><small>{item.orderReference}</small><strong>{item.pickupNumber}</strong></div><StatusText state={item.status} /></header>
     <p className="bfr-order-summary">{item.itemSummary}</p>
+    <Button variant="secondary" size="sm" aria-expanded={detailsOpen} aria-controls={detailsId} onClick={() => setDetailsOpen(!detailsOpen)}>{detailsOpen ? "품목·옵션 접기" : "품목·옵션 보기"}</Button>
+    <div id={detailsId}>{detailsOpen ? <PreparationLines storeId={storeId} orderReference={item.orderReference} /> : null}</div>
     <dl><div><dt><CalendarDays size={13} />픽업 영업일</dt><dd>{item.pickupBusinessDate}</dd></div><div><dt><Clock3 size={13} />픽업 시간</dt><dd>{shortDateTime.format(new Date(item.pickupWindowStart))}</dd></div>{elapsed ? <div><dt><Clock3 size={13} />현재 단계</dt><dd>{elapsed}</dd></div> : null}</dl>
     {item.acceptancePhase === "WARNING" ? <p className="bfr-card-warning"><AlertTriangle size={14} />접수 제한 시간이 얼마 남지 않았습니다.</p> : null}
     {item.acceptancePhase === "TIMEOUT_PENDING" ? <p className="bfr-card-warning"><AlertTriangle size={14} />자동 거절 처리를 확인 중입니다.</p> : null}
     <div className="bfr-card-actions">{item.allowedActions.map((action) => action === "REJECT" ? <Button key={action} size="sm" variant="danger" disabled={busy} onClick={onBeginReject}>{storeOrderActionLabels[action]}</Button> : <Button key={action} size="sm" variant="brand" loading={busy} onClick={() => onAction(action)}>{busy ? "처리 중" : storeOrderActionLabels[action]}</Button>)}<ButtonLink size="sm" variant="ghost" to={`/store/refunds/${storeId}/${item.orderReference}`}>부분 환불</ButtonLink></div>
     {rejecting ? <form className="bfr-reject" onSubmit={(event) => { event.preventDefault(); onAction("REJECT", rejectionReason.trim()); }}><TextAreaField label="거절 사유" value={rejectionReason} maxLength={500} required onValueChange={onReasonChange} /><div><Button size="sm" variant="ghost" onClick={onCancelReject}>취소</Button><Button size="sm" variant="secondary" type="submit" disabled={busy || !rejectionReason.trim()}>거절 확정</Button></div></form> : null}
   </article>;
+}
+
+function PreparationLines({ storeId, orderReference }: { storeId: string; orderReference: string }) {
+  const { state, reload } = useResource(useCallback(async () => {
+    const detail = unwrap(await merchantApi.GET("/stores/{storeId}/orders/{orderReference}", { params: { path: { storeId, orderReference } } }));
+    if (!detail.lines?.length) throw new ApiRequestError(0, "UNEXPECTED_RESPONSE", "주문 품목을 확인하지 못했습니다.");
+    return detail.lines;
+  }, [storeId, orderReference]));
+  if (state.status === "loading") return <RefreshLoading label="전체 품목을 불러오는 중" />;
+  if (state.status === "failed") return <RefreshError error={state.error} retry={reload} />;
+  return <ul className="bfr-preparation-lines" aria-label="주문 당시 전체 품목과 옵션">{state.value.map((line) => <li key={line.lineSequence}><div><strong>{line.menuName}</strong><span>{line.quantity}개</span></div><p>{line.optionNames.length ? line.optionNames.join(" · ") : "선택 옵션 없음"}</p></li>)}</ul>;
 }
 
 type Preview = components["schemas"]["MerchantRefundPreview"];

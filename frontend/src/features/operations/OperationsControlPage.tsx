@@ -85,7 +85,7 @@ function ControlSection({ title, eyebrow, children }: { title: string; eyebrow: 
 }
 
 function PendingControl() {
-  return <InlineNotice tone="danger" announce="assertive" title="이 화면을 준비하고 있습니다" description="지금은 이 업무를 조회하거나 실행할 수 없습니다." />;
+  return <InlineNotice tone="info" title="이 화면을 준비하고 있습니다" description="지금은 이 업무를 조회하거나 실행할 수 없습니다." />;
 }
 
 function RecordCards<T extends SimpleRecord>({ records, empty, onOpenRecord, render }: { records: readonly T[]; empty: string; onOpenRecord?: (reference: string) => void; render: (item: T) => React.ReactNode }) {

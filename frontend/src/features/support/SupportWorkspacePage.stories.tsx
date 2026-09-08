@@ -58,6 +58,7 @@ const meta = {
   component: SupportWorkspacePage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" }, layout: "fullscreen",
     docs: {
       description: {
         component:
@@ -200,5 +201,14 @@ export const SearchRateLimited: Story = {
     await userEvent.type(canvas.getByLabelText("전화번호 또는 이메일"), "010-0000-0000");
     await userEvent.click(canvas.getByRole("button", { name: "정확 검색" }));
     await expect(await canvas.findByText("검색 요청이 너무 많습니다")).toBeVisible();
+  },
+};
+
+export const OpenCaseFromLink: Story = {
+  parameters: { routing: { path: "/support", initialEntry: `/support?caseId=${caseId}`, surface: "support" }, msw: { handlers: caseHandlers } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText(`상담 ID ${caseId}`)).toBeVisible();
+    await expect(canvas.getByText("주문 픽업 완료")).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "상담 후속 업무" })).toHaveAttribute("href", `/support/follow-up?caseId=${caseId}`);
   },
 };

@@ -26,7 +26,7 @@ import { OperationsSessionGate } from "./features/auth/operations/OperationsSess
 import { MerchantAccountsPage } from "./features/operations/MerchantAccountsPage";
 import { OperationsControlPage } from "./features/operations/OperationsControlPage";
 import { OperationsRecoveryPage } from "./features/operations/OperationsRecoveryPage";
-import { SupportFollowUpPage } from "./features/support/SupportFollowUpPage";
+import { SupportFollowUpRoute } from "./features/support/SupportFollowUpRoute";
 import { SupportWorkspacePage } from "./features/support/SupportWorkspacePage";
 import { OperationsPolicyPage } from "./features/operations/OperationsPolicyPage";
 import { CouponCampaignsPage } from "./features/operations/CouponCampaignsPage";
@@ -126,7 +126,7 @@ export const router = createBrowserRouter([
     path: "/support", element: <ConsoleShell kind="support" />, children: [
       { element: <OperationsSessionGate />, children: [
         { index: true, element: <SupportWorkspacePage /> },
-        { path: "follow-up", element: <SupportFollowUpPage /> },
+        { path: "follow-up", element: <SupportFollowUpRoute /> },
       ] },
     ],
   },

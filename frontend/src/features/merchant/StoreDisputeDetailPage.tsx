@@ -49,7 +49,7 @@ export function StoreDisputeDetailPage({ scenario = "contract-pending", dispute,
       <ButtonLink to="/store/disputes" variant="ghost"><ArrowLeft size={17} aria-hidden="true" /> 이의제기 목록</ButtonLink>
       <PageHeading title="이의제기 내용" />
       {scenario === "contract-pending" || !dispute ? (
-        <InlineNotice tone="danger" announce="assertive" title="상세 내용을 준비하고 있습니다" description="지금은 이의제기 목록만 확인할 수 있습니다." />
+        <InlineNotice tone="info" title="상세 내용을 준비하고 있습니다" description="지금은 이의제기 목록만 확인할 수 있습니다." />
       ) : (
         <div className="console-detail-grid">
           <section className="surface-card order-panel">

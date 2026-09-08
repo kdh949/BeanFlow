@@ -79,3 +79,29 @@ export const OverflowQueue: Story = {
     await expect(await canvas.findByRole("button", { name: "오래된 준비 완료 작업 2건 보기" })).toBeVisible();
   },
 };
+
+const preparationLines = [
+  { lineSequence: 0, menuName: "아이스 아메리카노", optionNames: ["샷 추가", "얼음 적게"], quantity: 2 },
+  { lineSequence: 1, menuName: "고소한 오트밀 우유로 만든 따뜻한 카페라떼", optionNames: ["오트밀 우유 변경", "시럽 적게"], quantity: 1 },
+];
+export const FullPreparationDetails: Story = {
+  parameters: { msw: { handlers: [...merchantSignedInHandlers, ...storeBoardHandlers(), http.get("/api/v1/stores/:storeId/orders/:orderReference", () => HttpResponse.json({ ...boardOrder, lines: preparationLines }))] } },
+  play: async ({ canvas }) => {
+    const card = await canvas.findByRole("article", { name: "주문 A-142" });
+    await userEvent.click(within(card).getByRole("button", { name: "품목·옵션 보기" }));
+    await expect(await within(card).findByText("샷 추가 · 얼음 적게")).toBeVisible();
+    await expect(within(card).getByText(preparationLines[1]!.menuName)).toBeVisible();
+    await expect(within(card).getByText("2개")).toBeVisible();
+  },
+};
+export const PreparationDetailsUnavailable: Story = {
+  parameters: { msw: { handlers: [...merchantSignedInHandlers, ...storeBoardHandlers(), http.get("/api/v1/stores/:storeId/orders/:orderReference", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE" }, { status: 503 }))] } },
+  play: async ({ canvas, msw }) => {
+    const card = await canvas.findByRole("article", { name: "주문 A-142" });
+    await userEvent.click(within(card).getByRole("button", { name: "품목·옵션 보기" }));
+    await expect(await within(card).findByRole("alert")).toBeVisible();
+    msw.use(http.get("/api/v1/stores/:storeId/orders/:orderReference", () => HttpResponse.json({ ...boardOrder, lines: preparationLines })));
+    await userEvent.click(within(card).getByRole("button", { name: /다시 시도/ }));
+    await expect(await within(card).findByText("샷 추가 · 얼음 적게")).toBeVisible();
+  },
+};

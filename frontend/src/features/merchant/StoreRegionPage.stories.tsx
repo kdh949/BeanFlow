@@ -52,6 +52,7 @@ const meta = {
   component: StoreRegionPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" }, layout: "fullscreen",
     docs: {
       description: {
         component:
@@ -59,7 +60,7 @@ const meta = {
       },
       story: { inline: false, height: "820px" },
     },
-    routing: { path: "/store/region", initialEntry: "/store/region" },
+    routing: { path: "/store/region", initialEntry: "/store/region", surface: "refresh-store" },
     msw: { handlers: [...merchantSignedInHandlers, ownerStores, regionSearch, assignSuccess] },
   },
 } satisfies Meta<typeof StoreRegionPage>;
@@ -150,5 +151,21 @@ export const SearchUnavailable: Story = {
     await userEvent.type(await canvas.findByLabelText("지역 검색"), "역삼동");
     await userEvent.click(canvas.getByRole("button", { name: "검색" }));
     await expect(await canvas.findByText("서비스 연결을 확인하고 있습니다")).toBeVisible();
+  },
+};
+
+export const AssignmentInProgress: Story = {
+  parameters: { msw: { handlers: [...merchantSignedInHandlers, ownerStores, regionSearch, http.put("/api/v1/stores/:storeId/region", async () => { await delay(400); return HttpResponse.json({ storeId: ids.store, regionCode: regions[0]!.code, regionFullName: regions[0]!.fullName }); })] } },
+  play: async ({ canvas }) => {
+    await userEvent.type(await canvas.findByLabelText("지역 검색"), "역삼동");
+    await userEvent.click(canvas.getByRole("button", { name: "검색" }));
+    await userEvent.click(await canvas.findByRole("radio", { name: /역삼동/ }));
+    await userEvent.type(canvas.getByLabelText("지정 사유"), "소재지 확인");
+    await userEvent.click(canvas.getByRole("button", { name: "지역 지정" }));
+    await expect(canvas.getByRole("combobox", { name: "매장 선택" })).toBeDisabled();
+    await expect(canvas.getByLabelText("지정 사유")).toBeDisabled();
+    await expect(canvas.getByRole("radio", { name: /역삼동/ })).toBeDisabled();
+    await expect(await canvas.findByText("지역을 지정했습니다")).toBeVisible();
+    await expect(canvas.getByRole("combobox", { name: "매장 선택" })).toBeEnabled();
   },
 };

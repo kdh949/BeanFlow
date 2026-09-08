@@ -37,6 +37,7 @@ const meta = {
   component: MerchantAccountsPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" }, layout: "fullscreen",
     docs: {
       description: {
         component:
