@@ -39,8 +39,8 @@ type Story = StoryObj<typeof meta>;
 export const SignInRequired: Story = {
   args: { session: session({ status: "unauthenticated" }) },
   play: async ({ canvas, args }) => {
-    await expect(await canvas.findByText("운영자 로그인이 필요합니다")).toBeVisible();
-    await userEvent.click(canvas.getByRole("button", { name: "Keycloak로 로그인" }));
+    await expect(await canvas.findByText("조직 계정 로그인")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "조직 계정으로 로그인" }));
     await expect(args.session?.logIn).toHaveBeenCalled();
   },
 };
@@ -76,6 +76,6 @@ export const PermissionDenied: Story = {
     },
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText("운영 권한이 없습니다")).toBeVisible();
+    await expect(await canvas.findByText("업무 접근 권한이 없습니다")).toBeVisible();
   },
 };

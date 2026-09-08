@@ -1,8 +1,9 @@
 import type { Preview } from "@storybook/react-vite";
 import { useEffect } from "react";
-import { createMemoryRouter } from "react-router";
+import { createMemoryRouter, Outlet } from "react-router";
 import { RouterProvider } from "react-router/dom";
 import { mswLoader } from "msw-storybook-addon/csf3";
+import { ConsoleFrame } from "../src/presentation/ConsoleFrame";
 import { ConsoleShell, CustomerShell } from "../src/presentation/AppShells";
 import { merchantSession } from "../src/features/auth/merchant/merchantSession";
 import "../src/design-system/styles.css";
@@ -28,9 +29,9 @@ const preview: Preview = {
             : routing?.surface === "refresh-store" || routing?.surface === "store"
               ? [{ element: <StoreStoryShell />, children: [{ path: routing.path ?? "*", element: <Story /> }] }]
               : routing?.surface === "ops"
-                ? [{ element: <ConsoleShell kind="ops" />, children: [{ path: routing.path ?? "*", element: <Story /> }] }]
+                ? [{ element: <ConsoleFrame kind="ops" access="authenticated" actorLabel="운영 담당자" onLogOut={async () => {}}><Outlet /></ConsoleFrame>, children: [{ path: routing.path ?? "*", element: <Story /> }] }]
                 : routing?.surface === "support"
-                  ? [{ element: <ConsoleShell kind="support" />, children: [{ path: routing.path ?? "*", element: <Story /> }] }]
+                  ? [{ element: <ConsoleFrame kind="support" access="authenticated" actorLabel="고객지원 담당자" onLogOut={async () => {}}><Outlet /></ConsoleFrame>, children: [{ path: routing.path ?? "*", element: <Story /> }] }]
           : [{ path: routing?.path ?? "*", element: <Story /> }],
         { initialEntries: [routing?.initialEntry ?? "/"] },
       );

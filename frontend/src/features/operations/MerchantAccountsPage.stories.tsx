@@ -44,7 +44,7 @@ const meta = {
       },
       story: { inline: false, height: "900px" },
     },
-    routing: { path: "/ops/merchant-accounts", initialEntry: "/ops/merchant-accounts" },
+    routing: { surface: "ops", path: "/ops/merchant-accounts", initialEntry: "/ops/merchant-accounts" },
     msw: { handlers: [lookupAccount, resetPassword, releaseLock, createAccount] },
   },
 } satisfies Meta<typeof MerchantAccountsPage>;

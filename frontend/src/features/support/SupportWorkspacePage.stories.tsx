@@ -65,7 +65,7 @@ const meta = {
       },
       story: { inline: false, height: "1200px" },
     },
-    routing: { path: "/support", initialEntry: "/support" },
+    routing: { surface: "support", path: "/support", initialEntry: "/support" },
   },
 } satisfies Meta<typeof SupportWorkspacePage>;
 
