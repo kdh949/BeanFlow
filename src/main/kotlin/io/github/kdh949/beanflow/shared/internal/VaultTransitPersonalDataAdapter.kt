@@ -3,6 +3,10 @@ package io.github.kdh949.beanflow.shared.internal
 import io.github.kdh949.beanflow.shared.api.BlindIndex
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.EncryptedPersonalData
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyCall
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyOperation
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyTelemetry
+import io.github.kdh949.beanflow.shared.api.ExternalProvider
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.KeyedBlindIndexPort
 import io.github.kdh949.beanflow.shared.api.NormalizedExactSearchValue
@@ -27,11 +31,14 @@ import java.util.concurrent.Flow
 internal class VaultTransitPersonalDataAdapter(
     private val properties: VaultTransitPersonalDataProperties,
     private val objectMapper: ObjectMapper,
+    private val telemetry: ExternalDependencyTelemetry,
 ) : PersonalDataCryptoPort,
     KeyedBlindIndexPort {
     private val httpClient: HttpClient by lazy {
         HttpClient
             .newBuilder()
+            // The loopback Proxy must not forward h2c Upgrade headers to its TLS upstream.
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(properties.validated().connectTimeout)
             .followRedirects(HttpClient.Redirect.NEVER)
             .build()
@@ -167,6 +174,18 @@ internal class VaultTransitPersonalDataAdapter(
         operationPath: String,
         body: String?,
         method: String,
+    ): JsonNode =
+        telemetry.observe(
+            ExternalDependencyCall(ExternalProvider.VAULT, operation(operationPath)),
+        ) {
+            sendUnobserved(configuration, operationPath, body, method)
+        }
+
+    private fun sendUnobserved(
+        configuration: ValidatedVaultTransitConfiguration,
+        operationPath: String,
+        body: String?,
+        method: String,
     ): JsonNode {
         val requestBuilder =
             HttpRequest
@@ -201,6 +220,16 @@ internal class VaultTransitPersonalDataAdapter(
             unavailable(InvalidVaultTransitResponse())
         }
     }
+
+    private fun operation(operationPath: String): ExternalDependencyOperation =
+        when (operationPath.substringBefore('/')) {
+            "encrypt" -> ExternalDependencyOperation.ENCRYPT
+            "decrypt" -> ExternalDependencyOperation.DECRYPT
+            "rewrap" -> ExternalDependencyOperation.REWRAP
+            "hmac" -> ExternalDependencyOperation.HMAC
+            "keys" -> ExternalDependencyOperation.KEY_METADATA
+            else -> error("Unsupported Vault Transit operation")
+        }
 
     private fun encrypted(
         ciphertext: String,

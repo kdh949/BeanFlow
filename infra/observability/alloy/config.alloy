@@ -1,0 +1,36 @@
+otelcol.receiver.otlp "beanflow" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    traces = [otelcol.processor.batch.beanflow.input]
+    logs   = [otelcol.processor.batch.beanflow.input]
+  }
+}
+
+otelcol.processor.batch "beanflow" {
+  timeout         = "1s"
+  send_batch_size = 1024
+
+  output {
+    traces = [otelcol.exporter.otlphttp.tempo.input]
+    logs   = [otelcol.exporter.otlphttp.loki.input]
+  }
+}
+
+otelcol.exporter.otlphttp "tempo" {
+  client {
+    endpoint = sys.env("BEANFLOW_TEMPO_OTLP_HTTP_ENDPOINT")
+  }
+}
+
+otelcol.exporter.otlphttp "loki" {
+  client {
+    endpoint = sys.env("BEANFLOW_LOKI_OTLP_HTTP_ENDPOINT")
+  }
+}

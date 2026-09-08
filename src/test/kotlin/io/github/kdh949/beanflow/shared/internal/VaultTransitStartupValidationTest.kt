@@ -2,6 +2,8 @@ package io.github.kdh949.beanflow.shared.internal
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyTelemetry
+import io.github.kdh949.beanflow.shared.api.RecordingExternalDependencyTelemetry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -132,6 +134,7 @@ internal class VaultTransitStartupValidationTest {
         ApplicationContextRunner()
             .withUserConfiguration(VaultTransitPersonalDataConfiguration::class.java)
             .withBean(ObjectMapper::class.java, { ObjectMapper() })
+            .withBean(ExternalDependencyTelemetry::class.java, { RecordingExternalDependencyTelemetry() })
             .withPropertyValues("spring.profiles.active=$activeProfiles")
 
     private fun validProperties(

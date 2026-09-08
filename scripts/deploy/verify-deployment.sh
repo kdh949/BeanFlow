@@ -30,6 +30,11 @@ readonly public_origin="$(env_value BEANFLOW_PUBLIC_ORIGIN)"
 readonly bind_address="$(env_value BEANFLOW_BIND_ADDRESS)"
 readonly image_tag="$(env_value BEANFLOW_IMAGE_TAG)"
 readonly trusted_proxies="$(env_value BEANFLOW_AUTH_TRUSTED_PROXY_CIDRS)"
+readonly keycloak_mode="$(env_value BEANFLOW_KEYCLOAK_MODE || printf bundled)"
+case "$keycloak_mode" in
+  bundled | external) ;;
+  *) echo "BEANFLOW_KEYCLOAK_MODE must be bundled or external" >&2; exit 1 ;;
+esac
 
 [[ "$secrets_dir" == /* && "$secrets_dir" != "/" && "$secrets_dir" != "$root"/* ]] || {
   echo "BEANFLOW_SECRETS_DIR must be an absolute directory outside the repository" >&2
@@ -51,8 +56,6 @@ python3 "$root/scripts/deploy/validate-trusted-proxies.py" "$frontend_ip" "$trus
 
 required_secrets=(
   BEANFLOW_POSTGRES_PASSWORD
-  BEANFLOW_KEYCLOAK_DB_PASSWORD
-  BEANFLOW_KEYCLOAK_ADMIN_PASSWORD
   BEANFLOW_AUTH_ATTEMPT_HMAC_KEY_BASE64_URL
   BEANFLOW_CURSOR_HMAC_SECRET_BASE64_URL
   BEANFLOW_AISTOR_ACCESS_KEY
@@ -63,6 +66,9 @@ required_secrets=(
   BEANFLOW_VAULT_SECRET_ID
   BEANFLOW_VAULT_CA_PEM
 )
+if [[ "$keycloak_mode" == bundled ]]; then
+  required_secrets+=(BEANFLOW_KEYCLOAK_DB_PASSWORD BEANFLOW_KEYCLOAK_ADMIN_PASSWORD)
+fi
 
 for name in "${required_secrets[@]}"; do
   path="$secrets_dir/$name"
@@ -81,19 +87,10 @@ for name in "${required_secrets[@]}"; do
   }
 done
 
-[[ "$(<"$secrets_dir/TOSS_CLIENT_KEY")" == test_ck_* ]] || {
-  echo "TOSS_CLIENT_KEY must be a Toss sandbox test client key" >&2
-  exit 1
-}
-[[ "$(<"$secrets_dir/TOSS_SECRET_KEY")" == test_sk_* ]] || {
-  echo "TOSS_SECRET_KEY must be a Toss sandbox test secret key" >&2
-  exit 1
-}
-
-docker compose \
-  --env-file "$env_file" \
-  --file "$root/compose.portfolio.yml" \
-  --file "$overlay" \
-  config --format json | "$root/scripts/deploy/inspect-compose.py"
+compose=(docker compose --env-file "$env_file" --file "$root/compose.portfolio.yml" --file "$overlay")
+if [[ "$keycloak_mode" == external ]]; then
+  compose+=(--file "$root/compose.external-keycloak.yml")
+fi
+"${compose[@]}" config --format json | python3 "$root/scripts/deploy/inspect-compose.py" --keycloak-mode "$keycloak_mode"
 
 echo "$environment deployment preflight passed."

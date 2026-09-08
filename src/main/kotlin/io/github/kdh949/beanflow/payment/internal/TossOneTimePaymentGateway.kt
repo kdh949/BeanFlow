@@ -1,6 +1,11 @@
 package io.github.kdh949.beanflow.payment.internal
 
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyCall
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyOperation
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyOutcome
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyTelemetry
+import io.github.kdh949.beanflow.shared.api.ExternalProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -27,44 +32,60 @@ internal class TossOneTimePaymentGatewayConfiguration {
     @Bean
     fun tossOneTimePaymentGateway(
         objectMapper: ObjectMapper,
-        @Value("\${beanflow.toss.client-key}") clientKey: String,
-        @Value("\${beanflow.toss.secret-key}") secretKey: String,
+        telemetry: ExternalDependencyTelemetry,
+        @Value("\${beanflow.toss.client-key:}") clientKey: String,
+        @Value("\${beanflow.toss.secret-key:}") secretKey: String,
         @Value("\${beanflow.toss.base-url:https://api.tosspayments.com}") baseUrl: String,
     ): PaymentGateway {
-        require(clientKey.startsWith("test_ck_")) {
-            "toss-sandbox requires a Toss API individual integration test client key (test_ck_)"
+        require(clientKey.isNotBlank()) {
+            "toss-sandbox requires a non-blank client key"
         }
-        require(secretKey.startsWith("test_sk_")) {
-            "toss-sandbox requires a Toss API individual integration test secret key (test_sk_)"
+        require(secretKey.isNotBlank()) {
+            "toss-sandbox requires a non-blank secret key"
         }
         require(URI(baseUrl).let { it.scheme == "https" && it.host == "api.tosspayments.com" }) {
             "toss-sandbox requires the official HTTPS Toss API endpoint"
         }
-        return TossOneTimePaymentGateway(
-            restClient =
-                RestClient
-                    .builder()
-                    .baseUrl(baseUrl)
-                    .requestFactory(
-                        JdkClientHttpRequestFactory(
-                            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build(),
-                        ).apply { setReadTimeout(Duration.ofSeconds(8)) },
-                    ).defaultHeader(HttpHeaders.AUTHORIZATION, basicAuthorization(secretKey))
-                    .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
-                    .build(),
-            objectMapper = objectMapper,
-        )
+        return tossGateway(baseUrl, secretKey, objectMapper, telemetry)
+    }
+}
+
+@Configuration(proxyBeanMethods = false)
+@Profile("toss-perf & !prod & !portfolio & !toss-sandbox")
+internal class TossPerfPaymentGatewayConfiguration {
+    @Bean
+    fun tossPerfPaymentGateway(
+        objectMapper: ObjectMapper,
+        telemetry: ExternalDependencyTelemetry,
+        @Value("\${beanflow.toss.client-key}") clientKey: String,
+        @Value("\${beanflow.toss.secret-key}") secretKey: String,
+        @Value("\${beanflow.toss.base-url}") baseUrl: String,
+    ): PaymentGateway {
+        require(clientKey.startsWith("test_ck_")) {
+            "toss-perf requires a non-live test client key (test_ck_)"
+        }
+        require(secretKey.startsWith("test_sk_")) {
+            "toss-perf requires a non-live test secret key (test_sk_)"
+        }
+        require(baseUrl == "http://toss-driver:8080") {
+            "toss-perf requires the fixed internal driver origin http://toss-driver:8080"
+        }
+        return tossGateway(baseUrl, secretKey, objectMapper, telemetry)
     }
 }
 
 internal class TossOneTimePaymentGateway(
     private val restClient: RestClient,
     private val objectMapper: ObjectMapper,
+    private val telemetry: ExternalDependencyTelemetry,
 ) : PaymentGateway {
     override fun approve(request: GatewayApprovalRequest): ProviderPaymentResult =
         ProviderPaymentResult.Unknown("UNSUPPORTED_LEGACY_PAYMENT_METHOD_APPROVAL")
 
     override fun confirmOneTime(request: GatewayOneTimeConfirmationRequest): ProviderPaymentResult =
+        telemetry.observe(TOSS_CONFIRM, ::paymentOutcome) { confirmOneTimeUnobserved(request) }
+
+    private fun confirmOneTimeUnobserved(request: GatewayOneTimeConfirmationRequest): ProviderPaymentResult =
         try {
             val body =
                 restClient
@@ -93,6 +114,9 @@ internal class TossOneTimePaymentGateway(
         }
 
     override fun lookup(request: GatewayLookupRequest): ProviderPaymentResult =
+        telemetry.observe(TOSS_LOOKUP, ::paymentOutcome) { lookupUnobserved(request) }
+
+    private fun lookupUnobserved(request: GatewayLookupRequest): ProviderPaymentResult =
         try {
             val body =
                 if (!request.providerTransactionReference.isNullOrBlank()) {
@@ -153,6 +177,15 @@ internal class TossOneTimePaymentGateway(
         amountKrw: Long,
         providerIdempotencyKey: String,
     ): GatewayRefundResult =
+        telemetry.observe(TOSS_REFUND_LOOKUP, ::refundOutcome) {
+            lookupRefundUnobserved(request, amountKrw, providerIdempotencyKey)
+        }
+
+    private fun lookupRefundUnobserved(
+        request: GatewayLookupRequest,
+        amountKrw: Long,
+        providerIdempotencyKey: String,
+    ): GatewayRefundResult =
         try {
             val paymentKey =
                 request.providerTransactionReference
@@ -193,6 +226,15 @@ internal class TossOneTimePaymentGateway(
         }
 
     private fun cancel(
+        request: GatewayLookupRequest,
+        amountKrw: Long?,
+        providerIdempotencyKey: String,
+    ): GatewayRefundResult =
+        telemetry.observe(TOSS_CANCEL, ::refundOutcome) {
+            cancelUnobserved(request, amountKrw, providerIdempotencyKey)
+        }
+
+    private fun cancelUnobserved(
         request: GatewayLookupRequest,
         amountKrw: Long?,
         providerIdempotencyKey: String,
@@ -314,9 +356,31 @@ internal class TossOneTimePaymentGateway(
 
     private fun parse(body: String): JsonNode = objectMapper.readTree(body)
 
+    private fun paymentOutcome(result: ProviderPaymentResult): ExternalDependencyOutcome =
+        when (result) {
+            is ProviderPaymentResult.Approved -> ExternalDependencyOutcome.SUCCESS
+            is ProviderPaymentResult.Declined -> ExternalDependencyOutcome.DECLINED
+            is ProviderPaymentResult.Unknown -> ExternalDependencyOutcome.UNKNOWN
+        }
+
+    private fun refundOutcome(result: GatewayRefundResult): ExternalDependencyOutcome =
+        when (result) {
+            is GatewayRefundResult.Succeeded -> ExternalDependencyOutcome.SUCCESS
+
+            is GatewayRefundResult.Failed -> ExternalDependencyOutcome.FAILURE
+
+            is GatewayRefundResult.RetryableFailed,
+            is GatewayRefundResult.Unknown,
+            -> ExternalDependencyOutcome.UNKNOWN
+        }
+
     private companion object {
         const val IDEMPOTENCY_HEADER = "Idempotency-Key"
         val CODE_PATTERN = Regex("[A-Z0-9_]{1,100}")
+        val TOSS_CONFIRM = ExternalDependencyCall(ExternalProvider.TOSS, ExternalDependencyOperation.CONFIRM)
+        val TOSS_LOOKUP = ExternalDependencyCall(ExternalProvider.TOSS, ExternalDependencyOperation.LOOKUP)
+        val TOSS_CANCEL = ExternalDependencyCall(ExternalProvider.TOSS, ExternalDependencyOperation.CANCEL)
+        val TOSS_REFUND_LOOKUP = ExternalDependencyCall(ExternalProvider.TOSS, ExternalDependencyOperation.REFUND_LOOKUP)
         val DEFINITIVE_DECLINE_CODES =
             setOf(
                 "INVALID_REJECT_CARD",
@@ -334,3 +398,25 @@ private fun basicAuthorization(secretKey: String): String {
         )
     return "Basic $encoded"
 }
+
+private fun tossGateway(
+    baseUrl: String,
+    secretKey: String,
+    objectMapper: ObjectMapper,
+    telemetry: ExternalDependencyTelemetry,
+): TossOneTimePaymentGateway =
+    TossOneTimePaymentGateway(
+        restClient =
+            RestClient
+                .builder()
+                .baseUrl(baseUrl)
+                .requestFactory(
+                    JdkClientHttpRequestFactory(
+                        HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build(),
+                    ).apply { setReadTimeout(Duration.ofSeconds(8)) },
+                ).defaultHeader(HttpHeaders.AUTHORIZATION, basicAuthorization(secretKey))
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .build(),
+        objectMapper = objectMapper,
+        telemetry = telemetry,
+    )

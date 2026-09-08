@@ -20,6 +20,12 @@ Production 개인데이터 암호화와 keyed exact-search index는 HashiCorp Va
 identity로 auto-auth하고 `use_auto_auth_token = "force"`로 요청에 token을 주입한다. 애플리케이션 설정에는
 loopback Proxy base URI, mount와 key 이름, timeout, 허용 key version만 있고 token/secret은 없다.
 
+**Proxy protocol clarification (2026-09-07):** 애플리케이션의 Vault 전용 HTTP client는 HTTP/1.1을
+명시한다. Java client의 기본 HTTP/2 선호는 plain HTTP loopback 요청에 `Upgrade: h2c`를 붙이고,
+Vault Proxy가 TLS upstream으로 전달할 때 `invalid Upgrade request header`로 실패할 수 있다.
+Proxy의 외부 HTTPS·CA 검증과 AppRole 인증은 유지한다. 프로토콜 선택은 이 client에만 적용하며
+startup metadata 검증과 runtime fail-closed 정책은 변경하지 않는다.
+
 개발·테스트 fake는 test source 또는 명시적인 local profile에서만 사용할 수 있다. Production profile은
 in-memory/local/mock/no-op crypto나 자동 fallback을 등록하지 않는다. Vault Proxy 미설정, 원격/non-loopback URI,
 필수 key 설정 누락 또는 startup 검증 실패는 애플리케이션 시작 실패다.
@@ -100,6 +106,15 @@ Runtime Vault timeout/5xx/permission/key-version/response 오류는 `DEPENDENCY_
 single-region fail-closed를 기본으로 하며 암묵적 cross-region failover를 하지 않는다. Multi-region이 필요하면
 Vault Enterprise/HCP Performance/DR replication, data residency와 failover authority를 새 ADR로 정한다.
 
+### Known provider limitation (2026-09-07)
+
+Vault 2.0.4의 `rewrap` 구현은 암호 연산에 AAD를 전달하지 않는다. AAD로 보호된 fixture의
+rewrap이 HTTP 400으로 거절되고 앱이 `DEPENDENCY_UNAVAILABLE`로 실패하는 것을 직접 확인했다.
+따라서 위 rewrap 운영 목표는 이 버전에서 충족되지 않는다. 키 metadata 조회·encrypt/decrypt·HMAC은
+실제 TLS Vault로 검증했지만 AAD rewrap/rotation 완료를 주장하지 않는다. 이전 키 version은 유지하고
+AAD를 제거하거나 앱 안에서 decrypt→encrypt로 자동 대체하지 않는다. AAD를 보존하는 Provider 구현을
+검증하기 전까지 rewrap 기반 migration과 이전 decryption version 폐기는 진행하지 않는다.
+
 ## Alternatives Considered
 
 - 평문 + DB access control: DB 유출 시 원문과 검색 index가 즉시 노출돼 기각했다.
@@ -164,3 +179,4 @@ ADR-009, ADR-020, ADR-070, ADR-072, ADR-081, ADR-082, ADR-087, ADR-089.
 - [Vault Proxy auto-auth](https://developer.hashicorp.com/vault/docs/agent-and-proxy/autoauth)
 - [Vault Proxy API proxy](https://developer.hashicorp.com/vault/docs/agent-and-proxy/agent/apiproxy)
 - [Vault health API](https://developer.hashicorp.com/vault/api-docs/system/health)
+- [Vault 2.0.4 rewrap implementation](https://github.com/hashicorp/vault/blob/v2.0.4/builtin/logical/transit/path_rewrap.go)

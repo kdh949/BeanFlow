@@ -32,9 +32,24 @@ vault secrets list -format=json | grep -q '"transit/"' || vault secrets enable -
 vault auth list -format=json | grep -q '"approle/"' || vault auth enable approle
 
 vault write transit/keys/beanflow-personal-data \
-  type=aes256-gcm96 derived=false exportable=false allow_plaintext_backup=false deletion_allowed=false >/dev/null
+  type=aes256-gcm96 \
+  derived=false \
+  exportable=false \
+  allow_plaintext_backup=false >/dev/null
+
 vault write transit/keys/beanflow-blind-index \
-  type=hmac derived=false exportable=false allow_plaintext_backup=false deletion_allowed=false >/dev/null
+  type=hmac \
+  key_size=32 \
+  derived=false \
+  exportable=false \
+  allow_plaintext_backup=false >/dev/null
+
+vault write transit/keys/beanflow-personal-data/config \
+  deletion_allowed=false >/dev/null
+
+vault write transit/keys/beanflow-blind-index/config \
+  deletion_allowed=false >/dev/null
+
 vault policy write beanflow-portfolio "$script_dir/beanflow-policy.hcl" >/dev/null
 vault write auth/approle/role/beanflow-portfolio \
   token_policies=beanflow-portfolio \

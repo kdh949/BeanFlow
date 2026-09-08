@@ -8,7 +8,7 @@ import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 @Configuration(proxyBeanMethods = false)
-@Profile("local & !toss-sandbox & !prod")
+@Profile("local & !toss-sandbox & !toss-perf & !prod")
 internal class LocalPaymentGatewayConfiguration {
     @Bean
     fun localScriptedPaymentGateway(): PaymentGateway =

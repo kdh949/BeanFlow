@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.merchant.internal
 
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageUpload
+import io.github.kdh949.beanflow.shared.api.RecordingExternalDependencyTelemetry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -40,6 +41,7 @@ internal class AistorFreeIntegrationTest {
                 client,
                 AistorMediaMetrics(SimpleMeterRegistry()),
                 Clock.systemUTC(),
+                RecordingExternalDependencyTelemetry(),
             )
         val normalized = storage.normalize(StorefrontImageUpload(jpeg(), "image/jpeg"))
         val prepared = storage.store(StorefrontImageTarget.MENU, UUID.randomUUID(), normalized)
