@@ -123,6 +123,13 @@ jobs:
           ${{ steps.changes.outputs.base_sha }}
           ${{ steps.changes.outputs.head_sha }}
 
+      - name: Verify monitoring dashboard queries
+        run: |
+          scripts/ci/run-and-capture.sh .ci-artifacts/live-dashboard-queries.log \
+            python3 scripts/perf/test-live-dashboard-queries.py
+          scripts/ci/run-and-capture.sh .ci-artifacts/rca-dashboard-queries.log \
+            python3 scripts/perf/test-dashboard-queries.py
+
       - name: Upload failure evidence
         if: failure()
         uses: actions/upload-artifact@v7

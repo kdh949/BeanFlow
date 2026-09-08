@@ -1,0 +1,2001 @@
+{
+  "id": null,
+  "uid": "beanflow-live-operations",
+  "title": "BeanFlow / Live Operations",
+  "description": "현재 API 요청·오류·지연, DB 대기, 자원과 telemetry 수집 상태. 부하 실행 ID 없이 사용하는 최근 15분 / 10초 갱신 대시보드. worker gauge는 마지막 관측값이다.",
+  "tags": [
+    "beanflow",
+    "operations",
+    "live"
+  ],
+  "timezone": "Asia/Seoul",
+  "schemaVersion": 42,
+  "version": 1,
+  "editable": false,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "refresh": "10s",
+  "timepicker": {
+    "refresh_intervals": [
+      "10s",
+      "15s",
+      "30s",
+      "1m",
+      "5m"
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "title": "같은 시간의 Performance RCA",
+      "type": "link",
+      "url": "/d/beanflow-performance-rca/beanflow-performance-rca",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": true
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "환경",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "beanflow-prometheus"
+        },
+        "query": {
+          "query": "label_values(up{job=\"beanflow\"}, environment)",
+          "refId": "environment"
+        },
+        "regex": "",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "allValue": null,
+        "current": {
+          "text": "perf",
+          "value": "perf"
+        },
+        "options": []
+      },
+      {
+        "name": "host",
+        "label": "호스트",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "beanflow-prometheus"
+        },
+        "query": {
+          "query": "label_values(up{job=\"beanflow\",environment=\"$environment\"}, instance)",
+          "refId": "host"
+        },
+        "regex": "/^([^:]+):[0-9]+$/",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "allValue": null,
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": []
+      },
+      {
+        "name": "route",
+        "label": "HTTP Route",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "beanflow-prometheus"
+        },
+        "query": {
+          "query": "label_values(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\"}, uri)",
+          "refId": "route"
+        },
+        "regex": "",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": true,
+        "multi": false,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 2
+      },
+      "description": "**현재 상태 · 최근 15분 · 10초 갱신** — API/DB/호스트는 10초, 컨테이너는 15초마다 수집합니다. API 수집 성공은 외부 접속·결제 성공을 뜻하지 않습니다. 데이터 없음은 정상 0이 아닙니다. Route는 HTTP 패널에만 적용됩니다.",
+      "options": {
+        "mode": "markdown",
+        "content": "**현재 상태 · 최근 15분 · 10초 갱신** — API/DB/호스트는 10초, 컨테이너는 15초마다 수집합니다. API 수집 성공은 외부 접속·결제 성공을 뜻하지 않습니다. 데이터 없음은 정상 0이 아닙니다. Route는 HTTP 패널에만 적용됩니다."
+      }
+    },
+    {
+      "id": 2,
+      "title": "API 수집",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 4,
+        "h": 4
+      },
+      "description": "관리 endpoint의 scrape 성공과 표본 나이를 확인합니다. 30초 이상 된 표본은 중단 / 지연, target 부재는 데이터 없음입니다. 외부 WAF·readiness probe가 아닙니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "중단 / 지연",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "수집 중",
+                  "color": "green"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "데이터 없음",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == bool 1) * on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < bool 30)",
+          "legendFormat": "API",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 3,
+      "title": "현재 요청 / 초",
+      "type": "stat",
+      "gridPos": {
+        "x": 4,
+        "y": 2,
+        "w": 4,
+        "h": 4
+      },
+      "description": "선택 Route의 최근 rate 구간 요청률. 수집은 정상이고 관측된 counter가 증가하지 않으면 0입니다. k6 실행이나 목표 TPS가 아닙니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 2,
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "데이터 없음",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum((rate(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "legendFormat": "HTTP RPS",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 4,
+      "title": "서버 오류 · 5xx",
+      "type": "stat",
+      "gridPos": {
+        "x": 8,
+        "y": 2,
+        "w": 4,
+        "h": 4
+      },
+      "description": "요청 수로 가중한 5xx 비율. 요청이 있되 5xx series가 없으면 0, 요청 자체가 없으면 데이터 없음입니다. 4xx는 아래 상태별 요청에서 확인합니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "noValue": "요청 없음 / 수집 확인",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 2,
+          "max": 1,
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "요청 없음 / 수집 확인",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum((rate(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\",status=~\"5..\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))) or (0 * sum((rate(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))))) / (sum((rate(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))) > 0)",
+          "legendFormat": "5xx / 전체 요청",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 5,
+      "title": "응답 시간 · p95",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 2,
+        "w": 4,
+        "h": 4
+      },
+      "description": "선택 Route의 최근 rate 구간 요청 분포. 요청이 없으면 p95를 계산할 수 없습니다. 과거 마지막 정상 지연을 현재 값으로 표시하지 않습니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "계산할 표본 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 2,
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "계산할 표본 없음",
+                  "color": "gray"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "계산할 표본 없음",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) ((rate(http_server_requests_seconds_bucket{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))))",
+          "legendFormat": "p95",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 6,
+      "title": "DB 연결 대기 요청",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 2,
+        "w": 4,
+        "h": 4
+      },
+      "description": "현재 Hikari connection 획득을 기다리는 요청 수입니다. DB lock 대기와 별개의 지표입니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "데이터 없음",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum((hikaricp_connections_pending{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "legendFormat": "pending",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 7,
+      "title": "DB 미획득 잠금",
+      "type": "stat",
+      "gridPos": {
+        "x": 20,
+        "y": 2,
+        "w": 4,
+        "h": 4
+      },
+      "description": "현재 DB의 미획득 lock 수. exporter 연결·쿼리 실패 또는 scrape 지연이면 데이터 없음입니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "데이터 없음",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum((beanflow_pg_ungranted_locks{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) and on(job,instance) (((up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < 30)) and on(job,instance) (pg_up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 0)))",
+          "legendFormat": "locks",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 8,
+      "title": "요청과 사용자 영향",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 1
+      },
+      "description": "",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 9,
+      "title": "HTTP 상태별 요청 / 초",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "description": "4xx에는 인증·입력 거절과 업무 충돌도 포함됩니다. 상태별 요청량을 함께 확인합니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) ((rate(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "legendFormat": "{{status}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Route 응답 시간 · p95 / p99",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "description": "histogram을 합쳐 계산합니다. 요청이 없는 구간은 끊어집니다. exemplar가 있는 요청은 Tempo로 이동할 수 있습니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, uri) ((rate(http_server_requests_seconds_bucket{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))))",
+          "legendFormat": "p95 {{uri}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s",
+          "exemplar": true
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum by (le, uri) ((rate(http_server_requests_seconds_bucket{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))))",
+          "legendFormat": "p99 {{uri}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s",
+          "exemplar": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "주문 예약 충돌 / 초",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "description": "quote·stock·slot 충돌을 구분합니다. 해당 counter가 아직 생성되지 않았다면 데이터 없음이며 0으로 보정하지 않습니다. Route 필터 미적용.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (resource) ((rate(beanflow_order_reservation_conflicts_total{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "legendFormat": "{{resource}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "DB와 애플리케이션 자원",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      },
+      "description": "",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 13,
+      "title": "DB connection pool",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 8,
+        "h": 6
+      },
+      "description": "각 시점의 실제 active/max/pending입니다. 긴 구간 최대값으로 현재 상태를 대체하지 않습니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(hikaricp_connections_active{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "legendFormat": "active {{pool}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        },
+        {
+          "refId": "B",
+          "expr": "(hikaricp_connections_max{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "legendFormat": "max {{pool}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        },
+        {
+          "refId": "C",
+          "expr": "(hikaricp_connections_pending{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "legendFormat": "pending {{pool}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "PostgreSQL 대기 세션",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 15,
+        "w": 8,
+        "h": 6
+      },
+      "description": "Client 대기를 제외한 현재 DB 세션. exporter up·pg_up·scrape error와 30초 신선도를 모두 확인한 경우에만 빈 결과를 0으로 표시합니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum by (wait_event_type,wait_event) ((beanflow_pg_wait_sessions{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) and on(job,instance) (((up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < 30)) and on(job,instance) (pg_up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 0)))) or on() (0 * max((((up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < 30)) and on(job,instance) (pg_up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 0))))",
+          "legendFormat": "{{wait_event_type}} / {{wait_event}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "DB 미획득 잠금 추이",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 15,
+        "w": 8,
+        "h": 6
+      },
+      "description": "같은 시간대의 connection pool·느린 trace와 비교하는 상관 증거입니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(beanflow_pg_ungranted_locks{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) and on(job,instance) (((up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < 30)) and on(job,instance) (pg_up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 0))",
+          "legendFormat": "locks",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "JVM heap",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 8,
+        "h": 6
+      },
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum((jvm_memory_used_bytes{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",area=\"heap\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "legendFormat": "used",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        },
+        {
+          "refId": "B",
+          "expr": "sum((jvm_memory_committed_bytes{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",area=\"heap\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "legendFormat": "committed",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(((jvm_memory_max_bytes{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",area=\"heap\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))) > 0)",
+          "legendFormat": "max",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "JVM / 호스트 CPU",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 21,
+        "w": 8,
+        "h": 6
+      },
+      "description": "호스트는 같은 서버의 다른 workload도 포함합니다. 컨테이너별 CPU는 아래에서 분리합니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          },
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(process_cpu_usage{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "legendFormat": "JVM",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        },
+        {
+          "refId": "B",
+          "expr": "1 - avg((rate(node_cpu_seconds_total{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\",mode=\"idle\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"}) < 30)))",
+          "legendFormat": "host",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "호스트 메모리 / 디스크 I/O",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 21,
+        "w": 8,
+        "h": 6
+      },
+      "description": "메모리는 MemAvailable 기준 사용률, 디스크는 장치별 I/O busy 시간 비중입니다. 디스크 용량 사용률이 아닙니다. device mapper와 물리 장치는 중복 계층이므로 더하지 않습니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          },
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(1 - node_memory_MemAvailable_bytes{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"} / node_memory_MemTotal_bytes{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"}) and on(job,instance) ((up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"}) < 30))",
+          "legendFormat": "memory",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        },
+        {
+          "refId": "B",
+          "expr": "(rate(node_disk_io_time_seconds_total{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\",device!~\"loop.*|ram.*|sr.*\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"}) < 30))",
+          "legendFormat": "disk busy {{device}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 19,
+      "title": "컨테이너 · 선택형 Docker stats 수집",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 24,
+        "h": 1
+      },
+      "description": "",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 20,
+      "title": "컨테이너 CPU / 할당",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 8,
+        "h": 6
+      },
+      "description": "단위는 CPU core입니다. 1은 논리 CPU 한 개. 무제한 quota의 0은 제한선으로 표시하지 않습니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(beanflow_container_cpu_cores{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) and on(job,instance) (((up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} < 45))",
+          "legendFormat": "{{service}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "15s"
+        },
+        {
+          "refId": "B",
+          "expr": "((beanflow_container_cpu_limit_cores{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) and on(job,instance) (((up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} < 45))) > 0",
+          "legendFormat": "limit {{service}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "15s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 21,
+      "title": "컨테이너 메모리 / 한도",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 28,
+        "w": 8,
+        "h": 6
+      },
+      "description": "working set과 limit. 수집 실패·성공 시각 지연 때 오래된 값을 숨깁니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(beanflow_container_memory_working_set_bytes{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) and on(job,instance) (((up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} < 45))",
+          "legendFormat": "{{service}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "15s"
+        },
+        {
+          "refId": "B",
+          "expr": "((beanflow_container_memory_limit_bytes{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) and on(job,instance) (((up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} < 45))) > 0",
+          "legendFormat": "limit {{service}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "15s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 22,
+      "title": "컨테이너 실행 상태",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 28,
+        "w": 8,
+        "h": 6
+      },
+      "description": "1=실행 중, 0=중지. 삭제되었거나 allowlist 밖인 컨테이너는 사라질 수 있습니다. 기대 서비스 목록의 완전성이나 healthcheck 성공을 증명하지 않습니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "중지",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "실행 중",
+                  "color": "green"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "데이터 없음",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(beanflow_container_running{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) and on(job,instance) (((up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} < 45))",
+          "legendFormat": "{{service}}",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "15s"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 23,
+      "title": "외부 의존성과 후속 처리",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 1
+      },
+      "description": "",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 24,
+      "title": "외부 호출 결과 / 초",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 12,
+        "h": 6
+      },
+      "description": "success·declined·unknown·failure를 분리합니다. unknown은 확정 실패나 성공이 아닙니다. 최근 호출이 없어도 의존성 정상으로 판정하지 않습니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (provider,operation,outcome) ((rate(beanflow_external_calls_total{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "legendFormat": "{{provider}} / {{operation}} / {{outcome}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 25,
+      "title": "외부 호출 시간 · p95",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 35,
+        "w": 12,
+        "h": 6
+      },
+      "description": "실제로 발생한 호출의 최근 분포이며 능동 probe가 아닙니다. 호출이 없으면 지연 표본도 없습니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, provider,operation) ((rate(beanflow_external_duration_seconds_bucket{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))))",
+          "legendFormat": "{{provider}} / {{operation}}",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 26,
+      "title": "후속 처리 · 마지막 worker 관측값",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 12,
+        "h": 6
+      },
+      "description": "worker 마지막 관측값입니다. publication은 기본 10초, 멱등/결제/예약은 기본 30초 간격이나 실행 시간만큼 늦어집니다. 자체 마지막 성공 시각 지표가 없어 worker 실패 뒤 이전 값이 남을 수 있습니다. 0을 worker 정상의 증거로 사용하지 말고 오류 로그를 확인합니다. 예약 후보 수는 기본 최대 100건인 batch 크기이며 전체 backlog가 아닙니다. publication은 예약된 미활성 target을 포함할 수 있습니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(beanflow_event_publication_pending_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "legendFormat": "미완료 publication",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        },
+        {
+          "refId": "B",
+          "expr": "(beanflow_order_idempotency_processing_stuck{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "legendFormat": "멱등 처리 장기 대기",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        },
+        {
+          "refId": "C",
+          "expr": "(beanflow_reservation_due_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "legendFormat": "마지막 예약 만료 batch 후보",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 27,
+      "title": "후속 처리 나이 · 마지막 worker 관측값",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 41,
+        "w": 12,
+        "h": 6
+      },
+      "description": "worker 마지막 관측값입니다. publication은 기본 10초, 멱등/결제/예약은 기본 30초 간격이나 실행 시간만큼 늦어집니다. 자체 마지막 성공 시각 지표가 없어 worker 실패 뒤 이전 값이 남을 수 있습니다. 0을 worker 정상의 증거로 사용하지 말고 오류 로그를 확인합니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(beanflow_event_publication_oldest_age_seconds{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "legendFormat": "가장 오래된 publication",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        },
+        {
+          "refId": "B",
+          "expr": "(beanflow_payment_unknown_age{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "legendFormat": "가장 오래된 UNKNOWN payment",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 28,
+      "title": "수집 상태 · 데이터가 없을 때 먼저 확인",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 47,
+        "w": 24,
+        "h": 1
+      },
+      "description": "",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 29,
+      "title": "현재 target 수집 상태",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 8,
+        "h": 7
+      },
+      "description": "각 target의 scrape 성공·신선도만 확인합니다. Alloy up은 trace/log 전송 성공을 보장하지 않습니다. 선택형 container 수집 미설정은 데이터 없음입니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "중단 / 지연",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "수집 중",
+                  "color": "green"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "데이터 없음",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == bool 1) * on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < bool 30)",
+          "legendFormat": "API",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "10s"
+        },
+        {
+          "refId": "B",
+          "expr": "(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == bool 1) * on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < bool 30)",
+          "legendFormat": "PostgreSQL exporter",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "10s"
+        },
+        {
+          "refId": "C",
+          "expr": "(up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"} == bool 1) * on(job,instance) (time() - timestamp(up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"}) < bool 30)",
+          "legendFormat": "Host exporter",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "10s"
+        },
+        {
+          "refId": "D",
+          "expr": "(up{job=\"beanflow-alloy\",environment=\"$environment\",instance=\"$host:12345\"} == bool 1) * on(job,instance) (time() - timestamp(up{job=\"beanflow-alloy\",environment=\"$environment\",instance=\"$host:12345\"}) < bool 45)",
+          "legendFormat": "Alloy",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "15s"
+        },
+        {
+          "refId": "E",
+          "expr": "(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == bool 1) * on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < bool 45)",
+          "legendFormat": "Container exporter (선택)",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "15s"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 30,
+      "title": "마지막 target scrape 후 경과",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 48,
+        "w": 8,
+        "h": 7
+      },
+      "description": "Prometheus 마지막 scrape 시각이며 성공 여부와 다릅니다. target 수집 상태를 함께 확인합니다. query가 성공해도 수집 시각이 오래될 수 있습니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"})",
+          "legendFormat": "API",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        },
+        {
+          "refId": "B",
+          "expr": "time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"})",
+          "legendFormat": "DB",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        },
+        {
+          "refId": "C",
+          "expr": "time() - timestamp(up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"})",
+          "legendFormat": "Host",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "10s"
+        },
+        {
+          "refId": "D",
+          "expr": "time() - timestamp(up{job=\"beanflow-alloy\",environment=\"$environment\",instance=\"$host:12345\"})",
+          "legendFormat": "Alloy",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "15s"
+        },
+        {
+          "refId": "E",
+          "expr": "time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"})",
+          "legendFormat": "Containers",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "interval": "15s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 31,
+      "title": "Exporter 내부 수집 상태",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 48,
+        "w": 8,
+        "h": 7
+      },
+      "description": "HTTP endpoint는 살아 있어도 내부 수집이 실패할 수 있습니다. DB 연결/query, Docker 수집 성공과 성공 시각을 분리해 확인합니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "중단 / 지연",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "수집 중",
+                  "color": "green"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "데이터 없음",
+                  "color": "gray"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "pg_up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} and on(job,instance) ((up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < 30))",
+          "legendFormat": "DB 연결",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "10s"
+        },
+        {
+          "refId": "B",
+          "expr": "(1 - pg_exporter_last_scrape_error{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) and on(job,instance) ((up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < 30))",
+          "legendFormat": "DB query",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "10s"
+        },
+        {
+          "refId": "C",
+          "expr": "(beanflow_container_collection_success{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} * on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} < bool 45)) and on(job,instance) ((up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < 45))",
+          "legendFormat": "Docker stats",
+          "editorMode": "code",
+          "range": false,
+          "instant": true,
+          "interval": "15s"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 32,
+      "title": "해석과 상세 진단",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 55,
+        "w": 24,
+        "h": 3
+      },
+      "description": "**데이터 없음**: 최초 호출 전, 무요청 구간의 지연·오류율, 미설정 exporter, 수집 실패를 먼저 구분하세요. **worker gauge**는 마지막 실행 관측값으로 실패 뒤 오래된 값이 남을 수 있습니다. 위의 수집 상태는 worker 정상 판정이 아닙니다. 이상 구간은 시간축에서 선택한 뒤 상단 **같은 시간의 Performance RCA** 링크에서 trace·log·profile로 확인하세요.",
+      "options": {
+        "mode": "markdown",
+        "content": "**데이터 없음**: 최초 호출 전, 무요청 구간의 지연·오류율, 미설정 exporter, 수집 실패를 먼저 구분하세요. **worker gauge**는 마지막 실행 관측값으로 실패 뒤 오래된 값이 남을 수 있습니다. 위의 수집 상태는 worker 정상 판정이 아닙니다. 이상 구간은 시간축에서 선택한 뒤 상단 **같은 시간의 Performance RCA** 링크에서 trace·log·profile로 확인하세요."
+      }
+    }
+  ]
+}
