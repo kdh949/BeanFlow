@@ -2,11 +2,16 @@ import http from 'node:http';
 import { pathToFileURL } from 'node:url';
 
 const MAX_BODY_BYTES = 32 * 1024;
-const MAX_RETAINED_PAYMENTS = 10_000;
+const MAX_RETAINED_PAYMENTS = 50_000;
 
-export function createTossDriverServer({ timeoutDelayMs = 9000 } = {}) {
+export function createTossDriverServer({ timeoutDelayMs = 9000, maxRetainedPayments = MAX_RETAINED_PAYMENTS } = {}) {
+  if (!Number.isSafeInteger(maxRetainedPayments) || maxRetainedPayments < 1 || maxRetainedPayments > MAX_RETAINED_PAYMENTS) {
+    throw new RangeError('Invalid perf driver payment capacity');
+  }
   const paymentsByKey = new Map();
   const paymentKeyByOrder = new Map();
+  const confirmationsByKey = new Map();
+  const cancellationsByKey = new Map();
 
   const server = http.createServer(async (request, response) => {
     try {
@@ -42,14 +47,31 @@ export function createTossDriverServer({ timeoutDelayMs = 9000 } = {}) {
           json(response, 404, { code: 'NOT_FOUND_PAYMENT' });
           return;
         }
+        const idempotencyKey = request.headers['idempotency-key'];
+        const cancellations = cancellationsByKey.get(payment.paymentKey) ?? new Map();
+        const signature = JSON.stringify([payload.cancelReason, payload.cancelAmount ?? null]);
+        const previous = cancellations.get(idempotencyKey);
+        if (previous) {
+          json(response, previous.signature === signature ? 200 : 409,
+            previous.signature === signature ? previous.body : { code: 'IDEMPOTENCY_KEY_REUSED' });
+          return;
+        }
+        const remaining = payment.totalAmount - payment.cancels.reduce((sum, entry) => sum + entry.cancelAmount, 0);
+        const amount = payload.cancelAmount ?? remaining;
+        if (!Number.isSafeInteger(amount) || amount <= 0 || amount > remaining) {
+          json(response, 400, { code: 'INVALID_CANCEL_AMOUNT' });
+          return;
+        }
         const cancel = {
-          cancelAmount: Number.isSafeInteger(payload.cancelAmount) ? payload.cancelAmount : payment.totalAmount,
+          cancelAmount: amount,
           cancelReason: payload.cancelReason,
           cancelStatus: 'DONE',
-          transactionKey: `perf-cancel-${payment.cancels.length + 1}`,
+          transactionKey: `${payment.paymentKey}-cancel-${payment.cancels.length + 1}`,
         };
         payment.cancels.push(cancel);
-        payment.status = payload.cancelAmount == null ? 'CANCELED' : 'PARTIAL_CANCELED';
+        payment.status = amount === remaining ? 'CANCELED' : 'PARTIAL_CANCELED';
+        cancellations.set(idempotencyKey, { signature, body: structuredClone(payment) });
+        cancellationsByKey.set(payment.paymentKey, cancellations);
         json(response, 200, payment);
         event('cancel', 'success');
         return;
@@ -81,6 +103,12 @@ export function createTossDriverServer({ timeoutDelayMs = 9000 } = {}) {
   return server;
 
   async function confirm(payload, response, byKey, byOrder, delayMs) {
+    const existing = confirmationsByKey.get(payload.paymentKey);
+    if (existing) {
+      const matches = existing.orderId === payload.orderId && existing.totalAmount === payload.amount;
+      json(response, matches ? 200 : 409, matches ? existing : { code: 'PAYMENT_BINDING_MISMATCH' });
+      return;
+    }
     const scenario = scenarioOf(payload.paymentKey);
     if (scenario === 'decline') {
       json(response, 400, { code: 'INVALID_REJECT_CARD', message: 'declined' });
@@ -99,6 +127,11 @@ export function createTossDriverServer({ timeoutDelayMs = 9000 } = {}) {
       return;
     }
 
+    if (byKey.size >= maxRetainedPayments) {
+      json(response, 503, { code: 'DRIVER_CAPACITY_EXCEEDED' });
+      event('confirm', 'capacity_exceeded');
+      return;
+    }
     const payment = {
       paymentKey: payload.paymentKey,
       orderId: payload.orderId,
@@ -107,23 +140,14 @@ export function createTossDriverServer({ timeoutDelayMs = 9000 } = {}) {
       currency: 'KRW',
       cancels: [],
     };
-    retain(payment, byKey, byOrder);
+    byKey.set(payment.paymentKey, payment);
+    byOrder.set(payment.orderId, payment.paymentKey);
+    confirmationsByKey.set(payment.paymentKey, structuredClone(payment));
     if (scenario === 'timeout') {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
     json(response, 200, payment);
     event('confirm', scenario === 'unknown' ? 'unknown' : 'success');
-  }
-
-  function retain(payment, byKey, byOrder) {
-    if (byKey.size >= MAX_RETAINED_PAYMENTS) {
-      const oldestKey = byKey.keys().next().value;
-      const oldest = byKey.get(oldestKey);
-      byKey.delete(oldestKey);
-      if (oldest) byOrder.delete(oldest.orderId);
-    }
-    byKey.set(payment.paymentKey, payment);
-    byOrder.set(payment.orderId, payment.paymentKey);
   }
 }
 
@@ -156,7 +180,7 @@ function authorized(request) {
 
 function validIdempotencyKey(request) {
   const value = request.headers['idempotency-key'];
-  return typeof value === 'string' && /^[A-Za-z0-9._-]{1,100}$/.test(value);
+  return typeof value === 'string' && /^[\x21-\x7E]{1,300}$/.test(value);
 }
 
 function validConfirmation(payload) {
