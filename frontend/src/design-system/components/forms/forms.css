@@ -11,6 +11,7 @@
 .bf-stepper button { min-width: var(--tap-min); min-height: var(--tap-min); display: grid; place-items: center; border: 0; background: var(--control-bg); color: var(--control-text); cursor: pointer; }
 .bf-stepper button:disabled { background: var(--control-disabled-bg); color: var(--control-disabled-text); cursor: not-allowed; }
 .bf-stepper output { min-width: 32px; text-align: center; font-weight: 800; }
+.bf-stepper.is-disabled { background: var(--control-disabled-bg); }
 .bf-stepper.is-disabled output { color: var(--control-disabled-text); background: var(--control-disabled-bg); }
 .bf-field { min-width: 0; display: grid; align-content: start; gap: var(--sp-3); }
 .bf-field__label,.bf-radio-group legend { color: var(--text-strong); font-size: var(--fs-caption); font-weight: var(--fw-bold); }

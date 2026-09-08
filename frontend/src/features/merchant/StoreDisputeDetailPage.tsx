@@ -53,7 +53,7 @@ export function StoreDisputeDetailPage({ scenario = "contract-pending", dispute,
       ) : (
         <div className="console-detail-grid">
           <section className="surface-card order-panel">
-            <div className="panel-heading"><div><span className="context-label">{dispute.settlementItemReference}</span><h2>{dispute.disputeId}</h2></div><StatusText state={dispute.state} /></div>
+            <div className="panel-heading"><div><span className="context-label">{dispute.settlementItemReference}</span><h2>{dispute.disputeId}</h2></div><StatusText domain="dispute" state={dispute.state} /></div>
             <dl className="detail-list"><div><dt>요청 금액</dt><dd className="bf-num">{won.format(dispute.expectedAdjustmentKrw)}</dd></div><div><dt>보류 금액</dt><dd className="bf-num">{won.format(dispute.heldAmountKrw)}</dd></div><div><dt>첨부 자료</dt><dd>{dispute.evidenceCount}건</dd></div></dl>
             <div className="dispute-summary"><FileSearch aria-hidden="true" /><div><strong>신청 사유</strong><p>{dispute.reasonSummary}</p></div></div>
             {dispute.decisionSummary ? <div className="dispute-summary"><RotateCcw aria-hidden="true" /><div><strong>검토 결과</strong><p>{dispute.decisionSummary}</p></div></div> : <InlineNotice title="검토 중입니다" description="검토가 끝나면 다시 검토를 요청할 수 있는지 확인할 수 있습니다." />}

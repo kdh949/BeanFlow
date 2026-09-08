@@ -112,7 +112,7 @@ export function StoreDisputesPage() {
                       <span className="context-label">명세 {compactId(dispute.settlementItemId)}</span>
                       <strong className="bf-num">{won.format(dispute.expectedAdjustmentKrw)}</strong>
                     </div>
-                    <StatusText state={dispute.state} />
+                    <StatusText domain="dispute" state={dispute.state} />
                   </header>
                   <dl className="detail-list">
                     <div><dt>보류 금액</dt><dd className="bf-num">{won.format(dispute.heldAmountKrw)}</dd></div>

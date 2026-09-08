@@ -112,7 +112,7 @@ fixture를 구별하여 보고한다.
 - [x] 감사 결과 및 최신 main 비교, 독립 작업 트리 준비.
 - [x] BeanFlow 6009 MCP inventory와 story 작성 지침 조회.
 - [x] 인증·레이아웃 slice 구현과 로컬 검증. 첫 PR 작성.
-- [ ] 업무 의미·환불 slice 구현/검증/PR.
+- [x] 업무 의미·환불 slice 구현/검증/PR.
 - [ ] 조회·제공 범위 slice 구현/검증/PR.
 - [ ] 전체 회귀, 시각 검증, stack ancestry와 원격 CI 확인.
 
@@ -138,3 +138,8 @@ MCP 전체 267개 중 266개 통과 후 실패 fixture 1개를 수정하고 해�
 ## Revision Notes
 
 - 2026-09-08: 최초 실행 계획.
+
+- 두 번째 slice: 도메인별 상태명, 환불 결과/요청 보존과 금액 재조회 실패, 상담 정보 위계 수정.
+  typecheck, unit 185개, presentation 10개, product-copy 11개, 디자인 검사 통과.
+  Storybook MCP 전체 274개 및 a11y 통과. Storybook/제품 build, Docs smoke 66 docs/47 states,
+  Sites 4개 통과. 320px 상담·390px 환불 결과 화면에서 가로 overflow와 13px 미만 주요 제어 글자 없음.

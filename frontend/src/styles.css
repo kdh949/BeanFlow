@@ -485,3 +485,5 @@
   .follow-up-case-summary > div:nth-child(2) { grid-column: auto; grid-row: auto; }
   .follow-up-event-list > li, .follow-up-steps > li { align-items: flex-start; flex-direction: column; }
 }
+
+.support-case-reference { overflow-wrap: anywhere; font-size: var(--fs-body-sm); }

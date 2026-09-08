@@ -75,7 +75,7 @@ type Story = StoryObj<typeof meta>;
 async function openCase(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) {
   await userEvent.type(canvas.getByLabelText("기존 상담 건 ID"), caseId);
   await userEvent.click(canvas.getByRole("button", { name: "상담 건 열기" }));
-  await expect(await canvas.findByText(`상담 ${caseId}`)).toBeVisible();
+  await expect(await canvas.findByText(`상담 ID ${caseId}`)).toBeVisible();
 }
 
 export const MaskedExactSearch: Story = {
@@ -169,7 +169,7 @@ export const VerificationLocked: Story = {
   play: async ({ canvas }) => {
     await openCase(canvas);
     await userEvent.click(canvas.getByRole("button", { name: "강화 본인확인 시작" }));
-    await expect(await canvas.findByText("LOCKED")).toBeVisible();
+    await expect(await canvas.findByText("잠김")).toBeVisible();
     await expect(canvas.queryByRole("button", { name: "등록 전화로 인증 코드 발급" })).not.toBeInTheDocument();
   },
 };

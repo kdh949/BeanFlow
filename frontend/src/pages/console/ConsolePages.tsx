@@ -47,7 +47,7 @@ export function OpsDashboardPage({ scenario = "contract-pending", summary }: { s
       <section className="console-shortcuts">
         <Link className="surface-card shortcut-card" to="/ops/recovery"><AlertTriangle /><div><strong>문제와 정산 확인</strong><span>실패 업무, 정산 차이와 감사 기록 보기</span></div><ArrowRight /></Link>
         <Link className="surface-card shortcut-card" to="/ops/control"><ListChecks /><div><strong>승인과 지급 준비</strong><span>환불 승인, 캠페인과 지급 파일 처리</span></div><ArrowRight /></Link>
-        <Link className="surface-card shortcut-card" to="/ops/orders"><Search /><div><strong>보상 내역 찾기</strong><span>주문 번호로 보상 상태 확인</span></div><ArrowRight /></Link>
+        <Link className="surface-card shortcut-card" to="/ops/orders"><Search /><div><strong>보상 내역 찾기</strong><span>내부 주문 ID로 보상 상태 확인</span></div><ArrowRight /></Link>
       </section>
     </div>
   );
@@ -68,13 +68,17 @@ export function OpsOrderPage() {
   }
   return <div className="console-page">
     <PageHeading title="주문 보상 조회" />
-    <form className="lookup-bar lookup-bar-two" onSubmit={(event) => void lookup(event)}><div><Search size={18} /><TextField label="주문 ID" id="ops-order-id" value={orderId} onValueChange={setOrderId} placeholder="UUID 입력" /><TextField label="접근 사유" value={accessReason} onValueChange={setAccessReason} placeholder="감사 접근 사유" /><Button type="submit" disabled={loading || !orderId.trim() || !accessReason.trim()}>조회</Button></div></form>
+    <form className="lookup-bar lookup-bar-two" onSubmit={(event) => void lookup(event)}><div><Search size={18} /><TextField label="주문 ID" id="ops-order-id" value={orderId} onValueChange={setOrderId} placeholder="내부 주문 ID 입력" description="고객 주문 번호(BF-…)와 다른 내부 식별자입니다." /><TextField label="접근 사유" value={accessReason} onValueChange={setAccessReason} placeholder="감사 접근 사유" /><Button type="submit" disabled={loading || !orderId.trim() || !accessReason.trim()}>조회</Button></div></form>
     {loading ? <LoadingState label="보상 상태를 조회하는 중" /> : null}{error ? <ErrorState error={error} /> : null}
     {!result && !loading && !error ? <EmptyState title="감사 조회 대기" description="주문 ID와 업무상 접근 사유가 모두 필요합니다." /> : null}
     {result ? <CompensationResult result={result} /> : null}
   </div>;
 }
 
+const compensationStepLabels: Record<components["schemas"]["CompensationStep"]["type"], string> = {
+  PAYMENT: "결제 환불", PICKUP: "픽업 예약 해제", STOCK: "재고 반환", COUPON: "쿠폰 복원", POINTS: "포인트 복원", CUSTOMER_NOTIFICATION: "고객 알림",
+};
+
 export function CompensationResult({ result }: { result: Compensation }) {
-  return <section className="surface-card compensation-card"><div className="panel-heading"><div><span className="context-label">CASE {compactId(result.caseId)}</span><h2>{result.trigger === "STORE_REJECTION" ? "매장 거절 보상" : "고객 취소 보상"}</h2></div><StatusText state={result.state} /></div><div className="compensation-steps">{result.steps.map((step) => <article key={step.type}><span>{step.state === "SUCCEEDED" || step.state === "NOT_REQUIRED" ? <CheckCircle2 size={19} /> : <AlertTriangle size={19} />}</span><div><strong>{step.type}</strong><small>{step.state} · 시도 {step.attemptCount}회{step.lastErrorCode ? ` · ${step.lastErrorCode}` : ""}</small></div></article>)}</div><p className="form-footnote">최종 갱신 {shortDateTime.format(new Date(result.updatedAt))} · 주문의 종료 상태와 보상 성공은 독립적입니다.</p></section>;
+  return <section className="surface-card compensation-card"><div className="panel-heading"><div><span className="context-label">CASE {compactId(result.caseId)}</span><h2>{result.trigger === "STORE_REJECTION" ? "매장 거절 보상" : "고객 취소 보상"}</h2></div><StatusText state={result.state} /></div><div className="compensation-steps">{result.steps.map((step) => <article key={step.type}><span>{step.state === "SUCCEEDED" || step.state === "NOT_REQUIRED" ? <CheckCircle2 size={19} /> : <AlertTriangle size={19} />}</span><div><strong>{compensationStepLabels[step.type]}</strong><small><StatusText state={step.state} /> · 시도 {step.attemptCount}회{step.lastErrorCode ? ` · ${step.lastErrorCode}` : ""}</small></div></article>)}</div><p className="form-footnote">최종 갱신 {shortDateTime.format(new Date(result.updatedAt))} · 주문의 종료 상태와 보상 성공은 독립적입니다.</p></section>;
 }

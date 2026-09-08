@@ -292,7 +292,7 @@ body:has(.bfr-customer-stage) { min-width: 0; }
 .bfr-refund-form { display: grid; gap: var(--sp-5); }
 .bfr-refund-form > div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-4); }
 .bfr-refund-alert { margin-bottom: var(--sp-5); padding: var(--sp-5); border-radius: var(--r-sm); background: var(--danger-bg); color: var(--danger-fg); font-size: var(--fs-body-sm); }
-.bfr-refund-outcome { margin-bottom: var(--sp-5); padding: var(--sp-6); display: flex; align-items: flex-start; gap: var(--sp-5); border: var(--bw-hair) solid var(--border-success-soft); border-radius: var(--r-sm); background: var(--success-bg); }
+.bfr-refund-outcome { margin-bottom: var(--sp-5); padding: var(--sp-6); display: flex; align-items: flex-start; gap: var(--sp-5); border: var(--bw-hair) solid var(--border-hair); border-radius: var(--r-sm); background: var(--warning-bg); }
 .bfr-refund-outcome h2 { font-size: var(--fs-title-3); }
 .bfr-refund-outcome p { margin-top: var(--sp-2); font-size: var(--fs-body-sm); }
 .bfr-refund-outcome small { color: var(--text-muted); font-size: var(--fs-caption); }
@@ -320,3 +320,6 @@ body:has(.bfr-customer-stage) { min-width: 0; }
   .bfr-refund-lines > article { grid-template-columns: 1fr; }
   .bfr-refund-lines article dl { grid-column: auto; }
 }
+
+.bfr-refund-outcome--success { background: var(--success-bg); border-color: var(--border-success-soft); }
+.bfr-refund-outcome--danger { background: var(--danger-bg); }

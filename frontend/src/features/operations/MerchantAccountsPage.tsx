@@ -186,7 +186,7 @@ export function MerchantAccountsPage() {
               <section className="surface-card order-panel merchant-account-summary">
                 <div className="panel-heading">
                   <div><span className="context-label">정확 일치 계정</span><h2>{account.displayName}</h2></div>
-                  <StatusText state={account.accountState} />
+                  <StatusText domain="account" state={account.accountState} />
                 </div>
                 <dl className="detail-list">
                   <div><dt>로그인 ID</dt><dd>{account.loginId}</dd></div>

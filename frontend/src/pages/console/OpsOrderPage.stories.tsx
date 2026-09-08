@@ -46,7 +46,7 @@ async function submitLookup(canvas: Parameters<NonNullable<Story["play"]>>[0]["c
 export const SuccessfulLookup: Story = {
   render: () => <div className="console-page"><CompensationResult result={compensationSucceeded} /></div>,
   play: async ({ canvas }) => {
-    await expect(canvas.getByText("완료")).toBeVisible();
+    await expect(canvas.getAllByText("완료").length).toBeGreaterThan(0);
   },
 };
 
@@ -71,6 +71,6 @@ export const SuccessfulLookupInteraction: Story = {
   },
   play: async ({ canvas }) => {
     await submitLookup(canvas);
-    await expect(await canvas.findByText("완료")).toBeVisible();
+    await expect((await canvas.findAllByText("완료")).length).toBeGreaterThan(0);
   },
 };

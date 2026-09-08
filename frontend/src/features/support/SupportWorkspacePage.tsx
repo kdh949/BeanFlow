@@ -35,6 +35,8 @@ const nextCaseState: Partial<Record<SupportCase["state"], SupportCase["state"]>>
   RESOLVED: "CLOSED",
 };
 
+const personalFieldLabels: Record<string, string> = { CUSTOMER_PRIMARY_PHONE: "고객 등록 전화번호", STORE_SUPPORT_PHONE: "매장 상담 전화번호", COURIER_RELAY_PHONE: "배달원 안심 전화번호" };
+const caseActionLabels: Partial<Record<SupportCase["state"], string>> = { OPEN: "상담 시작", IN_PROGRESS: "해결 처리", WAITING: "상담 재개", RESOLVED: "상담 종료" };
 const fieldBySubject: Record<SubjectLink["subjectType"], PersonalField | null> = {
   CUSTOMER: "CUSTOMER_PRIMARY_PHONE",
   STORE: "STORE_SUPPORT_PHONE",
@@ -369,6 +371,12 @@ export function SupportWorkspacePage() {
   return (
     <div className="console-page support-workspace">
       <PageHeading title="고객지원 콘솔" />
+      {supportCase ? <>
+          <section className="surface-card support-case-header">
+            <div><span className="context-label">현재 상담 건</span><h2>상담 {compactId(supportCase.caseId)}</h2><p className="support-case-reference">상담 ID {supportCase.caseId}</p><p>담당자 {compactId(supportCase.assigneeId)} · 버전 {supportCase.version}</p></div>
+            <div><StatusText state={supportCase.state} /><ButtonLink variant="secondary" to={`/support/follow-up?caseId=${encodeURIComponent(supportCase.caseId)}`}>상담 후속 업무</ButtonLink>{nextCaseState[supportCase.state] ? <Button variant="secondary" loading={transitioning} onClick={() => void transitionCase()}>{caseActionLabels[supportCase.state]}</Button> : null}</div>
+          </section>
+      </> : null}
 
       <section className="support-intake-grid">
         <form className="surface-card operation-form" onSubmit={(event) => { event.preventDefault(); void searchSubjects(); }}>
@@ -416,30 +424,26 @@ export function SupportWorkspacePage() {
       {caseLoading ? <LoadingState label="상담 건과 관련 이력을 불러오는 중" /> : null}
       {supportCase ? (
         <>
-          <section className="surface-card support-case-header">
-            <div><span className="context-label">진행 중인 상담 건</span><h2>상담 {supportCase.caseId}</h2><p>담당자 {compactId(supportCase.assigneeId)} · 버전 {supportCase.version}</p></div>
-            <div><StatusText state={supportCase.state} /><ButtonLink variant="secondary" to={`/support/follow-up?caseId=${encodeURIComponent(supportCase.caseId)}`}>상담 후속 업무</ButtonLink>{nextCaseState[supportCase.state] ? <Button variant="secondary" loading={transitioning} onClick={() => void transitionCase()}>다음 상태: {nextCaseState[supportCase.state]}</Button> : null}</div>
-          </section>
           {caseError ? <ErrorState error={caseError} retry={() => void openCase(supportCase.caseId)} /> : null}
           <div className="support-control-grid">
             <section className="surface-card support-access-panel">
               <div className="operation-heading"><ShieldCheck aria-hidden="true" /><div><strong>본인확인과 제한형 열람</strong><small>본인확인을 마쳐도 개인정보 열람 권한은 별도로 승인해야 합니다.</small></div></div>
-              {activeLink ? <p className="support-subject-binding"><StatusText state={activeLink.subjectType} /><code>{activeLink.subjectId}</code><span>{revealField}</span></p> : <EmptyState title="본인확인 가능한 대상이 없습니다" description="고객, 매장 또는 배송 대상을 상담 건에 연결해 주세요." />}
+              {activeLink ? <p className="support-subject-binding"><StatusText state={activeLink.subjectType} /><code>{activeLink.subjectId}</code><span>{revealField ? personalFieldLabels[revealField] : ""}</span></p> : <EmptyState title="본인확인 가능한 대상이 없습니다" description="고객, 매장 또는 배송 대상을 상담 건에 연결해 주세요." />}
               {terminal ? <p className="operation-warning">종료된 상담 건에서는 본인확인이나 개인정보 열람을 시작할 수 없습니다.</p> : null}
               {activeLink && !verification && !terminal ? <Button block loading={verificationBusy} onClick={() => void startVerification()}>강화 본인확인 시작</Button> : null}
               {verification ? (
                 <div className="support-step-stack">
-                  <div className="support-step-summary"><span>본인확인</span><StatusText state={verification.state} /><strong>{verification.achievedLevel}</strong><small>만료 {shortDateTime.format(new Date(verification.expiresAt))}</small></div>
+                  <div className="support-step-summary"><span>본인확인</span><StatusText state={verification.state} /><StatusText state={verification.achievedLevel} /><small>만료 {shortDateTime.format(new Date(verification.expiresAt))}</small></div>
                   {!challenge && verification.state === "PENDING" ? <Button variant="secondary" block loading={verificationBusy} onClick={() => void issueChallenge()}>등록 전화로 인증 코드 발급</Button> : null}
-                  {challenge ? <div className="challenge-proof"><p><StatusText state={challenge.state} /> 인증 코드 {compactId(challenge.challengeId)}</p>{challenge.state === "ISSUED" ? <><TextField label="일회성 인증 코드" id="support-proof" type="password" autoComplete="one-time-code" value={proof} onValueChange={setProof} /><Button block loading={verificationBusy} disabled={!proof} onClick={() => void verifyProof()}>인증 코드 확인</Button></> : null}</div> : null}
+                  {challenge ? <div className="challenge-proof"><p><StatusText state={challenge.state} /> 인증 요청 {compactId(challenge.challengeId)}</p>{challenge.state === "ISSUED" ? <><TextField label="일회성 인증 코드" id="support-proof" type="password" autoComplete="one-time-code" value={proof} onValueChange={setProof} /><Button block loading={verificationBusy} disabled={!proof} onClick={() => void verifyProof()}>인증 코드 확인</Button></> : null}</div> : null}
                   {verification.achievedLevel === "ENHANCED" && !grant ? <Button block loading={grantBusy} onClick={() => void requestGrant()}>전화번호 열람 권한 요청</Button> : null}
                 </div>
               ) : null}
               {verificationError ? <ErrorState error={verificationError} /> : null}
               {grant ? (
                 <div className="support-grant-card">
-                  <div><span className="context-label">데이터 접근 승인</span><StatusText state={grant.state} /></div>
-                  <code>{grant.grantId}</code><p>{grant.risk} · 사용 {grant.reservedReveals}/{grant.maxReveals}</p>
+                  <div><span className="context-label">데이터 접근 승인</span><StatusText domain="grant" state={grant.state} /></div>
+                  <code>{grant.grantId}</code><p><StatusText state={grant.risk} /> · 사용 {grant.reservedReveals}/{grant.maxReveals}</p>
                   {grant.state === "APPROVAL_PENDING" ? <Button variant="secondary" block loading={grantBusy} onClick={() => void approveGrant()}>별도 승인자로 열람 승인</Button> : null}
                   {grant.state === "ACTIVE" ? <Button block loading={grantBusy} onClick={() => void revealPersonalData()}><Eye size={16} /> 승인된 전화번호 열람</Button> : null}
                 </div>
@@ -462,7 +466,7 @@ function RevealPanel({ reveal, onClear }: { reveal: Reveal; onClear: () => void 
   return (
     <section className="support-reveal" aria-labelledby="support-reveal-title">
       <div><EyeOff aria-hidden="true" /><div><strong id="support-reveal-title">60초 뒤 자동으로 숨겨지는 정보</strong></div></div>
-      {Object.entries(reveal.values).map(([field, value]) => <p key={field}><span>{field}</span><strong>{value}</strong></p>)}
+      {Object.entries(reveal.values).map(([field, value]) => <p key={field}><span>{personalFieldLabels[field] ?? field}</span><strong>{value}</strong></p>)}
       <Button variant="ghost" block onClick={onClear}>지금 지우기</Button>
     </section>
   );

@@ -39,7 +39,7 @@ export function ConsoleFrame({ kind, access, actorLabel, ownsAnyStore = false, m
   ];
   const opsItems = [
     { to: "/ops", label: "운영 현황", icon: BarChart3, end: true },
-    { to: "/ops/orders", label: "주문 조회", icon: Search, end: false },
+    { to: "/ops/orders", label: "주문 보상 조회", icon: Search, end: false },
     { to: "/ops/merchant-accounts", label: "점주 계정", icon: UserRound, end: false },
     { to: "/ops/recovery", label: "문제 확인 및 복구", icon: LifeBuoy, end: false },
     { to: "/ops/control", label: "운영 업무", icon: CircleDotDashed, end: false },

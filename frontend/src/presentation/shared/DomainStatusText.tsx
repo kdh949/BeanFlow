@@ -1,9 +1,15 @@
 import { StatusText as VisualStatusText, type StatusTextTone } from "../../design-system";
 
-export type DomainStatusTextProps = { state: string; label?: string };
+export type DomainStatusTextProps = { state: string; label?: string; domain?: "account" | "dispute" | "grant" | "brand" | "catalog" };
 
 const labels: Record<string, string> = {
-  ACTIVE: "판매 중",
+  ACTIVE: "활성",
+  OWNER: "점주", STAFF: "직원", INITIAL_PASSWORD: "초기 비밀번호 변경 필요",
+  OPEN: "접수", WAITING: "응답 대기", RESOLVED: "해결됨", CLOSED: "종료됨",
+  CUSTOMER: "고객", STORE: "매장", RIDER: "외부 배달원", DELIVERY: "배송", ORDER: "주문",
+  NONE: "미확인", UNVERIFIED: "미확인", BASIC: "기본 확인", ENHANCED: "강화 확인", VERIFIED: "확인 완료",
+  ISSUED: "발급됨", LOCKED: "잠김", AMBIGUOUS: "후보 확인 필요",
+  SENSITIVE: "민감 정보", HIGHLY_SENSITIVE: "고위험 정보",
   SOLD_OUT: "품절",
   ARCHIVED: "보관됨",
   AVAILABLE: "판매 가능",
@@ -52,11 +58,19 @@ const labels: Record<string, string> = {
   NOT_REQUIRED: "해당 없음",
 };
 
+const domainLabels: Record<NonNullable<DomainStatusTextProps["domain"]>, Record<string, string>> = {
+  account: { ACTIVE: "사용 가능", DISABLED: "사용 중지" },
+  dispute: { ACCEPTED: "인정", REJECTED: "기각" },
+  grant: { ACTIVE: "열람 승인", APPROVAL_PENDING: "열람 승인 대기" },
+  brand: { ACTIVE: "운영 중" },
+  catalog: { ACTIVE: "판매 중" },
+};
+
 const uncertainty = new Set(["UNKNOWN", "RECONCILING", "MANUAL_REVIEW", "INCOMPLETE", "REVIEW_PENDING"]);
 const failure = new Set(["FAILED", "CANCELLED", "REJECTED", "EXPIRED"]);
 
 /** Owns BeanFlow domain-state copy while delegating only visual tone to the design system. */
-export function DomainStatusText({ state, label }: DomainStatusTextProps) {
+export function DomainStatusText({ state, label, domain }: DomainStatusTextProps) {
   const tone: StatusTextTone = uncertainty.has(state) ? "uncertain" : failure.has(state) ? "danger" : "neutral";
-  return <VisualStatusText tone={tone}>{label ?? labels[state] ?? state}</VisualStatusText>;
+  return <VisualStatusText tone={tone}>{label ?? (domain ? domainLabels[domain][state] : undefined) ?? labels[state] ?? state}</VisualStatusText>;
 }
