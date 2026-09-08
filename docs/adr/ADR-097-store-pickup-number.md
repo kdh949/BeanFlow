@@ -167,6 +167,7 @@ DB의 행 잠금으로 직렬화한다. 애플리케이션 재시도 없이 동�
   별도 transaction에 남기지 않는다. 최초 경로의 한 번 더 실행되는 UPDATE는 정상 경로의
   이력 크기에 비례하는 집계 비용을 제거하기 위한 비용이다.
 - 검증과 배포 전후 측정은 [잠금 구간 SQL 개선 계획](../exec-plans/completed/pickup-counter-pr-extraction.md)에 기록한다.
+  환불·감사 후속 처리까지 포함한 통합 측정은 [잠금 구간 SQL 재측정](../quality/performance-lock-critical-section-retest-2026-09-08.md)을 참조한다.
 
 ## Related Decisions
 

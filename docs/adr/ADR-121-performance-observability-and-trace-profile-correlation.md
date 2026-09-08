@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-04
-- **Implementation owner:** [BeanFlow 성능 관측성과 부하 테스트 기반](../exec-plans/active/performance-observability-and-load-test-foundation.md)
+- **Implementation owner:** [BeanFlow 성능 관측성과 부하 테스트 기반](../exec-plans/completed/performance-observability-and-load-test-foundation.md)
 
 ## Context
 

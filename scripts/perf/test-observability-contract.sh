@@ -145,6 +145,7 @@ ruby -ryaml -e '
 node --test scripts/load/load-contract.test.mjs scripts/load/k6-runtime.test.mjs infra/perf/toss-driver.test.mjs
 python3 scripts/perf/test-container-stats-exporter.py
 python3 scripts/perf/test-dashboard-queries.py
+python3 scripts/perf/test-live-dashboard-queries.py
 python3 scripts/load/run-contract.test.py
 bash -n scripts/perf/hold-pickup-slot-lock.sh scripts/perf/postgres-wait-snapshot.sh
 sh -n scripts/perf/postgres-exporter-entrypoint.sh
