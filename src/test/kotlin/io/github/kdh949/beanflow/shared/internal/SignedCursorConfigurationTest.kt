@@ -4,12 +4,20 @@ import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Clock
+import java.util.Base64
 
 internal class SignedCursorConfigurationTest {
+    @TempDir
+    lateinit var secretsDirectory: Path
+
     private val contextRunner =
         ApplicationContextRunner()
             .withUserConfiguration(SignedCursorConfiguration::class.java, TestInfrastructure::class.java)
@@ -26,6 +34,38 @@ internal class SignedCursorConfigurationTest {
                 assertThat(meter!!.id.tags.map { it.key to it.value }).containsExactly("outcome" to "valid")
             }
     }
+
+    @Test
+    fun `deployment profiles bind the supplied cursor key from the real config tree`() {
+        Files.writeString(secretsDirectory.resolve("BEANFLOW_CURSOR_HMAC_SECRET_BASE64_URL"), TEST_VECTOR_SECRET)
+        listOf("portfolio", "perf").forEach { profile ->
+            deploymentContext(profile).run { context ->
+                assertThat(context).hasNotFailed()
+                val keyRing = context.getBean(CursorHmacKeyRing::class.java)
+                assertThat(keyRing.activeKeyId).isEqualTo("deployed-v1")
+                assertThat(keyRing.activeKey).isEqualTo(Base64.getUrlDecoder().decode(TEST_VECTOR_SECRET))
+            }
+        }
+    }
+
+    @Test
+    fun `deployment profiles reject a missing cursor secret without a fixture fallback`() {
+        listOf("portfolio", "perf").forEach { profile ->
+            deploymentContext(profile).run { context ->
+                assertThat(context).hasFailed()
+            }
+        }
+    }
+
+    private fun deploymentContext(profile: String): ApplicationContextRunner =
+        contextRunner
+            .withInitializer(ConfigDataApplicationContextInitializer())
+            .withPropertyValues(
+                "spring.config.location=file:src/main/resources/",
+                "spring.config.import=configtree:$secretsDirectory/",
+                "spring.profiles.active=$profile",
+                "BEANFLOW_CURSOR_HMAC_ACTIVE_KEY_ID=deployed-v1",
+            )
 
     @Test
     fun `missing empty duplicate malformed short and unknown active key configuration fail startup without secret text`() {

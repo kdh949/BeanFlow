@@ -3,6 +3,9 @@ package io.github.kdh949.beanflow.payment.internal
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyOperation
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyOutcome
+import io.github.kdh949.beanflow.shared.api.RecordingExternalDependencyTelemetry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -22,6 +25,7 @@ internal class TossOneTimePaymentGatewayTest {
     private lateinit var gateway: TossOneTimePaymentGateway
     private val responses = ConcurrentLinkedQueue<StubResponse>()
     private val requests = ConcurrentLinkedQueue<CapturedRequest>()
+    private val telemetry = RecordingExternalDependencyTelemetry()
 
     @BeforeEach
     fun setUp() {
@@ -39,6 +43,7 @@ internal class TossOneTimePaymentGatewayTest {
                     .defaultHeader(HttpHeaders.AUTHORIZATION, authorization)
                     .build(),
                 ObjectMapper(),
+                telemetry,
             )
     }
 
@@ -69,6 +74,9 @@ internal class TossOneTimePaymentGatewayTest {
         assertThat(body.path("paymentKey").asText()).isEqualTo("pay-key")
         assertThat(body.path("orderId").asText()).isEqualTo("bf_order_123")
         assertThat(body.path("amount").asLong()).isEqualTo(1_000)
+        val telemetryRecord = telemetry.records.single()
+        assertThat(telemetryRecord.call.operation).isEqualTo(ExternalDependencyOperation.CONFIRM)
+        assertThat(telemetryRecord.outcome).isEqualTo(ExternalDependencyOutcome.SUCCESS)
     }
 
     @Test
@@ -81,6 +89,8 @@ internal class TossOneTimePaymentGatewayTest {
 
         assertThat(declined).isEqualTo(ProviderPaymentResult.Declined("INVALID_REJECT_CARD"))
         assertThat(unknown).isEqualTo(ProviderPaymentResult.Unknown("TOSS_CONFIRM_INTERNAL_SERVER_ERROR"))
+        assertThat(telemetry.records.map { it.outcome })
+            .containsExactly(ExternalDependencyOutcome.DECLINED, ExternalDependencyOutcome.UNKNOWN)
     }
 
     @Test

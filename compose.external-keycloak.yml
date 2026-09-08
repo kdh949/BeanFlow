@@ -1,0 +1,33 @@
+# Apply last, after compose.portfolio.yml and compose.staging.yml/compose.prod.yml.
+# Docker Compose 2.24.4+ is required for !override.
+services:
+  keycloak: !reset null
+
+  postgres:
+    secrets: !override
+      - source: postgres_password
+        target: BEANFLOW_POSTGRES_PASSWORD
+    volumes: !override
+      - postgres-data:/var/lib/postgresql/data
+
+  api:
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+    environment:
+      BEANFLOW_JWK_SET_URI: ${BEANFLOW_JWK_SET_URI:?BEANFLOW_JWK_SET_URI is required for external Keycloak}
+      BEANFLOW_OPERATIONS_OIDC_ISSUER_URI: ${BEANFLOW_OPERATIONS_OIDC_ISSUER_URI:?BEANFLOW_OPERATIONS_OIDC_ISSUER_URI is required for external Keycloak}
+      BEANFLOW_OPERATIONS_OIDC_AUTHORIZATION_SERVER_URL: ${BEANFLOW_OPERATIONS_OIDC_AUTHORIZATION_SERVER_URL:?BEANFLOW_OPERATIONS_OIDC_AUTHORIZATION_SERVER_URL is required for external Keycloak}
+      BEANFLOW_OPERATIONS_OIDC_REALM: ${BEANFLOW_OPERATIONS_OIDC_REALM:?BEANFLOW_OPERATIONS_OIDC_REALM is required for external Keycloak}
+      BEANFLOW_OPERATIONS_OIDC_CLIENT_ID: ${BEANFLOW_OPERATIONS_OIDC_CLIENT_ID:?BEANFLOW_OPERATIONS_OIDC_CLIENT_ID is required for external Keycloak}
+
+  frontend:
+    depends_on: !override
+      api:
+        condition: service_healthy
+    volumes:
+      - ./deploy/nginx/external-keycloak.conf:/etc/nginx/conf.d/default.conf:ro
+
+secrets:
+  keycloak_db_password: !reset null
+  keycloak_admin_password: !reset null

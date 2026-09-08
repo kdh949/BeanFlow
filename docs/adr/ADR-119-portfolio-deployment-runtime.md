@@ -16,11 +16,18 @@ secret 주입, 외부 노출 경계와 버전 롤백 절차가 하나의 검증 
 
 ## Decision
 
+### Extension (2026-09-06)
+
+[ADR-122](ADR-122-external-keycloak-deployment.md)는 별도로 운영하는 Keycloak을 사용하는 명시적
+`external` 배포 모드를 추가한다. 아래 내장 Keycloak 결정은 기존 `bundled` 기본 배포에 유지된다.
+
 ### 1. `portfolio`를 별도 공개 배포 profile로 둔다
 
 - `portfolio`는 `local`, `toss-sandbox`, `vault-enforced`를 조합한다.
-- Toss client/secret key는 기존 adapter의 `test_ck_`/`test_sk_` startup validation을 그대로 통과해야
-  한다. live key와 실제 자금 이동은 허용하지 않는다.
+- **Key validation amendment (2026-09-06):** Toss client/secret key 접두사 검사를 배포 preflight와
+  `toss-sandbox` startup에서 제거한다. 필수 key/secret 파일과 권한 검사는 유지한다. 테스트 키 선택은
+  배포 운영자의 책임이며, profile 이름이나 preflight 통과가 실제 자금 이동 부재를 보장하지 않는다.
+  포트폴리오 배포에는 테스트 키를 사용하고 live key와 실제 자금 이동은 허용하지 않는다.
 - notification과 결제수단 lifecycle은 현재 local/scripted 또는 명시적 unavailable 결과를 사용한다.
   UI와 운영 문서는 이 환경을 상용 운영으로 표현하지 않는다.
 - `prod` profile과 모든 production Provider guard는 변경하지 않는다. `portfolio`와 `prod`, `test`,
@@ -31,6 +38,17 @@ secret 주입, 외부 노출 경계와 버전 롤백 절차가 하나의 검증 
 - `prod`와 `portfolio`는 모두 `vault-enforced`를 활성화한다.
 - 애플리케이션은 같은 컨테이너의 loopback Vault Proxy만 호출한다.
 - Vault Proxy는 AppRole auto-auth token을 강제 사용하고 외부 Vault의 Transit API만 전달한다.
+- **Secret binding clarification (2026-09-07):** `portfolio`/`perf`가 포함하는 `local` 설정의 개발용
+  인증 HMAC key는 `vault-enforced`와 함께 활성화하지 않는다. 배포는 `application.yaml`의 필수
+  secret placeholder를 사용하며, 누락 시 local 고정 키로 대체하지 않는다. standalone local/demo의
+  명시적 fixture key는 유지한다.
+- **Readiness amendment (2026-09-07):** JVM 실행 전 60초 이내에 Vault health와 AppRole을 통한
+  두 Transit key metadata 읽기가 모두 성공해야 한다. DR secondary(472)와 활성 노드에 연결할 수
+  없는 standby(474)는 준비 완료가 아니다. 정상 standby(429)/performance standby(473)는 실제
+  metadata 읽기 성공을 함께 요구한다. key type·version·policy 상세 검증은 기존 JVM startup
+  validator가 수행한다. 실패 시 마지막 단계별 HTTP 상태만 추가 기록하고 응답 body/token은
+  기록하지 않는다. 활성 노드 부재는 외부 Vault 운영 문제로 조사하며 앱의 timeout 연장이나
+  검증 우회로 해결하지 않는다.
 - encryption key와 blind-index key는 서로 다른 Transit key다. AppRole role ID와 secret ID, CA는
   저장소 밖 파일로 주입한다.
 - Vault 또는 Proxy가 준비되지 않았거나 Transit 계약이 틀리면 애플리케이션 시작은 실패한다.
@@ -54,6 +72,13 @@ external private dependencies: Vault server, licensed AIStor
 ### 4. secret과 버전은 배포 입력이다
 
 - secret은 저장소 밖 디렉터리의 파일을 Compose secret/config tree로 주입한다.
+- **File ownership clarification (2026-09-07):** Compose의 file-backed secret은 host 파일의
+  소유권을 유지하므로 root 소유 `0600` 파일을 JVM이 직접 읽지 않는다. root entrypoint가
+  DB·HMAC·AIStor·Toss의 명시된 secret 7개를 `/run/beanflow-secrets` tmpfs에 복사한다.
+  디렉터리는 `beanflow` UID 10001 소유 `0700`, 파일은 같은 사용자 소유 `0400`이며 Spring의
+  config tree는 이 디렉터리만 읽는다. host 파일과 DB가 공유하는 원본의 소유권·내용은 변경하지 않는다.
+  Vault AppRole 파일은 기존 UID 10002 전용 디렉터리에 유지한다. 누락·빈 파일·복사 실패는
+  자식 프로세스를 시작하기 전에 실패시키며 환경변수나 기본값으로 대체하지 않는다.
 - `.env`, private key, certificate key와 실제 secret 파일은 Git에서 차단한다.
 - 애플리케이션 이미지는 `BEANFLOW_IMAGE_TAG`로 명시하며 `latest`를 배포 계약에 사용하지 않는다.
 - rollback은 이전 image tag를 다시 선택하는 애플리케이션 rollback이다. Flyway migration은
