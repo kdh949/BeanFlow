@@ -37,9 +37,31 @@ for name, up, pg, error, waiting, expected in [
         series.append({"series": 'beanflow_pg_wait_sessions{job="beanflow-postgres",wait_event="transactionid",wait_event_type="Lock"}', "values": str(waiting)})
     tests.append({"name": name, "interval": "1m", "input_series": series,
                   "promql_expr_test": [{"expr": wait, "eval_time": "0m", "exp_samples": expected}]})
+
+pickup_mean = next(p for p in panels if p["id"] == 152)["targets"][0]["expr"].replace("$__rate_interval", "2m")
+for name, instances, expected in [
+    ("pickup without observations is unavailable", [("api:8081", "0+0x2", "0+0x2")], []),
+    ("pickup idle after earlier observations is unavailable", [("api:8081", "5+0x2", "10+0x2")], []),
+    ("missing pickup metrics are unavailable", [], []),
+    ("observed pickup mean preserves duration", [("api:8081", "0+1x2", "0+2x2")],
+     [{"labels": '{job="beanflow",instance="api:8081"}', "value": 0.5}]),
+    ("observed zero pickup duration remains zero", [("api:8081", "0+0x2", "0+2x2")],
+     [{"labels": '{job="beanflow",instance="api:8081"}', "value": 0}]),
+    ("idle pickup instance does not hide active instance", [
+        ("idle:8081", "5+0x2", "10+0x2"), ("active:8081", "0+1x2", "0+2x2")],
+     [{"labels": '{job="beanflow",instance="active:8081"}', "value": 0.5}]),
+]:
+    series = [
+        {"series": f'beanflow_order_pickup_sequence_allocation_duration_seconds_{suffix}'
+                   + f'{{job="beanflow",instance="{instance}"}}', "values": values}
+        for instance, sums, counts in instances
+        for suffix, values in [("sum", sums), ("count", counts)]
+    ]
+    tests.append({"name": name, "interval": "1m", "input_series": series,
+                  "promql_expr_test": [{"expr": pickup_mean, "eval_time": "2m", "exp_samples": expected}]})
 with tempfile.TemporaryDirectory(prefix="beanflow-dashboard-queries-") as directory:
     Path(directory, "tests.yml").write_text(json.dumps({"rule_files": [], "evaluation_interval": "1m", "tests": tests}))
     # Linux bind mounts preserve the private fixture directory's owner and 0700 permissions.
     subprocess.run(["docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}", "--entrypoint", "/bin/promtool", "-v", directory + ":/tests:ro",
                     "prom/prometheus:v3.14.0", "test", "rules", "/tests/tests.yml"], check=True)
-print("PASS: dashboard units, label isolation and seven DB wait availability cases")
+print("PASS: dashboard units, label isolation, seven DB wait and six pickup mean cases")
