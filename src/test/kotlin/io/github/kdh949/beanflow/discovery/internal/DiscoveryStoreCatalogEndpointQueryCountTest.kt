@@ -1,7 +1,7 @@
 package io.github.kdh949.beanflow.discovery.internal
 
 import com.jayway.jsonpath.JsonPath
-import io.github.kdh949.beanflow.BeanflowSharedDatabaseTest
+import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -19,7 +19,9 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.RequestPostProcessor
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.request
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.transaction.annotation.Transactional
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.sql.Connection
@@ -27,7 +29,8 @@ import java.sql.Timestamp
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
 import javax.sql.DataSource
 
 /**
@@ -36,12 +39,14 @@ import javax.sql.DataSource
  * `DiscoveryStoreCatalogQueryCountTest` counts what one repository method issues, which says
  * nothing about how many statements the endpoint runs in total: store identity, the availability
  * check and the projection are separate calls. This suite wraps the application's own `DataSource`
- * and counts everything a request touches, so an extra query added anywhere on the path — a service,
- * an interceptor, a lazy association — shows up here.
+ * and counts everything on the synchronous request thread, so an extra query added anywhere on the
+ * path — a service, an interceptor, a lazy association — shows up here. Independent background
+ * statements must not enter this request budget; async request handling would need a different scope.
  */
 @Import(TestcontainersConfiguration::class, DiscoveryStoreCatalogEndpointQueryCountTest.CountingDataSourceConfiguration::class)
 @AutoConfigureMockMvc
-@BeanflowSharedDatabaseTest
+@BeanflowIsolatedSpringContext("verifies request query counts while a separate JDBC connection executes background work")
+@Transactional
 @SpringBootTest(
     properties = [
         "beanflow.store-acceptance.initial-delay-ms=3600000",
@@ -114,6 +119,30 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
             assertThat(large).isEqualTo(STORE_ENDPOINT_STATEMENTS)
         }
 
+        @Test
+        fun `background statements do not change the request statement count`() {
+            val count =
+                countStatements {
+                    val background = FutureTask { jdbcTemplate.queryForObject("SELECT 1", Int::class.java) }
+                    Thread(background, "query-count-background").start()
+                    assertThat(background.get(5, TimeUnit.SECONDS)).isEqualTo(1)
+                    readStoreOk(smallStore)
+                }
+
+            assertThat(count).isEqualTo(STORE_ENDPOINT_STATEMENTS)
+        }
+
+        @Test
+        fun `an additional statement on the request thread is still counted`() {
+            val count =
+                countStatements {
+                    jdbcTemplate.queryForObject("SELECT 1", Int::class.java)
+                    readStoreOk(smallStore)
+                }
+
+            assertThat(count).isEqualTo(STORE_ENDPOINT_STATEMENTS + 1)
+        }
+
         private fun readOk(
             path: String,
             expectedItems: Int,
@@ -121,6 +150,7 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
             val body =
                 mockMvc
                     .perform(get(path).with(customerJwt()))
+                    .andExpect(request().asyncNotStarted())
                     .andExpect(status().isOk)
                     .andReturn()
                     .response.contentAsString
@@ -128,16 +158,13 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
             assertThat(JsonPath.read<List<*>>(body, "$.items")).hasSize(expectedItems)
         }
 
-        private fun countStatements(block: () -> Unit): Int {
-            val before = statements.count.get()
-            block()
-            return statements.count.get() - before
-        }
+        private fun countStatements(block: () -> Unit): Int = statements.measure(block)
 
         private fun readStoreOk(storeId: UUID) {
             val body =
                 mockMvc
                     .perform(get(storePath(storeId)).with(customerJwt()))
+                    .andExpect(request().asyncNotStarted())
                     .andExpect(status().isOk)
                     .andReturn()
                     .response.contentAsString
@@ -241,9 +268,25 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
             const val STORE_ENDPOINT_STATEMENTS = 2
         }
 
-        /** Counts statement preparations on the application's own data source. */
+        /** Counts preparations only during the measured synchronous request on this thread. */
         internal class StatementCounter {
-            val count = AtomicInteger()
+            private val currentCount = ThreadLocal<Int>()
+
+            fun measure(block: () -> Unit): Int {
+                check(currentCount.get() == null) { "Statement measurements must not overlap on the same thread" }
+                currentCount.set(0)
+                return try {
+                    block()
+                    checkNotNull(currentCount.get())
+                } finally {
+                    currentCount.remove()
+                }
+            }
+
+            fun increment() {
+                val count = currentCount.get() ?: return
+                currentCount.set(count + 1)
+            }
         }
 
         @TestConfiguration(proxyBeanMethods = false)
@@ -277,7 +320,7 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
                     Connection::class.java.classLoader,
                     arrayOf(Connection::class.java),
                 ) { _, method, args ->
-                    if (method.name in STATEMENT_METHODS) counter.count.incrementAndGet()
+                    if (method.name in STATEMENT_METHODS) counter.increment()
                     try {
                         method.invoke(connection, *(args ?: emptyArray()))
                     } catch (failure: InvocationTargetException) {

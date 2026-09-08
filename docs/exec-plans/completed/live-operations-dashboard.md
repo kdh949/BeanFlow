@@ -155,3 +155,22 @@ host는 exact instance matcher, Route는 Prometheus datasource의 기본 변수 
   실패 로그를 artifact로 보존한다. 원격 실행 결과는 해당 PR의 정확한 head check에서 확인한다.
 - Not run: 이 저장소 반영 작업에서 서버 재배포, 새 부하·장애 주입, Grafana UI 재검증.
   앞 절의 Grafana/중앙 query 결과는 최초 구현 당시의 검증 기록이다.
+
+### PR 전체 CI의 요청 SQL 계측 보완
+
+PR #142의 첫 [전체 CI](https://github.com/kdh949/BeanFlow/actions/runs/34227298378)는
+`DiscoveryStoreCatalogEndpointQueryCountTest` 한 건에서 2문장 대신 3문장을 관측해 실패했다.
+제품 소스에는 변경이 없었다. 기존 카운터는 DataSource를 사용하는 모든 스레드의 문장 준비를
+집계하므로 요청 측정 구간에 독립 작업이 섞일 수 있었다. 원본 CI에는 SQL·스레드 기록이 없어
+추가 1건의 정확한 실행 주체를 직접 특정하지는 못했다.
+
+별도 JDBC 연결의 `SELECT 1`을 측정 구간에 넣은 회귀 테스트는 기존 코드에서
+`expected 2 / actual 3`으로 실패했다. 카운터를 동기 요청 스레드에 한정하고 `finally`에서
+측정 범위를 해제한다. 요청 안의 추가 SQL은 계속 집계하며 MockMvc 비동기 처리 부재를 명시적으로
+확인한다. 기존 SQL 예산을 늘리거나 테스트를 건너뛰지 않는다. 별도 연결 회귀에 맞춰 테스트 클래스는
+사유가 있는 격리 컨텍스트로 전환하고 기존 테스트 transaction rollback을 유지한다.
+
+- Passed: Java 21/PostgreSQL에서 endpoint 5개, repository query count 4개, Spring 테스트 격리 1개
+  총 10개 테스트, failure/error/skipped 0 및 `spotlessCheck`.
+- 수정 전 5개 중 background 혼입 회귀 1개만 실패했다. 같은 스레드의 추가 SQL 탐지는 전후 모두 통과했다.
+- 제품 SQL, API, schema와 transaction 변경은 없다. 수정 후 head의 전체 CI 결과는 PR check로 확인한다.
