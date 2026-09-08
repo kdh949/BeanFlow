@@ -131,6 +131,7 @@ internal class StoreOrderBoardIntegrationTest
             assertThat(items).allSatisfy { item ->
                 assertThat(item["lifecycle"]["paidAt"].asText()).isEqualTo(now.toString())
                 assertThat(item["lifecycle"].has("completedAt")).isFalse()
+                assertThat(item.has("lines")).isFalse()
             }
             assertThat(items.single { it["status"].asText() == "PAID" }["lifecycle"].has("acceptedAt")).isFalse()
             assertThat(items.single { it["status"].asText() == "ACCEPTED" }["lifecycle"]["acceptedAt"].asText())
@@ -345,6 +346,64 @@ internal class StoreOrderBoardIntegrationTest
         }
 
         @Test
+        fun `detail preserves all preparation snapshots and rejects malformed options without changing polling`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val order = create(fixture, "board-detail-lines")
+            activate(order.orderId, "ACCEPTED")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "ACTIVE")
+            // Explicit read-model fixtures exercise multiple preparation snapshots.
+            jdbcTemplate.update(
+                "UPDATE ordering_order_line SET option_names_json = ? WHERE order_id = ?",
+                "[\"샷 추가\",\"얼음 적게\"]",
+                order.orderId,
+            )
+            jdbcTemplate.update(
+                """
+                INSERT INTO ordering_order_line (
+                    id, order_id, line_sequence, menu_id, menu_name, option_names_json, unit_price_krw,
+                    quantity, gross_krw, coupon_discount_krw, points_applied_krw, cash_payable_krw,
+                    sellable_requirements_json, option_selection_snapshot_state, normalized_option_ids_json
+                ) SELECT ?, order_id, 1, menu_id, '라떼', '[]', unit_price_krw,
+                    quantity, gross_krw, coupon_discount_krw, points_applied_krw, cash_payable_krw,
+                    sellable_requirements_json, option_selection_snapshot_state, normalized_option_ids_json
+                FROM ordering_order_line WHERE order_id = ? AND line_sequence = 0
+                """.trimIndent(),
+                UUID.randomUUID(),
+                order.orderId,
+            )
+            jdbcTemplate.update("UPDATE merchant_menu SET name = 'Changed current menu' WHERE id = ?", fixture.menuId)
+            val path = "${boardPath(fixture.storeId)}/${order.reference}"
+            mockMvc
+                .perform(get(path).with(merchantJwt(actorId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.lines.length()").value(2))
+                .andExpect(jsonPath("$.lines[0].menuName").value("Americano"))
+                .andExpect(jsonPath("$.lines[0].optionNames[0]").value("샷 추가"))
+                .andExpect(jsonPath("$.lines[0].optionNames[1]").value("얼음 적게"))
+                .andExpect(jsonPath("$.lines[1].lineSequence").value(1))
+                .andExpect(jsonPath("$.lines[1].menuName").value("라떼"))
+                .andExpect(jsonPath("$.lines[1].optionNames").isEmpty)
+            listOf("malformed", "null", "[null]", "[123]", "[\"\"]").forEach { invalid ->
+                jdbcTemplate.update(
+                    "UPDATE ordering_order_line SET option_names_json = ? WHERE order_id = ? AND line_sequence = 0",
+                    invalid,
+                    order.orderId,
+                )
+                mockMvc
+                    .perform(get(path).with(merchantJwt(actorId)))
+                    .andExpect(status().isServiceUnavailable)
+                    .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                    .andExpect(jsonPath("$.lines").doesNotExist())
+                mockMvc
+                    .perform(get(boardPath(fixture.storeId)).with(merchantJwt(actorId)))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.groups[0].items[0].lines").doesNotExist())
+            }
+        }
+
+        @Test
         fun `membership and reference scope distinguish forbidden from missing and revoke clears access`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
@@ -360,6 +419,10 @@ internal class StoreOrderBoardIntegrationTest
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.orderReference").value(order.reference))
                 .andExpect(jsonPath("$.status").value("ACCEPTED"))
+                .andExpect(jsonPath("$.lines[0].menuName").value("Americano"))
+                .andExpect(jsonPath("$.lines[0].quantity").value(1))
+                .andExpect(jsonPath("$.lines[0].optionNames").isEmpty)
+                .andExpect(jsonPath("$.lines[0].menuId").doesNotExist())
                 .andExpect(jsonPath("$.lifecycle.paidAt").value(now.toString()))
                 .andExpect(jsonPath("$.lifecycle.acceptedAt").value(now.plusSeconds(10).toString()))
                 .andExpect(jsonPath("$.lifecycle.preparingAt").doesNotExist())

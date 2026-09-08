@@ -223,6 +223,15 @@ frontend elapsed 표시는 마지막 200의 event timestamp와 client clock만 �
 lane, `allowedActions`, lane별 50건 bound, overflow count/cursor, 3초 conditional polling과 상태
 전이 API 의미는 변경하지 않는다.
 
+## 상세 제조 품목 보강 (2026-09-09)
+
+공개 주문번호 상세 조회는 `lines`에 `lineSequence`, 주문 당시 `menuName`, `optionNames`, `quantity`를
+제공한다. [ADR-004](ADR-004-order-price-snapshot.md)의 표시 snapshot만 읽으며 현재 메뉴·옵션을 조인하지 않는다.
+기존 BoardItem의 추가 선택 필드로 확장하되 상세 조회의 성공 응답에는 항상 모든 line을 순서대로 포함한다.
+기본 polling과 overflow 응답은 기존 한 줄 요약을 유지하고 옵션 snapshot을 읽거나 전송하지 않는다.
+옵션 snapshot이 손상되거나 품목이 없으면 `503 DEPENDENCY_UNAVAILABLE`이며 빈 옵션·빈 품목으로 대체하지 않는다.
+매장 membership 검사와 외부 주문의 거부를 유지하며 고객 정보·내부 주문/품목 ID·결제정보를 추가하지 않는다.
+
 ## Related Decisions
 
 - [ADR-099](ADR-099-customer-order-read-model.md)

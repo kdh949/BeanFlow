@@ -3315,6 +3315,7 @@ paths:
       summary: (스토어) 공개 주문번호로 주문 조회
       description: |
         스토어 구성원이 `BF-XXXX-XXXX` 형식의 공개 주문번호로 매장 주문을 조회하는 API입니다.
+        성공 응답의 `lines`에는 주문 당시 메뉴명, 옵션명과 수량을 순서대로 포함합니다.
         고객이 선택한 취소 사유나 고객용 환불 상세처럼 스토어 업무에 필요하지 않은 정보는 응답에서 제외합니다.
 
         주요 오류:
@@ -8854,6 +8855,37 @@ components:
         compensationRecovery:
           $ref: '#/components/schemas/StoreCompensationSummary'
           description: 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다.
+        lines:
+          type: array
+          minItems: 1
+          description: 상세 조회 성공 응답에 포함하는 주문 당시 전체 제조 품목입니다. 기본 polling·overflow·전이 응답에는 생략합니다.
+          items:
+            $ref: '#/components/schemas/StoreOrderPreparationLine'
+    StoreOrderPreparationLine:
+      type: object
+      additionalProperties: false
+      description: 현재 메뉴가 아닌 주문 생성 시 저장한 제조 품목 snapshot입니다.
+      required: [lineSequence, menuName, optionNames, quantity]
+      properties:
+        lineSequence:
+          type: integer
+          minimum: 0
+          description: 주문 당시의 품목 순서입니다.
+        menuName:
+          type: string
+          minLength: 1
+          description: 주문 당시 메뉴명입니다.
+        optionNames:
+          type: array
+          description: 주문 당시 선택한 옵션명입니다. 옵션 없는 품목은 빈 배열입니다.
+          items:
+            type: string
+            minLength: 1
+        quantity:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 해당 품목의 주문 수량입니다.
     StoreOrderBoard:
       type: object
       additionalProperties: false

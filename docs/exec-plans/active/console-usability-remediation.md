@@ -49,14 +49,14 @@ BR-25, BR-38, BR-39, BR-41 및 ADR-092/100/108을 유지한다. 서버만 금액
 
 ## Architecture and Transaction Boundaries
 
-frontend presentation·auth gate·기존 API client 소비를 변경한다. Aggregate, DB transaction,
+frontend presentation·auth gate·API client 소비와 Ordering의 상세 조회 Projection/DTO를 변경한다. Aggregate, DB transaction,
 Provider 호출·멱등성 저장 경계는 변경하지 않는다. 비동기 조회는 이전 요청의 응답이 새로운 선택을 덮지 않게 한다.
 
 ## Alternatives Considered
 
 - 페이지별 CSS 덮어쓰기 추가: 현재 충돌을 누적하므로 선택하지 않는다. 기존 공통 컴포넌트 계약과 배치를 수정한다.
 - 모든 준비 중 기능에 완성 fixture 연결: 실제 기능처럼 보이는 오류이므로 금지한다.
-- 거대한 단일 PR: 원인과 검증 범위가 다르므로 세 개의 선형 stack으로 분리한다.
+- 거대한 단일 PR: 원인과 검증 범위가 다르므로 네 개의 선형 stack으로 분리한다.
 
 ## Failure Semantics
 
@@ -65,7 +65,7 @@ Provider 호출·멱등성 저장 경계는 변경하지 않는다. 비동기 �
 
 ## Data and Migration
 
-새 schema나 migration 없음. 기존 DTO와 typed runtime client를 사용한다.
+DB schema와 migration 없음. 주문 보드 item의 선택적 lines 필드를 상세 응답에서 제공하고 typed runtime client를 생성한다.
 
 ## API and Event Contracts
 
@@ -76,7 +76,8 @@ Provider 호출·멱등성 저장 경계는 변경하지 않는다. 비동기 �
 
 1. `feature/console-auth-and-layout` → main: 인증·계정·가독성·반응형, story 회귀 방어.
 2. `feature/console-domain-feedback` → 1번 branch: 상태·문구·환불 후속 동작과 상담 정보 위계.
-3. `feature/console-workflow-availability` → 2번 branch: 기존 조회 연결과 제공 범위/진입점 정합성.
+3. `feature/console-order-detail-contract` → 2번 branch: 상세 조회에 주문 당시 품목·옵션 snapshot 추가.
+4. `feature/console-workflow-availability` → 3번 branch: 기존 조회 연결과 제공 범위/진입점 정합성.
 
 각 branch는 직전 검증 commit에서 시작한다. 후속 PR은 직전 branch만 base로 한다. 최종 PR에 이 계획의
 완료 이동과 항목별 결과를 기록한다. 새 파일 변경이 PR을 과도하게 키우면 같은 원칙으로 더 분리할 수 있다.
@@ -113,6 +114,7 @@ fixture를 구별하여 보고한다.
 - [x] BeanFlow 6009 MCP inventory와 story 작성 지침 조회.
 - [x] 인증·레이아웃 slice 구현과 로컬 검증. 첫 PR 작성.
 - [x] 업무 의미·환불 slice 구현/검증/PR.
+- [x] 주문 상세 조회 품목·옵션 계약 구현 및 검증.
 - [ ] 조회·제공 범위 slice 구현/검증/PR.
 - [ ] 전체 회귀, 시각 검증, stack ancestry와 원격 CI 확인.
 
@@ -143,3 +145,12 @@ MCP 전체 267개 중 266개 통과 후 실패 fixture 1개를 수정하고 해�
   typecheck, unit 185개, presentation 10개, product-copy 11개, 디자인 검사 통과.
   Storybook MCP 전체 274개 및 a11y 통과. Storybook/제품 build, Docs smoke 66 docs/47 states,
   Sites 4개 통과. 320px 상담·390px 환불 결과 화면에서 가로 overflow와 13px 미만 주요 제어 글자 없음.
+
+- 2026-09-09: 공개 주문번호 상세 API도 요약만 반환하므로 읽기 전용 품목·옵션 확장을 별도 세 번째 PR로 분리.
+  ADR-004의 저장된 메뉴·옵션·수량만 사용한다. 고객/결제/내부 식별자는 추가하지 않으며 인가·전이·멱등성 경계는 유지한다.
+  후보 파일은 StoreOrderBoardContracts/QueryRepository/Projector, OpenAPI, schema.d.ts, 기존 통합 테스트다.
+  기본 보드 polling에 옵션을 추가하는 대안은 사용하지 않는다. 상세 응답 크기만 품목 수만큼 증가한다.
+  계약/문서 검사, PostgreSQL 권한·스냅샷·목록 미포함 테스트와 전체 frontend 타입 검사를 실행한다.
+
+- 세 번째 slice: PostgreSQL 보드 통합 9개, 정책·ETag 5개, Runtime OpenAPI parity 1개 통과.
+  frontend typecheck 및 문서/OpenAPI semantic 검사 통과. 상세만 옵션을 읽고 polling은 기존 응답을 보존한다.

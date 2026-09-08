@@ -63,6 +63,14 @@ internal data class StoreOrderBoardItemResponse(
     val allowedActions: List<StoreOrderAction>,
     val lifecycle: StoreOrderBoardLifecycleResponse? = null,
     val compensationRecovery: StoreCompensationSummary? = null,
+    val lines: List<StoreOrderPreparationLineResponse>? = null,
+)
+
+internal data class StoreOrderPreparationLineResponse(
+    val lineSequence: Int,
+    val menuName: String,
+    val optionNames: List<String>,
+    val quantity: Long,
 )
 
 internal data class StoreOrderBoardDateGroupResponse(

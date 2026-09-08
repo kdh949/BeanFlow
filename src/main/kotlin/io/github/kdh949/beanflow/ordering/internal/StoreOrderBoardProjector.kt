@@ -4,10 +4,13 @@ import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.springframework.stereotype.Component
+import tools.jackson.databind.ObjectMapper
 import java.time.Instant
 
 @Component
-internal class StoreOrderBoardProjector {
+internal class StoreOrderBoardProjector(
+    private val objectMapper: ObjectMapper,
+) {
     fun board(
         rows: StoreOrderBoardRows,
         now: Instant,
@@ -35,7 +38,25 @@ internal class StoreOrderBoardProjector {
         now: Instant,
     ): StoreOrderBoardItemResponse {
         val order = rows.orders.singleOrNull() ?: dependency("Store order detail projection is not singular")
-        return item(order, rows.linesByOrderId[order.orderId].orEmpty(), compensationRecovery, now)
+        val lineProjections = rows.linesByOrderId[order.orderId].orEmpty()
+        val item = item(order, lineProjections, compensationRecovery, now)
+        val lines =
+            lineProjections.sortedBy { it.lineSequence }.map { line ->
+                val rawOptions = line.optionNamesJson ?: dependency("Store order option snapshot is missing")
+                val optionNames =
+                    try {
+                        val node = objectMapper.readTree(rawOptions)
+                        if (!node.isArray || (0 until node.size()).any { !node[it].isString || node[it].asText().isBlank() }) {
+                            dependency("Store order option snapshot is invalid")
+                        }
+                        (0 until node.size()).map { node[it].asText() }
+                    } catch (_: RuntimeException) {
+                        dependency("Store order option snapshot cannot be read")
+                    }
+                if (line.lineSequence < 0 || optionNames.any { it.isBlank() }) dependency("Store order line projection is invalid")
+                StoreOrderPreparationLineResponse(line.lineSequence, line.menuName, optionNames, line.quantity)
+            }
+        return item.copy(lines = lines)
     }
 
     fun transitioned(
