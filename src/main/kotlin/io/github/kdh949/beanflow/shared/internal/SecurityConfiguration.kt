@@ -21,6 +21,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtGra
 import org.springframework.security.web.AuthenticationEntryPoint
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.access.AccessDeniedHandler
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository
 import org.springframework.security.web.context.SecurityContextHolderFilter
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler
@@ -179,7 +180,10 @@ internal class SecurityConfiguration {
         }
         return http
             .securityMatcher(registry.requestMatcher(chain))
-            .sessionManagement {
+            .securityContext {
+                // ADR-094: rebuild authentication per request without persisting it in the JDBC session.
+                it.securityContextRepository(RequestAttributeSecurityContextRepository())
+            }.sessionManagement {
                 it.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 // LoginSessionCoordinator already performs the required transactional rotation.
                 // A second Spring Security fixation rotation on the first authenticated read would

@@ -83,6 +83,14 @@ Session에는 actor 식별자, 인증 시각과 로그인 시점의 `credentialV
 권한과 계정 상태는 요청마다 다시 조회한다. 계정 조회 실패는 503이며, 상태가 인증 불가하거나 version이
 다르면 401이다. 권한을 Session에 캐시하면 revoke가 즉시 반영되지 않는다.
 
+#### 인증 결과 저장 범위 명시 (2026-09-10)
+
+Customer/Merchant Chain의 `SecurityContext`는 `RequestAttributeSecurityContextRepository`로 요청
+범위에만 보관한다. 기본 `HttpSessionSecurityContextRepository`가 `SPRING_SECURITY_CONTEXT`를 JDBC
+Session에 추가하지 않도록 명시한다. 첫 인증 요청들이 같은 Session을 읽은 뒤 인증 결과를 동시에
+INSERT하는 충돌을 제거하며, 위 최소 Session 정보와 요청별 계정·권한 재조회 원칙을 유지한다.
+로그인 Session의 명시적 저장·회전과 PostgreSQL transaction 경계는 변경하지 않는다.
+
 ## Alternatives Considered
 
 ### 1. CSRF 대신 `SameSite=Strict`만 사용

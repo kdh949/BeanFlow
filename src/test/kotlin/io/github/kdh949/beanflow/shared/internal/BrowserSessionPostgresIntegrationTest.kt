@@ -17,6 +17,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
@@ -33,6 +35,7 @@ import java.time.Clock
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -50,10 +53,44 @@ class BrowserSessionPostgresIntegrationTest(
 ) {
     private val transactions = TransactionTemplate(transactionManager)
 
+    @Autowired
+    private lateinit var actorLoaders: TestBrowserActorLoaderConfiguration
+
     @BeforeEach
     fun clearSessions() {
         jdbcTemplate.update("DELETE FROM spring_session")
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS test_browser_account_lock (id uuid PRIMARY KEY)")
+    }
+
+    @ParameterizedTest
+    @EnumSource(BrowserActorType::class)
+    fun `concurrent first browser requests keep authentication out of stored sessions`(actorType: BrowserActorType) {
+        val session = create(actorType, UUID.randomUUID(), clock.millis(), 1)
+        val originalAttributes = attributeNames(session.sessionId)
+        val pool = Executors.newFixedThreadPool(4)
+        // All requests must read the same initial JDBC session before any can save authentication.
+        actorLoaders.authenticationBarrier = CyclicBarrier(4)
+        try {
+            val responses =
+                (1..4).map {
+                    pool.submit<Int> {
+                        mockMvc
+                            .perform(
+                                get("/api/v1/auth/${actorType.name.lowercase()}/csrf")
+                                    .cookie(sessionCookie("BEANFLOW_${actorType.name}_SESSION", session.sessionId)),
+                            ).andReturn()
+                            .response.status
+                    }
+                }
+            assertThat(responses.map { it.get(20, TimeUnit.SECONDS) }).containsOnly(204)
+        } finally {
+            actorLoaders.authenticationBarrier = null
+            pool.shutdownNow()
+            check(pool.awaitTermination(10, TimeUnit.SECONDS)) { "Concurrent browser requests did not terminate" }
+        }
+
+        assertThat(countSession(session.sessionId)).isOne()
+        assertThat(attributeNames(session.sessionId)).containsExactlyInAnyOrderElementsOf(originalAttributes)
     }
 
     @Test
@@ -243,6 +280,9 @@ class BrowserSessionPostgresIntegrationTest(
 
 @TestConfiguration(proxyBeanMethods = false)
 internal class TestBrowserActorLoaderConfiguration {
+    @Volatile
+    var authenticationBarrier: CyclicBarrier? = null
+
     @Bean
     fun customerBrowserActorLoader(): BrowserActorLoader = testLoader(BrowserActorType.CUSTOMER) { actorId -> CustomerActor(actorId) }
 
@@ -260,6 +300,9 @@ internal class TestBrowserActorLoaderConfiguration {
             override fun load(
                 actorId: UUID,
                 credentialVersion: Long,
-            ): CurrentActor = actor(actorId)
+            ): CurrentActor {
+                authenticationBarrier?.await(10, TimeUnit.SECONDS)
+                return actor(actorId)
+            }
         }
 }
