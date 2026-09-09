@@ -19,8 +19,13 @@ interface NotificationReprocessingCaseOperations {
 }
 
 interface EventPublicationReprocessingCaseOperations {
-    fun openEventPublicationCase(command: OpenReprocessingCaseCommand): UUID
+    fun openEventPublicationCase(command: OpenReprocessingCaseCommand): EventPublicationManualReviewResult
 }
+
+data class EventPublicationManualReviewResult(
+    val caseId: UUID,
+    val transitioned: Boolean,
+)
 
 interface AcceptanceTimeoutWorkReprocessingCaseOperations {
     fun openAcceptanceTimeoutWorkCase(command: OpenReprocessingCaseCommand): UUID
