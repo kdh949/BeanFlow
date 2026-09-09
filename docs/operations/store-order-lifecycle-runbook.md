@@ -267,6 +267,12 @@ log를 기록한다. 로그의 `publicationId`는 `event_publication.id`, `event
 ID다. `listenerId`, `correlationId`, `caseId`, `reason`을 함께 사용해 최초 실패와 연결한다.
 로그가 반복되지 않아도 미해결 gauge가 남아 있으면 복구가 끝난 것이 아니다.
 
+개별 수동 검토 인계가 실패하면 해당 case/step transaction은 rollback되지만, 같은 batch의
+다른 인계와 자동 재시도는 계속 진행한다. worker는 backlog 지표 갱신 뒤 publication ID와
+원인을 담은 예외를 다시 던진다. 자동 재시도나 지표 조회도 실패했다면 suppressed exception의
+인계 실패까지 확인한다. tick 오류와 다른 publication의 처리 완료가 함께 관측될 수 있으며,
+실패 인계는 다음 tick 대상에 남는다. 인계 성공 log/counter는 실패 건에 기록하지 않는다.
+
 publication row를 완료 처리하거나 삭제하지 않는다. `MANUAL_REVIEW`에서는 실패한
 listener의 owner 상태와 source reference를 read-only 확인하고, 승인된 incident
 절차로 원인을 수정한 뒤 별도 재처리 기능을 사용한다.

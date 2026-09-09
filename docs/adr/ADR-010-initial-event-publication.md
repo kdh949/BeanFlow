@@ -80,6 +80,16 @@
 - 이 변경은 수동 replay 권한/API를 추가하지 않는다. 미해결 case는 명시적 운영 복구가
   완료될 때까지 보존하며 자동으로 다시 열거나 해결됐다고 표시하지 않는다.
 
+2026-09-10 handoff failure isolation amendment:
+
+- 개별 publication 인계 실패는 해당 transaction을 rollback하고, 같은 batch의 나머지
+  인계와 자동 재시도 실행을 중단하지 않는다. 실패 publication은 기존 실패 상태와
+  attempt를 유지하며 다음 tick에 인계를 다시 시도한다.
+- worker는 publication ID와 원인을 포함한 인계 예외를 모아 자동 재시도와 backlog 지표
+  갱신 뒤 다시 던진다. 실패 tick을 성공으로 반환하거나 실패 건의 인계 성공 log/counter를 기록하지 않는다.
+- 자동 재시도 또는 지표 조회도 실패하면 그 예외에 인계 실패를 suppressed exception으로
+  보존해 함께 노출한다. JVM Error는 복구 가능한 건별 실패로 취급하지 않는다.
+
 ## Alternatives Considered
 
 - 동기 호출만 사용

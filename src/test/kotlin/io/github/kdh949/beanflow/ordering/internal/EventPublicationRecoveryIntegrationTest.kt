@@ -308,10 +308,25 @@ internal class EventPublicationRecoveryIntegrationTest
         }
 
         @Test
-        fun `failed compensation handoff rolls back its case and can be retried`() {
+        fun `failed compensation handoff rolls back while due publications keep retrying`() {
+            val ready = publishFailingReady()
+            val readyPublicationId = incompletePublicationId()
             val fixture = cancellationWithMissingPickup()
-            await("pickup failure") { incompletePublicationCount() == 1L }
-            jdbcTemplate.update("UPDATE event_publication SET completion_attempts = 6 WHERE completion_date IS NULL")
+            await("ready and pickup failures") {
+                incompletePublicationCount() == 2L &&
+                    jdbcTemplate.queryForObject(
+                        "SELECT count(*) FROM event_publication WHERE completion_date IS NULL AND status = 'FAILED'",
+                        Long::class.java,
+                    ) == 2L
+            }
+            jdbcTemplate.update(
+                "UPDATE event_publication SET completion_attempts = 6, publication_date = ? " +
+                    "WHERE completion_date IS NULL AND id <> ?",
+                Timestamp.from(clock.instant().minusSeconds(60)),
+                readyPublicationId,
+            )
+            val exhaustedId = queries.findExhaustedIds(100).single()
+            val publicationBefore = jdbcTemplate.queryForMap("SELECT * FROM event_publication WHERE id = ?", exhaustedId)
             val before = requireNotNull(compensationOperations.findByOrderId(fixture.orderId)).steps
             jdbcTemplate.execute(
                 """
@@ -326,11 +341,33 @@ internal class EventPublicationRecoveryIntegrationTest
                     FOR EACH ROW WHEN (NEW.state = 'MANUAL_REVIEW') EXECUTE FUNCTION test_reject_publication_handoff()
                     """.trimIndent(),
                 )
-                assertThatThrownBy { recoveryWorker.runOnce() }.hasStackTraceContaining("SCRIPTED_HANDOFF_FAILURE")
-                assertThat(reprocessingReasonCount("EVENT_PUBLICATION_RETRY_EXHAUSTED")).isZero()
-                assertThat(requireNotNull(compensationOperations.findByOrderId(fixture.orderId)).steps).isEqualTo(before)
-                assertThat(manualReviewLogs()).isEmpty()
-                assertThat(queries.findExhaustedIds(100)).hasSize(1)
+                listOf(12L, 31L).forEachIndexed { attempt, seconds ->
+                    clock.advance(Duration.ofSeconds(seconds))
+                    if (attempt == 1) failingListener.allowSuccess()
+
+                    assertThatThrownBy { recoveryWorker.runOnce() }
+                        .hasStackTraceContaining("SCRIPTED_HANDOFF_FAILURE")
+
+                    await("due publication to progress despite failed handoff on tick ${attempt + 1}") {
+                        failingListener.callCount() == attempt + 2 &&
+                            jdbcTemplate.queryForObject(
+                                "SELECT status FROM event_publication WHERE id = ?",
+                                String::class.java,
+                                readyPublicationId,
+                            ) == if (attempt == 0) "FAILED" else "COMPLETED"
+                    }
+                    assertThat(reprocessingReasonCount("EVENT_PUBLICATION_RETRY_EXHAUSTED")).isZero()
+                    assertThat(requireNotNull(compensationOperations.findByOrderId(fixture.orderId)).steps).isEqualTo(before)
+                    assertThat(jdbcTemplate.queryForMap("SELECT * FROM event_publication WHERE id = ?", exhaustedId))
+                        .isEqualTo(publicationBefore)
+                    assertThat(manualReviewLogs()).isEmpty()
+                    assertThat(queries.findExhaustedIds(100)).containsExactly(exhaustedId)
+                    assertThat(gauge("beanflow.event.publication.manual.review.pending.count")).isZero()
+                    assertThat(gauge("beanflow.event.publication.attempt.max")).isEqualTo(6.0)
+                    assertThat(scope.currentTime()).isNull()
+                }
+                assertThat(notificationCount(ready.envelope.eventId)).isEqualTo(1)
+                assertThat(inboxCount(ready.customerId)).isEqualTo(1)
             } finally {
                 jdbcTemplate.execute("DROP TRIGGER IF EXISTS test_reject_publication_handoff ON operations_order_compensation_step")
                 jdbcTemplate.execute("DROP FUNCTION test_reject_publication_handoff()")
