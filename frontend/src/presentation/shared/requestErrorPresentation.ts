@@ -7,6 +7,22 @@ export type RequestErrorPresentation = {
 };
 
 const knownErrors: Record<string, Omit<RequestErrorPresentation, "reference">> = {
+  INVALID_REQUEST: {
+    title: "입력 내용을 확인해 주세요",
+    description: "요청 형식이나 입력한 값이 올바르지 않습니다. 내용을 수정한 뒤 다시 시도해 주세요.",
+  },
+  RESOURCE_NOT_FOUND: {
+    title: "요청한 대상을 찾을 수 없습니다",
+    description: "대상이 존재하는지, 현재 계정으로 접근할 수 있는지 확인해 주세요.",
+  },
+  REFUND_QUANTITY_UNAVAILABLE: {
+    title: "환불 가능 수량이 바뀌었습니다",
+    description: "환불 가능 상태를 다시 조회하고 품목과 수량을 선택해 주세요.",
+  },
+  REFUND_OUTCOME_UNRESOLVED: {
+    title: "이전 환불 결과를 확인하고 있습니다",
+    description: "이전 환불이 확정될 때까지 새 환불을 실행할 수 없습니다. 잠시 뒤 환불 가능 상태를 다시 확인해 주세요.",
+  },
   INVALID_PAYMENT_CALLBACK: {
     title: "결제 정보를 확인할 수 없습니다",
     description: "결제 결과 정보가 올바르지 않습니다. 주문 상태를 확인해 주세요.",
