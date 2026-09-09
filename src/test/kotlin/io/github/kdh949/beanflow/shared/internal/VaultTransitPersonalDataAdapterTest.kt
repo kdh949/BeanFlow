@@ -5,11 +5,13 @@ import com.sun.net.httpserver.HttpServer
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.EncryptedPersonalData
 import io.github.kdh949.beanflow.shared.api.ExactSearchCriterionType
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyOperation
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.PersonalDataEncryptionContext
 import io.github.kdh949.beanflow.shared.api.PersonalDataField
 import io.github.kdh949.beanflow.shared.api.PersonalDataNormalizer
 import io.github.kdh949.beanflow.shared.api.PersonalDataOwnerContext
+import io.github.kdh949.beanflow.shared.api.RecordingExternalDependencyTelemetry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
@@ -29,18 +31,40 @@ internal class VaultTransitPersonalDataAdapterTest {
     private lateinit var adapter: VaultTransitPersonalDataAdapter
     private val responses = ConcurrentLinkedQueue<StubResponse>()
     private val requests = ConcurrentLinkedQueue<CapturedRequest>()
+    private val telemetry = RecordingExternalDependencyTelemetry()
 
     @BeforeEach
     fun setUp() {
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/", ::handle)
         server.start()
-        adapter = VaultTransitPersonalDataAdapter(properties(), ObjectMapper())
+        adapter = VaultTransitPersonalDataAdapter(properties(), ObjectMapper(), telemetry)
     }
 
     @AfterEach
     fun tearDown() {
         server.stop(0)
+    }
+
+    @Test
+    fun `startup key lookups use HTTP 1_1 without h2c upgrade headers`() {
+        listOf("aes256-gcm96", "hmac").forEach { type ->
+            responses +=
+                StubResponse(
+                    200,
+                    """{"data":{"type":"$type","derived":false,"exportable":false,
+                    "deletion_allowed":false,"latest_version":4,
+                    "min_encryption_version":0,"min_decryption_version":1}}""",
+                )
+        }
+
+        adapter.validateStartup()
+
+        assertThat(requests.map { it.path }).containsExactly(
+            "/v1/transit/keys/customer-profile",
+            "/v1/transit/keys/support-exact-index",
+        )
+        assertThat(requests).allSatisfy(::assertProxyProtocol)
     }
 
     @Test
@@ -66,6 +90,7 @@ internal class VaultTransitPersonalDataAdapterTest {
         assertThat(captured).allSatisfy { request ->
             assertThat(request.tokenHeader).isNull()
             assertThat(request.authorizationHeader).isNull()
+            assertProxyProtocol(request)
         }
         val encryptBody = ObjectMapper().readTree(captured[0].body)
         assertThat(String(Base64.getDecoder().decode(encryptBody.path("plaintext").asText()))).isEqualTo("홍길동")
@@ -74,6 +99,8 @@ internal class VaultTransitPersonalDataAdapterTest {
         val decryptBody = ObjectMapper().readTree(captured[1].body)
         assertThat(decryptBody.path("ciphertext").asText()).isEqualTo("vault:v7:opaque-ciphertext")
         assertThat(decryptBody.path("associated_data").asText()).isEqualTo(encryptBody.path("associated_data").asText())
+        assertThat(telemetry.records.map { it.call.operation })
+            .containsExactly(ExternalDependencyOperation.ENCRYPT, ExternalDependencyOperation.DECRYPT)
     }
 
     @Test
@@ -217,6 +244,9 @@ internal class VaultTransitPersonalDataAdapterTest {
                 body = exchange.requestBody.readAllBytes().toString(StandardCharsets.UTF_8),
                 tokenHeader = exchange.requestHeaders.getFirst("X-Vault-Token"),
                 authorizationHeader = exchange.requestHeaders.getFirst("Authorization"),
+                protocol = exchange.protocol,
+                upgradeHeader = exchange.requestHeaders.getFirst("Upgrade"),
+                http2SettingsHeader = exchange.requestHeaders.getFirst("HTTP2-Settings"),
             )
         val bytes = response.body.toByteArray(StandardCharsets.UTF_8)
         exchange.responseHeaders.add("Content-Type", "application/json")
@@ -235,7 +265,16 @@ internal class VaultTransitPersonalDataAdapterTest {
         val body: String,
         val tokenHeader: String?,
         val authorizationHeader: String?,
+        val protocol: String,
+        val upgradeHeader: String?,
+        val http2SettingsHeader: String?,
     )
+
+    private fun assertProxyProtocol(request: CapturedRequest) {
+        assertThat(request.protocol).isEqualTo("HTTP/1.1")
+        assertThat(request.upgradeHeader).isNull()
+        assertThat(request.http2SettingsHeader).isNull()
+    }
 
     private fun causeChain(failure: Throwable): String =
         generateSequence(failure) { it.cause }

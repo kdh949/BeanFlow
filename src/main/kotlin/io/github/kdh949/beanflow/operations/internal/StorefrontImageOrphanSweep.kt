@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageReferenceOperations
 import io.github.kdh949.beanflow.merchant.api.StorefrontImageStorageOperations
+import io.github.kdh949.beanflow.merchant.api.StorefrontImageTarget
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -21,7 +22,7 @@ internal class StorefrontImageOrphanSweep(
     )
     fun sweep() {
         try {
-            storage.listOrphanCandidates(clock.instant().minus(ORPHAN_GRACE), BATCH_SIZE).forEach { candidateKey ->
+            storage.listOrphanCandidates(TARGETS, clock.instant().minus(ORPHAN_GRACE), BATCH_SIZE).forEach { candidateKey ->
                 if (!references.isReferenced(candidateKey)) {
                     storage.deleteObject(candidateKey)
                     record("deleted")
@@ -41,5 +42,6 @@ internal class StorefrontImageOrphanSweep(
     private companion object {
         val ORPHAN_GRACE: Duration = Duration.ofHours(24)
         const val BATCH_SIZE = 100
+        val TARGETS = setOf(StorefrontImageTarget.STORE, StorefrontImageTarget.MENU)
     }
 }

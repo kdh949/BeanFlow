@@ -11,13 +11,17 @@ import org.springframework.core.annotation.Order
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator
+import org.springframework.security.oauth2.jwt.JwtAudienceValidator
 import org.springframework.security.oauth2.jwt.JwtDecoder
+import org.springframework.security.oauth2.jwt.JwtValidators
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter
 import org.springframework.security.web.AuthenticationEntryPoint
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.access.AccessDeniedHandler
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository
 import org.springframework.security.web.context.SecurityContextHolderFilter
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler
@@ -31,7 +35,17 @@ internal class SecurityConfiguration {
     @ConditionalOnMissingBean(JwtDecoder::class)
     fun jwtDecoder(
         @Value("\${beanflow.security.jwk-set-uri}") jwkSetUri: String,
-    ): JwtDecoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build()
+        @Value("\${beanflow.operations-oidc.issuer-uri}") issuerUri: String,
+        @Value("\${beanflow.operations-oidc.client-id}") audience: String,
+    ): JwtDecoder =
+        NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build().apply {
+            setJwtValidator(
+                DelegatingOAuth2TokenValidator(
+                    JwtValidators.createDefaultWithIssuer(issuerUri),
+                    JwtAudienceValidator(audience),
+                ),
+            )
+        }
 
     @Bean
     @Order(0)
@@ -166,7 +180,10 @@ internal class SecurityConfiguration {
         }
         return http
             .securityMatcher(registry.requestMatcher(chain))
-            .sessionManagement {
+            .securityContext {
+                // ADR-094: rebuild authentication per request without persisting it in the JDBC session.
+                it.securityContextRepository(RequestAttributeSecurityContextRepository())
+            }.sessionManagement {
                 it.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 // LoginSessionCoordinator already performs the required transactional rotation.
                 // A second Spring Security fixation rotation on the first authenticated read would

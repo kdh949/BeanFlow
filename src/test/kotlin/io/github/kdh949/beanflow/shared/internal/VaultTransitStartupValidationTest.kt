@@ -2,6 +2,8 @@ package io.github.kdh949.beanflow.shared.internal
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import io.github.kdh949.beanflow.shared.api.ExternalDependencyTelemetry
+import io.github.kdh949.beanflow.shared.api.RecordingExternalDependencyTelemetry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -40,6 +42,16 @@ internal class VaultTransitStartupValidationTest {
             assertThat(context.startupFailure).isNotNull
             assertThat(context.startupFailure).hasMessageContaining("Vault Transit personal-data startup validation failed")
         }
+    }
+
+    @Test
+    fun `portfolio fails startup when configured Proxy is unreachable`() {
+        contextRunner("portfolio,vault-enforced")
+            .withPropertyValues(*validProperties("http://127.0.0.1:1").toTypedArray())
+            .run { context ->
+                assertThat(context.startupFailure).isNotNull
+                assertThat(context.startupFailure).hasMessageContaining("Vault Transit personal-data startup validation failed")
+            }
     }
 
     @Test
@@ -118,11 +130,12 @@ internal class VaultTransitStartupValidationTest {
         }
     }
 
-    private fun contextRunner() =
+    private fun contextRunner(activeProfiles: String = "prod,vault-enforced") =
         ApplicationContextRunner()
             .withUserConfiguration(VaultTransitPersonalDataConfiguration::class.java)
             .withBean(ObjectMapper::class.java, { ObjectMapper() })
-            .withPropertyValues("spring.profiles.active=prod")
+            .withBean(ExternalDependencyTelemetry::class.java, { RecordingExternalDependencyTelemetry() })
+            .withPropertyValues("spring.profiles.active=$activeProfiles")
 
     private fun validProperties(
         proxyBaseUri: String,

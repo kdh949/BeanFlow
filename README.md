@@ -60,8 +60,8 @@ BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
 
 - 지연 Provider 환경의 부하·장애 주입 측정
 
-고객 취소 command/recovery orchestration과 PointAccount read는 완료됐다. 실제 non-local
-배포, 운영 규모, SLA와 프로덕션 안정성은 증명하지 않았다.
+고객 취소 command/recovery orchestration과 PointAccount read는 완료됐다. 개인 서버용 non-local
+배포 패키지는 있지만 실제 서버 배포 결과, 운영 규모, SLA와 프로덕션 안정성은 증명하지 않았다.
 
 ## 실행 방법
 
@@ -93,6 +93,19 @@ bash scripts/demo/start.sh && bash scripts/demo/seed.sh && bash scripts/demo/smo
 기동 뒤 고객 UI는 `http://127.0.0.1:4173/app`, 매장 콘솔은 `/store`, 운영 콘솔은 `/ops`에서
 확인한다. 현재 고객·점주 화면의 legacy Token Editor는 Session 로그인을 제공하지 않으며, 제거와
 실제 로그인 연결은 후속 account/web Plan이 소유한다.
+
+### 개인 서버 포트폴리오 배포
+
+Sophos WAF 뒤 staging/production-like 배포는 [포트폴리오 서버 배포 Runbook](docs/operations/portfolio-deployment-runbook.md)을
+따른다. 두 환경 모두 `portfolio` profile과 Toss sandbox를 사용하며 상용 운영 환경이 아니다.
+외부 Vault·AIStor와 저장소 밖 secret이 준비되지 않으면 시작에 실패한다.
+
+### 성능 관측성과 부하 테스트
+
+기존 중앙 Prometheus/Loki/Tempo/Pyroscope/Grafana와 연결하는 perf 전용 Compose overlay, k6 시나리오,
+제어된 DB lock 재현과 RCA dashboard는 [성능 관측성 Runbook](docs/operations/performance-observability-runbook.md)을
+따른다. 이 환경은 실제 운영 profile과 겹치면 시작을 거부하며 Toss는 deterministic contract driver,
+AIStor와 Vault는 전용 실제 자원을 사용한다. 정적 설정 통과와 실제 중앙 telemetry ingest/UI 증거는 별도다.
 
 아래 수동 절차는 데모 script 없이 직접 구성할 때 쓴다.
 

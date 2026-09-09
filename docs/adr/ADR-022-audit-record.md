@@ -47,6 +47,9 @@ BR-30은 금액, 포인트, 슬롯, terminal 주문 상태, 정산, 이의 판�
 - `(action, targetType, targetId, sourceReference)`를 중복 방지 key로 사용한다.
 - target 변경과 해당 AuditRecord 중 하나라도 저장 실패하면 같은 local transaction을
   rollback한다.
+- **2026-09-08 저장 경로 명확화:** append가 새로 발급한 UUID의 AuditRecord는 전용 repository의
+  persist/flush로 삽입한다. merge의 존재 SELECT를 생략하되 category별 정책 snapshot, 모든 command의
+  사전 검증, Unique Constraint, flush 시 실패 전파와 같은 transaction rollback은 유지한다.
 - 각 record는 `occurredAt`을 `Asia/Seoul` 현지 시각으로 변환해 달력
   `plusYears(5)`를 적용한 `retentionExpiresAt` Instant를 생성 시 고정한다.
   `now >= retentionExpiresAt`부터 삭제 가능하다. 2월 29일은 달력 연산 결과인

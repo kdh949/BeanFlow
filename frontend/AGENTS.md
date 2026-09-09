@@ -62,7 +62,7 @@ Canonical components use typed props, JSDoc purpose/prop descriptions, Autodocs,
 - Do not add unrestricted styling props to bypass component APIs.
 - A new token must have a semantic name, documented usage, Storybook foundation example, and affected-component review.
 - Literal geometry is allowed only when intrinsic or clearly documented; repeated or identity-bearing values become tokens.
-- Do not treat `_ds_bundle.js`, `_ds_manifest.json`, or `storybook-static/` as editable component source.
+- Retired `_ds_bundle.js` and `_ds_manifest.json` snapshots must remain absent. `storybook-static/` is generated output, not editable component source.
 
 ## Design explorations
 
@@ -82,7 +82,7 @@ After selection, promote only the chosen design to `Patterns/` or `Pages/`, impl
 Run and report exact results for all relevant commands:
 
 - `npm run typecheck`
-- `npm run test:unit`
+- `npm test`
 - `npm run check:design`
 - `npm run build-storybook`
 - `npm run build`

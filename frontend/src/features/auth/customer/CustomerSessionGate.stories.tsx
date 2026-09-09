@@ -44,7 +44,7 @@ export const WrongActor: Story = {
     msw: { handlers: meResponds(403, { code: "ACCESS_DENIED", message: "고객 권한이 없습니다." }) },
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText(/다른 역할로 로그인되어 있는지 확인해 주세요/)).toBeVisible();
+    await expect(await canvas.findByText(/고객 계정으로 다시 로그인해 주세요/)).toBeVisible();
   },
 };
 
@@ -54,7 +54,7 @@ export const SessionStoreUnavailable: Story = {
     msw: { handlers: meResponds(503, { code: "DEPENDENCY_UNAVAILABLE", message: "인증 저장소를 사용할 수 없습니다." }) },
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText(/로그아웃된 것이 아니므로 다시 시도해 주세요/)).toBeVisible();
+    await expect(await canvas.findByText(/로그인 상태를 불러오지 못했어요/)).toBeVisible();
   },
 };
 

@@ -63,5 +63,5 @@ npm run test:storybook:docs
 
 ## Generated artefacts
 
-`_ds_bundle.js`, `_ds_manifest.json`, `storybook-static/`은 source가 아니다. Product code에서 import하면
-`npm run check:design`이 실패한다. Static build output은 commit하지 않는다.
+삭제된 `_ds_bundle.js`와 `_ds_manifest.json` snapshot은 복원하지 않는다. `storybook-static/`은 source가
+아니며 product code에서 import하면 `npm run check:design`이 실패한다. Static build output은 commit하지 않는다.

@@ -1,20 +1,27 @@
-:root{
-/* ---- Espresso: brand ink + primary action ---- */
---espresso-50:#FAF5F2;--espresso-100:#F1E5DE;--espresso-200:#E0C8BA;--espresso-300:#C6A08B;
---espresso-400:#9E6B4F;--espresso-500:#7A4630;--espresso-600:#5E3122;--espresso-700:#47211A;
---espresso-800:#341710;--espresso-900:#24100B;
-/* ---- Caramel: accent, energy, rewards (from the logo's motion streak) ---- */
---caramel-50:#FEF7EC;--caramel-100:#FDECD3;--caramel-200:#FBD7A6;--caramel-300:#F8BC74;
---caramel-400:#F5A65A;--caramel-500:#E8862B;--caramel-600:#C96A18;--caramel-700:#9E5212;
-/* ---- Crema: warm neutral surfaces + text ---- */
---crema-0:#FFFFFF;--crema-50:#FFFCF8;--crema-100:#FBF6EF;--crema-200:#F4EDE4;
---crema-300:#E7DDD1;--crema-400:#CFC2B3;--crema-500:#A5978A;--crema-600:#7B6F64;
---crema-700:#574E46;--crema-800:#3A342E;--crema-900:#211D1A;
-/* ---- Semantic hues ---- */
---mint-100:#DCF5E9;--mint-200:#BEE9D6;--mint-500:#12996B;--mint-600:#0C7A55;
---amber-100:#FDF0CC;--amber-200:#F3E0A6;--amber-500:#C98A05;--amber-600:#A06E04;
---berry-100:#FBE0DF;--berry-200:#F3C7C6;--berry-500:#D93A3A;--berry-600:#B12A2A;
---sky-100:#DDEBFB;--sky-200:#C4DCF7;--sky-500:#2F7BD8;--sky-600:#2263B2;
-/* ---- Brand-literal (do not alter: sampled from the logo file) ---- */
---brand-bean:#47211A;--brand-bean-hi:#5C3020;--brand-streak:#F5A85A;
+:root {
+  --color-white: #ffffff;
+  --ink-950: #071633;
+  --ink-800: #1c2944;
+  --ink-700: #35415b;
+  --slate-700: #46536b;
+  --slate-600: #58647a;
+  --slate-400: #9ba5b6;
+  --slate-300: #c8d0dd;
+  --slate-200: #dce2ec;
+  --slate-100: #edf1f6;
+  --slate-50: #f4f7fb;
+  --coral-700: #ce342f;
+  --coral-600: #ff4b42;
+  --coral-100: #fff0ee;
+  --red-700: #9f1f2c;
+  --red-600: #b52631;
+  --red-100: #ffeaed;
+  --amber-700: #795010;
+  --amber-600: #9a5c13;
+  --amber-100: #fff4dc;
+  --blue-700: #364fae;
+  --blue-600: #455ec7;
+  --blue-100: #edf2ff;
+  --green-700: #176f55;
+  --green-100: #eef8f5;
 }

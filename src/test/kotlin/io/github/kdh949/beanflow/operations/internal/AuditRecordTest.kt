@@ -9,8 +9,10 @@ import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.ordering.internal.OrderCreationDatabaseFixture
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import jakarta.persistence.EntityManagerFactory
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.hibernate.SessionFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -30,6 +32,7 @@ import java.util.UUID
     properties = [
         "beanflow.reservation-expiry.initial-delay-ms=3600000",
         "beanflow.audit-retention.initial-delay-ms=3600000",
+        "spring.jpa.properties.hibernate.generate_statistics=true",
     ],
 )
 internal class AuditRecordTest
@@ -39,7 +42,10 @@ internal class AuditRecordTest
         private val service: AuditRecordService,
         private val transactionTemplate: TransactionTemplate,
         private val jdbcTemplate: JdbcTemplate,
+        entityManagerFactory: EntityManagerFactory,
     ) {
+        private val statistics = entityManagerFactory.unwrap(SessionFactory::class.java).statistics
+
         @BeforeEach
         fun cleanDatabase() = OrderCreationDatabaseFixture.clean(jdbcTemplate)
 
@@ -137,6 +143,29 @@ internal class AuditRecordTest
             assertThat(count()).isEqualTo(1)
             assertThat(AuditRecordOperations::class.java.methods.map { it.name })
                 .doesNotContain("update", "delete", "purge")
+        }
+
+        @Test
+        fun `appending additional new records adds only one insert per record`() {
+            statistics.clear()
+            transactionTemplate.executeWithoutResult { operations.appendAll(listOf(command())) }
+            val singleCount = statistics.prepareStatementCount
+            statistics.clear()
+            transactionTemplate.executeWithoutResult { operations.appendAll(List(4) { command() }) }
+            val batchCount = statistics.prepareStatementCount
+
+            assertThat(batchCount - singleCount).isEqualTo(3)
+            assertThat(count()).isEqualTo(5)
+        }
+
+        @Test
+        fun `duplicate in a batch rolls back earlier new audit records`() {
+            val duplicate = command()
+            transactionTemplate.executeWithoutResult { operations.appendAll(listOf(duplicate)) }
+            assertThatThrownBy {
+                transactionTemplate.executeWithoutResult { operations.appendAll(listOf(command(), duplicate)) }
+            }.isInstanceOf(DataIntegrityViolationException::class.java)
+            assertThat(count()).isOne()
         }
 
         @Test

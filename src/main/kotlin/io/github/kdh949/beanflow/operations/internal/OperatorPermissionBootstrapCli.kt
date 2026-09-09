@@ -39,6 +39,7 @@ import kotlin.system.exitProcess
 )
 @Import(
     AuditRecordService::class,
+    AuditRecordAppendRepository::class,
     RetentionPolicyService::class,
     DatabaseAdvisoryLock::class,
     OperatorSecurityMetrics::class,

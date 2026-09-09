@@ -1,6 +1,7 @@
 # ADR-116: 비예약 주문 quote와 전체 fingerprint 사전조건
 
-- **Status:** Accepted
+- **Status:** Superseded
+- **Superseded by:** [ADR-123](ADR-123-order-quote-trade-terms-and-shared-availability.md)
 - **Date:** 2026-08-25
 - **Implementation owner:** [고객·점주 화면 재현을 위한 계약 완성](../exec-plans/completed/customer-merchant-screen-contract-completion.md)
 

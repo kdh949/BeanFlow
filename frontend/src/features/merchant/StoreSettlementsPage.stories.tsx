@@ -119,7 +119,7 @@ export const SettlementQueryUnavailable: Story = {
     },
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText("요청을 완료하지 못했습니다")).toBeVisible();
+    await expect(await canvas.findByText("서비스 연결을 확인하고 있습니다")).toBeVisible();
     await expect(canvas.getByRole("button", { name: /다시 시도/ })).toBeVisible();
   },
 };

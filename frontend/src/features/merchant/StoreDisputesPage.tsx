@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { components, paths } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { merchantApi } from "../../api/merchantClient";
-import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
-import { PageTitle } from "../../components/Shells";
-import { Button } from "../../design-system";
+import { EmptyState, LoadingState } from "../../design-system";
+import { PageHeading } from "../../design-system";
+import { Button, ChipButton } from "../../design-system";
+import { ErrorState, StatusText } from "../../presentation/shared";
 import { compactId, shortDateTime, won } from "../../lib/format";
 import { useMerchantStores } from "./useMerchantStores";
 import { StoreSelector } from "./StoreSelector";
@@ -70,10 +71,8 @@ export function StoreDisputesPage() {
 
   return (
     <div className="console-page">
-      <PageTitle
-        eyebrow="DISPUTE"
+      <PageHeading
         title="정산 이의제기"
-        description="접수한 이의제기의 진행 상태와 보류 금액을 확인합니다."
         action={<StoreSelector stores={stores} selected={selected} onSelect={select} />}
       />
 
@@ -86,15 +85,13 @@ export function StoreDisputesPage() {
         <>
           <div className="filter-row" role="group" aria-label="상태 필터">
             {STATE_FILTERS.map((option) => (
-              <button
+              <ChipButton
                 key={option.value}
-                type="button"
-                className={filter === option.value ? "is-active" : ""}
                 aria-pressed={filter === option.value}
                 onClick={() => setFilter(option.value)}
               >
                 {option.label}
-              </button>
+              </ChipButton>
             ))}
           </div>
 
@@ -112,10 +109,10 @@ export function StoreDisputesPage() {
                 <article className="surface-card dispute-card" key={dispute.disputeId}>
                   <header>
                     <div>
-                      <span className="eyebrow">명세 {compactId(dispute.settlementItemId)}</span>
+                      <span className="context-label">명세 {compactId(dispute.settlementItemId)}</span>
                       <strong className="bf-num">{won.format(dispute.expectedAdjustmentKrw)}</strong>
                     </div>
-                    <StatusBadge state={dispute.state} />
+                    <StatusText domain="dispute" state={dispute.state} />
                   </header>
                   <dl className="detail-list">
                     <div><dt>보류 금액</dt><dd className="bf-num">{won.format(dispute.heldAmountKrw)}</dd></div>
@@ -125,6 +122,7 @@ export function StoreDisputesPage() {
                       <dd>{dispute.decidedAt ? shortDateTime.format(new Date(dispute.decidedAt)) : "진행 중"}</dd>
                     </div>
                   </dl>
+                  <Button variant="secondary" disabled>상세 내용 준비 중</Button>
                 </article>
               ))}
             </section>

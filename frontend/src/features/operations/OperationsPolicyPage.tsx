@@ -3,9 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../../components/Ui";
-import { PageTitle } from "../../components/Shells";
-import { Button } from "../../design-system";
+import { Button, EmptyState, LoadingState, PageHeading, SelectField, Tab, TabList, TabPanel, Tabs, TextAreaField, TextField } from "../../design-system";
+import { ErrorState, StatusText } from "../../presentation/shared";
 import { shortDateTime } from "../../lib/format";
 
 type PointPolicy = components["schemas"]["OrdinaryPointAccrualPolicyVersion"];
@@ -29,22 +28,14 @@ export function OperationsPolicyPage() {
   const [workspace, setWorkspace] = useState<Workspace>("points");
   return (
     <div className="console-page operations-policy-page">
-      <PageTitle
-        eyebrow="PLATFORM POLICY"
-        title="운영 정책 관리"
-        description="포인트·만료 혜택 정책, 브랜드와 매장 검색 색인을 실제 서버 상태 기준으로 관리합니다."
-      />
-      <div className="filter-row policy-workspace-tabs" role="group" aria-label="운영 정책 업무 선택">
-        {workspaceItems.map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" className={workspace === id ? "is-active" : ""} aria-pressed={workspace === id} onClick={() => setWorkspace(id)}>
-            <Icon size={17} aria-hidden="true" /> {label}
-          </button>
-        ))}
-      </div>
-      {workspace === "points" ? <PointPolicyWorkspace /> : null}
-      {workspace === "restoration" ? <RestorationPolicyWorkspace /> : null}
-      {workspace === "brands" ? <BrandWorkspace /> : null}
-      {workspace === "search" ? <SearchIndexWorkspace /> : null}
+      <PageHeading title="운영 정책 관리" />
+      <Tabs value={workspace} onValueChange={(value) => setWorkspace(value as Workspace)}>
+        <TabList label="운영 정책 업무 선택">{workspaceItems.map(({ id, label, icon: Icon }) => <Tab key={id} value={id}><Icon size={17} aria-hidden="true" /> {label}</Tab>)}</TabList>
+        <TabPanel value="points"><PointPolicyWorkspace /></TabPanel>
+        <TabPanel value="restoration"><RestorationPolicyWorkspace /></TabPanel>
+        <TabPanel value="brands"><BrandWorkspace /></TabPanel>
+        <TabPanel value="search"><SearchIndexWorkspace /></TabPanel>
+      </Tabs>
     </div>
   );
 }
@@ -127,14 +118,13 @@ function PointPolicyWorkspace() {
   return (
     <section className="policy-workspace" aria-labelledby="point-policy-title">
       <div className="surface-card policy-intro-card">
-        <div><span className="eyebrow">GLOBAL DEFAULT</span><h2 id="point-policy-title">공통 포인트 적립 정책</h2><p>현재 버전을 먼저 감사 조회한 뒤 새 버전으로 즉시 적용합니다.</p></div>
+        <div><span className="context-label">공통 기본값</span><h2 id="point-policy-title">공통 포인트 적립 정책</h2></div>
         <div className="policy-audit-read">
-          <label htmlFor="point-policy-access-reason">정책 조회 사유</label>
-          <select id="point-policy-access-reason" value={accessReason} onChange={(event) => setAccessReason(event.target.value)} required>
+          <SelectField label="정책 조회 사유" id="point-policy-access-reason" value={accessReason} onValueChange={setAccessReason} required>
             <option value="">업무 사유 선택</option>
             <option value="POLICY_CHANGE_REVIEW">정책 변경 전 현재값 확인</option>
             <option value="POLICY_AUDIT_REVIEW">정책 감사 검토</option>
-          </select>
+          </SelectField>
           <Button variant="secondary" disabled={!accessReason} loading={loading} onClick={() => void load()}>현재 적립 정책 조회</Button>
         </div>
       </div>
@@ -144,7 +134,7 @@ function PointPolicyWorkspace() {
       {policy ? (
         <div className="console-detail-grid policy-detail-grid">
           <section className="surface-card order-panel">
-            <div className="panel-heading"><div><span className="eyebrow">CURRENT VERSION</span><h2>버전 {policy.policyVersionId} 적용 중</h2></div><StatusBadge state={policy.state} /></div>
+            <div className="panel-heading"><div><span className="context-label">현재 버전</span><h2>버전 {policy.policyVersionId} 적용 중</h2></div><StatusText state={policy.state} /></div>
             <dl className="detail-list">
               <div><dt>적립률</dt><dd>{((policy.accrualRateBps ?? 0) / 100).toFixed(2)}%</dd></div>
               <div><dt>반올림</dt><dd>{policy.roundingMode === "FLOOR" ? "버림" : "반올림"}</dd></div>
@@ -156,14 +146,14 @@ function PointPolicyWorkspace() {
           <form className="surface-card policy-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
             <h3>새 정책 버전</h3>
             <div className="field-grid">
-              <label>적립률(%)<input aria-label="적립률(%)" type="number" min="0" max="100" step="0.01" value={rate} onChange={(event) => { setRate(event.target.value); intent.current.rotate(); }} required /></label>
-              <label>반올림 방식<select value={roundingMode} onChange={(event) => setRoundingMode(event.target.value as typeof roundingMode)}><option value="FLOOR">버림</option><option value="HALF_UP">반올림</option></select></label>
-              <label>발행 주체<select value={issuerType} onChange={(event) => setIssuerType(event.target.value as typeof issuerType)}><option value="PLATFORM">플랫폼</option><option value="BRAND">브랜드</option><option value="STORE">매장</option></select></label>
-              <label>발행 주체 식별값<input value={issuerReference} maxLength={240} onChange={(event) => setIssuerReference(event.target.value)} required /></label>
-              <label>만료 계산<select value={expiryRule} onChange={(event) => setExpiryRule(event.target.value as typeof expiryRule)}><option value="SEOUL_CALENDAR_DAYS_FROM_COMPLETION">서울 달력일</option><option value="EXACT_DURATION_FROM_COMPLETION">정확한 시간</option></select></label>
-              <label>유효일수<input type="number" min="1" max="3650" value={validityDays} onChange={(event) => setValidityDays(event.target.value)} required /></label>
+              <TextField label="적립률(%)" type="number" min="0" max="100" step="0.01" value={rate} onValueChange={(value) => { setRate(value); intent.current.rotate(); }} required />
+              <SelectField label="반올림 방식" value={roundingMode} onValueChange={(value) => setRoundingMode(value as typeof roundingMode)}><option value="FLOOR">버림</option><option value="HALF_UP">반올림</option></SelectField>
+              <SelectField label="발행 주체" value={issuerType} onValueChange={(value) => setIssuerType(value as typeof issuerType)}><option value="PLATFORM">플랫폼</option><option value="BRAND">브랜드</option><option value="STORE">매장</option></SelectField>
+              <TextField label="발행 주체 ID" value={issuerReference} maxLength={240} onValueChange={setIssuerReference} required />
+              <SelectField label="만료 계산" value={expiryRule} onValueChange={(value) => setExpiryRule(value as typeof expiryRule)}><option value="SEOUL_CALENDAR_DAYS_FROM_COMPLETION">서울 달력일</option><option value="EXACT_DURATION_FROM_COMPLETION">정확한 시간</option></SelectField>
+              <TextField label="유효일수" type="number" min="1" max="3650" value={validityDays} onValueChange={setValidityDays} required />
             </div>
-            <label>변경 사유<textarea value={reason} maxLength={500} onChange={(event) => { setReason(event.target.value); setSaveError(null); intent.current.rotate(); }} required /></label>
+            <TextAreaField label="변경 사유" value={reason} maxLength={500} onValueChange={(value) => { setReason(value); setSaveError(null); intent.current.rotate(); }} required />
             <Button type="submit" loading={saving} disabled={!reason.trim()}>새 적립 정책 적용</Button>
             {saveError ? <ErrorState error={saveError} /> : null}
           </form>
@@ -239,12 +229,11 @@ function RestorationPolicyWorkspace() {
   return (
     <section className="policy-workspace" aria-labelledby="restoration-title">
       <div className="surface-card policy-intro-card">
-        <div><span className="eyebrow">EXPIRED BENEFIT</span><h2 id="restoration-title">만료 혜택 복원 정책</h2><p>다섯 가지 허용 조합을 현재 버전과 함께 관리합니다.</p></div>
+        <div><span className="context-label">만료 혜택</span><h2 id="restoration-title">만료 혜택 복원 정책</h2></div>
         <div className="policy-audit-read">
-          <label htmlFor="restoration-access-reason">복원 정책 조회 사유</label>
-          <select id="restoration-access-reason" value={accessReason} onChange={(event) => setAccessReason(event.target.value)} required>
+          <SelectField label="복원 정책 조회 사유" id="restoration-access-reason" value={accessReason} onValueChange={setAccessReason} required>
             <option value="">업무 사유 선택</option><option value="BENEFIT_POLICY_REVIEW">혜택 복원 정책 검토</option><option value="BENEFIT_POLICY_AUDIT">혜택 정책 감사</option>
-          </select>
+          </SelectField>
           <Button variant="secondary" disabled={!accessReason} loading={loading} onClick={() => void load()}>복원 정책 조회</Button>
         </div>
       </div>
@@ -256,8 +245,8 @@ function RestorationPolicyWorkspace() {
           <section className="policy-card-list" aria-label="만료 혜택 복원 정책 목록">
             {policies.map((policy) => (
               <article className={selected?.trigger === policy.trigger && selected?.benefitType === policy.benefitType ? "surface-card compact-policy-card is-selected" : "surface-card compact-policy-card"} key={`${policy.trigger}-${policy.benefitType}`}>
-                <div><span className="eyebrow">{policy.trigger}</span><h3>{policy.benefitType === "COUPON" ? "쿠폰" : "포인트"}</h3></div>
-                <StatusBadge state={`v${policy.policyVersionId}`} />
+                <div><span className="context-label">{policy.trigger}</span><h3>{policy.benefitType === "COUPON" ? "쿠폰" : "포인트"}</h3></div>
+                <StatusText state={`v${policy.policyVersionId}`} />
                 <p>{policy.mode === "COMPENSATE_WITH_NEW_ISSUANCE" ? "신규 혜택 발급" : "원래 만료일 유지"}</p>
                 <small>{policy.compensationValidityDays}일 · {policy.reason}</small>
                 <Button size="sm" variant="secondary" onClick={() => edit(policy)}>정책 변경</Button>
@@ -266,10 +255,10 @@ function RestorationPolicyWorkspace() {
           </section>
           {selected ? (
             <form className="surface-card policy-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-              <div className="panel-heading"><div><span className="eyebrow">{selected.trigger} · {selected.benefitType}</span><h3>버전 {selected.policyVersionId} 적용 중</h3></div><StatusBadge state={`v${selected.policyVersionId}`} /></div>
-              <label>복원 방식<select value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}><option value="COMPENSATE_WITH_NEW_ISSUANCE">신규 혜택 발급</option><option value="PRESERVE_ORIGINAL_EXPIRY">원래 만료일 유지</option></select></label>
-              <label>보상 유효일수<input aria-label="보상 유효일수" type="number" min="1" max="365" value={validityDays} onChange={(event) => setValidityDays(event.target.value)} required /></label>
-              <label>복원 정책 변경 사유<textarea value={reason} maxLength={500} onChange={(event) => { setReason(event.target.value); setSaveError(null); intent.current.rotate(); }} required /></label>
+              <div className="panel-heading"><div><span className="context-label">{selected.trigger} · {selected.benefitType}</span><h3>버전 {selected.policyVersionId} 적용 중</h3></div><StatusText state={`v${selected.policyVersionId}`} /></div>
+              <SelectField label="복원 방식" value={mode} onValueChange={(value) => setMode(value as typeof mode)}><option value="COMPENSATE_WITH_NEW_ISSUANCE">신규 혜택 발급</option><option value="PRESERVE_ORIGINAL_EXPIRY">원래 만료일 유지</option></SelectField>
+              <TextField label="보상 유효일수" type="number" min="1" max="365" value={validityDays} onValueChange={setValidityDays} required />
+              <TextAreaField label="복원 정책 변경 사유" value={reason} maxLength={500} onValueChange={(value) => { setReason(value); setSaveError(null); intent.current.rotate(); }} required />
               <Button type="submit" loading={saving} disabled={!reason.trim()}>새 복원 정책 적용</Button>
               {saveError ? <ErrorState error={saveError} /> : null}
             </form>
@@ -367,10 +356,10 @@ function BrandWorkspace() {
 
   return (
     <section className="policy-workspace" aria-labelledby="brand-title">
-      <div className="surface-card policy-intro-card"><div><span className="eyebrow">BRAND CATALOG</span><h2 id="brand-title">브랜드 관리</h2><p>활성 이름 중복과 소속 매장 수·버전 충돌을 서버에서 다시 검증합니다.</p></div><Button variant="secondary" onClick={() => void load()}><RefreshCw size={16} /> 목록 새로고침</Button></div>
+      <div className="surface-card policy-intro-card"><div><span className="context-label">브랜드 목록</span><h2 id="brand-title">브랜드 관리</h2><p>같은 이름이 있거나 매장에 연결된 브랜드는 변경할 수 없습니다.</p></div><Button variant="secondary" onClick={() => void load()}><RefreshCw size={16} /> 목록 새로고침</Button></div>
       <form className="surface-card inline-policy-form" onSubmit={(event) => { event.preventDefault(); void create(); }}>
-        <label>새 브랜드 이름<input value={newName} maxLength={120} onChange={(event) => { setNewName(event.target.value); createIntent.current.rotate(); }} required /></label>
-        <label>브랜드 등록 사유<input value={createReason} maxLength={500} onChange={(event) => { setCreateReason(event.target.value); createIntent.current.rotate(); }} required /></label>
+        <TextField label="새 브랜드 이름" value={newName} maxLength={120} onValueChange={(value) => { setNewName(value); createIntent.current.rotate(); }} required />
+        <TextField label="브랜드 등록 사유" value={createReason} maxLength={500} onValueChange={(value) => { setCreateReason(value); createIntent.current.rotate(); }} required />
         <Button type="submit" loading={creating} disabled={!newName.trim() || !createReason.trim()}>브랜드 등록</Button>
       </form>
       {loading ? <LoadingState label="브랜드 목록을 조회하는 중" /> : null}
@@ -381,7 +370,7 @@ function BrandWorkspace() {
           <section className="policy-card-list" aria-label="브랜드 목록">
             {brands.map((brand) => (
               <article className={selected?.brandId === brand.brandId ? "surface-card compact-policy-card is-selected" : "surface-card compact-policy-card"} key={brand.brandId}>
-                <div><span className="eyebrow">BRAND</span><h3>{brand.name}</h3></div><StatusBadge state={brand.status} />
+                <div><span className="context-label">브랜드</span><h3>{brand.name}</h3></div><StatusText domain="brand" state={brand.status} />
                 <p>소속 매장 {brand.assignedStoreCount}개</p><small>버전 {brand.version}</small>
                 <Button size="sm" variant="secondary" onClick={() => edit(brand)}>브랜드 편집</Button>
               </article>
@@ -390,10 +379,10 @@ function BrandWorkspace() {
           {selected ? (
             <form className="surface-card policy-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
               <h3>브랜드 정보 변경</h3>
-              <label>브랜드 이름<input value={editName} maxLength={120} onChange={(event) => setEditName(event.target.value)} required /></label>
-              <label>운영 상태<select value={editStatus} onChange={(event) => setEditStatus(event.target.value as Brand["status"])}><option value="ACTIVE">활성</option><option value="ARCHIVED" disabled={selected.assignedStoreCount > 0}>보관</option></select></label>
+              <TextField label="브랜드 이름" value={editName} maxLength={120} onValueChange={setEditName} required />
+              <SelectField label="운영 상태" value={editStatus} onValueChange={(value) => setEditStatus(value as Brand["status"])}><option value="ACTIVE">활성</option><option value="ARCHIVED" disabled={selected.assignedStoreCount > 0}>보관</option></SelectField>
               {selected.assignedStoreCount > 0 ? <p className="policy-caution">소속 매장이 남아 있어 보관할 수 없습니다.</p> : null}
-              <label>브랜드 변경 사유<textarea value={editReason} maxLength={500} onChange={(event) => { setEditReason(event.target.value); setMutationFailure(null); editIntent.current.rotate(); }} required /></label>
+              <TextAreaField label="브랜드 변경 사유" value={editReason} maxLength={500} onValueChange={(value) => { setEditReason(value); setMutationFailure(null); editIntent.current.rotate(); }} required />
               <Button type="submit" loading={saving} disabled={!editReason.trim()}>브랜드 변경 적용</Button>
             </form>
           ) : <EmptyState title="편집할 브랜드를 선택하세요" description="이름 변경과 보관은 현재 버전·소속 매장 수를 기준으로 검증됩니다." />}
@@ -434,17 +423,16 @@ function SearchIndexWorkspace() {
 
   return (
     <section className="policy-workspace" aria-labelledby="search-index-title">
-      <div className="surface-card policy-intro-card"><div><span className="eyebrow">DISCOVERY RECOVERY</span><h2 id="search-index-title">매장 검색 색인 재생성</h2><p>실행 시작 전 대상을 고정하고 매장별 트랜잭션으로 갱신합니다. 부분 결과는 전체 성공이 아닙니다.</p></div></div>
+      <div className="surface-card policy-intro-card"><div><span className="context-label">검색 복구</span><h2 id="search-index-title">매장 검색 색인 재생성</h2></div></div>
       <form className="surface-card policy-form search-index-form" onSubmit={(event) => { event.preventDefault(); void rebuild(); }}>
-        <label>재생성 사유<textarea value={reason} maxLength={500} onChange={(event) => { setReason(event.target.value); setError(null); setResult(null); intent.current.rotate(); }} required /></label>
+        <TextAreaField label="재생성 사유" value={reason} maxLength={500} onValueChange={(value) => { setReason(value); setError(null); setResult(null); intent.current.rotate(); }} required />
         <Button type="submit" loading={running} disabled={!reason.trim()}><RefreshCw size={17} /> 검색 색인 재생성</Button>
-        <p className="policy-caution">503 응답은 어떤 매장도 반영되지 않았다는 뜻이 아닙니다. 재시도 전 운영 Runbook을 확인하세요.</p>
       </form>
       {running ? <LoadingState label="검색 색인을 매장별로 재생성하는 중" /> : null}
       {error ? <ErrorState error={error} /> : null}
       {result ? (
         <section className={result.complete ? "surface-card index-result is-complete" : "surface-card index-result is-partial"} aria-live="polite">
-          <div className="panel-heading"><div><span className="eyebrow">STORED PASS RESULT</span><h2>{result.complete ? "스냅샷 범위 재생성 완료" : "부분 완료 · 재조정 필요"}</h2></div><StatusBadge state={result.complete ? "COMPLETE" : "RECONCILING"} /></div>
+          <div className="panel-heading"><div><span className="context-label">저장된 실행 결과</span><h2>{result.complete ? "대상 매장 재생성 완료" : "일부 매장 완료 · 추가 확인 필요"}</h2></div><StatusText state={result.complete ? "COMPLETE" : "RECONCILING"} /></div>
           <dl className="detail-list">
             <div><dt>색인 반영</dt><dd>{result.indexedStoreCount}개</dd></div>
             <div><dt>건너뜀</dt><dd>{result.skippedStoreCount}개</dd></div>

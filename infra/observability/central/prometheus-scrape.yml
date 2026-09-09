@@ -1,0 +1,37 @@
+# Merge these jobs into the existing Prometheus 3.14 scrape_configs.
+# All targets are private VPN addresses; do not expose the management ports publicly.
+scrape_configs:
+  - job_name: beanflow
+    metrics_path: /actuator/prometheus
+    scrape_interval: 10s
+    scrape_timeout: 8s
+    static_configs:
+      - targets: ["BEANFLOW_PERF_VPN_HOST:18081"]
+        labels:
+          environment: perf
+
+  - job_name: beanflow-alloy
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["BEANFLOW_PERF_VPN_HOST:12345"]
+        labels:
+          environment: perf
+
+  - job_name: beanflow-postgres
+    metrics_path: /metrics
+    scrape_interval: 10s
+    scrape_timeout: 8s
+    static_configs:
+      - targets: ["BEANFLOW_PERF_VPN_HOST:19187"]
+        labels:
+          environment: perf
+
+  - job_name: beanflow-node
+    metrics_path: /metrics
+    scrape_interval: 10s
+    scrape_timeout: 8s
+    static_configs:
+      - targets: ["BEANFLOW_PERF_VPN_HOST:19100"]
+        labels:
+          environment: perf

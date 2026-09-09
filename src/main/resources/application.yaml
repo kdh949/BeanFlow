@@ -13,6 +13,16 @@ spring:
     name: beanflow
   profiles:
     group:
+      prod:
+        - vault-enforced
+      portfolio:
+        - local
+        - toss-sandbox
+        - vault-enforced
+      perf:
+        - local
+        - toss-perf
+        - vault-enforced
       toss-sandbox-runtime:
         - local
         - toss-sandbox

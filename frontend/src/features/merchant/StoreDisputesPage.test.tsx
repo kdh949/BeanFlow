@@ -1,5 +1,6 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { merchantApi } from "../../api/merchantClient";
 import { StoreDisputesPage } from "./StoreDisputesPage";
@@ -18,6 +19,10 @@ function dispute(sequence: number) {
 }
 
 type Query = { cursor?: string } | undefined;
+
+function renderPage() {
+  return render(<MemoryRouter><StoreDisputesPage /></MemoryRouter>);
+}
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -52,7 +57,7 @@ describe("store disputes pagination", () => {
       throw new Error(`unexpected GET ${path}`);
     }) as never);
 
-    render(<StoreDisputesPage />);
+    renderPage();
 
     expect(await screen.findAllByText("₩1,000")).toHaveLength(2);
     expect(screen.queryByText("₩2,000")).not.toBeInTheDocument();
@@ -87,7 +92,7 @@ describe("store disputes pagination", () => {
       throw new Error(`unexpected GET ${path}`);
     }) as never);
 
-    render(<StoreDisputesPage />);
+    renderPage();
     await screen.findAllByText("₩1,000");
     await userEvent.click(screen.getByRole("button", { name: /이의제기 더 보기/ }));
     await waitFor(() => expect(seenCursors).toContain("page-2"));

@@ -1,13 +1,12 @@
-:root{
-/* Warm-tinted shadows — never neutral black. */
---sh-0:none; /* @kind shadow */
---sh-1:0 1px 2px rgba(52,23,16,.06),0 1px 1px rgba(52,23,16,.04);
---sh-2:0 2px 6px rgba(52,23,16,.07),0 1px 2px rgba(52,23,16,.05);
---sh-3:0 8px 20px -6px rgba(52,23,16,.12),0 2px 6px rgba(52,23,16,.05);
---sh-4:0 18px 42px -12px rgba(52,23,16,.18),0 4px 10px rgba(52,23,16,.06);
---sh-sheet:0 -10px 34px -10px rgba(52,23,16,.16);
---sh-inset:inset 0 1px 0 rgba(255,255,255,.6);
---ring-focus:0 0 0 3px rgba(232,134,43,.32);
---ring-danger:0 0 0 3px rgba(217,58,58,.24);
---sh-customer-frame:0 28px 80px rgba(20,8,5,.32);
+:root {
+  --sh-0: none; /* @kind shadow */
+  --sh-1: 0 1px 2px rgba(7, 22, 51, .05);
+  --sh-2: 0 5px 18px rgba(7, 22, 51, .07);
+  --sh-3: 0 8px 20px rgba(7, 22, 51, .09);
+  --sh-4: 0 18px 42px rgba(7, 22, 51, .14);
+  --sh-sheet: 0 -10px 34px rgba(7, 22, 51, .12);
+  --sh-inset: inset 0 1px 0 rgba(255, 255, 255, .7);
+  --ring-focus: 0 0 0 3px rgba(7, 22, 51, .13);
+  --ring-danger: 0 0 0 3px rgba(181, 38, 49, .2);
+  --sh-customer-frame: 0 0 0 1px rgba(7, 22, 51, .05);
 }

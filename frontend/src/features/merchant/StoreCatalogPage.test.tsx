@@ -74,10 +74,10 @@ describe("StoreCatalogPage", () => {
     await userEvent.click(await screen.findByRole("button", { name: /카페 라테/ }));
     await userEvent.click(await screen.findByRole("checkbox", { name: /고객에게 판매 가능/ }));
     await userEvent.click(screen.getByRole("button", { name: "거래 내용 저장" }));
-    expect(await screen.findByText("VERSION 3")).toBeVisible();
+    expect(await screen.findByText("3번째 저장")).toBeVisible();
     await userEvent.click(screen.getByRole("checkbox", { name: /고객에게 판매 가능/ }));
     await userEvent.click(screen.getByRole("button", { name: "거래 내용 저장" }));
-    expect(await screen.findByText("VERSION 4")).toBeVisible();
+    expect(await screen.findByText("4번째 저장")).toBeVisible();
 
     const calls = put.mock.calls as unknown as Array<[string, { body: Record<string, unknown> }]>;
     expect(calls.map(([, options]) => options.body)).toEqual([
@@ -116,7 +116,7 @@ describe("StoreCatalogPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "정책 저장" }));
 
     expect(await screen.findByText("다른 변경이 먼저 저장되었습니다")).toBeVisible();
-    expect(screen.getByRole("button", { name: "서버 값 다시 불러오기" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "최신 내용 불러오기" })).toBeVisible();
     expect(screen.queryByText("주문 정책을 저장했습니다.")).not.toBeInTheDocument();
   });
 
@@ -158,7 +158,7 @@ describe("StoreCatalogPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "거래 내용 저장" }));
 
     expect(await screen.findByText("다른 변경이 먼저 저장되었습니다")).toBeVisible();
-    expect(screen.getByRole("button", { name: "서버 값 다시 불러오기" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "최신 내용 불러오기" })).toBeVisible();
     expect(name).toHaveValue("새 라테");
   });
 
@@ -236,10 +236,10 @@ describe("StoreCatalogPage", () => {
     await userEvent.selectOptions(selector, secondStoreId);
     await waitFor(() => expect(requestedPolicyFor(secondStoreId)).toBe(true));
     secondPolicy.resolve(response({ ...policy, storeId: secondStoreId, version: 3 }));
-    expect(await screen.findByText("VERSION 3")).toBeVisible();
+    expect(await screen.findByText("3번째 저장")).toBeVisible();
 
     firstPolicy.resolve(response({ ...policy, acceptingOrders: false, version: 7 }));
-    await waitFor(() => expect(screen.getByText("VERSION 3")).toBeVisible());
+    await waitFor(() => expect(screen.getByText("3번째 저장")).toBeVisible());
     expect(screen.getByRole("checkbox", { name: /새 주문 접수/ })).toBeChecked();
 
     await userEvent.click(screen.getByRole("checkbox", { name: /새 주문 접수/ }));

@@ -21,8 +21,8 @@ internal class StoreOrderingPolicyMigrationTest : IsolatedPostgresSupport() {
     }
 
     @Test
-    fun `V69 backfills existing Store policy at version zero with a deterministic timestamp`() {
-        flyway(target = "68").migrate()
+    fun `V72 backfills existing Store policy at version zero with a deterministic timestamp`() {
+        flyway(target = "71").migrate()
         val existingStore = UUID.randomUUID()
         jdbc.update(
             "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, false, true, 0)",
@@ -44,14 +44,14 @@ internal class StoreOrderingPolicyMigrationTest : IsolatedPostgresSupport() {
         assertThat((row["ordering_policy_updated_at"] as java.sql.Timestamp).toInstant()).isEqualTo(Instant.EPOCH)
         assertThat(
             jdbc.queryForObject(
-                "SELECT count(*) FROM flyway_schema_history WHERE success AND version = '69'",
+                "SELECT count(*) FROM flyway_schema_history WHERE success AND version = '72'",
                 Long::class.java,
             ),
         ).isEqualTo(1)
     }
 
     @Test
-    fun `V69 constrains the policy command replay ledger and registers its audit action`() {
+    fun `V72 constrains the policy command replay ledger and registers its audit action`() {
         flyway().migrate()
         val actorId = UUID.randomUUID()
         val storeId = UUID.randomUUID()

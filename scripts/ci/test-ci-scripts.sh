@@ -306,4 +306,13 @@ assert_contains \
   "$WORKFLOW" \
   "Storybook accessibility evidence is retained for fourteen days"
 
+frontend_timeout="$(
+  sed -n '/^  frontend:/,/^  backend_build:/p' "$WORKFLOW" |
+    awk '$1 == "timeout-minutes:" { print $2; exit }'
+)"
+if [[ ! "$frontend_timeout" =~ ^[0-9]+$ ]] || ((frontend_timeout < 30)); then
+  echo "FAIL: frontend CI timeout must be at least 30 minutes, got '$frontend_timeout'" >&2
+  exit 1
+fi
+
 echo "CI script tests passed."

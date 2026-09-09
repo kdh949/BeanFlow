@@ -3,9 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
-import { EmptyState, ErrorState, LoadingState } from "../../components/Ui";
-import { PageTitle } from "../../components/Shells";
-import { Button } from "../../design-system";
+import { Button, EmptyState, LoadingState, PageHeading, RadioCard, RadioGroup, TextAreaField, TextField } from "../../design-system";
+import { ErrorState } from "../../presentation/shared";
 import { StoreSelector } from "./StoreSelector";
 import { useMerchantStores } from "./useMerchantStores";
 
@@ -31,11 +30,16 @@ export function StoreRegionPage() {
   const [saveError, setSaveError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
   const searchGeneration = useRef(0);
+  const saveGeneration = useRef(0);
+  const assigning = useRef(false);
   const intent = useRef(new SubmissionIntent());
   const storeId = selected?.storeId ?? null;
 
   const resetDraft = useCallback(() => {
     searchGeneration.current += 1;
+    saveGeneration.current += 1;
+    assigning.current = false;
+    setSearching(false); setLoadingMore(false); setSaving(false);
     setDraftQuery("");
     setSubmittedQuery("");
     setPage(null);
@@ -82,7 +86,9 @@ export function StoreRegionPage() {
   }
 
   async function assign() {
-    if (!storeId || !selectedRegion || !reason.trim()) return;
+    if (!storeId || !selectedRegion || !reason.trim() || assigning.current) return;
+    const generation = ++saveGeneration.current;
+    assigning.current = true;
     const body = { regionCode: selectedRegion.code, reason: reason.trim() };
     const fingerprint = JSON.stringify({ storeId, ...body });
     setSaving(true);
@@ -98,15 +104,17 @@ export function StoreRegionPage() {
         },
         body,
       }));
+      if (generation !== saveGeneration.current) return;
       setSaved(result);
       intent.current.complete();
     } catch (failure) {
+      if (generation !== saveGeneration.current) return;
       if (failure instanceof ApiRequestError && failure.code === "IDEMPOTENCY_KEY_REUSED") {
         intent.current.rotate();
       }
       setSaveError(failure);
     } finally {
-      setSaving(false);
+      if (generation === saveGeneration.current) { assigning.current = false; setSaving(false); }
     }
   }
 
@@ -117,11 +125,9 @@ export function StoreRegionPage() {
 
   return (
     <div className="console-page">
-      <PageTitle
-        eyebrow="STORE REGION"
+      <PageHeading
         title="매장 지역 설정"
-        description="법정동 지역을 검색해 매장의 검색 노출 기준 지역을 지정합니다."
-        action={<StoreSelector stores={stores} selected={selected} onSelect={select} />}
+        action={<StoreSelector stores={stores} selected={selected} onSelect={select} disabled={saving} />}
       />
 
       {stores.length === 0 ? (
@@ -134,8 +140,9 @@ export function StoreRegionPage() {
           <section className="surface-card region-search-panel" aria-labelledby="region-search-title">
             <div className="panel-heading">
               <div>
-                <span className="eyebrow">ACTIVE REGION</span>
+                <span className="context-label">지정할 지역 찾기</span>
                 <h2 id="region-search-title">법정동 검색</h2>
+                <p className="form-footnote">검색 결과는 현재 저장된 지역을 뜻하지 않습니다.</p>
               </div>
               <MapPin aria-hidden="true" />
             </div>
@@ -146,17 +153,18 @@ export function StoreRegionPage() {
                 void search(draftQuery);
               }}
             >
-              <label htmlFor="region-query">지역 검색</label>
               <div>
                 <Search size={18} aria-hidden="true" />
-                <input
+                <TextField
+                  disabled={saving}
+                  label="지역 검색"
                   id="region-query"
                   value={draftQuery}
                   placeholder="예: 역삼동, 강남구"
                   required
-                  onChange={(event) => setDraftQuery(event.target.value)}
+                  onValueChange={setDraftQuery}
                 />
-                <Button type="submit" loading={searching}>{searching ? "검색 중" : "검색"}</Button>
+                <Button type="submit" disabled={saving} loading={searching}>{searching ? "검색 중" : "검색"}</Button>
               </div>
             </form>
 
@@ -169,45 +177,28 @@ export function StoreRegionPage() {
               />
             ) : null}
             {page?.items.length ? (
-              <fieldset className="region-results">
-                <legend><strong>{submittedQuery}</strong> 검색 결과</legend>
-                {page.items.map((region) => (
-                  <label key={region.code} className={selectedRegion?.code === region.code ? "is-selected" : ""}>
-                    <input
-                      type="radio"
-                      name="region"
-                      checked={selectedRegion?.code === region.code}
-                      onChange={() => {
-                        setSelectedRegion(region);
-                        setSaved(null);
-                        setSaveError(null);
-                        intent.current.rotate();
-                      }}
-                      aria-label={`${region.fullName} ${region.code}`}
-                    />
-                    <span>
-                      <strong>{region.fullName}</strong>
-                      <small>{region.code}</small>
-                    </span>
-                  </label>
-                ))}
+              <div className="region-results">
+                <RadioGroup label={`${submittedQuery} 검색 결과`} value={selectedRegion?.code ?? ""} onValueChange={(value) => { setSelectedRegion(page.items.find((region) => region.code === value) ?? null); setSaved(null); setSaveError(null); intent.current.rotate(); }}>
+                  {page.items.map((region) => <RadioCard disabled={saving} key={region.code} value={region.code} label={region.fullName} description={region.code} />)}
+                </RadioGroup>
                 {page.page.nextCursor ? (
                   <Button
                     type="button"
                     variant="secondary"
+                    disabled={saving}
                     loading={loadingMore}
                     onClick={() => void search(submittedQuery, page.page.nextCursor ?? undefined, true)}
                   >
                     {loadingMore ? "더 불러오는 중" : "지역 더 보기"}
                   </Button>
                 ) : null}
-              </fieldset>
+              </div>
             ) : null}
           </section>
 
           <aside className="surface-card action-panel region-assignment" aria-labelledby="region-assignment-title">
             <div>
-              <span className="eyebrow">ASSIGNMENT</span>
+              <span className="context-label">지역 지정</span>
               <h2 id="region-assignment-title">선택 지역 지정</h2>
             </div>
             {selectedRegion ? (
@@ -216,17 +207,18 @@ export function StoreRegionPage() {
                 <div><strong>{selectedRegion.fullName}</strong><small>{selectedRegion.code}</small></div>
               </div>
             ) : (
-              <p className="form-footnote">검색 결과에서 지역을 선택해 주세요. 검색어 자체는 저장되지 않습니다.</p>
+              <p className="form-footnote">검색 결과에서 지역을 선택해 주세요.</p>
             )}
-            <label htmlFor="region-reason">지정 사유</label>
-            <textarea
+            <TextAreaField
+              disabled={saving}
+              label="지정 사유"
               id="region-reason"
               value={reason}
               maxLength={1000}
               required
               placeholder="예: 사업자등록증상 소재지 기준"
-              onChange={(event) => {
-                setReason(event.target.value);
+              onValueChange={(value) => {
+                setReason(value);
                 setSaved(null);
                 setSaveError(null);
                 intent.current.rotate();
@@ -250,7 +242,7 @@ export function StoreRegionPage() {
               </div>
             ) : null}
             <p className="form-footnote">
-              현재 지정값 조회 API는 제공되지 않습니다. 이 화면은 이번 저장 응답만 표시하며, 새로고침 후 기존 값을 추정하지 않습니다.
+              저장한 지역은 완료 메시지에서 확인할 수 있어요. 다시 변경하려면 지역을 새로 검색해 주세요.
             </p>
           </aside>
         </div>

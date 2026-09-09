@@ -6,8 +6,7 @@ import { ApiRequestError } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
 import { runCustomerLogoutHandlers } from "../shared/customerLogout";
 import { CART_STORAGE_KEY, type CartLine, cart } from "./cart";
-import { CartPage } from "./CartPage";
-import { StoreDetailPage } from "./StoreDetailPage";
+import { RefreshCartPage, RefreshStoreDetailPage } from "../../presentation/beanflow-refresh";
 import { orderConflictGuidance, shouldRotateIdempotencyKey } from "./orderConflicts";
 
 const line = (menuId: string, quantity = 1): CartLine => ({
@@ -56,9 +55,15 @@ const quote = (payableKrw = 9_000, fingerprint = "a".repeat(64)) => ({
 });
 
 function routeGet(routes: Record<string, unknown>) {
+  const responses: Record<string, unknown> = {
+    "/me/points": ok({ availablePointsKrw: 1500, recoveryPendingKrw: 0, currency: "KRW", expiring: [], expiringHasMore: false }),
+    "/me/notification-summary": ok({ hasUnread: false }),
+    "/me/favorite-stores": ok({ items: [] }),
+    ...routes,
+  };
   return vi.spyOn(customerApi, "GET").mockImplementation(async (path: string) => {
-    if (!(path in routes)) throw new Error(`unexpected GET ${path}`);
-    return routes[path] as never;
+    if (!(path in responses)) throw new Error(`unexpected GET ${path}`);
+    return responses[path] as never;
   });
 }
 
@@ -66,7 +71,7 @@ function renderStore() {
   return render(
     <MemoryRouter initialEntries={["/app/stores/store-1"]}>
       <Routes>
-        <Route path="/app/stores/:storeId" element={<StoreDetailPage />} />
+        <Route path="/app/stores/:storeId" element={<RefreshStoreDetailPage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -76,7 +81,7 @@ function renderCart() {
   return render(
     <MemoryRouter initialEntries={["/app/cart"]}>
       <Routes>
-        <Route path="/app/cart" element={<CartPage />} />
+        <Route path="/app/cart" element={<RefreshCartPage />} />
         <Route path="/app/checkout/:orderId" element={<h1>결제 화면</h1>} />
       </Routes>
     </MemoryRouter>,
@@ -111,6 +116,16 @@ describe("client cart", () => {
     const state = cart.read();
     expect(state.status === "ready" && state.cart.lines).toHaveLength(1);
     expect(state.status === "ready" && state.cart.lines[0]?.quantity).toBe(3);
+  });
+
+  it("merges edited options into the matching line without losing quantity or another menu", () => {
+    const store = { storeId: "store-1", storeName: "성수" };
+    cart.add(store, line("menu-1", 2));
+    cart.add(store, { ...line("menu-1", 3), optionIds: ["shot", "syrup"] });
+    cart.add(store, line("menu-2"));
+    const replacement = { ...line("menu-1", 2), optionIds: ["syrup", "shot"], display: { menuName: "현재 메뉴명", optionNames: ["시럽", "샷"], unitPriceKrw: 5500 } };
+    cart.updateLine(0, replacement);
+    expect(cart.read()).toMatchObject({ status: "ready", cart: { storeId: "store-1", lines: [{ ...replacement, quantity: 5 }, line("menu-2")] } });
   });
 
   it("reports a damaged cart instead of overwriting it with an empty one", () => {
@@ -165,7 +180,7 @@ describe("store identity comes from the server", () => {
     const { container } = renderStore();
     const user = userEvent.setup();
     expect(await screen.findByRole("button", { name: /아메리카노/ })).toBeInTheDocument();
-    expect(container.querySelector("img.menu-thumbnail")).toHaveAttribute("src", "/demo/catalog/americano.webp");
+    expect(container.querySelector(".bfr-menu-row__media img")).toHaveAttribute("src", "/demo/catalog/americano.webp");
     await user.click(screen.getByRole("button", { name: /아메리카노/ }));
     await user.click(screen.getByRole("button", { name: /담기/ }));
 
@@ -193,7 +208,8 @@ describe("store identity comes from the server", () => {
 
     renderCart();
 
-    expect(await screen.findByText("성수 로스터리에서 픽업합니다.")).toBeInTheDocument();
+    expect(await screen.findByText("성수 로스터리")).toBeInTheDocument();
+    expect(screen.queryByText("예전 이름")).not.toBeInTheDocument();
   });
 
   it("keeps the saved name and stays orderable when the store read fails", async () => {
@@ -205,8 +221,9 @@ describe("store identity comes from the server", () => {
 
     renderCart();
 
-    expect(await screen.findByText("성수 로스터리에서 픽업합니다.")).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /가능/ })).toBeEnabled();
+    expect(await screen.findByText("성수 로스터리")).toBeInTheDocument();
+    expect(screen.getByText("매장 안내를 불러오지 못했어요.")).toBeInTheDocument();
+    expect(await screen.findByRole("radio", { name: /가능/ })).toBeEnabled();
   });
 });
 
@@ -216,10 +233,10 @@ describe("store detail", () => {
 
     renderStore();
 
-    expect(await screen.findByText("지금은 픽업 시간이 모두 마감됐어요. 잠시 뒤 다시 확인해 주세요.")).toBeInTheDocument();
+    expect(await screen.findByText("지금은 픽업 시간이 모두 마감됐어요.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "커피" })).toBeInTheDocument();
     expect(screen.getByText("고소한 원두의 긴 여운")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "미분류" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "메뉴" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /오트 라떼/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /아메리카노/ })).toBeDisabled();
   });
@@ -234,7 +251,7 @@ describe("store detail", () => {
     renderStore();
 
     expect(await screen.findByText("영업 중")).toBeInTheDocument();
-    expect(screen.getByText("주문 불가")).toBeInTheDocument();
+    expect(screen.getByText("주문 쉬는 중")).toBeInTheDocument();
     expect(screen.getByText(/현재 주문을 받지 않아요/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /아메리카노/ })).toBeDisabled();
   });
@@ -270,7 +287,7 @@ describe("order creation conflicts", () => {
 
     renderCart();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /가능/ }));
+    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     await user.click(await screen.findByRole("button", { name: /4,500.*주문하기/ }));
 
     expect(await screen.findByText("고른 픽업 시간이 방금 마감됐어요")).toBeInTheDocument();
@@ -297,7 +314,7 @@ describe("order creation conflicts", () => {
 
     renderCart();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /가능/ }));
+    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     await user.click(await screen.findByRole("button", { name: /9,000.*주문하기/ }));
 
     expect(await screen.findByRole("heading", { name: "결제 화면" })).toBeInTheDocument();
@@ -332,7 +349,7 @@ describe("order creation conflicts", () => {
 
     renderCart();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /가능/ }));
+    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     expect(await screen.findByRole("button", { name: /9,000.*주문하기/ })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "메뉴 menu-1 수량 늘리기" }));
 
@@ -363,7 +380,7 @@ describe("order creation conflicts", () => {
 
     renderCart();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /가능/ }));
+    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     await user.click(await screen.findByRole("button", { name: /9,000.*주문하기/ }));
 
     expect(await screen.findByText("주문 금액과 조건이 변경됐어요")).toBeInTheDocument();
@@ -376,5 +393,32 @@ describe("order creation conflicts", () => {
     expect(orderRequests[0]?.body).toMatchObject({ expectedQuoteFingerprint: "a".repeat(64) });
     expect(orderRequests[1]?.body).toMatchObject({ expectedQuoteFingerprint: "b".repeat(64) });
     expect(orderRequests[1]?.key).not.toBe(orderRequests[0]?.key);
+  });
+});
+
+describe("point use in order quotes", () => {
+  it("requotes point changes and submits the current amount and fingerprint", async () => {
+    cart.add({ storeId: "store-1", storeName: "성수" }, line("menu-1", 2));
+    document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
+    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
+    vi.spyOn(customerApi, "POST").mockImplementation(async (path: string, options: unknown) => {
+      const body = (options as { body: Record<string, unknown> }).body;
+      requests.push({ path, body });
+      if (path === "/me/order-quotes") {
+        const amount = body.pointsToUseKrw as number;
+        const result = quote(9000, amount ? "b".repeat(64) : "a".repeat(64));
+        return ok({ ...result, pricing: { ...result.pricing, pointsAppliedKrw: amount, payableKrw: 9000 - amount } }) as never;
+      }
+      return ok({ order: { orderId: "order-1", payableKrw: 7500 } }) as never;
+    });
+    renderCart();
+    await userEvent.click(await screen.findByRole("radio", { name: /가능/ }));
+    expect(await screen.findByRole("button", { name: /9,000.*주문하기/ })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "전액 사용" }));
+    expect(screen.getByRole("button", { name: "견적 확인 후 주문하기" })).toBeDisabled();
+    await userEvent.click(await screen.findByRole("button", { name: /7,500.*주문하기/ }));
+    expect(await screen.findByRole("heading", { name: "결제 화면" })).toBeInTheDocument();
+    expect(requests.at(-1)).toMatchObject({ path: "/orders", body: { pointsToUseKrw: 1500, expectedQuoteFingerprint: "b".repeat(64) } });
   });
 });

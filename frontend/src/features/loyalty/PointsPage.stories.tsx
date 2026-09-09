@@ -61,7 +61,7 @@ export const AccountIntegrityFailure: Story = {
     },
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText(/잔액이 0원이라는 뜻은 아니며/)).toBeVisible();
+    await expect(await canvas.findByText(/정확한 포인트 잔액을 확인할 수 없어/)).toBeVisible();
     await expect(canvas.queryByText("0P")).not.toBeInTheDocument();
   },
 };

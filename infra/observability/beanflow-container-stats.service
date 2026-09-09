@@ -1,0 +1,26 @@
+[Unit]
+Description=BeanFlow Compose project container metrics
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=orbit-runner
+Group=orbit-runner
+SupplementaryGroups=docker
+ExecStart=/usr/bin/python3 /opt/beanflow-observability/container-stats-exporter.py --bind 172.16.16.22 --allow 172.16.16.18 --allow 172.16.16.22
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

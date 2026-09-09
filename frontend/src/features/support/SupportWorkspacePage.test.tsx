@@ -44,6 +44,17 @@ afterEach(() => {
 });
 
 describe("SupportWorkspacePage", () => {
+  it("does not show an empty active case when a linked timeline fails", async () => {
+    vi.spyOn(operationsApi, "GET").mockImplementation((async (path: string) => {
+      if (path.endsWith("/timeline")) throw new Error("timeline unavailable");
+      return response(supportCase);
+    }) as never);
+    render(<MemoryRouter initialEntries={[`/support?caseId=${caseId}`]}><SupportWorkspacePage /></MemoryRouter>);
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(screen.queryByText(`상담 ID ${caseId}`)).not.toBeInTheDocument();
+    expect(screen.queryByText("표시할 이력이 없습니다")).not.toBeInTheDocument();
+  });
+
   it("sends exact PII only in a POST body and connects the masked candidate to a Case", async () => {
     const post = vi.spyOn(operationsApi, "POST").mockImplementation((async (path: string) => {
       if (path === "/support/searches") return response({
@@ -83,8 +94,8 @@ describe("SupportWorkspacePage", () => {
     });
     expect(JSON.stringify(searchCall[1])).not.toContain("query");
 
-    await userEvent.click(screen.getByRole("button", { name: "새 Case에 연결" }));
-    expect(await screen.findByText(`CASE ${caseId}`)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "새 상담 건에 연결" }));
+    expect(await screen.findByText(`상담 ID ${caseId}`)).toBeVisible();
     const postCalls = post.mock.calls as unknown as Array<[string, unknown]>;
     expect(postCalls.some(([path]) => path.endsWith("/subject-links"))).toBe(true);
   });
@@ -98,7 +109,7 @@ describe("SupportWorkspacePage", () => {
           source: "ORDERING",
           type: "ORDER_STATE",
           state: "COMPLETED",
-          summary: "주문 픽업 완료",
+          summary: "ORDER_STATE:COMPLETED",
           amountKrw: 7500,
           occurredAt: "2026-08-23T09:30:00Z",
         }],
@@ -174,21 +185,22 @@ describe("SupportWorkspacePage", () => {
     }) as never);
 
     render(<MemoryRouter><SupportWorkspacePage /></MemoryRouter>);
-    await userEvent.type(screen.getByLabelText("기존 Case ID"), caseId);
-    await userEvent.click(screen.getByRole("button", { name: "Case 열기" }));
+    await userEvent.type(screen.getByLabelText("기존 상담 건 ID"), caseId);
+    await userEvent.click(screen.getByRole("button", { name: "상담 건 열기" }));
     expect(await screen.findByText("주문 픽업 완료")).toBeVisible();
+    expect(screen.queryByText("ORDER_STATE:COMPLETED")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "ENHANCED 본인확인 시작" }));
-    await userEvent.click(screen.getByRole("button", { name: "등록 전화로 challenge 발급" }));
-    await userEvent.type(screen.getByLabelText("일회성 proof"), "123456");
-    await userEvent.click(screen.getByRole("button", { name: "proof 검증" }));
-    await waitFor(() => expect(screen.queryByLabelText("일회성 proof")).not.toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "강화 본인확인 시작" }));
+    await userEvent.click(screen.getByRole("button", { name: "등록 전화로 인증 코드 발급" }));
+    await userEvent.type(screen.getByLabelText("일회성 인증 코드"), "123456");
+    await userEvent.click(screen.getByRole("button", { name: "인증 코드 확인" }));
+    await waitFor(() => expect(screen.queryByLabelText("일회성 인증 코드")).not.toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole("button", { name: "전화번호 Grant 요청" }));
+    await userEvent.click(screen.getByRole("button", { name: "전화번호 열람 권한 요청" }));
     await userEvent.click(screen.getByRole("button", { name: "승인된 전화번호 열람" }));
     expect(await screen.findByText("010-1234-5678")).toBeVisible();
     expect(JSON.stringify(localStorage) + JSON.stringify(sessionStorage)).not.toContain("010-1234-5678");
-    await userEvent.click(screen.getByRole("button", { name: "원문 즉시 지우기" }));
+    await userEvent.click(screen.getByRole("button", { name: "지금 지우기" }));
     expect(screen.queryByText("010-1234-5678")).not.toBeInTheDocument();
   });
 });

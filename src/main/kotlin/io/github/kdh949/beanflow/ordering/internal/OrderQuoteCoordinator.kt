@@ -229,7 +229,7 @@ internal class OrderQuoteCoordinator(
 }
 
 internal object OrderQuoteFingerprint {
-    private const val VERSION = "order-quote-fingerprint/v5"
+    private const val VERSION = "order-quote-fingerprint/v6"
 
     fun calculate(
         command: OrderQuoteCommand,
@@ -283,9 +283,7 @@ internal object OrderQuoteFingerprint {
                     value(pickup.startsAt)
                     value(pickup.endsAt)
                     value(pickup.capacity)
-                    value(pickup.reservedCount)
-                    value(pickup.confirmedCount)
-                    value(pickup.version)
+                    // ADR-123: shared usage is checked under owner locks, not a customer trade term.
                     nullable(coupon) { current ->
                         value(current.couponIssuanceId)
                         value(current.issuanceVersion)

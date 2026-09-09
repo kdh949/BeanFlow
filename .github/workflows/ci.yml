@@ -107,12 +107,28 @@ jobs:
           scripts/ci/run-and-capture.sh .ci-artifacts/document-verification.log
           bash scripts/verify-docs.sh
 
+      - name: Verify deployment contracts
+        run: |
+          scripts/ci/run-and-capture.sh .ci-artifacts/backend-image-contract.log \
+            bash scripts/deploy/test-backend-image-contract.sh
+          scripts/ci/run-and-capture.sh .ci-artifacts/frontend-image-contract.log \
+            bash scripts/deploy/test-frontend-image-contract.sh
+          scripts/ci/run-and-capture.sh .ci-artifacts/deployment-contract.log \
+            bash scripts/deploy/test-deployment-contract.sh
+
       - name: Check whitespace errors
         run: >-
           scripts/ci/run-and-capture.sh .ci-artifacts/diff-check.log
           git diff --check
           ${{ steps.changes.outputs.base_sha }}
           ${{ steps.changes.outputs.head_sha }}
+
+      - name: Verify monitoring dashboard queries
+        run: |
+          scripts/ci/run-and-capture.sh .ci-artifacts/live-dashboard-queries.log \
+            python3 scripts/perf/test-live-dashboard-queries.py
+          scripts/ci/run-and-capture.sh .ci-artifacts/rca-dashboard-queries.log \
+            python3 scripts/perf/test-dashboard-queries.py
 
       - name: Upload failure evidence
         if: failure()
@@ -133,7 +149,7 @@ jobs:
     needs: preflight
     if: needs.preflight.outputs.scope == 'frontend' || needs.preflight.outputs.scope == 'full'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -162,9 +178,9 @@ jobs:
         working-directory: frontend
         run: npm run typecheck
 
-      - name: Run frontend unit tests
+      - name: Run frontend unit and boundary regression tests
         working-directory: frontend
-        run: npm run test:unit
+        run: npm test
 
       - name: Run required Storybook interaction tests
         working-directory: frontend

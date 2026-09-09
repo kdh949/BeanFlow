@@ -3,9 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
-import { EmptyState, ErrorState, LoadingState } from "../../components/Ui";
-import { PageTitle } from "../../components/Shells";
-import { Button, FeedbackState } from "../../design-system";
+import { Button, Checkbox, ChipButton, EmptyState, FeedbackState, LoadingState, PageHeading, TextField } from "../../design-system";
+import { ErrorState } from "../../presentation/shared";
+import { requestErrorPresentation } from "../../presentation/shared/requestErrorPresentation";
 import { StoreSelector } from "./StoreSelector";
 import { useMerchantStores } from "./useMerchantStores";
 
@@ -15,7 +15,7 @@ type MenuCatalogSummary = components["schemas"]["MenuCatalogSummary"];
 type MenuTradeContent = components["schemas"]["MenuTradeContent"];
 type MenuTradeDefinition = components["schemas"]["MenuTradeDefinition"];
 
-export function StoreCatalogPage() {
+export function StoreCatalogPage({ embedded = false }: { embedded?: boolean }) {
   const { state: storesState, stores, selected, select, reload } = useMerchantStores("ANY");
   const [policy, setPolicy] = useState<StoreOrderingPolicy | null>(null);
   const [acceptingOrders, setAcceptingOrders] = useState(false);
@@ -44,6 +44,7 @@ export function StoreCatalogPage() {
         params: { path: { storeId: requestedStoreId } },
       }));
       if (policyRequest.current !== requestId || activeStoreId.current !== requestedStoreId) return;
+      if (activeStoreId.current !== storeId) return;
       setPolicy(next);
       setAcceptingOrders(next.acceptingOrders);
       setPickupEnabled(next.pickupEnabled);
@@ -62,6 +63,7 @@ export function StoreCatalogPage() {
   useEffect(() => {
     policyRequest.current += 1;
     setPolicy(null);
+    setSaving(false);
     if (storeId) void loadPolicy();
   }, [storeId, loadPolicy]);
 
@@ -90,18 +92,20 @@ export function StoreCatalogPage() {
         },
         body,
       }));
+      if (activeStoreId.current !== storeId) return;
       setPolicy(next);
       setAcceptingOrders(next.acceptingOrders);
       setPickupEnabled(next.pickupEnabled);
       setSaved(true);
       intent.current.complete();
     } catch (failure) {
+      if (activeStoreId.current !== storeId) return;
       if (failure instanceof ApiRequestError && failure.code === "IDEMPOTENCY_KEY_REUSED") {
         intent.current.rotate();
       }
       setSaveError(failure);
     } finally {
-      setSaving(false);
+      if (activeStoreId.current === storeId) setSaving(false);
     }
   }
 
@@ -117,12 +121,9 @@ export function StoreCatalogPage() {
 
   return (
     <div className="console-page">
-      <PageTitle
-        eyebrow="MENU & ORDERING"
-        title="메뉴·가격"
-        description="고객이 새 주문을 만들고 매장에서 픽업할 수 있는지 관리합니다."
-        action={<StoreSelector stores={stores} selected={selected} onSelect={select} />}
-      />
+      {embedded ? <div className="catalog-store-selector"><StoreSelector stores={stores} selected={selected} onSelect={select} /></div> : (
+        <PageHeading title="메뉴·가격" action={<StoreSelector stores={stores} selected={selected} onSelect={select} />} />
+      )}
 
       {stores.length === 0 ? (
         <EmptyState
@@ -135,39 +136,25 @@ export function StoreCatalogPage() {
         <ErrorState error={loadError} retry={() => void loadPolicy()} />
       ) : policy ? (
         <div className="console-detail-grid">
-          <section className="surface-card" aria-labelledby="ordering-policy-title">
+          <MenuCatalogWorkspace key={policy.storeId} storeId={policy.storeId} />
+          <section className="surface-card catalog-policy-panel" aria-labelledby="ordering-policy-title">
             <div className="panel-heading">
               <div>
-                <span className="eyebrow">ORDERING POLICY</span>
                 <h2 id="ordering-policy-title">주문 접수 정책</h2>
               </div>
               <Settings2 aria-hidden="true" />
             </div>
-            <p>두 설정은 함께 저장되며, 저장 시점에 매장 권한과 서버 버전을 다시 확인합니다.</p>
+            <p>새 주문을 받을지 설정합니다. 이미 받은 주문은 그대로 유지됩니다.</p>
             <fieldset>
               <legend>고객 주문에 적용할 정책</legend>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={acceptingOrders}
-                  onChange={(event) => updateDraft(() => setAcceptingOrders(event.target.checked))}
-                />
-                <span><strong>새 주문 접수</strong><small>끄면 고객은 새 주문을 만들 수 없습니다.</small></span>
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={pickupEnabled}
-                  onChange={(event) => updateDraft(() => setPickupEnabled(event.target.checked))}
-                />
-                <span><strong>매장 픽업</strong><small>끄면 픽업 주문을 받을 수 없습니다.</small></span>
-              </label>
+              <Checkbox label="새 주문 접수" description="끄면 고객은 새 주문을 만들 수 없습니다." checked={acceptingOrders} disabled={saving} onCheckedChange={(next) => updateDraft(() => setAcceptingOrders(next))} />
+              <Checkbox label="매장 픽업" description="끄면 픽업 주문을 받을 수 없습니다." checked={pickupEnabled} disabled={saving} onCheckedChange={(next) => updateDraft(() => setPickupEnabled(next))} />
             </fieldset>
           </section>
 
           <aside className="surface-card action-panel" aria-labelledby="ordering-save-title">
             <div>
-              <span className="eyebrow">VERSION {policy.version}</span>
+              <span className="context-label">{policy.version}번째 저장</span>
               <h2 id="ordering-save-title">변경 저장</h2>
             </div>
             <p className="form-footnote">마지막 거래 정책 변경: {new Date(policy.updatedAt).toLocaleString("ko-KR")}</p>
@@ -179,13 +166,12 @@ export function StoreCatalogPage() {
               <FeedbackState
                 kind="error"
                 title="다른 변경이 먼저 저장되었습니다"
-                description="현재 입력을 자동으로 덮어쓰지 않습니다. 서버의 최신 값을 다시 불러와 검토해 주세요."
+                description="다른 사람이 저장한 최신 내용을 불러와 확인한 뒤 다시 수정해 주세요."
                 reference={saveError.correlationId}
-                action={<Button variant="secondary" onClick={() => void loadPolicy()}>서버 값 다시 불러오기</Button>}
+                action={<Button variant="secondary" onClick={() => void loadPolicy()}>최신 내용 불러오기</Button>}
               />
             ) : saveError ? <ErrorState error={saveError} retry={() => void save()} /> : null}
           </aside>
-          <MenuCatalogWorkspace storeId={policy.storeId} />
         </div>
       ) : null}
     </div>
@@ -373,7 +359,6 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
     <section className="surface-card menu-catalog-workspace" aria-labelledby="menu-catalog-title">
       <div className="panel-heading menu-catalog-heading">
         <div>
-          <span className="eyebrow">TRADE CATALOG</span>
           <h2 id="menu-catalog-title">메뉴 거래 내용</h2>
           <p>가격·판매 상태·옵션·판매 구성을 한 번에 저장합니다.</p>
         </div>
@@ -382,26 +367,27 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
 
       <div className="catalog-lifecycle-tabs" role="group" aria-label="메뉴 보관 상태">
         {(["ACTIVE", "ARCHIVED"] as const).map((value) => (
-          <button key={value} type="button" aria-pressed={lifecycle === value} onClick={() => setLifecycle(value)}>
+          <ChipButton key={value} aria-pressed={lifecycle === value} onClick={() => setLifecycle(value)}>
             {value === "ACTIVE" ? "판매 카탈로그" : "보관된 메뉴"}
-          </button>
+          </ChipButton>
         ))}
       </div>
 
       {loading ? (
         <FeedbackState kind="loading" title="메뉴를 불러오는 중" description="거래 카탈로그의 최신 상태를 확인하고 있습니다." />
       ) : loadError ? (
-        <FeedbackState kind="error" title="메뉴를 불러오지 못했습니다" description={failureMessage(loadError)} action={<Button variant="secondary" onClick={() => void loadList()}>다시 시도</Button>} />
+        <FeedbackState kind="error" title="메뉴를 불러오지 못했습니다" description={failureMessage(loadError)} reference={requestErrorPresentation(loadError).reference} action={<Button variant="secondary" onClick={() => void loadList()}>다시 시도</Button>} />
       ) : items.length === 0 ? (
-        <FeedbackState kind="empty" title={lifecycle === "ACTIVE" ? "등록된 메뉴가 없습니다" : "보관된 메뉴가 없습니다"} description={lifecycle === "ACTIVE" ? "새 메뉴를 draft로 만든 뒤 거래 내용을 저장해 주세요." : "보관한 메뉴는 복원하거나 물리 삭제할 수 없습니다."} />
+        <FeedbackState kind="empty" title={lifecycle === "ACTIVE" ? "등록된 메뉴가 없습니다" : "보관된 메뉴가 없습니다"} description={lifecycle === "ACTIVE" ? "새 메뉴를 추가하고 가격과 판매 여부를 저장해 주세요." : "보관한 메뉴는 다시 판매할 수 없습니다."} />
       ) : (
         <ul className="menu-authoring-list">
           {items.map((item) => (
             <li key={item.menuId}>
               {item.lifecycle === "ACTIVE" ? (
-                <button type="button" className="menu-authoring-summary" onClick={() => void edit(item)}>
+                <div className="menu-authoring-summary">
                   <MenuCatalogItemSummary item={item} />
-                </button>
+                  <Button variant="secondary" onClick={() => void edit(item)} aria-label={`${item.name} 편집`}>편집</Button>
+                </div>
               ) : (
                 <div className="menu-authoring-summary" aria-label={`${item.name} 보관 요약`}>
                   <MenuCatalogItemSummary item={item} />
@@ -416,6 +402,8 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
           ))}
         </ul>
       )}
+
+      {saveError && !editing ? <ErrorState error={saveError} retry={() => void loadList()} /> : null}
 
       {!loading && !loadError && nextCursor ? (
         <Button type="button" variant="secondary" loading={loadingMore} onClick={() => void loadList(nextCursor)}>
@@ -442,7 +430,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
         <div className="catalog-dialog-backdrop">
           <div ref={archiveDialog} role="dialog" aria-modal="true" aria-labelledby="archive-menu-title" className="surface-card catalog-dialog">
             <h3 id="archive-menu-title">‘{archiveTarget.name}’ 메뉴를 보관할까요?</h3>
-            <p>고객 메뉴와 검색에서 즉시 제외됩니다. 이 버전에서는 복원이나 물리 삭제를 제공하지 않습니다.</p>
+            <p>고객 메뉴와 검색에서 제외되며 다시 판매할 수 없습니다. 잠시 품절이라면 판매 가능 설정을 꺼 주세요.</p>
             <div className="button-row">
               <Button variant="secondary" onClick={() => { setArchiveTarget(null); archiveTrigger.current?.focus(); }}>취소</Button>
               <Button variant="danger" loading={saving} onClick={() => void confirmArchive()}>메뉴 보관</Button>
@@ -492,22 +480,22 @@ function MenuTradeEditor({
   return (
     <form className="menu-trade-editor" onSubmit={(event) => { event.preventDefault(); onSave(); }}>
       <div className="panel-heading">
-        <div><span className="eyebrow">{current ? `VERSION ${current.version}` : "NEW DRAFT"}</span><h3>{current ? "거래 내용 편집" : "새 메뉴 만들기"}</h3></div>
+        <div><span className="context-label">{current ? `${current.version}번째 저장` : "새 메뉴"}</span><h3>{current ? "거래 내용 편집" : "새 메뉴 만들기"}</h3></div>
         <Button type="button" variant="ghost" onClick={onClose}>편집 닫기</Button>
       </div>
       <div className="form-grid">
-        <label>메뉴 이름<input required maxLength={200} value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} /></label>
-        <label>기본 가격(KRW)<input required min={0} type="number" value={draft.basePriceKrw} onChange={(event) => onChange({ ...draft, basePriceKrw: Number(event.target.value) })} /></label>
+        <TextField label="메뉴 이름" required maxLength={200} value={draft.name} onValueChange={(name) => onChange({ ...draft, name })} />
+        <TextField label="기본 가격(KRW)" required min={0} type="number" value={String(draft.basePriceKrw)} onValueChange={(value) => onChange({ ...draft, basePriceKrw: Number(value) })} />
       </div>
-      <label className="toggle-row"><input type="checkbox" checked={draft.available} onChange={(event) => onChange({ ...draft, available: event.target.checked })} /><span><strong>고객에게 판매 가능</strong><small>켜려면 하나 이상의 판매 구성이 필요합니다.</small></span></label>
+      <Checkbox label="고객에게 판매 가능" description="품절이면 끄고, 다시 팔 수 있을 때 켜 주세요. 판매하려면 사용 가능한 구성이 하나 이상 필요합니다." checked={draft.available} onCheckedChange={(available) => onChange({ ...draft, available })} />
 
       <fieldset className="catalog-fieldset">
         <legend>옵션 ({draft.options.length}/100)</legend>
         {draft.options.map((option, index) => (
           <div className="catalog-child-row" key={option.optionId}>
-            <label>옵션 이름<input required value={option.name} onChange={(event) => onChange({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) })} /></label>
-            <label>추가 금액<input type="number" min={0} value={option.additionalPriceKrw} onChange={(event) => onChange({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, additionalPriceKrw: Number(event.target.value) } : item) })} /></label>
-            <label className="compact-check"><input type="checkbox" checked={option.available} onChange={(event) => onChange({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, available: event.target.checked } : item) })} /> 판매 가능</label>
+            <TextField label="옵션 이름" required maxLength={200} value={option.name} onValueChange={(name) => onChange({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, name } : item) })} />
+            <TextField label="추가 금액" required type="number" min={0} value={String(option.additionalPriceKrw)} onValueChange={(value) => onChange({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, additionalPriceKrw: Number(value) } : item) })} />
+            <Checkbox label="판매 가능" checked={option.available} onCheckedChange={(available) => onChange({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, available } : item) })} />
             <Button type="button" variant="ghost" size="sm" onClick={() => onChange({ ...draft, options: draft.options.filter((_, itemIndex) => itemIndex !== index), configurations: draft.configurations.map((configuration) => ({ ...configuration, selectedOptionIds: configuration.selectedOptionIds.filter((id) => id !== option.optionId) })) })}>옵션 제거</Button>
           </div>
         ))}
@@ -518,7 +506,8 @@ function MenuTradeEditor({
         <legend>판매 구성 ({draft.configurations.length}/500)</legend>
         {draft.configurations.map((configuration, index) => (
           <div className="catalog-configuration" key={configuration.configurationId}>
-            <fieldset><legend>선택 옵션</legend>{draft.options.length === 0 ? <p>옵션 없는 기본 구성입니다.</p> : draft.options.map((option) => <label key={option.optionId} className="compact-check"><input type="checkbox" checked={configuration.selectedOptionIds.includes(option.optionId)} onChange={(event) => onChange({ ...draft, configurations: draft.configurations.map((item, itemIndex) => itemIndex === index ? { ...item, selectedOptionIds: event.target.checked ? [...item.selectedOptionIds, option.optionId] : item.selectedOptionIds.filter((id) => id !== option.optionId) } : item) })} /> {option.name || "이름 없는 옵션"}</label>)}</fieldset>
+            <fieldset><legend>선택 옵션</legend>{draft.options.length === 0 ? <p>옵션 없는 기본 구성입니다.</p> : draft.options.map((option) => <Checkbox key={option.optionId} label={option.name || "이름 없는 옵션"} checked={configuration.selectedOptionIds.includes(option.optionId)} onCheckedChange={(checked) => onChange({ ...draft, configurations: draft.configurations.map((item, itemIndex) => itemIndex === index ? { ...item, selectedOptionIds: checked ? [...item.selectedOptionIds, option.optionId] : item.selectedOptionIds.filter((id) => id !== option.optionId) } : item) })} />)}</fieldset>
+            <Checkbox label="이 구성 판매 가능" checked={configuration.available} onCheckedChange={(available) => onChange({ ...draft, configurations: draft.configurations.map((item, itemIndex) => itemIndex === index ? { ...item, available } : item) })} />
             <Button type="button" variant="ghost" size="sm" onClick={() => onChange({ ...draft, configurations: draft.configurations.filter((_, itemIndex) => itemIndex !== index) })}>구성 제거</Button>
           </div>
         ))}
@@ -527,7 +516,7 @@ function MenuTradeEditor({
 
       <div className="button-row"><Button type="submit" loading={saving}>{saving ? "저장 중" : current ? "거래 내용 저장" : "메뉴 생성"}</Button><Button type="button" variant="secondary" onClick={onClose}>취소</Button></div>
       {saved ? <p className="form-success" role="status">메뉴 거래 내용을 저장했습니다.</p> : null}
-      {stale ? <FeedbackState kind="error" title="다른 변경이 먼저 저장되었습니다" description="자동으로 덮어쓰지 않습니다. 서버의 최신 거래 내용을 다시 불러와 검토해 주세요." reference={error instanceof ApiRequestError ? error.correlationId : undefined} action={onReload ? <Button variant="secondary" onClick={onReload}>서버 값 다시 불러오기</Button> : undefined} /> : error ? <ErrorState error={error} retry={onSave} /> : null}
+      {stale ? <FeedbackState kind="error" title="다른 변경이 먼저 저장되었습니다" description="다른 사람이 저장한 최신 내용을 불러와 확인한 뒤 다시 수정해 주세요." reference={error instanceof ApiRequestError ? error.correlationId : undefined} action={onReload ? <Button variant="secondary" onClick={onReload}>최신 내용 불러오기</Button> : undefined} /> : error ? <ErrorState error={error} retry={onSave} /> : null}
     </form>
   );
 }
@@ -544,5 +533,5 @@ function toDefinition(content: MenuTradeContent): MenuTradeDefinition {
 }
 
 function failureMessage(failure: unknown): string {
-  return failure instanceof Error ? failure.message : "필수 저장소를 사용할 수 없습니다.";
+  return requestErrorPresentation(failure).description;
 }

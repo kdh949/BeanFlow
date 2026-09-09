@@ -87,6 +87,16 @@ internal interface AistorObjectClient {
 
     fun list(prefix: String): Sequence<AistorObjectSummary>
 
+    fun list(
+        prefix: String,
+        startAfter: String?,
+        limit: Int,
+    ): List<AistorObjectSummary> =
+        list(prefix)
+            .filter { startAfter == null || it.key > startAfter }
+            .take(limit)
+            .toList()
+
     fun verifyBucket(): AistorBucketVerification
 }
 
@@ -163,6 +173,28 @@ internal class MinioAistorObjectClient(
                 val item = result.get()
                 AistorObjectSummary(item.objectName(), item.lastModified().toInstant())
             }
+
+    override fun list(
+        prefix: String,
+        startAfter: String?,
+        limit: Int,
+    ): List<AistorObjectSummary> =
+        operational
+            .listObjects(
+                ListObjectsArgs
+                    .builder()
+                    .bucket(bucket)
+                    .prefix(prefix)
+                    .startAfter(startAfter)
+                    .maxKeys(limit)
+                    .recursive(true)
+                    .build(),
+            ).asSequence()
+            .take(limit)
+            .map { result ->
+                val item = result.get()
+                AistorObjectSummary(item.objectName(), item.lastModified().toInstant())
+            }.toList()
 
     override fun verifyBucket(): AistorBucketVerification =
         try {

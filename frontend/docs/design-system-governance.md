@@ -1,7 +1,7 @@
 # BeanFlow Design System & Storybook Governance
 
 > Intended repository path: `frontend/docs/design-system-governance.md`
-> Status: Accepted (2026-08-15)
+> Status: Accepted, revised (2026-08-27)
 > Scope: every change under `frontend/src/**` that affects rendered UI
 
 ## 1. Purpose
@@ -19,9 +19,18 @@ Use this precedence when sources disagree:
 3. Typed, editable React components and patterns under `src/design-system/`
 4. Canonical Storybook stories and docs that exercise those sources
 5. Product screens that compose canonical components and patterns
-6. Generated bundles, manifests, screenshots, and archived explorations
+6. Selected reference images and archived explorations as design-intent evidence only
 
-Generated files such as `_ds_bundle.js`, `_ds_manifest.json`, static Storybook output, or screenshots are migration/reference inputs only. Do not edit them as the primary implementation and do not treat them as a component API unless the editable TypeScript source exists.
+The retired generated `_ds_bundle.js` and `_ds_manifest.json` snapshots are deleted and must not be restored.
+Static Storybook output and screenshots are never editable component sources.
+
+## 2.1 Canonical visual direction
+
+- Cool white and slate surfaces, navy information hierarchy, and coral primary actions are the sole palette direction.
+- Status is text-first. Filled green success badges and the retired `StatusBadge` API are prohibited.
+- Customer surfaces are mobile-first and concise; store, operations, and support surfaces use the same language at workspace density.
+- Decorative English eyebrow labels are not part of the system. Context labels must carry useful product meaning in normal reading order.
+- Espresso, caramel, crema, `.bf-btn`, `components/Ui`, `components/Shells`, and refresh-only primitive/frame APIs are retired and may not return.
 
 ## 3. Library layers
 
@@ -89,7 +98,7 @@ A similar appearance is not enough reason to create a new component. A new compo
 
 - New raw hex, RGB, HSL, font-family, shadow, or arbitrary CSS custom properties outside the token layer.
 - Inline style objects for static visual styling.
-- A second button, card, badge, input, dialog, or status system with different class naming.
+- A second button, card, badge, input, dialog, shell, or status system with different class naming.
 - Tokens named after one page or one temporary variant when a semantic name is possible.
 - Adding a token merely to hide a one-off arbitrary value.
 
@@ -104,6 +113,9 @@ Literal dimensions may be valid for intrinsic geometry, media assets, hit target
 - Prefer explicit variants and states over unrestricted `className` or `style` escape hatches.
 - A component protects its own accessibility semantics, focus behavior, disabled behavior, and loading behavior.
 - Product-specific business text and data remain outside primitives unless the component is intentionally a domain pattern.
+- Product source는 `input`, `select`, `textarea`를 직접 렌더링하지 않고 canonical field/selection component를 사용한다.
+- Feature CSS는 canonical control의 color, border, focus, selected, disabled, touch-target 계약을 재정의하지 않고 배치만 소유한다.
+- API error, domain state, 사용자 노출 문구의 변환은 shared/product presentation 계층이 소유하며 design-system은 presentation-safe prop만 받는다.
 - Deprecated components are documented with a replacement and removed from the AI manifest.
 
 ## 7. Story rules
@@ -210,6 +222,7 @@ Recommended checks:
 - Storybook/Vitest browser tests
 - Storybook static build
 - design-token/adherence lint
+- native-control and CSS ownership boundary regression tests
 - accessibility tests
 - product build and Sites handoff tests
 - visual regression for canonical critical stories once a clean baseline is approved

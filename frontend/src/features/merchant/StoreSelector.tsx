@@ -1,4 +1,4 @@
-import { Store } from "lucide-react";
+import { SelectField } from "../../design-system";
 import type { MerchantStore } from "../auth/merchant/merchantSession";
 
 /**
@@ -10,23 +10,23 @@ export function StoreSelector({
   stores,
   selected,
   onSelect,
+  disabled = false,
 }: {
   stores: MerchantStore[];
   selected: MerchantStore | null;
   onSelect: (storeId: string) => void;
+  disabled?: boolean;
 }) {
   if (stores.length === 0) return null;
   return (
-    <label className="store-selector">
-      <Store size={17} />
-      <span className="visually-hidden">매장 선택</span>
-      <select value={selected?.storeId ?? ""} onChange={(event) => onSelect(event.target.value)}>
+    <div className="store-selector">
+      <SelectField disabled={disabled} label="매장 선택" labelVisibility="sr-only" value={selected?.storeId ?? ""} onValueChange={onSelect}>
         {stores.map((store) => (
           <option key={store.storeId} value={store.storeId}>
             {store.storeName} · {store.membershipRole === "OWNER" ? "점주" : "직원"}
           </option>
         ))}
-      </select>
-    </label>
+      </SelectField>
+    </div>
   );
 }

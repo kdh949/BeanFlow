@@ -21,8 +21,8 @@ internal class MenuCatalogMigrationTest : IsolatedPostgresSupport() {
     }
 
     @Test
-    fun `V70 backfills existing catalogue rows as active at trade version zero`() {
-        flyway(target = "69").migrate()
+    fun `V73 backfills existing catalogue rows as active at trade version zero`() {
+        flyway(target = "72").migrate()
         val storeId = UUID.randomUUID()
         val menuId = UUID.randomUUID()
         val optionId = UUID.randomUUID()
@@ -64,7 +64,7 @@ internal class MenuCatalogMigrationTest : IsolatedPostgresSupport() {
     }
 
     @Test
-    fun `V70 enforces lifecycle tuples active configuration uniqueness and replay retention`() {
+    fun `V73 enforces lifecycle tuples active configuration uniqueness and replay retention`() {
         flyway().migrate()
         val storeId = UUID.randomUUID()
         val menuId = UUID.randomUUID()

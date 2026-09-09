@@ -7,6 +7,7 @@ const meta = {
   component: Button,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: {
         component: "폼 제출과 즉시 행동에 쓰는 canonical action control입니다. 이동에는 ButtonLink를 사용합니다.",
@@ -22,7 +23,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Primary: Story = {
+export const Brand: Story = {
   play: async ({ args, canvas }) => {
     await userEvent.click(canvas.getByRole("button", { name: "주문 접수" }));
     await expect(args.onClick).toHaveBeenCalledOnce();
@@ -42,5 +43,14 @@ export const Disabled: Story = {
 };
 
 export const LongKoreanLabel: Story = {
-  args: { variant: "accent", children: "12,800원 결제하고 픽업 시간 확정하기" },
+  args: { variant: "brand", children: "12,800원 결제하고 픽업 시간 확정하기" },
+};
+
+export const SmallTouchTarget: Story = {
+  args: { size: "sm", children: "작게" },
+  play: async ({ canvas }) => {
+    const bounds = canvas.getByRole("button", { name: "작게" }).getBoundingClientRect();
+    await expect(bounds.width).toBeGreaterThanOrEqual(44);
+    await expect(bounds.height).toBeGreaterThanOrEqual(44);
+  },
 };

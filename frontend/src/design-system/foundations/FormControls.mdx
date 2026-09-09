@@ -1,0 +1,38 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import './foundations.css';
+
+<Meta title="Foundations/Form Controls" />
+
+# Form controls
+
+고객 화면과 workspace는 같은 semantic state를 공유합니다. 고객 화면은 주로 `lg`, 정보 밀도가 높은
+운영·지원 workspace는 `md`를 사용하지만 pointer target은 항상 `--tap-min: 44px` 이상입니다.
+
+## Canonical semantic aliases
+
+| Token | Role |
+| --- | --- |
+| `--control-bg` / `--control-text` | 입력 가능한 기본 surface와 본문 |
+| `--control-placeholder` | 입력 전 힌트. label을 대체하지 않음 |
+| `--control-border` / `--control-border-hover` | rest와 hover boundary |
+| `--control-border-focus` / `--control-focus` | keyboard focus boundary와 ring |
+| `--control-invalid-border` | validation failure. 문구와 함께 사용 |
+| `--control-disabled-bg` / `--control-disabled-text` / `--control-disabled-border` | 실행 불가능한 control |
+| `--control-selected-bg` / `--control-selected-border` / `--control-selected-text` | checkbox/radio의 명시적 선택 |
+
+<div className="foundation-control-stack" aria-label="form control size examples">
+  <label><strong>Workspace · md</strong><input className="foundation-control foundation-control--md" value="운영자 접근 사유" readOnly /></label>
+  <label><strong>Customer · lg</strong><input className="foundation-control foundation-control--lg" value="매장 또는 메뉴 검색" readOnly /></label>
+</div>
+
+`TextField`, `TextAreaField`, `SelectField`는 label, description, error ID를 내부에서 연결합니다. 숫자와
+날짜도 controlled string으로 유지해 빈 값을 `0`이나 현재 날짜로 자동 변환하지 않습니다.
+
+## Selection responsibilities
+
+- `Checkbox`: 한 form에서 여러 항목을 포함하거나 제외
+- `Switch`: 저장 즉시 반영되는 이진 preference
+- `RadioGroup`: 하나만 고르는 native selection; `RadioCard`는 픽업 시간과 지역 같은 rich option
+- `QuantityStepper`: min/max가 있는 정수 수량
+
+페이지는 같은 의미를 다른 toggle·pill·button contract로 다시 만들지 않습니다.

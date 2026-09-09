@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { HttpResponse, delay, http } from "msw";
 import { ids, merchantSignedInHandlers } from "../../../.storybook/fixtures";
+import { StoreManagementPage } from "./StoreManagementPage";
 import { StoreCatalogPage } from "./StoreCatalogPage";
 
 const stores = http.get("/api/v1/merchant/me/stores", () => HttpResponse.json([
@@ -81,12 +82,12 @@ const meta = {
   parameters: {
     docs: {
       description: {
-        component: "기존 Store console composition과 FeedbackState/Button을 조합해 주문 정책과 Menu Aggregate 전체 교체·보관을 관리합니다. stale 응답은 자동 덮어쓰기 대신 명시적 reload를 요구합니다.",
+        component: "새 콘솔의 공통 제목, 폼, 버튼으로 메뉴·가격·품절·판매 재개와 주문 접수 정책을 관리합니다. 다른 변경이 먼저 저장되면 최신 내용을 확인합니다.",
       },
       story: { inline: false, height: "760px" },
     },
     a11y: { test: "error" },
-    routing: { path: "/store/catalog", initialEntry: "/store/catalog" },
+    routing: { path: "/store/catalog", initialEntry: "/store/catalog", surface: "store" },
     msw: { handlers: [...merchantSignedInHandlers, stores, currentPolicy, savePolicy, ...menuHandlers] },
   },
 } satisfies Meta<typeof StoreCatalogPage>;
@@ -141,7 +142,7 @@ export const PolicySaved: Story = {
     await userEvent.click(await canvas.findByRole("checkbox", { name: /새 주문 접수/ }));
     await userEvent.click(canvas.getByRole("button", { name: "정책 저장" }));
     await expect(await canvas.findByText("주문 정책을 저장했습니다.")).toBeVisible();
-    await expect(canvas.getByText("VERSION 4")).toBeVisible();
+    await expect(canvas.getByText("4번째 저장")).toBeVisible();
   },
 };
 
@@ -165,7 +166,7 @@ export const VersionConflict: Story = {
     await userEvent.click(await canvas.findByRole("checkbox", { name: /매장 픽업/ }));
     await userEvent.click(canvas.getByRole("button", { name: "정책 저장" }));
     await expect(await canvas.findByText("다른 변경이 먼저 저장되었습니다")).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "서버 값 다시 불러오기" })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "최신 내용 불러오기" })).toBeVisible();
   },
 };
 
@@ -188,7 +189,7 @@ export const IdempotencyKeyReused: Story = {
   play: async ({ canvas }) => {
     await userEvent.click(await canvas.findByRole("checkbox", { name: /새 주문 접수/ }));
     await userEvent.click(canvas.getByRole("button", { name: "정책 저장" }));
-    await expect(await canvas.findByText(/요청 키가 다른 주문 정책/)).toBeVisible();
+    await expect(await canvas.findByText("요청 정보가 변경되었습니다")).toBeVisible();
   },
 };
 
@@ -230,7 +231,7 @@ export const PermissionLost: Story = {
     },
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText("매장 카탈로그 권한이 회수되었습니다.")).toBeVisible();
+    await expect(await canvas.findByText("이 작업을 진행할 수 없습니다")).toBeVisible();
   },
 };
 
@@ -250,7 +251,7 @@ export const PolicyDependencyUnavailable: Story = {
     },
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText("주문 정책을 조회하지 못했습니다.")).toBeVisible();
+    await expect(await canvas.findByText("서비스 연결을 확인하고 있습니다")).toBeVisible();
   },
 };
 
@@ -338,7 +339,7 @@ export const MenuSaved: Story = {
     await userEvent.type(canvas.getByLabelText("메뉴 이름"), "디카페인 아메리카노");
     await userEvent.click(canvas.getByRole("button", { name: "메뉴 생성" }));
     await expect(await canvas.findByText("메뉴 거래 내용을 저장했습니다.")).toBeVisible();
-    await expect(canvas.getByText("VERSION 0")).toBeVisible();
+    await expect(canvas.getByText("0번째 저장")).toBeVisible();
   },
 };
 
@@ -350,11 +351,11 @@ export const ManualMenuAvailability: Story = {
     await expect(available).toBeChecked();
     await userEvent.click(available);
     await userEvent.click(canvas.getByRole("button", { name: "거래 내용 저장" }));
-    await expect(await editor.findByText("VERSION 3")).toBeVisible();
+    await expect(await editor.findByText("3번째 저장")).toBeVisible();
     await expect(available).not.toBeChecked();
     await userEvent.click(available);
     await userEvent.click(canvas.getByRole("button", { name: "거래 내용 저장" }));
-    await expect(await editor.findByText("VERSION 4")).toBeVisible();
+    await expect(await editor.findByText("4번째 저장")).toBeVisible();
     await expect(available).toBeChecked();
   },
 };
@@ -378,7 +379,7 @@ export const MenuVersionConflict: Story = {
     await userEvent.type(name, "새 라테");
     await userEvent.click(canvas.getByRole("button", { name: "거래 내용 저장" }));
     await expect(await canvas.findByText("다른 변경이 먼저 저장되었습니다")).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "서버 값 다시 불러오기" })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "최신 내용 불러오기" })).toBeVisible();
   },
 };
 
@@ -414,7 +415,7 @@ export const MenuDependencyUnavailable: Story = {
   },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("메뉴를 불러오지 못했습니다")).toBeVisible();
-    await expect(canvas.getByText("메뉴 카탈로그 저장소를 사용할 수 없습니다.")).toBeVisible();
+    await expect(canvas.getByText("잠시 뒤 다시 시도해 주세요.")).toBeVisible();
   },
 };
 
@@ -445,7 +446,7 @@ export const MenuPermissionLost: Story = {
     ] },
   },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText("메뉴 카탈로그 권한이 회수되었습니다.")).toBeVisible();
+    await expect(await canvas.findByText("현재 계정의 권한을 확인해 주세요.")).toBeVisible();
   },
 };
 
@@ -465,7 +466,7 @@ export const MenuIdempotencyKeyReused: Story = {
     await userEvent.click(await canvas.findByRole("button", { name: /카페 라테/ }));
     await userEvent.type(await canvas.findByLabelText("메뉴 이름"), " 수정");
     await userEvent.click(canvas.getByRole("button", { name: "거래 내용 저장" }));
-    await expect(await canvas.findByText("요청 키가 다른 메뉴 변경에 사용되었습니다.")).toBeVisible();
+    await expect(await canvas.findByText("요청 정보가 변경되었습니다")).toBeVisible();
   },
 };
 
@@ -514,5 +515,35 @@ export const NoStoreMembership: Story = {
   },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("관리할 수 있는 매장이 없습니다")).toBeVisible();
+  },
+};
+
+export const ManagementWorkspace: Story = {
+  render: () => <StoreManagementPage catalogContent={<StoreCatalogPage embedded />} />,
+  parameters: { routing: { path: "/store/management", initialEntry: "/store/management", surface: "store" } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("button", { name: /카페 라테/ })).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "매장 관리" })).toHaveAttribute("href", "/store/management");
+    await expect(canvas.queryByRole("tab", { name: "재고" })).not.toBeInTheDocument();
+  },
+};
+
+export const ConfigurationAvailability: Story = {
+  parameters: { msw: { handlers: [
+    ...merchantSignedInHandlers, stores, currentPolicy, savePolicy,
+    http.get("/api/v1/stores/:storeId/menus/:menuId/trade-content", () => HttpResponse.json({ ...menuContent, available: false })),
+    ...menuHandlers,
+  ] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: /카페 라테/ }));
+    const editor = within(canvas.getByRole("region", { name: "메뉴 거래 내용" }));
+    await userEvent.click(await editor.findByRole("checkbox", { name: "이 구성 판매 가능", exact: true }));
+    await userEvent.click(editor.getByRole("button", { name: "거래 내용 저장" }));
+    await expect(await editor.findByText("3번째 저장")).toBeVisible();
+    await expect(editor.getByRole("checkbox", { name: "이 구성 판매 가능", exact: true })).not.toBeChecked();
+    await userEvent.click(editor.getByRole("checkbox", { name: "이 구성 판매 가능", exact: true }));
+    await userEvent.click(editor.getByRole("button", { name: "거래 내용 저장" }));
+    await expect(await editor.findByText("4번째 저장")).toBeVisible();
+    await expect(editor.getByRole("checkbox", { name: "이 구성 판매 가능", exact: true })).toBeChecked();
   },
 };

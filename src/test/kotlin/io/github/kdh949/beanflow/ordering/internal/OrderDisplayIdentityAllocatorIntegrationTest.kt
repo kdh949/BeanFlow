@@ -78,6 +78,43 @@ internal class OrderDisplayIdentityAllocatorIntegrationTest
         }
 
         @Test
+        fun `existing counter allocation does not wait for historical order table access`() {
+            val storeId = UUID.randomUUID()
+            val businessDate = LocalDate.parse("2030-01-01")
+            assertThat(transaction.execute { pickupSequences.next(storeId, businessDate) }).isEqualTo(1)
+            val pool = Executors.newSingleThreadExecutor()
+            try {
+                transaction.executeWithoutResult {
+                    jdbcTemplate.execute("LOCK TABLE ordering_order IN ACCESS EXCLUSIVE MODE")
+                    val allocation =
+                        pool.submit<Long> {
+                            requireNotNull(
+                                transaction.execute {
+                                    jdbcTemplate.execute("SET LOCAL lock_timeout = '250ms'")
+                                    pickupSequences.next(storeId, businessDate)
+                                },
+                            )
+                        }
+                    assertThat(allocation.get(5, TimeUnit.SECONDS)).isEqualTo(2)
+                }
+            } finally {
+                pool.shutdownNow()
+            }
+        }
+
+        @Test
+        fun `existing counter increment rolls back with the caller transaction`() {
+            val storeId = UUID.randomUUID()
+            val businessDate = LocalDate.parse("2030-01-01")
+            assertThat(transaction.execute { pickupSequences.next(storeId, businessDate) }).isEqualTo(1)
+            transaction.executeWithoutResult {
+                assertThat(pickupSequences.next(storeId, businessDate)).isEqualTo(2)
+                it.setRollbackOnly()
+            }
+            assertThat(transaction.execute { pickupSequences.next(storeId, businessDate) }).isEqualTo(2)
+        }
+
+        @Test
         fun `committed display identities and ended orders never return a pickup sequence`() {
             val storeId = UUID.randomUUID()
             val pickupStart = Instant.parse("2030-01-01T00:10:00Z")

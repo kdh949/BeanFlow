@@ -3,7 +3,8 @@ import { HttpResponse, http } from "msw";
 import { expect, userEvent } from "storybook/test";
 import { compensationManualReview, compensationSucceeded } from "../../../.storybook/fixtures";
 import { ApiRequestError } from "../../api/client";
-import { ErrorState, LoadingState } from "../../components/Ui";
+import { LoadingState } from "../../design-system";
+import { ErrorState } from "../../presentation/shared";
 import { CompensationResult, OpsOrderPage } from "./ConsolePages";
 
 const meta = {
@@ -37,7 +38,7 @@ export const ManualReview: Story = {
 };
 
 async function submitLookup(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) {
-  await userEvent.type(canvas.getByLabelText("주문 번호"), "40000000-0000-4000-8000-000000000001");
+  await userEvent.type(canvas.getByLabelText("주문 ID"), "40000000-0000-4000-8000-000000000001");
   await userEvent.type(canvas.getByLabelText("접근 사유"), "compensation recovery review");
   await userEvent.click(canvas.getByRole("button", { name: "조회" }));
 }
@@ -45,7 +46,7 @@ async function submitLookup(canvas: Parameters<NonNullable<Story["play"]>>[0]["c
 export const SuccessfulLookup: Story = {
   render: () => <div className="console-page"><CompensationResult result={compensationSucceeded} /></div>,
   play: async ({ canvas }) => {
-    await expect(canvas.getByText("완료")).toBeVisible();
+    await expect(canvas.getAllByText("완료").length).toBeGreaterThan(0);
   },
 };
 
@@ -70,6 +71,6 @@ export const SuccessfulLookupInteraction: Story = {
   },
   play: async ({ canvas }) => {
     await submitLookup(canvas);
-    await expect(await canvas.findByText("완료")).toBeVisible();
+    await expect((await canvas.findAllByText("완료")).length).toBeGreaterThan(0);
   },
 };

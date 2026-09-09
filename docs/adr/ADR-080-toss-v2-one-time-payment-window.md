@@ -86,10 +86,12 @@ Tx C  Payment result + Order/resource transition + idempotent response + Audit c
 
 ### Provider adapter와 취소
 
-- Toss adapter는 API 개별 연동 test client/secret key 쌍만 `toss-sandbox & !prod`에서 허용한다.
-  client key는 `test_ck_`, secret은 `test_sk_`여야 한다. Payment Widget용 `test_gck_`/`test_gsk_`,
-  missing/live/profile overlap은 startup failure다. 키 쌍의 실제 MID 일치는 Provider의 인증 응답으로
-  fail-closed 검증한다.
+- **Key validation amendment (2026-09-06):** `toss-sandbox & !prod` adapter와 portfolio 배포는
+  client/secret key 접두사에 따른 시작 차단을 제거한다. 두 키의 누락·공백 값은 시작을 실패시키고,
+  공식 HTTPS endpoint와 profile 격리는 유지한다. 키 유형·MID 일치·유효성은 실제 SDK/Provider
+  응답으로 확인하며 인증 실패를 성공으로 대체하지 않는다. 배포 운영자가 테스트 키를 선택하며,
+  애플리케이션은 live 키 여부를 접두사로 차단하지 않는다. 이 변경은 Payment Widget 지원 추가가
+  아니며 Standard Payment Window의 실제 호환성 검증을 대신하지 않는다.
 - 로컬 실제 호출은 `toss-sandbox-runtime` profile group이 `local`과 `toss-sandbox`를 합성한다.
   scripted `PaymentGateway`와 scripted PaymentMethod provider는 제외하고 Toss gateway 하나와
   legacy PaymentMethod 요청을 `Misconfigured`로 끝내는 명시적 unavailable provider를 선택한다.
@@ -190,7 +192,7 @@ Payment는 이미 주문별 승인·불명·reconciliation·late approval과 Ref
   상태·금액·operation marker exact match
 - SettlementAdjustment, Point restoration/recovery와 기존 snapshot tie-out
 - one-time path의 PaymentMethod repository/Port 호출 0회
-- profile/key guard, Basic colon auth, secret/paymentKey redaction과 HTTP fault matrix
+- profile/필수 key guard, 접두사에 무관한 startup, Basic colon auth, secret/paymentKey redaction과 HTTP fault matrix
 - mobile/keyboard/focus/status announcement, reload/back과 console/network audit
 - customer status/confirmation response가 `orderReference`를 반환하고 internal `orderId`를 노출하지
   않는지, status read와 idempotent confirmation replay 및 reconciliation-produced response마다 검증
@@ -201,7 +203,8 @@ Payment는 이미 주문별 승인·불명·reconciliation·late approval과 Ref
 
 - 공개 API 개별 연동 test key 쌍으로 `toss-sandbox-runtime`이 `local,toss-sandbox`를 활성화하고
   health `UP`까지 기동했다. Widget key 쌍은 SDK의 `NotSupportedWidgetKeyError` 관측 뒤 startup
-  guard가 더 이르게 거부하도록 고정했다.
+  guard가 더 이르게 거부하도록 고정했다. 해당 접두사 guard는 2026-09-06 amendment로 제거했으며,
+  당시 SDK 호환성 실패 관측은 유지한다.
 - 실제 Toss V2 Payment Window가 4,500원과 9,000원 서버 snapshot을 표시했다. 국내 공개 테스트
   카드가 없으므로 개인 카드 정보를 사용하지 않고 Toss가 제공하는 V2 `sandbox.paymentResult`
   인증 시뮬레이션을 브라우저 검증에만 임시 적용했다. 이 옵션은 제품 source에 남기지 않았다.

@@ -15,6 +15,15 @@ function ok<T>(data: T, status = 200) {
   return { data, response: new Response(null, { status }) };
 }
 
+function mockAuthenticatedReads() {
+  return vi.spyOn(customerApi, "GET").mockImplementation(async (path) => {
+    if (path === "/me") return ok(actor) as never;
+    if (path === "/me/points") return ok({ availablePointsKrw: 1500, recoveryPendingKrw: 0, currency: "KRW", expiring: [], expiringHasMore: false }) as never;
+    if (path === "/me/coupons") return ok({ items: [], page: {} }) as never;
+    throw new Error(`unexpected GET ${path}`);
+  });
+}
+
 function failure(status: number, code: string, message = "요청을 완료하지 못했습니다.") {
   return { error: { code, message }, response: new Response(null, { status }) };
 }
@@ -47,11 +56,21 @@ afterEach(() => {
 
 describe("customer session route boundary", () => {
   it("renders the protected route for an authenticated actor", async () => {
-    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+    mockAuthenticatedReads();
 
     renderApp("/app/orders");
 
     expect(await screen.findByRole("heading", { name: "주문 목록" })).toBeInTheDocument();
+  });
+
+  it("keeps refund access in orders and leaves coupon claims as a separate destination", async () => {
+    mockAuthenticatedReads();
+
+    renderApp("/app/me");
+
+    expect(await screen.findByRole("link", { name: "주문 내역" })).toHaveAttribute("href", "/app/orders");
+    expect(screen.getByRole("link", { name: "쿠폰 받기" })).toHaveAttribute("href", "/app/coupon-claims");
+    expect(screen.queryByRole("link", { name: "환불 내역" })).not.toBeInTheDocument();
   });
 
   it("sends 401 to login with a sanitized same-origin return path", async () => {
@@ -71,7 +90,7 @@ describe("customer session route boundary", () => {
 
     renderApp("/app/orders");
 
-    expect(await screen.findByText("이 브라우저의 인증 정보는 고객 화면을 사용할 수 없습니다. 다른 역할로 로그인되어 있는지 확인해 주세요.")).toBeInTheDocument();
+    expect(await screen.findByText("현재 로그인으로는 고객 화면을 이용할 수 없어요. 고객 계정으로 다시 로그인해 주세요.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "로그인" })).not.toBeInTheDocument();
   });
 
@@ -80,7 +99,7 @@ describe("customer session route boundary", () => {
 
     renderApp("/app/orders");
 
-    expect(await screen.findByText("로그인 상태를 확인하지 못했습니다. 로그아웃된 것이 아니므로 다시 시도해 주세요.")).toBeInTheDocument();
+    expect(await screen.findByText("로그인 상태를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "로그인" })).not.toBeInTheDocument();
   });
 
@@ -187,7 +206,7 @@ describe("customer login and signup states", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("아이디 또는 비밀번호를 확인해 주세요.");
 
     await user.click(screen.getByRole("button", { name: "로그인" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("15분 뒤 다시 시도해 주세요.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("잠시 뒤 다시 시도해 주세요.");
     expect(post).toHaveBeenCalledTimes(2);
   });
 
@@ -256,7 +275,7 @@ describe("customer logout", () => {
     sessionStorage.setItem("beanflow.idempotency.payment.order-1", "key");
     sessionStorage.setItem("beanflow.payment-attempt.payment-1", "{}");
     authToken.set("operator-access-token");
-    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+    mockAuthenticatedReads();
     const remove = vi.spyOn(customerApi, "DELETE").mockResolvedValue({ response: new Response(null, { status: 204 }) } as never);
 
     renderApp("/app/me");
@@ -272,7 +291,7 @@ describe("customer logout", () => {
   });
 
   it("blocks a protected route again after logout", async () => {
-    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+    mockAuthenticatedReads();
     vi.spyOn(customerApi, "DELETE").mockResolvedValue({ response: new Response(null, { status: 204 }) } as never);
     await customerSession.refresh();
 
@@ -283,7 +302,7 @@ describe("customer logout", () => {
   });
 
   it("keeps the browser authenticated when the server logout fails, so the customer can retry", async () => {
-    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+    mockAuthenticatedReads();
     const remove = vi.spyOn(customerApi, "DELETE")
       .mockResolvedValue(failure(503, "DEPENDENCY_UNAVAILABLE", "인증 의존성을 사용할 수 없습니다.") as never);
 
@@ -292,13 +311,13 @@ describe("customer logout", () => {
     await user.click(await screen.findByRole("button", { name: "로그아웃" }));
 
     await waitFor(() => expect(remove).toHaveBeenCalled());
-    expect(await screen.findByText("요청을 완료하지 못했습니다")).toBeInTheDocument();
+    expect(await screen.findByText("서비스 연결을 확인하고 있습니다")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "내 정보" })).toBeInTheDocument();
     expect(customerSession.get().status).toBe("authenticated");
   });
 
   it("treats a 401 on session delete as already logged out server-side", async () => {
-    vi.spyOn(customerApi, "GET").mockResolvedValue(ok(actor) as never);
+    mockAuthenticatedReads();
     vi.spyOn(customerApi, "DELETE").mockResolvedValue(failure(401, "UNAUTHORIZED") as never);
 
     renderApp("/app/me");

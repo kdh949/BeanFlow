@@ -50,7 +50,7 @@ DO UPDATE SET last_sequence = ordering_pickup_counter.last_sequence + 1
 RETURNING last_sequence;
 ```
 
-- 이 문장 하나가 삽입과 증가를 모두 처리하므로 사전 조회가 없다.
+- 정상 발급은 기존 카운터의 원자적 증가이며 애플리케이션에서 값을 먼저 읽지 않는다.
 - 주문 생성 트랜잭션 안에서 실행한다. 같은 PostgreSQL transaction의 주문 insert가 rollback되면
   counter 증가도 rollback되어 그 시도만으로 결번이 생기지 않는다.
 - 커밋된 주문이 이후 취소·거절·만료되더라도 번호를 반납하거나 재사용하지 않는다. 활성 주문 화면에서
@@ -152,6 +152,22 @@ DB의 행 잠금으로 직렬화한다. 애플리케이션 재시도 없이 동�
 - `Asia/Seoul` 자정 경계, 매장/일자 독립성, 동시 20건 유일성, rollback과 커밋 후 비재사용을
   PostgreSQL Testcontainers로 검증했다.
 - 순번 UPSERT와 행 잠금 대기를 `beanflow.order.pickup_sequence.allocation.duration` p95 timer로 계측한다.
+
+### 2026-09-08 정상 발급과 초기화 경로 분리
+
+- 기존 카운터에는 `UPDATE ... SET last_sequence = last_sequence + 1 RETURNING last_sequence`를
+  실행한다. 정상 주문마다 과거 주문과 슬롯을 집계하지 않는다.
+- UPDATE 결과가 없는 최초 발급에만 기존 주문의 `GREATEST(count(*), max(pickup_sequence)) + 1`
+  기준선을 구하고 UPSERT한다. 동시 최초 발급은 `GREATEST(counter + 1, EXCLUDED.last_sequence)`로
+  직렬화한다. V50 당시 누락된 슬롯을 복구한 뒤 새 카운터를 만드는 경로도 유지한다.
+- V50/V51 및 bounded backfill이 초기화·동기화한 카운터를 정상 발급의 authority로 사용한다.
+  운영 중 카운터를 임의 삭제하거나 낮춘 뒤 매 요청의 전체 집계로 보정하는 방식은 지원하지 않는다.
+  기존 runbook의 old writer 배제, backfill·contract preflight와 카운터 보존 조건을 유지한다.
+- 두 경로 모두 주문과 같은 transaction이다. 초기화 실패를 1로 대체하거나 rollback된 증가를
+  별도 transaction에 남기지 않는다. 최초 경로의 한 번 더 실행되는 UPDATE는 정상 경로의
+  이력 크기에 비례하는 집계 비용을 제거하기 위한 비용이다.
+- 검증과 배포 전후 측정은 [잠금 구간 SQL 개선 계획](../exec-plans/completed/pickup-counter-pr-extraction.md)에 기록한다.
+  환불·감사 후속 처리까지 포함한 통합 측정은 [잠금 구간 SQL 재측정](../quality/performance-lock-critical-section-retest-2026-09-08.md)을 참조한다.
 
 ## Related Decisions
 

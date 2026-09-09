@@ -1,0 +1,25 @@
+services:
+  frontend:
+    networks:
+      backend:
+        ipv4_address: 172.29.0.10
+      edge: {}
+  api:
+    networks:
+      backend:
+        ipv4_address: 172.29.0.20
+      egress: {}
+  keycloak:
+    networks:
+      backend:
+        ipv4_address: 172.29.0.30
+  postgres:
+    networks:
+      backend:
+        ipv4_address: 172.29.0.40
+
+networks:
+  backend:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24

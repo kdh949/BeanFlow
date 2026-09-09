@@ -37,6 +37,7 @@ const meta = {
   component: MerchantAccountsPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" }, layout: "fullscreen",
     docs: {
       description: {
         component:
@@ -44,7 +45,7 @@ const meta = {
       },
       story: { inline: false, height: "900px" },
     },
-    routing: { path: "/ops/merchant-accounts", initialEntry: "/ops/merchant-accounts" },
+    routing: { surface: "ops", path: "/ops/merchant-accounts", initialEntry: "/ops/merchant-accounts" },
     msw: { handlers: [lookupAccount, resetPassword, releaseLock, createAccount] },
   },
 } satisfies Meta<typeof MerchantAccountsPage>;
@@ -83,14 +84,18 @@ export const LockedAccountReleased: Story = {
 
 export const NewAccountOneTimePassword: Story = {
   play: async ({ canvas }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "새 계정 발급" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "새 계정 발급" }));
     await userEvent.type(canvas.getByLabelText("새 로그인 ID"), "newmerchant");
     await userEvent.type(canvas.getByLabelText("표시 이름"), "신규 점주");
     await userEvent.type(canvas.getByLabelText("첫 매장 ID"), ids.store);
     await userEvent.type(canvas.getByLabelText("발급 사유"), "신규 가맹 계약 승인");
     await userEvent.click(canvas.getByRole("button", { name: "점주 계정 발급" }));
     await expect(await canvas.findByText("NEW_PASSWORD_DEMO_0000000000001")).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "확인 후 지우기" })).toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "임시 비밀번호" })).toBeVisible();
+    await expect(canvas.getByText(/^만료 /)).toBeVisible();
+    await expect(canvas.queryByText(/티켓·로그|브라우저 저장소|지금 전달/)).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "화면에서 지우기" }));
+    await expect(canvas.queryByText("NEW_PASSWORD_DEMO_0000000000001")).not.toBeInTheDocument();
   },
 };
 
@@ -111,7 +116,7 @@ export const ResetConflict: Story = {
     await lookup(canvas);
     await userEvent.type(canvas.getByLabelText("임시 비밀번호 재발급 사유"), "본인 확인 완료");
     await userEvent.click(canvas.getByRole("button", { name: "임시 비밀번호 재발급" }));
-    await expect(await canvas.findByText(/임시 비밀번호는 다시 표시할 수 없습니다/)).toBeVisible();
+    await expect(await canvas.findByText("임시 비밀번호를 다시 표시할 수 없습니다")).toBeVisible();
     await expect(canvas.queryByText("RESET_PASSWORD_DEMO_00000000001")).not.toBeInTheDocument();
   },
 };
@@ -144,6 +149,6 @@ export const QueryUnavailable: Story = {
     await userEvent.type(canvas.getByLabelText("점주 로그인 ID"), "merchant01");
     await userEvent.selectOptions(canvas.getByLabelText("조회 사유"), "MERCHANT_ACCOUNT_STATUS_REVIEW");
     await userEvent.click(canvas.getByRole("button", { name: "계정 조회" }));
-    await expect(await canvas.findByText("점주 계정 저장소를 사용할 수 없습니다.")).toBeVisible();
+    await expect(await canvas.findByText("서비스 연결을 확인하고 있습니다")).toBeVisible();
   },
 };

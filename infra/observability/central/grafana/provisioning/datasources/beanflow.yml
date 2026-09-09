@@ -1,0 +1,64 @@
+apiVersion: 1
+
+datasources:
+  - name: BeanFlow Prometheus
+    type: prometheus
+    uid: beanflow-prometheus
+    access: proxy
+    url: $BEANFLOW_PROMETHEUS_URL
+    isDefault: false
+    jsonData:
+      exemplarTraceIdDestinations:
+        - datasourceUid: beanflow-tempo
+          name: trace_id
+
+  - name: BeanFlow Loki
+    type: loki
+    uid: beanflow-loki
+    access: proxy
+    url: $BEANFLOW_LOKI_URL
+    jsonData:
+      derivedFields:
+        - name: TraceID
+          matcherType: label
+          matcherRegex: 'trace[_]?id'
+          datasourceUid: beanflow-tempo
+          url: '$${__value.raw}'
+
+  - name: BeanFlow Pyroscope
+    type: grafana-pyroscope-datasource
+    uid: beanflow-pyroscope
+    access: proxy
+    url: $BEANFLOW_PYROSCOPE_URL
+
+  - name: BeanFlow Tempo
+    type: tempo
+    uid: beanflow-tempo
+    access: proxy
+    url: $BEANFLOW_TEMPO_URL
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: beanflow-loki
+        spanStartTimeShift: -30s
+        spanEndTimeShift: 30s
+        tags:
+          - key: service.name
+            value: service_name
+        filterByTraceID: true
+        filterBySpanID: false
+        customQuery: false
+      tracesToProfiles:
+        datasourceUid: beanflow-pyroscope
+        tags:
+          - key: service.name
+            value: service_name
+        profileTypeId: wall:wall:nanoseconds:wall:nanoseconds
+      serviceMap:
+        datasourceUid: beanflow-prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      streamingEnabled:
+        search: true
+        metrics: true

@@ -19,7 +19,8 @@ path로 이동했다. ADR-118과 BR-52가 권한·수명주기·직렬화·멱�
 
 ## Purpose / Big Picture
 
-완료 후 ACTIVE same-store `OWNER | STAFF`는 `/store/catalog`에서 다음을 수행할 수 있다.
+완료 후 ACTIVE same-store `OWNER | STAFF`는 `/store/management`의 메뉴 탭에서 다음을 수행할 수 있다.
+기존 `/store/catalog` 진입은 같은 관리 화면으로 이동한다.
 
 ```text
 매장 선택
@@ -34,7 +35,9 @@ path로 이동했다. ADR-118과 BR-52가 권한·수명주기·직렬화·멱�
 두 transaction의 실제 lock 순서에 따라 이전 상태로 완결되거나 `ORDER_QUOTE_STALE`로 실패한다. 이미지,
 메뉴 설명·카테고리 같은 표시 전용 변경은 거래가 같으므로 fingerprint를 바꾸지 않는다.
 
-이 plan은 reviewer용 선형 stack을 만든다. 첫 PR은 docs-only이며, 이후 각 PR은 바로 이전 PR head를
+현재 통합 PR은 최신 main을 feature 브랜치에 병합하여 메뉴 관리와 주문 정책을 함께 검증한다. 기존 선형 stack 검증 기록은 아래에 보존한다.
+
+초기 계획은 reviewer용 선형 stack을 만든다. 첫 PR은 docs-only이며, 이후 각 PR은 바로 이전 PR head를
 base로 한다. merge, force-push, 기존 PR base 변경, 임의 close를 하지 않는다. 각 구현 PR은 자신의
 migration, backend command/read, OpenAPI와 generated schema, 소비 UI, 핵심 테스트와 Storybook state를
 함께 포함한다.
@@ -482,6 +485,8 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
   PR #118(`feature/merchant-ordering-policy <- feature/merchant-store-ordering-policy`)로 게시했다.
 - [x] 2026-08-27: Milestone 2 Menu catalogue vertical slice를 commits `d404eb1`, `b713580`,
   PR #119(`feature/merchant-store-ordering-policy <- feature/merchant-menu-catalog-lifecycle`)로 게시했다.
+- [x] 2026-09-10: main의 새 콘솔·공통 폼으로 메뉴 관리 화면을 통합하고 주문 정책과 메뉴 schema를 V72/V73으로 정합화했다.
+- [x] 2026-09-10: 통합 backend 56개 class의 329개 test와 frontend unit 211개, design/type/build, Docs 69개 entry 검증이 통과했다.
 - [ ] Milestone 3 combined verification과 completion evidence 완료.
 
 ## Surprises & Discoveries
@@ -508,6 +513,9 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
 
 ## Decision Log
 
+- 2026-09-10: main의 canonical navy/coral 콘솔과 폼을 사용해 메뉴 관리를 통합한다. `/store/management`의 메뉴 탭은 실제 카탈로그 편집기를 제공하고 `/store/catalog`도 같은 source를 사용한다. main의 공유 픽업 사용량 fingerprint 제외를 유지하며 메뉴·옵션은 수동 판매 상태로 판단한다.
+- 2026-09-10: main baefa035의 V71까지 유지하고 미통합 Store/Menu schema를 V72/V73으로 재번호화한다. 다른 open PR과 원래 checkout의 migration 변경이 없음을 확인했다. PR 150 통합 중 이 작업이 migration writer를 소유한다.
+
 | Date | Decision | Reason | Record |
 | --- | --- | --- | --- |
 | 2026-08-26 | Store 주문 정책과 Menu 거래 catalogue는 ACTIVE same-store `OWNER | STAFF`가 관리 | 일상 매장 운영을 STAFF까지 허용하고 실행 시 membership을 재검증 | ADR-118, BR-52 |
@@ -520,6 +528,13 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
 | 2026-08-27 | stale expected version은 `MERCHANT_CONTENT_STALE` 재사용 | 기존 점주 콘텐츠 writer와 공용 오류 계약을 유지하고 불필요한 새 failure code를 만들지 않음 | ADR-118, 이 ExecPlan |
 
 ## Outcomes & Retrospective
+
+2026-09-10 통합 검증은 main `baefa035`를 포함한다. `/store/management`에서 canonical 콘솔과 폼을 통해
+메뉴·옵션·선택 조합의 가격과 수동 판매 상태, 메뉴 생성·전체 교체·보관, 매장 주문 정책을 관리한다.
+320px와 390px에서 가로 넘침 없이 편집할 수 있음을 확인했다. backend 329개 test와 bootJar, CI shard
+목록 검증, frontend unit 211개, presentation/copy/design/type/build, Sites 4개, Storybook Docs 69개 entry가
+통과했다. 전체 Storybook interaction/a11y와 최신 main의 이벤트 복구 변경 검증, 원격 CI는 별도로 확인한다.
+아래 Milestone 1/2 기록의 migration 번호와 CI 상태는 당시 검증 기록이며 현재 schema는 V72/V73이다.
 
 Milestone 1은 PR #118에서 V69 Store ordering policy version과 90일 command replay 원장, authenticated GET/PUT,
 membership FOR SHARE 뒤 Store FOR UPDATE, Audit와 quote fingerprint v3를 구현했다. PostgreSQL writer-first와
