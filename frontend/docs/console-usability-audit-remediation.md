@@ -62,3 +62,20 @@
 - Storybook과 Docs smoke는 명시적 fixture 검증이다. 실제 OIDC·PG·운영 데이터·배포 후 검증은 Not run.
 - 픽셀 차이를 자동 판정하는 시각 회귀 기준선은 Not configured. 수동 스크린샷 확인과 a11y·상호작용 검사를 구별한다.
 - 원격 CI는 각 PR의 현재 checks를 기준으로 확인하며, 실행 중인 검증을 통과로 간주하지 않는다.
+
+
+## 리뷰 보완 (2026-09-09)
+
+- #144: 서버 오류와 환불 POST 응답 유실을 분리한다. 400/403/404/503은 실패 안내와 새 preview
+  확인을 제공하고, 422 수량 변경은 선택을 초기화해 재선택한다. 같은 요청 처리 중 응답과 transport
+  failure는 각각 표시하면서 body/key를 보존한다. 요청 전 CSRF 실패는 환불 결과 불명으로 표시하지 않는다.
+- #145: 상세 조회에 빈 품목 guard를 명시한다. 기존 공통 요약 검사도 503을 반환함을 확인했고,
+  실제 DB 품목 누락에 대해 503 및 성공 필드 미반환을 통합 테스트로 고정했다.
+- #146: 서버의 machine summary를 출력하지 않고 typed type/state를 업무 문구로 변환한다.
+  주문과 알림의 ACCEPTED, 환불의 불명·재확인·운영팀 확인을 구분한다. 상담 화면과 후속 조회
+  fixture도 서버와 같은 `type:state` 형식을 사용한다. 미지원 상태를 성공으로 추정하지 않는다.
+- Passed: unit 204개, presentation 10개, product-copy 11개, Storybook MCP 294개(a11y 포함),
+  Docs smoke 68 docs/47 states, Storybook·제품 build, Sites 4개, 디자인 검사와 typecheck.
+  주문 보드 통합 10개, 정책·ETag 5개, Runtime OpenAPI parity 1개, spotlessCheck·assemble 통과.
+- 320px 타임라인과 390px 후속 상담·환불의 실제 렌더 문구와 입력 동작을 확인했다.
+  실제 운영 데이터·OIDC·PG 검증과 배포는 Not run이다.

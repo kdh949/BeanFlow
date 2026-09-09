@@ -33,7 +33,7 @@ const timeline = {
     source: "ORDERING",
     type: "ORDER_STATE",
     state: "COMPLETED",
-    summary: "주문 픽업 완료",
+    summary: "ORDER_STATE:COMPLETED",
     amountKrw: 7500,
     occurredAt: "2026-08-23T09:30:00Z",
   }, {
@@ -41,7 +41,7 @@ const timeline = {
     source: "PAYMENT",
     type: "REFUND_STATE",
     state: "RECONCILING",
-    summary: "환불 결과 재확인 중",
+    summary: "REFUND_STATE:RECONCILING",
     amountKrw: 7500,
     occurredAt: "2026-08-23T09:35:00Z",
   }],

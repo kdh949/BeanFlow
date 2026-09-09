@@ -1,11 +1,11 @@
 # 콘솔 리뷰의 실패·조회·타임라인 계약 보완
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-09-09`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -94,9 +94,9 @@ StoreOrderBoardIntegrationTest, RuntimeOpenApiParityTest, spotlessCheck, assembl
 
 - [x] 세 PR의 authoritative reviewThreads와 현재 branch 확인.
 - [x] 격리 worktree 및 Storybook MCP prerequisite 확인.
-- [x] #144 수정·로컬 검증·push. 원격 CI에서 수량 변경 Story의 완료 대기 보완 필요.
-- [ ] #145 수정·검증·push.
-- [ ] #146 수정·전체 검증·push.
+- [x] #144 수정·로컬 검증·push. 원격 CI 수량 변경 Story 완료 대기를 보완하고 frontend/build 재통과.
+- [x] #145 수정·검증·push.
+- [x] #146 수정·전체 로컬 검증. 검증 commit을 해당 PR에 반영.
 
 ## Surprises & Discoveries
 
@@ -110,7 +110,7 @@ StoreOrderBoardIntegrationTest, RuntimeOpenApiParityTest, spotlessCheck, assembl
 
 #144: typecheck, npm test (unit 185개, presentation 10개, product-copy 11개), check:design,
 문서/OpenAPI 검사와 Storybook MCP 환불 오류·멱등 재시도 10개 및 a11y 통과.
-전체 Storybook/제품 빌드와 전체 회귀는 마지막 PR에서 실행한다. 운영 환경 검증: Not run.
+후속 CI 실패에서 비동기 preview 완료 대기를 보강한 뒤 전체 Storybook 281개 통과. 운영 환경 검증: Not run.
 
 #145: 실제 DB에서 품목을 삭제한 테스트는 기존 guard에서도 503으로 통과했다. 상세 경계 guard를
 추가한 뒤 보드 통합 10개, 정책·ETag 5개, Runtime OpenAPI parity 1개, spotlessCheck와 assemble 통과.
@@ -119,3 +119,12 @@ StoreOrderBoardIntegrationTest, RuntimeOpenApiParityTest, spotlessCheck, assembl
 ## Revision Notes
 
 - 2026-09-09: 리뷰 범위·불변식·검증 계획 기록.
+
+- #146: SupportTimeline의 15개 type과 39개 state를 exhaustive typed map으로 변환한다.
+  주문/알림 ACCEPTED와 주문 COMPLETED의 문맥을 구별하며, UNKNOWN/RECONCILING/MANUAL_REVIEW를
+  확정 결과로 바꾸지 않는다. 미지원 서버 값은 상태 확인 필요로 명시한다.
+- #146 검증: typecheck, unit 204개, presentation 10개, product-copy 11개, check:design,
+  Storybook MCP 전체 294개(a11y 포함), Storybook build, Docs smoke 68 docs/47 states,
+  제품 build와 Sites 4개 통과. 320px 타임라인과 390px 후속 상담/환불에서 번역·동작을 브라우저 확인했다.
+- 원격 CI는 세 PR의 최신 commit에 대해 별도로 조회한다. 현재 계획은 로컬 검증된 구현 결과를 기록하며
+  CI 실행 중 상태를 Passed로 기록하지 않는다. 운영 OIDC·PG·실데이터 검증과 배포는 Not run.

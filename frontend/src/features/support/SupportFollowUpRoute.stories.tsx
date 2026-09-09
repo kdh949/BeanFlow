@@ -5,11 +5,11 @@ import { SupportFollowUpRoute } from "./SupportFollowUpRoute";
 
 const caseId = "a1000000-0000-4000-8000-000000000001";
 const supportCase = { caseId, state: "IN_PROGRESS", priority: "NORMAL", assigneeId: "a7000000-0000-4000-8000-000000000001", version: 4, openedAt: "2026-08-23T09:00:00Z", subjectLinks: [] };
-const item = { itemId: "a8000000-0000-4000-8000-000000000001", source: "ORDERING", type: "ORDER_STATE", state: "COMPLETED", summary: "주문 픽업 완료", amountKrw: 7500, occurredAt: "2026-08-23T09:30:00Z" };
+const item = { itemId: "a8000000-0000-4000-8000-000000000001", source: "ORDERING", type: "ORDER_STATE", state: "COMPLETED", summary: "ORDER_STATE:COMPLETED", amountKrw: 7500, occurredAt: "2026-08-23T09:30:00Z" };
 const caseHandler = http.get("/api/v1/support/cases/:caseId", () => HttpResponse.json(supportCase));
 const timelineHandler = http.get("/api/v1/support/cases/:caseId/timeline", ({ request }) => {
   const more = new URL(request.url).searchParams.has("cursor");
-  return HttpResponse.json({ items: [more ? { ...item, itemId: "a8000000-0000-4000-8000-000000000002", summary: "이전 상담 접수", state: "OPEN", type: "CASE_STATE", source: "SUPPORT", amountKrw: null } : item], nextCursor: more ? null : "page-two" });
+  return HttpResponse.json({ items: [more ? { ...item, itemId: "a8000000-0000-4000-8000-000000000002", summary: "CASE_STATE:OPEN", state: "OPEN", type: "CASE_STATE", source: "SUPPORT", amountKrw: null } : item], nextCursor: more ? null : "page-two" });
 });
 const meta = {
   title: "Pages/Support/Follow-up route",
@@ -31,8 +31,9 @@ export const LinkedCase: Story = {
     await expect(canvas.getByRole("link", { name: "상담 처리로 돌아가기" })).toHaveAttribute("href", `/support?caseId=${caseId}`);
     await expect(canvas.queryByText(/ORDERING|ORDER_STATE/)).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "이력 더 보기" }));
-    await expect(await canvas.findByText("이전 상담 접수")).toBeVisible();
+    await expect(await canvas.findByText("상담 접수")).toBeVisible();
     await expect(canvas.getByText("주문 픽업 완료")).toBeVisible();
+    await expect(canvas.queryByText(/ORDER_STATE:|CASE_STATE:/)).not.toBeInTheDocument();
     await expect(canvas.queryByRole("button", { name: "이력 더 보기" })).not.toBeInTheDocument();
   },
 };
