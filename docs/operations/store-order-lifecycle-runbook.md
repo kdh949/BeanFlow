@@ -252,7 +252,26 @@ ORDER BY created_at, id;
 - `beanflow.event.publication.oldest.age.seconds`
 - `beanflow.event.publication.attempt.max`
 - `beanflow.event.publication.exhaustion.count{event_type,outcome}`
+- `beanflow.event.publication.retry.pending.count`: 자동 재시도 가능한 실패 건수. 재시도 시각을
+  기다리는 건을 포함하며 예약 Analytics와 운영 case로 인계한 건은 제외한다.
+- `beanflow.event.publication.manual.review.pending.count`: 해결되지 않은 EVENT_PUBLICATION
+  운영 case 건수. worker가 같은 건을 다시 관측해도 증가하지 않는다.
+- `beanflow.event.publication.manual.review.oldest.age.seconds`: 가장 오래된 미해결 운영 case의
+  생성 시각부터 경과한 시간.
 - `beanflow.order.termination.event.routing_error.count{event_type,consumer}`
+
+기존 pending/oldest/attempt 지표는 예약 Analytics와 수동 검토를 포함한 전체 미완료
+publication을 계속 표시한다. exhaustion counter는 관측 횟수가 아니라 새 인계 횟수다.
+worker는 수동 검토 전환 transaction이 commit된 경우에만 `outcome=MANUAL_REVIEW`
+log를 기록한다. 로그의 `publicationId`는 `event_publication.id`, `eventId`는 event envelope의
+ID다. `listenerId`, `correlationId`, `caseId`, `reason`을 함께 사용해 최초 실패와 연결한다.
+로그가 반복되지 않아도 미해결 gauge가 남아 있으면 복구가 끝난 것이 아니다.
+
+개별 수동 검토 인계가 실패하면 해당 case/step transaction은 rollback되지만, 같은 batch의
+다른 인계와 자동 재시도는 계속 진행한다. worker는 backlog 지표 갱신 뒤 publication ID와
+원인을 담은 예외를 다시 던진다. 자동 재시도나 지표 조회도 실패했다면 suppressed exception의
+인계 실패까지 확인한다. tick 오류와 다른 publication의 처리 완료가 함께 관측될 수 있으며,
+실패 인계는 다음 tick 대상에 남는다. 인계 성공 log/counter는 실패 건에 기록하지 않는다.
 
 publication row를 완료 처리하거나 삭제하지 않는다. `MANUAL_REVIEW`에서는 실패한
 listener의 owner 상태와 source reference를 read-only 확인하고, 승인된 incident

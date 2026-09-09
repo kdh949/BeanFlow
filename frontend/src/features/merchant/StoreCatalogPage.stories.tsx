@@ -537,13 +537,13 @@ export const ConfigurationAvailability: Story = {
   play: async ({ canvas }) => {
     await userEvent.click(await canvas.findByRole("button", { name: /카페 라테/ }));
     const editor = within(canvas.getByRole("region", { name: "메뉴 거래 내용" }));
-    await userEvent.click(await editor.findByRole("checkbox", { name: "이 구성 판매 가능", exact: true }));
+    await userEvent.click(await editor.findByRole("checkbox", { name: "이 구성 판매 가능" }));
     await userEvent.click(editor.getByRole("button", { name: "거래 내용 저장" }));
     await expect(await editor.findByText("3번째 저장")).toBeVisible();
-    await expect(editor.getByRole("checkbox", { name: "이 구성 판매 가능", exact: true })).not.toBeChecked();
-    await userEvent.click(editor.getByRole("checkbox", { name: "이 구성 판매 가능", exact: true }));
+    await expect(editor.getByRole("checkbox", { name: "이 구성 판매 가능" })).not.toBeChecked();
+    await userEvent.click(editor.getByRole("checkbox", { name: "이 구성 판매 가능" }));
     await userEvent.click(editor.getByRole("button", { name: "거래 내용 저장" }));
     await expect(await editor.findByText("4번째 저장")).toBeVisible();
-    await expect(editor.getByRole("checkbox", { name: "이 구성 판매 가능", exact: true })).toBeChecked();
+    await expect(editor.getByRole("checkbox", { name: "이 구성 판매 가능" })).toBeChecked();
   },
 };

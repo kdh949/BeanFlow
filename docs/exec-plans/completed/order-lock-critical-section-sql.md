@@ -29,7 +29,7 @@
   dropped 142, HTTP p95 1,744.4ms, workflow p95 6,362.9ms로 기준에 실패했다.
   앞선 실행의 3분 점주 접수 기한 만료가 겹쳐 자동 거절·환불·복구와 event backlog가 발생했다.
   이 혼합 결과를 고립된 주문 부하와 직접 비교하지 않는다.
-- DB blocker 표본에는 stock/slot 대기와 audit/결제 후속 SQL을 실행하는 잠금 보유자가 함께 보인다.
+- DB blocker 표본에는 픽업 슬롯 대기와 audit/결제 후속 SQL을 실행하는 잠금 보유자가 함께 보인다.
   repository span에는 connection 획득도 포함될 수 있다. 실제 JDBC span 없는 시간을 행 잠금으로
   단정하지 않는다. 2.17s 주문 trace의 첫 DB span은 0.85s 뒤 시작해 pool 대기가 함께 존재한다.
 

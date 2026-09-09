@@ -1,22 +1,8 @@
 package io.github.kdh949.beanflow.ordering.internal
 
-import io.github.kdh949.beanflow.eventing.api.OrderAcceptedV1
-import io.github.kdh949.beanflow.eventing.api.OrderCancelledV1
-import io.github.kdh949.beanflow.eventing.api.OrderCompletedV2
-import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
-import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
-import io.github.kdh949.beanflow.eventing.api.SettlementAdjustmentCreatedV1
-import io.github.kdh949.beanflow.eventing.api.SettlementBatchConfirmedV1
-import io.github.kdh949.beanflow.eventing.api.SettlementDisputeDecidedV1
-import io.github.kdh949.beanflow.eventing.api.SettlementDisputeFiledV1
-import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
-import io.github.kdh949.beanflow.operations.api.EventPublicationReprocessingCaseOperations
-import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
-import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.modulith.events.IncompleteEventPublications
 import org.springframework.modulith.events.ResubmissionOptions
 import org.springframework.scheduling.annotation.Scheduled
@@ -24,16 +10,14 @@ import org.springframework.stereotype.Component
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 @Component
 internal class EventPublicationRecoveryWorker(
     private val publications: IncompleteEventPublications,
-    private val compensationOperations: OrderCompensationOperations,
-    private val compensationTargets: CompensationPublicationTargetRegistry,
-    private val reprocessingCaseOperations: EventPublicationReprocessingCaseOperations,
-    private val jdbcTemplate: JdbcTemplate,
+    private val queries: EventPublicationRecoveryQueries,
+    private val manualReview: EventPublicationManualReviewService,
+    private val scope: AutomaticPublicationRecoveryScope,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
     @Value("\${beanflow.event-publication.batch-size:100}")
@@ -43,6 +27,13 @@ internal class EventPublicationRecoveryWorker(
     private val pendingCount = gauge("beanflow.event.publication.pending.count")
     private val oldestAgeSeconds = gauge("beanflow.event.publication.oldest.age.seconds")
     private val maximumAttemptCount = gauge("beanflow.event.publication.attempt.max")
+    private val retryPendingCount = gauge("beanflow.event.publication.retry.pending.count")
+    private val manualReviewPendingCount = gauge("beanflow.event.publication.manual.review.pending.count")
+    private val manualReviewOldestAgeSeconds = gauge("beanflow.event.publication.manual.review.oldest.age.seconds")
+
+    init {
+        require(batchSize > 0) { "Event publication recovery batch size must be positive" }
+    }
 
     @Scheduled(
         fixedDelayString = "\${beanflow.event-publication.fixed-delay-ms:10000}",
@@ -54,144 +45,83 @@ internal class EventPublicationRecoveryWorker(
 
     fun runOnce() {
         val now = clock.instant()
-        publications.resubmitIncompletePublications(
-            ResubmissionOptions
-                .defaults()
-                .withBatchSize(batchSize)
-                .withMaxInFlight(batchSize)
-                .withFilter { publication ->
-                    if (isReservedAnalyticsTarget(publication.identifier)) {
-                        return@withFilter false
-                    }
-                    val attempts = publication.completionAttempts
-                    if (EventPublicationRetrySchedule.exhausted(attempts)) {
-                        val event = publication.event
-                        val compensationEvent = event is OrderRejectedV1 || event is OrderCancelledV1
-                        val listenerId = listenerId(publication.identifier)
-                        val stepType = if (compensationEvent) compensationTargets.find(event, listenerId) else null
-                        val reason =
-                            if (compensationEvent && stepType == null) {
-                                "PUBLICATION_TARGET_UNMAPPED"
-                            } else {
-                                "EVENT_PUBLICATION_RETRY_EXHAUSTED"
-                            }
-                        reprocessingCaseOperations.openEventPublicationCase(
-                            OpenReprocessingCaseCommand(
-                                ownerReference = "event-publication:${publication.identifier}",
-                                reason = reason,
-                                correlationId = correlationId(event, publication.identifier.toString()),
-                                now = now,
-                            ),
-                        )
-                        if (stepType != null) {
-                            compensationOperations.markPublicationManualReview(
-                                compensationOrderId(event),
-                                stepType,
-                                "EVENT_PUBLICATION_RETRY_EXHAUSTED",
-                                now,
-                            )
-                        }
-                        meterRegistry
-                            .counter(
-                                "beanflow.event.publication.exhaustion.count",
-                                "event_type",
-                                event.javaClass.simpleName.lowercase(),
-                                "outcome",
-                                if (stepType == null && compensationEvent) "unmapped" else "manual_review",
-                            ).increment()
-                        if (compensationEvent && stepType == null) {
-                            meterRegistry
-                                .counter(
-                                    "beanflow.order.termination.event.routing_error.count",
-                                    "event_type",
-                                    event.javaClass.simpleName.lowercase(),
-                                    "consumer",
-                                    "unmapped",
-                                ).increment()
-                        }
-                        logger.error(
-                            "event_publication id={} eventType={} outcome=MANUAL_REVIEW attempts={}",
-                            publication.identifier,
-                            event.javaClass.name,
-                            attempts,
-                        )
-                        false
-                    } else {
-                        EventPublicationRetrySchedule.isDue(
-                            attempts,
-                            publication.publicationDate,
-                            publication.lastResubmissionDate,
-                            now,
-                        )
-                    }
-                },
+        val handoffFailures = mutableListOf<IllegalStateException>()
+        queries.findExhaustedIds(batchSize).forEach { id ->
+            // The service proxy commits the case and compensation step before telemetry is emitted.
+            val transition =
+                try {
+                    manualReview.transition(id, now)
+                } catch (failure: Exception) {
+                    handoffFailures.add(IllegalStateException("Event publication manual-review handoff failed: $id", failure))
+                    return@forEach
+                }
+            transition?.let(::recordTransition)
+        }
+        try {
+            scope.run(now) {
+                publications.resubmitIncompletePublications(
+                    ResubmissionOptions.defaults().withBatchSize(batchSize).withMaxInFlight(batchSize),
+                )
+            }
+            updateMetrics(now)
+        } catch (failure: Exception) {
+            handoffFailures.forEach(failure::addSuppressed)
+            throw failure
+        }
+        handoffFailures.firstOrNull()?.let { failure ->
+            handoffFailures.drop(1).forEach(failure::addSuppressed)
+            throw failure
+        }
+    }
+
+    private fun recordTransition(transition: PublicationManualReviewTransition) {
+        meterRegistry
+            .counter(
+                "beanflow.event.publication.exhaustion.count",
+                "event_type",
+                transition.eventType.lowercase(),
+                "outcome",
+                if (transition.unmapped) "unmapped" else "manual_review",
+            ).increment()
+        if (transition.unmapped) {
+            meterRegistry
+                .counter(
+                    "beanflow.order.termination.event.routing_error.count",
+                    "event_type",
+                    transition.eventType.lowercase(),
+                    "consumer",
+                    "unmapped",
+                ).increment()
+        }
+        logger.error(
+            "event_publication publicationId={} eventId={} eventType={} listenerId={} correlationId={} " +
+                "caseId={} outcome=MANUAL_REVIEW attempts={} reason={}",
+            transition.publicationId,
+            transition.eventId,
+            transition.eventType,
+            transition.listenerId,
+            transition.correlationId,
+            transition.caseId,
+            transition.attempts,
+            transition.reason,
         )
-        updateMetrics(now)
     }
 
     private fun updateMetrics(now: Instant) {
-        val count =
-            jdbcTemplate.queryForObject(
-                "select count(*) from event_publication where completion_date is null",
-                Long::class.java,
-            ) ?: 0
-        val oldest =
-            jdbcTemplate.queryForObject(
-                "select min(publication_date) from event_publication where completion_date is null",
-                Instant::class.java,
-            )
-        val attempts =
-            jdbcTemplate.queryForObject(
-                "select coalesce(max(completion_attempts), 0) from event_publication where completion_date is null",
-                Long::class.java,
-            ) ?: 0
-        pendingCount.set(count)
-        oldestAgeSeconds.set(
-            oldest?.let { Duration.between(it, now).seconds.coerceAtLeast(0) } ?: 0,
-        )
-        maximumAttemptCount.set(attempts)
+        val backlog = queries.backlog()
+        pendingCount.set(backlog.pending)
+        oldestAgeSeconds.set(ageSeconds(backlog.oldest, now))
+        maximumAttemptCount.set(backlog.attempts)
+        retryPendingCount.set(backlog.retryPending)
+        val reviewBacklog = queries.manualReviewBacklog()
+        manualReviewPendingCount.set(reviewBacklog.pending)
+        manualReviewOldestAgeSeconds.set(ageSeconds(reviewBacklog.oldest, now))
     }
 
-    private fun gauge(name: String): AtomicLong = meterRegistry.gauge(name, AtomicLong(0))
+    private fun ageSeconds(
+        oldest: Instant?,
+        now: Instant,
+    ): Long = oldest?.let { Duration.between(it, now).seconds.coerceAtLeast(0) } ?: 0
 
-    private fun isReservedAnalyticsTarget(publicationId: UUID): Boolean =
-        listenerId(publicationId).startsWith(RESERVED_ANALYTICS_TARGET_PREFIX)
-
-    private fun listenerId(publicationId: UUID): String =
-        requireNotNull(
-            jdbcTemplate.queryForObject(
-                "select listener_id from event_publication where id = ?",
-                String::class.java,
-                publicationId,
-            ),
-        )
-
-    private fun compensationOrderId(event: Any): UUID =
-        when (event) {
-            is OrderRejectedV1 -> event.orderId
-            is OrderCancelledV1 -> event.orderId
-            else -> error("Not an order compensation event")
-        }
-
-    private fun correlationId(
-        event: Any,
-        fallback: String,
-    ): String =
-        when (event) {
-            is OrderRejectedV1 -> event.envelope.correlationId
-            is OrderCancelledV1 -> event.envelope.correlationId
-            is StoreAcceptanceWarningRequestedV1 -> event.envelope.correlationId
-            is OrderAcceptedV1 -> event.envelope.correlationId
-            is OrderReadyV1 -> event.envelope.correlationId
-            is OrderCompletedV2 -> event.envelope.correlationId
-            is SettlementBatchConfirmedV1 -> event.envelope.correlationId
-            is SettlementAdjustmentCreatedV1 -> event.envelope.correlationId
-            is SettlementDisputeFiledV1 -> event.envelope.correlationId
-            is SettlementDisputeDecidedV1 -> event.envelope.correlationId
-            else -> fallback
-        }
-
-    private companion object {
-        const val RESERVED_ANALYTICS_TARGET_PREFIX = "beanflow.analytics."
-    }
+    private fun gauge(name: String): AtomicLong = requireNotNull(meterRegistry.gauge(name, AtomicLong(0)))
 }

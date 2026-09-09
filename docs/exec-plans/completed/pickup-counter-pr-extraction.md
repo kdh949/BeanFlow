@@ -11,7 +11,7 @@
 
 ## Purpose / Big Picture
 
-주문 생성이 stock/slot 잠금을 보유한 동안 매번 과거 주문 count/max를 집계하던 SQL 비용을 줄인다.
+주문 생성이 픽업 슬롯 잠금을 보유한 동안 매번 과거 주문 count/max를 집계하던 SQL 비용을 줄인다.
 
 ## Current State
 

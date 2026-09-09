@@ -2,7 +2,7 @@
 
 ## 변경 근거와 동작
 
-주문 생성이 stock/slot 잠금을 보유한 동안 매번 과거 주문 count/max를 집계하던 SQL 비용을 줄인다.
+주문 생성이 픽업 슬롯 잠금을 보유한 동안 매번 과거 주문 count/max를 집계하던 SQL 비용을 줄인다.
 
 기존 counter가 있으면 `UPDATE ... RETURNING`으로 원자 증가한다. counter가 없을 때만
 기존 주문 count/max를 이용한 UPSERT를 실행한다. 동시 초기화에서는 기존 counter+1과 baseline 중
@@ -62,7 +62,7 @@ threshold는 FAILED다. 수정 후 HTTP p95와 dropped가 기존 두 측정 사�
 repository span 전체를 lock 또는 connection pool 대기로 환산하지 않는다.
 
 2026-09-07 19:16:46 UTC read-only repeatable-read 확인에서 예열141·5/s301·20/s1698건의
-native 생성/승인 수와 DB가 일치했다. stock/slot counter 불일치, 정원 초과, 중복 픽업번호는 0이었다.
+native 생성/승인 수와 DB가 일치했다. 픽업 슬롯 counter 불일치, 정원 초과, 중복 픽업번호는 0이었다.
 예열+5/s 442건은 환불/보상/정원 복구 SUCCEEDED였다. 본 실행의 비동기 환불은 당시 진행 중이었다.
 환불 이후 정산·분석 금융 이벤트의 미완료 기록은 별도 잔여 문제이며 거래 전체 완료로 표시하지 않는다.
 

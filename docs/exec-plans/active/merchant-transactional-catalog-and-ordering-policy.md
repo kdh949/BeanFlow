@@ -487,6 +487,7 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
   PR #119(`feature/merchant-store-ordering-policy <- feature/merchant-menu-catalog-lifecycle`)로 게시했다.
 - [x] 2026-09-10: main의 새 콘솔·공통 폼으로 메뉴 관리 화면을 통합하고 주문 정책과 메뉴 schema를 V72/V73으로 정합화했다.
 - [x] 2026-09-10: 통합 backend 56개 class의 329개 test와 frontend unit 211개, design/type/build, Docs 69개 entry 검증이 통과했다.
+- [x] 2026-09-10: 최신 main `7ba84ea`를 추가 통합하고 이벤트 복구·주문 종료·구조/계약 회귀 59개, frontend unit 212개와 전체 Storybook interaction/a11y 322개를 검증했다. 매장 전환 왕복 뒤 지연 저장 응답이 새 정책·편집 초안을 덮어쓰지 않는 회귀도 포함한다.
 - [ ] Milestone 3 combined verification과 completion evidence 완료.
 
 ## Surprises & Discoveries
@@ -513,6 +514,8 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
 
 ## Decision Log
 
+- 2026-09-10: 추가 병합된 main `7ba84ea`의 ADR-010 자동 복구·수동 검토 인계 정책을 유지한다. 현재 주문 종료 consumer 집합에 맞춘 exact target 매핑과 멱등성 검증을 함께 실행한다.
+
 - 2026-09-10: main의 canonical navy/coral 콘솔과 폼을 사용해 메뉴 관리를 통합한다. `/store/management`의 메뉴 탭은 실제 카탈로그 편집기를 제공하고 `/store/catalog`도 같은 source를 사용한다. main의 공유 픽업 사용량 fingerprint 제외를 유지하며 메뉴·옵션은 수동 판매 상태로 판단한다.
 - 2026-09-10: main baefa035의 V71까지 유지하고 미통합 Store/Menu schema를 V72/V73으로 재번호화한다. 다른 open PR과 원래 checkout의 migration 변경이 없음을 확인했다. PR 150 통합 중 이 작업이 migration writer를 소유한다.
 
@@ -531,9 +534,11 @@ Passed/Failed/Not run/Blocked, 다음 PR dependency와 size 판단을 포함한�
 
 2026-09-10 통합 검증은 main `baefa035`를 포함한다. `/store/management`에서 canonical 콘솔과 폼을 통해
 메뉴·옵션·선택 조합의 가격과 수동 판매 상태, 메뉴 생성·전체 교체·보관, 매장 주문 정책을 관리한다.
-320px와 390px에서 가로 넘침 없이 편집할 수 있음을 확인했다. backend 329개 test와 bootJar, CI shard
+320px, 390px, 1280px에서 가로 넘침 없이 편집할 수 있음을 확인했다. backend 329개 test와 bootJar, CI shard
 목록 검증, frontend unit 211개, presentation/copy/design/type/build, Sites 4개, Storybook Docs 69개 entry가
-통과했다. 전체 Storybook interaction/a11y와 최신 main의 이벤트 복구 변경 검증, 원격 CI는 별도로 확인한다.
+통과했다. 전체 Storybook interaction/a11y도 322개 모두 통과했다. 최신 main `7ba84ea` 통합 후 이벤트 복구·주문 종료·모듈/API 계약 59개와 spotlessCheck/bootJar를 추가 검증했다.
+매장 전환 저장 경합 보완 후 frontend unit 212개, type/design/build와 카탈로그 29개 interaction/a11y가 통과했다.
+최종 head의 원격 CI 및 전체 backend suite는 이 로컬 검증과 구분한다.
 아래 Milestone 1/2 기록의 migration 번호와 CI 상태는 당시 검증 기록이며 현재 schema는 V72/V73이다.
 
 Milestone 1은 PR #118에서 V69 Store ordering policy version과 90일 command replay 원장, authenticated GET/PUT,
@@ -565,3 +570,5 @@ interaction+a11y와 static Storybook build가 통과했다. local docs/OpenAPI, 
 - 2026-08-27: Store/Menu stale expected version을 기존 `MERCHANT_CONTENT_STALE` 409로 통일했다.
 - 2026-08-27: V69 Store 주문 정책 vertical slice와 `/store/catalog` 소비자를 stacked PR #118로 게시했다.
 - 2026-08-27: V70 Menu catalogue 거래 계약과 점주 소비 UI를 stacked PR #119로 게시했다.
+
+- 2026-09-10: main의 신규 콘솔 디자인, 공유 픽업 가용성 및 이벤트 복구 정책을 카탈로그와 통합하고 실제 실행한 로컬 회귀 결과를 기록했다.

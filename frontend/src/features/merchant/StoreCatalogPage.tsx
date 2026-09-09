@@ -44,7 +44,6 @@ export function StoreCatalogPage({ embedded = false }: { embedded?: boolean }) {
         params: { path: { storeId: requestedStoreId } },
       }));
       if (policyRequest.current !== requestId || activeStoreId.current !== requestedStoreId) return;
-      if (activeStoreId.current !== storeId) return;
       setPolicy(next);
       setAcceptingOrders(next.acceptingOrders);
       setPickupEnabled(next.pickupEnabled);
@@ -76,6 +75,7 @@ export function StoreCatalogPage({ embedded = false }: { embedded?: boolean }) {
 
   async function save() {
     if (!storeId || !policy || policy.storeId !== storeId) return;
+    const requestId = policyRequest.current;
     const body = { acceptingOrders, pickupEnabled, expectedVersion: policy.version };
     const fingerprint = JSON.stringify({ storeId, ...body });
     setSaving(true);
@@ -92,20 +92,20 @@ export function StoreCatalogPage({ embedded = false }: { embedded?: boolean }) {
         },
         body,
       }));
-      if (activeStoreId.current !== storeId) return;
+      if (policyRequest.current !== requestId || activeStoreId.current !== storeId) return;
       setPolicy(next);
       setAcceptingOrders(next.acceptingOrders);
       setPickupEnabled(next.pickupEnabled);
       setSaved(true);
       intent.current.complete();
     } catch (failure) {
-      if (activeStoreId.current !== storeId) return;
+      if (policyRequest.current !== requestId || activeStoreId.current !== storeId) return;
       if (failure instanceof ApiRequestError && failure.code === "IDEMPOTENCY_KEY_REUSED") {
         intent.current.rotate();
       }
       setSaveError(failure);
     } finally {
-      if (activeStoreId.current === storeId) setSaving(false);
+      if (policyRequest.current === requestId && activeStoreId.current === storeId) setSaving(false);
     }
   }
 

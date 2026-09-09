@@ -1,5 +1,8 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.eventing.api.BenefitRestorationPolicySnapshotV1
@@ -14,10 +17,14 @@ import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
 import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
@@ -31,6 +38,7 @@ import org.springframework.modulith.events.IncompleteEventPublications
 import org.springframework.modulith.events.ResubmissionOptions
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import java.sql.Timestamp
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -38,6 +46,8 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -66,9 +76,16 @@ internal class EventPublicationRecoveryIntegrationTest
         private val policies: ExpiredBenefitRestorationPolicyOperations,
         private val jdbcTemplate: JdbcTemplate,
         private val clock: PublicationRecoveryTestClock,
+        private val queries: EventPublicationRecoveryQueries,
+        private val manualReview: EventPublicationManualReviewService,
+        private val scope: AutomaticPublicationRecoveryScope,
+        private val meters: MeterRegistry,
         transactionManager: PlatformTransactionManager,
     ) {
         private val transactions = TransactionTemplate(transactionManager)
+        private val log = LoggerFactory.getLogger(EventPublicationRecoveryWorker::class.java) as Logger
+        private val captured = ListAppender<ILoggingEvent>()
+        private val seededPublicationIds = mutableListOf<UUID>()
 
         @BeforeEach
         fun cleanDatabase() {
@@ -81,10 +98,13 @@ internal class EventPublicationRecoveryIntegrationTest
             )
             failingListener.reset()
             clock.reset()
+            captured.start()
+            log.addAppender(captured)
         }
 
         @AfterEach
         fun completeScriptedPublication() {
+            seededPublicationIds.forEach { jdbcTemplate.update("DELETE FROM event_publication WHERE id = ?", it) }
             jdbcTemplate.update(
                 "DELETE FROM event_publication WHERE event_type = ?",
                 OrderCancelledV1::class.java.name,
@@ -101,6 +121,12 @@ internal class EventPublicationRecoveryIntegrationTest
                     incompletePublicationCount() == 0L
                 }
             }
+        }
+
+        @AfterEach
+        fun detachLogCapture() {
+            log.detachAppender(captured)
+            captured.stop()
         }
 
         @Test
@@ -150,6 +176,7 @@ internal class EventPublicationRecoveryIntegrationTest
 
         @Test
         fun `five failed resubmissions open one event publication manual review case`() {
+            val exhaustionBefore = exhaustionCount()
             val event =
                 OrderReadyV1(
                     envelope =
@@ -197,7 +224,258 @@ internal class EventPublicationRecoveryIntegrationTest
             assertThat(eventPublicationManualReviewCount(event.envelope.correlationId)).isEqualTo(1)
             assertThat(notificationCount(event.envelope.eventId)).isEqualTo(1)
             assertThat(inboxCount(event.customerId)).isEqualTo(1)
+            repeat(180) { recoveryWorker.runOnce() }
+            assertThat(exhaustionCount() - exhaustionBefore).isEqualTo(1.0)
+            assertThat(manualReviewLogs()).hasSize(1)
+            assertThat(manualReviewLogs().single()).contains("eventId=${event.envelope.eventId}", "publicationId=", "listenerId=")
+            assertThat(gauge("beanflow.event.publication.manual.review.pending.count")).isEqualTo(1.0)
+            assertThat(gauge("beanflow.event.publication.retry.pending.count")).isZero()
+            assertThat(gauge("beanflow.event.publication.pending.count")).isEqualTo(1.0)
+            assertThat(queries.findExhaustedIds(100)).isEmpty()
+
+            // A new worker has no memory of previous ticks and must still respect the durable handoff.
+            val freshMeters = SimpleMeterRegistry()
+            try {
+                clock.advance(Duration.ofMinutes(30))
+                EventPublicationRecoveryWorker(publications, queries, manualReview, scope, clock, freshMeters, 100).runOnce()
+                assertThat(freshMeters.find("beanflow.event.publication.exhaustion.count").counter()).isNull()
+                assertThat(freshMeters.get("beanflow.event.publication.manual.review.oldest.age.seconds").gauge().value())
+                    .isEqualTo(1800.0)
+            } finally {
+                freshMeters.close()
+            }
+            assertThat(manualReviewLogs()).hasSize(1)
+            assertThat(failingListener.callCount()).isEqualTo(6)
         }
+
+        @Test
+        fun `blocked publications are excluded before the automatic recovery batch limit`() {
+            val event = publishFailingReady()
+            val publicationId = incompletePublicationId()
+            seedBlockedPublications(publicationId, "manual", 125)
+            seedBlockedPublications(publicationId, "reserved", 125)
+            seedBlockedPublications(publicationId, "not-due", 125)
+            clock.advance(Duration.ofSeconds(12))
+            failingListener.allowSuccess()
+
+            recoveryWorker.runOnce()
+
+            await("due publication behind blocked rows to complete") {
+                jdbcTemplate.queryForObject(
+                    "SELECT completion_date IS NOT NULL FROM event_publication WHERE id = ?",
+                    Boolean::class.java,
+                    publicationId,
+                ) == true
+            }
+            assertThat(failingListener.callCount()).isEqualTo(2)
+            assertThat(incompletePublicationCount()).isEqualTo(375)
+            assertThat(notificationCount(event.envelope.eventId)).isEqualTo(1)
+            assertThat(queries.findExhaustedIds(100)).isEmpty()
+            assertThat(manualReviewLogs()).isEmpty()
+            assertThat(gauge("beanflow.event.publication.manual.review.pending.count")).isEqualTo(125.0)
+            assertThat(gauge("beanflow.event.publication.retry.pending.count")).isEqualTo(125.0)
+        }
+
+        @Test
+        fun `concurrent workers hand off a publication once`() {
+            val event = publishFailingReady()
+            jdbcTemplate.update("UPDATE event_publication SET completion_attempts = 6 WHERE completion_date IS NULL")
+            val before = exhaustionCount()
+            val start = CountDownLatch(1)
+            Executors.newFixedThreadPool(2).use { executor ->
+                val runs =
+                    (1..2).map {
+                        executor.submit {
+                            start.await()
+                            recoveryWorker.runOnce()
+                        }
+                    }
+                start.countDown()
+                runs.forEach { it.get(10, TimeUnit.SECONDS) }
+            }
+            assertThat(eventPublicationManualReviewCount(event.envelope.correlationId)).isEqualTo(1)
+            assertThat(exhaustionCount() - before).isEqualTo(1.0)
+            assertThat(manualReviewLogs()).hasSize(1)
+            assertThat(failingListener.callCount()).isEqualTo(1)
+            assertThat(incompletePublicationAttemptCount()).isEqualTo(6)
+        }
+
+        @Test
+        fun `failed compensation handoff rolls back while due publications keep retrying`() {
+            val ready = publishFailingReady()
+            val readyPublicationId = incompletePublicationId()
+            val fixture = cancellationWithMissingPickup()
+            await("ready and pickup failures") {
+                incompletePublicationCount() == 2L &&
+                    jdbcTemplate.queryForObject(
+                        "SELECT count(*) FROM event_publication WHERE completion_date IS NULL AND status = 'FAILED'",
+                        Long::class.java,
+                    ) == 2L
+            }
+            jdbcTemplate.update(
+                "UPDATE event_publication SET completion_attempts = 6, publication_date = ? " +
+                    "WHERE completion_date IS NULL AND id <> ?",
+                Timestamp.from(clock.instant().minusSeconds(60)),
+                readyPublicationId,
+            )
+            val exhaustedId = queries.findExhaustedIds(100).single()
+            val publicationBefore = jdbcTemplate.queryForMap("SELECT * FROM event_publication WHERE id = ?", exhaustedId)
+            val before = requireNotNull(compensationOperations.findByOrderId(fixture.orderId)).steps
+            jdbcTemplate.execute(
+                """
+                CREATE FUNCTION test_reject_publication_handoff() RETURNS trigger LANGUAGE plpgsql AS '
+                BEGIN RAISE EXCEPTION ''SCRIPTED_HANDOFF_FAILURE''; END'
+                """.trimIndent(),
+            )
+            try {
+                jdbcTemplate.execute(
+                    """
+                    CREATE TRIGGER test_reject_publication_handoff BEFORE UPDATE ON operations_order_compensation_step
+                    FOR EACH ROW WHEN (NEW.state = 'MANUAL_REVIEW') EXECUTE FUNCTION test_reject_publication_handoff()
+                    """.trimIndent(),
+                )
+                listOf(12L, 31L).forEachIndexed { attempt, seconds ->
+                    clock.advance(Duration.ofSeconds(seconds))
+                    if (attempt == 1) failingListener.allowSuccess()
+
+                    assertThatThrownBy { recoveryWorker.runOnce() }
+                        .hasStackTraceContaining("SCRIPTED_HANDOFF_FAILURE")
+
+                    await("due publication to progress despite failed handoff on tick ${attempt + 1}") {
+                        failingListener.callCount() == attempt + 2 &&
+                            jdbcTemplate.queryForObject(
+                                "SELECT status FROM event_publication WHERE id = ?",
+                                String::class.java,
+                                readyPublicationId,
+                            ) == if (attempt == 0) "FAILED" else "COMPLETED"
+                    }
+                    assertThat(reprocessingReasonCount("EVENT_PUBLICATION_RETRY_EXHAUSTED")).isZero()
+                    assertThat(requireNotNull(compensationOperations.findByOrderId(fixture.orderId)).steps).isEqualTo(before)
+                    assertThat(jdbcTemplate.queryForMap("SELECT * FROM event_publication WHERE id = ?", exhaustedId))
+                        .isEqualTo(publicationBefore)
+                    assertThat(manualReviewLogs()).isEmpty()
+                    assertThat(queries.findExhaustedIds(100)).containsExactly(exhaustedId)
+                    assertThat(gauge("beanflow.event.publication.manual.review.pending.count")).isZero()
+                    assertThat(gauge("beanflow.event.publication.attempt.max")).isEqualTo(6.0)
+                    assertThat(scope.currentTime()).isNull()
+                }
+                assertThat(notificationCount(ready.envelope.eventId)).isEqualTo(1)
+                assertThat(inboxCount(ready.customerId)).isEqualTo(1)
+            } finally {
+                jdbcTemplate.execute("DROP TRIGGER IF EXISTS test_reject_publication_handoff ON operations_order_compensation_step")
+                jdbcTemplate.execute("DROP FUNCTION test_reject_publication_handoff()")
+            }
+            recoveryWorker.runOnce()
+            assertThat(reprocessingReasonCount("EVENT_PUBLICATION_RETRY_EXHAUSTED")).isEqualTo(1)
+            assertThat(manualReviewLogs()).hasSize(1)
+            assertThat(
+                requireNotNull(compensationOperations.findByOrderId(fixture.orderId))
+                    .steps
+                    .single { it.type == OrderCompensationStepType.PICKUP }
+                    .attemptCount,
+            ).isZero()
+        }
+
+        @Test
+        fun `automatic query scope is cleared on failure and preserves explicit replay`() {
+            publishFailingReady()
+            assertThatThrownBy { scope.run(clock.instant()) { error("SCRIPTED_SCOPE_FAILURE") } }
+                .hasMessage("SCRIPTED_SCOPE_FAILURE")
+            assertThat(scope.currentTime()).isNull()
+            jdbcTemplate.update("UPDATE event_publication SET completion_attempts = 6 WHERE completion_date IS NULL")
+            recoveryWorker.runOnce()
+            val id = incompletePublicationId()
+            failingListener.allowSuccess()
+            publications.resubmitIncompletePublications { it.identifier == id }
+            await("explicit exact-publication replay to complete") { incompletePublicationCount() == 0L }
+            assertThat(failingListener.callCount()).isEqualTo(2)
+        }
+
+        private fun publishFailingReady(): OrderReadyV1 {
+            val event =
+                OrderReadyV1(
+                    envelope =
+                        EventEnvelope(
+                            UUID.randomUUID(),
+                            "OrderReadyV1",
+                            UUID.randomUUID(),
+                            1,
+                            clock.instant(),
+                            1,
+                            "recovery-test:${UUID.randomUUID()}",
+                            "recovery-test",
+                        ),
+                    orderId = UUID.randomUUID(),
+                    customerId = UUID.randomUUID(),
+                    storeId = UUID.randomUUID(),
+                    readyAt = clock.instant(),
+                )
+            transactions.executeWithoutResult { eventPublisher.publishEvent(event) }
+            await("scripted ready failure") { incompletePublicationCount() == 1L && incompletePublicationStatus() == "FAILED" }
+            return event
+        }
+
+        private fun seedBlockedPublications(
+            template: UUID,
+            kind: String,
+            count: Int,
+        ) {
+            repeat(count) {
+                val id = UUID.randomUUID()
+                seededPublicationIds.add(id)
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO event_publication
+                        (id, listener_id, event_type, serialized_event, publication_date, status, completion_attempts, last_resubmission_date)
+                    SELECT ?, CASE WHEN ? = 'reserved' THEN 'beanflow.analytics.reserved-test' ELSE listener_id END,
+                           event_type, serialized_event, ?, 'FAILED', ?, ? FROM event_publication WHERE id = ?
+                    """.trimIndent(),
+                    id,
+                    kind,
+                    Timestamp.from(clock.instant().minusSeconds(7200)),
+                    if (kind == "manual") 6 else 2,
+                    Timestamp.from(clock.instant()),
+                    template,
+                )
+                if (kind == "manual") {
+                    jdbcTemplate.update(
+                        """
+                        INSERT INTO operations_reprocessing_case
+                            (id, case_type, owner_reference, status, reason, correlation_id, created_at, updated_at, version)
+                        VALUES (?, 'EVENT_PUBLICATION', ?, 'MANUAL_REVIEW', 'EVENT_PUBLICATION_RETRY_EXHAUSTED',
+                                'blocked-fixture', ?, ?, 0)
+                        """.trimIndent(),
+                        UUID.randomUUID(),
+                        "event-publication:$id",
+                        Timestamp.from(clock.instant()),
+                        Timestamp.from(clock.instant()),
+                    )
+                }
+            }
+        }
+
+        private fun incompletePublicationId(): UUID =
+            requireNotNull(
+                jdbcTemplate.queryForObject(
+                    "SELECT id FROM event_publication WHERE completion_date IS NULL",
+                    UUID::class.java,
+                ),
+            )
+
+        private fun exhaustionCount(): Double =
+            meters
+                .find("beanflow.event.publication.exhaustion.count")
+                .tag("event_type", "orderreadyv1")
+                .tag("outcome", "manual_review")
+                .counter()
+                ?.count() ?: 0.0
+
+        private fun gauge(name: String): Double = meters.get(name).gauge().value()
+
+        private fun manualReviewLogs(): List<String> =
+            captured.list
+                .map { it.formattedMessage }
+                .filter { it.contains("outcome=MANUAL_REVIEW") }
 
         @Test
         fun `reserved analytics target remains durable without consuming retry attempts`() {

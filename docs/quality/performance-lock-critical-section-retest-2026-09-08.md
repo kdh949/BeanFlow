@@ -10,7 +10,7 @@
 
 ## 원인과 변경
 
-견적 v3의 사용량 무효화 해결 뒤 관측한 stock/slot lock wait는 실제 DB 대기였다. 다만 대기 요청의
+견적 v3의 사용량 무효화 해결 뒤 관측한 픽업 슬롯 lock wait는 실제 DB 대기였다. 다만 대기 요청의
 trace만으로 특정 SQL이 유일한 원인이라고 할 수 없다. 추가 실험에서 다음을 구분했다.
 
 1. **잠금 보유 중 불필요한 SQL:** 픽업번호 발급이 매 주문마다 과거 주문/slot의 count/max를
@@ -49,7 +49,7 @@ Toss 멱등키의 길이 계약은 [공식 헤더 문서](https://docs.tosspayme
 ## 개선 전 실제 부하
 
 모든 실행은 public HTTPS → WAF → API → 동일 PostgreSQL/내부 Toss driver 경로다. 합성 고객 20명,
-같은 매장·메뉴·공유 stock 하나와 미래 pickup slot 네 개, 수량 1, 포인트/쿠폰 없음,
+같은 매장·메뉴와 미래 pickup slot 네 개, 수량 1, 포인트/쿠폰 없음,
 quote → order → payment attempt → confirmation의 HTTP 4회 workflow를 사용한다.
 부하 fixture/dataset과 API 2 GiB, PostgreSQL 1.5 GiB, Hikari 10, trace sampling 1.0,
 wall profile 10ms를 고정했다. local compile/test와 실제 부하를 겹치지 않았다.
@@ -74,12 +74,12 @@ lock 최대 5였다. event backlog 0이 모든 비동기 작업의 완료를 뜻
 이 최대값은 해당 실행 범위의 Prometheus 표본이며 모든 순간의 정확한 peak 보장은 아니다.
 
 예시 trace `cf41c1a71e47eaeba646dfa7bb73b75`의 총 시간은 2171.8ms다.
-첫 DB span이 요청 시작 851.8ms 뒤 나타나며, 실제 pickup/stock SELECT는 각각 133.4/45.8ms다.
+첫 DB span이 요청 시작 851.8ms 뒤 나타나며, 실제 pickup SELECT는 133.4ms다.
 repository span의 시간 전체를 행 잠금 대기로 간주하지 않는다. SQL 사이의 pool 획득 대기와
 DB 잠금 대기를 함께 봐야 한다.
 
 2026-09-07 18:07:31 UTC의 read-only repeatable-read 검증에서 위 본 실행 세 개의 native 생성·승인
-수와 DB distinct order 수가 일치했다. stock/slot counter 불일치, 정원 초과, 중복 pickup 번호,
+수와 DB distinct order 수가 일치했다. 픽업 슬롯 counter 불일치, 정원 초과, 중복 pickup 번호,
 당시 lock waiter는 모두 0이었다. 세 실행의 3,678건은 자동 거절 후 환불 UNKNOWN으로 남아 있었으며,
 이것을 환불 완료로 기록하지 않는다.
 

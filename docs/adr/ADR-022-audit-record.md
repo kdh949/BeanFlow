@@ -29,7 +29,7 @@ BR-30은 금액, 포인트, 슬롯, terminal 주문 상태, 정산, 이의 판�
 - 한 transaction summary로 합치지 않고 상태가 바뀐 Aggregate target마다 별도
   AuditRecord를 append한다.
 - 같은 transaction의 record는 correlationId와 source reference로 묶는다.
-- 최소 action은 `ORDER_CREATED`, `PICKUP_RESERVED`, `STOCK_RESERVED`,
+- 최소 action은 `ORDER_CREATED`, `PICKUP_RESERVED`,
   `COUPON_RESERVED`, `POINTS_RESERVED`, `BENEFIT_ONLY_PAYMENT_APPROVED`,
   각 reservation `CONFIRMED`, `ORDER_EXPIRED`, `PICKUP_EXPIRED`,
   `COUPON_RELEASED`, `POINTS_RELEASED`다.
