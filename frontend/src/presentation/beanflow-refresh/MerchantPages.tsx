@@ -100,6 +100,9 @@ function RefundWorkspace({ storeId, orderReference }: { storeId: string; orderRe
   const [pricing, setPricing] = useState(false);
   const [previewValid, setPreviewValid] = useState(true);
   const [retryingResult, setRetryingResult] = useState(false);
+  const [processingRequest, setProcessingRequest] = useState(false);
+  const [quantityChanged, setQuantityChanged] = useState(false);
+  const requestLocked = retryingResult || processingRequest;
   const inFlight = useRef(false);
   const submitted = useRef<{ body: { lines: { lineSequence: number; quantity: number }[]; previewVersion: string; reason: string }; key: string } | null>(null);
   const intent = useRef(new SubmissionIntent());
@@ -119,16 +122,16 @@ function RefundWorkspace({ storeId, orderReference }: { storeId: string; orderRe
     finally { if (currentGeneration === generation.current) setPricing(false); }
   }
   function change(line: PreviewLine, quantity: number) {
-    if (inFlight.current || result || retryingResult) return;
+    if (inFlight.current || result || requestLocked) return;
     const bounded = Math.max(0, Math.min(quantity, line.remainingQuantity));
     intent.current.rotate(); void reprice({ ...selection, [line.lineSequence]: bounded });
   }
   async function refresh() {
-    if (inFlight.current || retryingResult) return;
+    if (inFlight.current || requestLocked) return;
     setStale(false); await reprice(result ? {} : selection, Boolean(result));
   }
   async function submit() {
-    if (inFlight.current || result || !current || (!retryingResult && (!previewValid || pricing || !reason.trim()))) return;
+    if (inFlight.current || result || !current || (!requestLocked && (!previewValid || pricing || !reason.trim()))) return;
     if (!submitted.current) {
       const lines = current.lines.filter((line) => line.selectedQuantity > 0).map((line) => ({ lineSequence: line.lineSequence, quantity: line.selectedQuantity }));
       if (!lines.length) return;
@@ -136,23 +139,40 @@ function RefundWorkspace({ storeId, orderReference }: { storeId: string; orderRe
       submitted.current = { body, key: intent.current.keyFor(JSON.stringify({ storeId, orderReference, ...body })) };
     }
     const attempt = submitted.current;
-    inFlight.current = true; setSubmitting(true); setFailure(null); setStale(false);
+    inFlight.current = true; setSubmitting(true); setFailure(null); setStale(false); setQuantityChanged(false);
+    let commandSent = false;
     try {
-      const response = unwrap(await merchantApi.POST("/stores/{storeId}/orders/{orderReference}/refunds", { params: { path: { storeId, orderReference }, header: { "Idempotency-Key": attempt.key, ...(await merchantCsrfHeader()) } }, body: attempt.body }));
-      setResult(response); setRetryingResult(false); setPreviewValid(false);
+      const csrfHeader = await merchantCsrfHeader();
+      commandSent = true;
+      const response = unwrap(await merchantApi.POST("/stores/{storeId}/orders/{orderReference}/refunds", { params: { path: { storeId, orderReference }, header: { "Idempotency-Key": attempt.key, ...csrfHeader } }, body: attempt.body }));
+      setResult(response); setRetryingResult(false); setProcessingRequest(false); setPreviewValid(false);
     } catch (error) {
-      if (error instanceof ApiRequestError && error.code === "REFUND_PREVIEW_STALE") {
-        submitted.current = null; intent.current.rotate(); setRetryingResult(false); setStale(true); await reprice(selection);
-      } else if (error instanceof ApiRequestError && (error.code === "IDEMPOTENCY_KEY_REUSED" || error.code === "REFUND_OUTCOME_UNRESOLVED")) {
-        submitted.current = null; intent.current.rotate(); setRetryingResult(false); setPreviewValid(false); setFailure(error);
-      } else { setRetryingResult(true); setFailure(error); }
+      if (!commandSent && requestLocked) {
+        // A failed CSRF refresh cannot settle a previously submitted command.
+        setFailure(error); return;
+      }
+      setRetryingResult(false); setProcessingRequest(false);
+      if (error instanceof ApiRequestError && error.code === "IDEMPOTENCY_REQUEST_IN_PROGRESS") {
+        setProcessingRequest(true); setFailure(error);
+      } else if (commandSent && (error instanceof TypeError || (error instanceof DOMException && error.name === "AbortError"))) {
+        // Fetch transport failures have no server decision. Preserve this exact command.
+        setRetryingResult(true); setFailure(error);
+      } else {
+        submitted.current = null; intent.current.rotate(); setPreviewValid(false);
+        if (error instanceof ApiRequestError && error.code === "REFUND_PREVIEW_STALE") {
+          setStale(true); await reprice(selection);
+        } else if (error instanceof ApiRequestError && error.code === "REFUND_QUANTITY_UNAVAILABLE") {
+          // An empty preview fetches the current selectable units without reducing a refund automatically.
+          setQuantityChanged(true); await reprice({});
+        } else { setFailure(error); }
+      }
     } finally { inFlight.current = false; setSubmitting(false); }
   }
 
   if (resource.state.status === "loading" && !preview) return <div className="bfr-merchant-page"><RefreshLoading label="환불 가능 품목을 불러오는 중" /></div>;
   if (resource.state.status === "failed" && !preview) return <div className="bfr-merchant-page"><RefreshError error={resource.state.error} retry={resource.reload} /></div>;
   if (!current) return <div className="bfr-merchant-page"><RefreshLoading label="환불 가능 품목을 불러오는 중" /></div>;
-  const editingLocked = submitting || Boolean(result) || retryingResult;
+  const editingLocked = submitting || Boolean(result) || requestLocked;
   const selectedTotal = current.totals.cashRefundKrw + current.totals.pointsRestorationKrw;
   return <div className="bfr-merchant-page bfr-refund-page">
     <Link className="bfr-back-link" to="/store"><ArrowLeft size={16} />주문 관리로</Link>
@@ -160,17 +180,19 @@ function RefundWorkspace({ storeId, orderReference }: { storeId: string; orderRe
     {result ? <RefundOutcome result={result} /> : null}
     <section className="bfr-refund-context"><header><h2>환불 대상 주문</h2><StatusText state={current.orderContext.status} /></header><dl><div><dt>주문 번호</dt><dd>{current.orderReference}</dd></div><div><dt>주문 시각</dt><dd>{shortDateTime.format(new Date(current.orderContext.orderedAt))}</dd></div><div><dt>픽업 시간</dt><dd>{shortDateTime.format(new Date(current.orderContext.pickupWindow.startsAt))}–{shortTime.format(new Date(current.orderContext.pickupWindow.endsAt))}</dd></div><div><dt>결제 방식</dt><dd>{current.orderContext.paymentKind === "ONE_TIME_EXTERNAL" ? "일회성 결제" : "혜택 전액 사용"}</dd></div><div><dt>결제 금액</dt><dd>{won.format(current.orderContext.pricing.payableKrw)}</dd></div></dl></section>
     <div className="bfr-refund-workspace">
-      <section className="bfr-refund-lines"><header><h2>{result || retryingResult ? "환불 요청 품목" : "환불 품목"}</h2><span>{result || retryingResult ? "요청 시점 기준 금액" : "현재 환불 가능 금액"}</span></header>{current.lines.map((line) => <article key={line.lineSequence}><div><strong>{line.menuName}</strong><small>{result || retryingResult ? "요청 전 환불 가능" : "남은 환불 가능"} {line.remainingQuantity}개</small></div><QuantityStepper disabled={editingLocked} value={selection[line.lineSequence] ?? line.selectedQuantity} min={0} max={line.remainingQuantity} label={`${line.menuName} 환불 수량`} onChange={(value) => change(line, value)} /><dl><div><dt>현금</dt><dd>{won.format(line.cashRefundKrw)}</dd></div><div><dt>포인트</dt><dd>{won.format(line.pointsRestorationKrw)}</dd></div><div><dt>쿠폰 귀속</dt><dd>{won.format(line.couponAttributionKrw)}</dd></div></dl></article>)}</section>
+      <section className="bfr-refund-lines"><header><h2>{result || requestLocked ? "환불 요청 품목" : "환불 품목"}</h2><span>{result || requestLocked ? "요청 시점 기준 금액" : "현재 환불 가능 금액"}</span></header>{current.lines.map((line) => <article key={line.lineSequence}><div><strong>{line.menuName}</strong><small>{result || requestLocked ? "요청 전 환불 가능" : "남은 환불 가능"} {line.remainingQuantity}개</small></div><QuantityStepper disabled={editingLocked} value={selection[line.lineSequence] ?? line.selectedQuantity} min={0} max={line.remainingQuantity} label={`${line.menuName} 환불 수량`} onChange={(value) => change(line, value)} /><dl><div><dt>현금</dt><dd>{won.format(line.cashRefundKrw)}</dd></div><div><dt>포인트</dt><dd>{won.format(line.pointsRestorationKrw)}</dd></div><div><dt>쿠폰 귀속</dt><dd>{won.format(line.couponAttributionKrw)}</dd></div></dl></article>)}</section>
       <aside className="bfr-refund-side">
         <section className="bfr-refund-summary"><div><span>현금 환불</span><strong>{won.format(current.totals.cashRefundKrw)}</strong></div><div><span>포인트 복원</span><strong>{won.format(current.totals.pointsRestorationKrw)}</strong></div><p>쿠폰 귀속액 {won.format(current.totals.couponAttributionKrw)}은 쿠폰 복원을 의미하지 않습니다.</p></section>
         {!current.lines.some((line) => line.remainingQuantity > 0) ? <p className="bfr-refund-alert" role="status">이 주문에는 남은 환불 가능 수량이 없습니다.</p> : null}
         {stale ? <p className="bfr-refund-alert" role="alert">다른 요청이 먼저 처리되어 금액이 바뀌었습니다. 새 금액을 확인한 뒤 다시 실행해 주세요.</p> : null}
+        {quantityChanged ? <p className="bfr-refund-alert" role="alert">환불 가능 수량이 바뀌었습니다. 새 수량을 확인하고 환불 품목을 다시 선택해 주세요.</p> : null}
         {pricing ? <p role="status">선택한 품목의 금액을 확인하는 중</p> : null}
-        {failure ? <RefreshError error={failure} retry={retryingResult ? undefined : () => void refresh()} /> : null}
+        {failure ? <RefreshError error={failure} retry={requestLocked ? undefined : () => void refresh()} /> : null}
       </aside>
     </div>
     {retryingResult ? <FeedbackState kind="error" title="환불 요청 결과를 확인하지 못했습니다" description="입력한 품목과 사유를 유지했습니다. 같은 요청으로 결과를 확인해 주세요." action={<Button loading={submitting} onClick={() => void submit()}>같은 요청 결과 확인</Button>} /> : null}
-    <form className="bfr-refund-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}><TextAreaField disabled={editingLocked} label="환불 사유" value={reason} required maxLength={500} placeholder="환불 사유를 입력해 주세요" onValueChange={(value) => { setReason(value); intent.current.rotate(); }} /><div><Button variant="secondary" type="button" disabled={submitting || pricing || retryingResult} onClick={() => void refresh()}>{result ? "환불 가능 상태 확인" : "금액 다시 계산"}</Button><Button variant="brand" type="submit" loading={submitting} disabled={editingLocked || pricing || !previewValid || selectedTotal <= 0 || !reason.trim()}><RotateCcw size={16} />부분 환불 실행</Button></div></form>
+    {processingRequest ? <Button loading={submitting} onClick={() => void submit()}>처리 상태 다시 확인</Button> : null}
+    <form className="bfr-refund-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}><TextAreaField disabled={editingLocked} label="환불 사유" value={reason} required maxLength={500} placeholder="환불 사유를 입력해 주세요" onValueChange={(value) => { setReason(value); intent.current.rotate(); }} /><div><Button variant="secondary" type="button" disabled={submitting || pricing || requestLocked} onClick={() => void refresh()}>{result ? "환불 가능 상태 확인" : "금액 다시 계산"}</Button><Button variant="brand" type="submit" loading={submitting} disabled={editingLocked || pricing || !previewValid || selectedTotal <= 0 || !reason.trim()}><RotateCcw size={16} />부분 환불 실행</Button></div></form>
   </div>;
 }
 

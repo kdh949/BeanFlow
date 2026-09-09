@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, waitFor } from "storybook/test";
 import { HttpResponse, http, delay } from "msw";
 import { merchantSignedInHandlers } from "../../../.storybook/fixtures";
 import { RefreshStoreRefundPage } from "./MerchantPages";
@@ -143,5 +143,99 @@ export const ConcurrentUnresolvedRefund: Story = {
     await expect(canvas.queryByRole("button", { name: "같은 요청 결과 확인" })).not.toBeInTheDocument();
     await expect(canvas.getByRole("button", { name: /부분 환불 실행/ })).toBeDisabled();
     await expect(canvas.getByRole("button", { name: "금액 다시 계산" })).toBeEnabled();
+  },
+};
+
+function rejectedRequest(status: number, code: string, title: string): Story {
+  return {
+    parameters: { msw: { handlers: [...merchantFrameHandlers, previewHandler(selected), http.post("/api/v1/stores/:storeId/orders/:orderReference/refunds", () => HttpResponse.json({ code, message: "Internal server detail", correlationId: "REQ-REJECTED" }, { status }))] } },
+    play: async ({ canvas, msw }) => {
+      await userEvent.type(await canvas.findByLabelText("환불 사유"), "고객 요청");
+      let rejectedKey: string | null = null;
+      msw.use(http.post("/api/v1/stores/:storeId/orders/:orderReference/refunds", ({ request }) => {
+        rejectedKey = request.headers.get("Idempotency-Key");
+        return HttpResponse.json({ code, message: "Internal server detail" }, { status });
+      }));
+      await userEvent.click(canvas.getByRole("button", { name: /부분 환불 실행/ }));
+      await expect(await canvas.findByText(title)).toBeVisible();
+      await expect(canvas.getByLabelText("환불 사유")).toBeEnabled();
+      await expect(canvas.queryByRole("button", { name: "같은 요청 결과 확인" })).not.toBeInTheDocument();
+      await expect(canvas.queryByText("Internal server detail")).not.toBeInTheDocument();
+      await expect(canvas.getByRole("button", { name: /부분 환불 실행/ })).toBeDisabled();
+      // A later attempt must first pass a fresh server preview, never replay the rejected command.
+      msw.use(previewHandler(selected));
+      await userEvent.click(canvas.getByRole("button", { name: "금액 다시 계산" }));
+      await waitFor(() => expect(canvas.getByRole("button", { name: /부분 환불 실행/ })).toBeEnabled());
+      msw.use(http.post("/api/v1/stores/:storeId/orders/:orderReference/refunds", ({ request }) => {
+        expect(request.headers.get("Idempotency-Key")).not.toBe(rejectedKey);
+        return HttpResponse.json({ orderReference, state: "UNKNOWN", cashRefundRequestedKrw: 3800, pointsRestorationRequestedKrw: 0, pointsRestorationState: "NOT_REQUIRED", currency: "KRW", createdAt: "2026-08-17T03:00:00Z", updatedAt: "2026-08-17T03:00:05Z", correlationId: "REQ-RETRY" }, { status: 202 });
+      }));
+      await userEvent.click(canvas.getByRole("button", { name: /부분 환불 실행/ }));
+      await expect(await canvas.findByText("환불 결과를 확인하고 있습니다")).toBeVisible();
+    },
+  };
+}
+
+export const InvalidRequest: Story = rejectedRequest(400, "INVALID_REQUEST", "입력 내용을 확인해 주세요");
+export const PermissionDenied: Story = rejectedRequest(403, "ACCESS_DENIED", "이 작업을 진행할 수 없습니다");
+export const OrderNotFound: Story = rejectedRequest(404, "RESOURCE_NOT_FOUND", "요청한 대상을 찾을 수 없습니다");
+export const ExecutionUnavailable: Story = rejectedRequest(503, "DEPENDENCY_UNAVAILABLE", "서비스 연결을 확인하고 있습니다");
+
+export const QuantityNoLongerAvailable: Story = {
+  parameters: { msw: { handlers: [...merchantFrameHandlers, previewHandler(selected), http.post("/api/v1/stores/:storeId/orders/:orderReference/refunds", () => HttpResponse.json({ code: "REFUND_QUANTITY_UNAVAILABLE", message: "Requested units exceed remaining units" }, { status: 422 }))] } },
+  play: async ({ canvas, msw }) => {
+    await userEvent.type(await canvas.findByLabelText("환불 사유"), "고객 요청");
+    let previewBody: unknown;
+    msw.use(http.post("/api/v1/stores/:storeId/orders/:orderReference/refund-previews", async ({ request }) => {
+      previewBody = await request.json();
+      return HttpResponse.json(preview({ lines: [line({ remainingQuantity: 1 })], previewVersion: "b".repeat(64) }));
+    }));
+    await userEvent.click(canvas.getByRole("button", { name: /부분 환불 실행/ }));
+    await expect(await canvas.findByText(/환불 가능 수량이 바뀌었습니다/)).toBeVisible();
+    await waitFor(() => expect(canvas.getByLabelText("환불 사유")).toBeEnabled());
+    await expect(previewBody).toEqual({});
+    await expect(canvas.getByRole("button", { name: /부분 환불 실행/ })).toBeDisabled();
+    await expect(canvas.queryByRole("button", { name: "같은 요청 결과 확인" })).not.toBeInTheDocument();
+    await expect(canvas.getByText("남은 환불 가능 1개")).toBeVisible();
+  },
+};
+
+export const SameRequestProcessing: Story = {
+  parameters: { msw: { handlers: [...merchantFrameHandlers, previewHandler(selected)] } },
+  play: async ({ canvas, msw }) => {
+    let firstRequest: { key: string | null; body: unknown } | undefined;
+    msw.use(http.post("/api/v1/stores/:storeId/orders/:orderReference/refunds", async ({ request }) => {
+      firstRequest = { key: request.headers.get("Idempotency-Key"), body: await request.json() };
+      return HttpResponse.json({ code: "IDEMPOTENCY_REQUEST_IN_PROGRESS", message: "Request is processing" }, { status: 409, headers: { "Retry-After": "1" } });
+    }));
+    await userEvent.type(await canvas.findByLabelText("환불 사유"), "고객 요청");
+    await userEvent.click(canvas.getByRole("button", { name: /부분 환불 실행/ }));
+    await expect(await canvas.findByRole("button", { name: "처리 상태 다시 확인" })).toBeEnabled();
+    await expect(canvas.queryByText("환불 요청 결과를 확인하지 못했습니다")).not.toBeInTheDocument();
+    await expect(canvas.getByLabelText("환불 사유")).toBeDisabled();
+    msw.use(http.post("/api/v1/stores/:storeId/orders/:orderReference/refunds", async ({ request }) => {
+      await expect({ key: request.headers.get("Idempotency-Key"), body: await request.json() }).toEqual(firstRequest);
+      return HttpResponse.json({ orderReference, state: "UNKNOWN", cashRefundRequestedKrw: 3800, pointsRestorationRequestedKrw: 0, pointsRestorationState: "NOT_REQUIRED", currency: "KRW", createdAt: "2026-08-17T03:00:00Z", updatedAt: "2026-08-17T03:00:05Z", correlationId: "REQ-PROCESSING" }, { status: 202 });
+    }));
+    await userEvent.click(canvas.getByRole("button", { name: "처리 상태 다시 확인" }));
+    await expect(await canvas.findByText("환불 결과를 확인하고 있습니다")).toBeVisible();
+  },
+};
+
+export const CsrfPreparationUnavailable: Story = {
+  parameters: { msw: { handlers: [...merchantFrameHandlers, previewHandler(selected)] } },
+  play: async ({ canvas, msw }) => {
+    await userEvent.type(await canvas.findByLabelText("환불 사유"), "고객 요청");
+    document.cookie = "BEANFLOW_MERCHANT_XSRF=; Max-Age=0; path=/";
+    let sent = false;
+    msw.use(
+      http.get("/api/v1/auth/merchant/csrf", () => HttpResponse.error()),
+      http.post("/api/v1/stores/:storeId/orders/:orderReference/refunds", () => { sent = true; return HttpResponse.error(); }),
+    );
+    await userEvent.click(canvas.getByRole("button", { name: /부분 환불 실행/ }));
+    await expect(await canvas.findByRole("alert")).toBeVisible();
+    await expect(sent).toBe(false);
+    await expect(canvas.getByLabelText("환불 사유")).toBeEnabled();
+    await expect(canvas.queryByRole("button", { name: "같은 요청 결과 확인" })).not.toBeInTheDocument();
   },
 };

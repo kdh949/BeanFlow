@@ -404,6 +404,33 @@ internal class StoreOrderBoardIntegrationTest
         }
 
         @Test
+        fun `detail rejects an order whose entire line snapshot is missing`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val order = create(fixture, "board-detail-missing-lines")
+            activate(order.orderId, "ACCEPTED")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "ACTIVE")
+            val path = "${boardPath(fixture.storeId)}/${order.reference}"
+            mockMvc
+                .perform(get(path).with(merchantJwt(actorId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.lines.length()").value(1))
+
+            // This isolated fixture has one order; clear immutable dependent snapshots without disabling constraints.
+            jdbcTemplate.execute("TRUNCATE TABLE ordering_order_point_accrual_unit CASCADE")
+            assertThat(jdbcTemplate.update("DELETE FROM ordering_order_line WHERE order_id = ?", order.orderId))
+                .isEqualTo(1)
+
+            mockMvc
+                .perform(get(path).with(merchantJwt(actorId)))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                .andExpect(jsonPath("$.lines").doesNotExist())
+                .andExpect(jsonPath("$.itemSummary").doesNotExist())
+        }
+
+        @Test
         fun `membership and reference scope distinguish forbidden from missing and revoke clears access`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
