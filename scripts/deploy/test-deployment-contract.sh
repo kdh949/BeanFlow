@@ -73,8 +73,21 @@ BEANFLOW_OPERATIONS_OIDC_REALM=beanflow
 BEANFLOW_OPERATIONS_OIDC_CLIENT_ID=beanflow
 BEANFLOW_JWK_SET_URI=https://sso.example.test:5443/realms/beanflow/protocol/openid-connect/certs
 ENV
+  python3 "$root/scripts/deploy/render_external_nginx.py" --env-file "$external_env_file" > "$runtime_dir/external-keycloak.conf"
   "$root/scripts/deploy/verify-deployment.sh" "$environment" --env-file "$external_env_file"
 done
+
+# The effective proxy must match the API's signing configuration, including same-origin mode.
+same_origin_env="$runtime_dir/same-origin.env"
+sed 's|BEANFLOW_AISTOR_PUBLIC_ENDPOINT=https://objects.example.test|BEANFLOW_AISTOR_PUBLIC_ENDPOINT=https://portfolio.example.test|' \
+  "$runtime_dir/staging-external.env" > "$same_origin_env"
+if "$root/scripts/deploy/verify-deployment.sh" staging --env-file "$same_origin_env" > "$runtime_dir/stale.log" 2>&1; then
+  echo "Stale Nginx configuration was unexpectedly accepted" >&2
+  exit 1
+fi
+grep -q 'external-keycloak.conf differs' "$runtime_dir/stale.log"
+python3 "$root/scripts/deploy/render_external_nginx.py" --env-file "$same_origin_env" > "$runtime_dir/external-keycloak.conf"
+"$root/scripts/deploy/verify-deployment.sh" staging --env-file "$same_origin_env"
 
 expect_external_rejection() {
   local key="$1" value="$2" expected_message="$3"

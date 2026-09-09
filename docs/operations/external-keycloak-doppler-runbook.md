@@ -58,6 +58,36 @@ BEANFLOW_JWK_SET_URI=https://sso.example.test:5443/realms/beanflow/protocol/open
 issuer/base/realm/JWKS는 정확히 일치해야 한다. callback과 logout URI는 Compose가 BeanFlow의
 `BEANFLOW_PUBLIC_ORIGIN`에서 만든다. 외부 Keycloak 주소와 BeanFlow 주소를 혼동하지 않는다.
 
+### AIStor 이미지 공개 경로
+
+`BEANFLOW_AISTOR_ENDPOINT`는 frontend와 API 컨테이너에서 접근할 수 있는 저장소 주소다.
+`BEANFLOW_AISTOR_PUBLIC_ENDPOINT`는 브라우저용 서명 URL의 HTTPS origin이다.
+공개 endpoint가 `BEANFLOW_PUBLIC_ORIGIN`과 같으면 준비 스크립트가 해당 bucket의
+`stores/`, `menus/`, `campaigns/` GET/HEAD 프록시를 자동 생성한다. 예를 들어:
+
+```dotenv
+BEANFLOW_PUBLIC_ORIGIN=https://app.example.test
+BEANFLOW_AISTOR_PUBLIC_ENDPOINT=https://app.example.test
+BEANFLOW_AISTOR_ENDPOINT=http://aistor.internal.example:9000
+BEANFLOW_AISTOR_BUCKET=beanflow-staging
+```
+
+서버 IP와 bucket은 저장소 공통 설정에 고정하지 않는다. 공개 endpoint가 다른 origin이면 해당
+host의 프록시가 이미지 제공을 담당하며, BeanFlow Nginx에는 AIStor 경로를 추가하지 않는다.
+같은 출처 프록시의 upstream은 path/query/credential 없는 HTTP(S) origin이어야 하고 공개 origin으로
+되돌아가는 설정은 거절한다. HTTPS upstream은 컨테이너 CA bundle로 인증서를 검증하며 SNI를 사용한다.
+사설 CA 사용 시 신뢰 체인을 별도로 구성하고 인증서 검증을 끄지 않는다.
+
+생성 파일은 `<BEANFLOW_SECRETS_DIR의 상위 디렉터리>/external-keycloak.conf`에 0644로 저장한다.
+비밀값은 없으며 frontend UID 101이 읽는 파일이다. secret 파일의 0600과 directory의 0700은 유지한다.
+Compose는 이 생성 파일을 읽기 전용 mount하며, preflight는 현재 API signing 설정과 생성 파일의
+일치 여부를 검사한다. `deploy/nginx/external-keycloak.conf`는 생성기의 입력이므로 직접 mount하지 않는다.
+
+Bucket은 계속 비공개다. 프록시는 Cookie·Authorization·request body를 제거하고 원래 경로·query와
+public signing Host를 전달한다. HEAD도 허용하지만 GET 서명으로 HEAD까지 인증되는 것은 아니다.
+다른 HTTP method는 403, bucket listing과 다른 prefix는 404다. 이미지 응답은 `private, no-store`이며
+저장소 오류를 SPA HTML로 바꾸지 않는다. 이미지 로그에는 method/status/request ID만 남긴다.
+
 공통 비밀값은 다음 열 개다. 값은 Doppler UI 또는 안전한 secret 입력 도구에서 등록한다.
 
 ```text
@@ -125,6 +155,35 @@ doppler run --no-fallback -- bash scripts/deploy/deploy-staging-doppler.sh
 배포 전환에서 남은 컨테이너는 소유권을 확인한 뒤 별도로 정리한다. `down -v`, DB drop이나
 `--remove-orphans`는 이 절차에 포함하지 않는다.
 
+### 기존 배포에서 Nginx 설정만 갱신
+
+기존 고정 설정 mount에서 생성 파일 mount로 전환하는 최초 적용은 **frontend 컨테이너 재생성**이
+필요하다. API/web 이미지 재빌드는 이 프록시 수정에 필요하지 않지만 기존 배포의 이미지 tag를 유지한다.
+Doppler 설정 준비와 `verify-deployment.sh staging --env-file <deployment.env>`를 먼저 통과시킨 뒤,
+평소와 같은 project/env/Compose 파일 조합으로 아래 순서만 수행한다.
+
+```bash
+docker compose --env-file <deployment.env> \
+  -f compose.portfolio.yml -f compose.staging.yml -f compose.external-keycloak.yml \
+  run --rm --no-deps frontend nginx -t
+docker compose --env-file <deployment.env> \
+  -f compose.portfolio.yml -f compose.staging.yml -f compose.external-keycloak.yml \
+  up -d --no-deps --no-build --pull never --force-recreate frontend
+```
+
+준비 스크립트는 생성 파일을 원자적으로 교체한다. 기존 파일 bind mount는 이전 inode를 계속 볼 수
+있으므로 준비 후 `nginx -s reload`만으로 새 파일 적용을 보장하지 않는다. 실패 시 이전 non-secret
+설정 파일과 Compose mount를 복원하고 frontend만 재생성한다. DB·객체·credential은 되돌리지 않는다.
+
+Doppler 없이 파일 기반 배포를 준비할 때는 다음 명령으로 생성 후보를 만들고 0644로 배치한다.
+경로는 위 secret directory의 상위 디렉터리를 사용한다. `verify-deployment.sh` 자체는 파일을 생성하지 않는다.
+
+```bash
+python3 scripts/deploy/render_external_nginx.py --env-file <deployment.env> > <external-keycloak.conf.candidate>
+chmod 0644 <external-keycloak.conf.candidate>
+mv <external-keycloak.conf.candidate> <external-keycloak.conf>
+```
+
 ## 5. 확인과 오류 구분
 
 ```bash
@@ -147,6 +206,12 @@ doppler run --no-fallback -- bash -euc '
 - discovery 404: realm 존재, 실제 context path, reverse proxy routing과 접근망을 확인한다. 임의로
   `/auth` prefix를 붙이거나 issuer를 추정하지 않는다.
 - TLS 실패: 서버와 브라우저가 신뢰하는 유효한 인증서 체인을 구성한다. 검증 비활성화를 사용하지 않는다.
+- 이미지 URL이 HTML 200: 생성 설정과 mount 및 same-origin 여부를 확인한다. 새로 발급한 서명 URL의
+  **GET 200 + image Content-Type**, query를 제거한 요청의 **403**, 업로드 method의 **403**을 확인한다.
+  URL의 서명 query를 채팅·로그·명령 이력에 남기지 않는다.
+- 이미지 502/504: frontend에서 AIStor endpoint로의 연결·DNS·TLS를 확인한다. 이미지 access log의 status와
+  request ID를 사용한다. AIStor 주소는 Docker DNS `127.0.0.11`로 요청 시 해석하여 DNS 장애가 Nginx
+  시작을 막지 않도록 한다. 이미지 장애와 `/healthz`·텍스트 API 상태는 별도로 확인한다.
 - 로그인 redirect/CORS 오류: 외부 client의 정확한 callback, logout URI와 Web Origins를 확인한다.
 - 로그인 후 401: issuer와 access-token audience가 입력과 일치하는지 확인한다.
 - 로그인 후 403: `roles` 배열과 `PLATFORM_OPERATOR`, BeanFlow 세부 permission grant를 확인한다.
@@ -160,3 +225,5 @@ doppler run --no-fallback -- bash -euc '
 - [Keycloak JavaScript client 설정](https://www.keycloak.org/securing-apps/javascript-adapter)
 - [Doppler Service Tokens](https://docs.doppler.com/docs/service-tokens)
 - [Docker Compose merge](https://docs.docker.com/reference/compose-file/merge/)
+- [Nginx proxy URI와 Host 처리](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass)
+- [Nginx resolver와 GET/HEAD method 제한](https://nginx.org/en/docs/http/ngx_http_core_module.html#resolver)
