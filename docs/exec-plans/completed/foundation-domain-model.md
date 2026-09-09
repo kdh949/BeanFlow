@@ -76,7 +76,7 @@ ExecPlan의 결과는 첫 Feature ExecPlan을 작성하기 위한 계약 기준�
 
 - 결제 전 예약 lease 5분; Payment `UNKNOWN`이어도 만료
 - 만료 후 뒤늦은 승인은 Order를 되살리지 않고 void/refund reconciliation
-- 재고·슬롯은 결제 승인 시 확정
+- 슬롯은 결제 승인 시 확정
 - 매장 수락 timeout 3분
 - 쿠폰 후 포인트 적용
 - 주문 스냅샷과 항목별 혜택 배분
@@ -285,7 +285,7 @@ ExecPlan 후보:
 - Spring Modulith module skeleton과 owner package boundary
 - Merchant 가격 조회
 - Order/OrderLine snapshot과 integer KRW allocation
-- PickupSlot, Stock, Coupon, Point 예약의 단일 로컬 PostgreSQL transaction
+- PickupSlot, Coupon, Point 예약의 단일 로컬 PostgreSQL transaction
 - 5분 `reservationExpiresAt` 고정
 - `/api/v1/orders` request/response와 IdempotencyRecord
 - 실제 PostgreSQL Testcontainers의 unique/check/lock 검증

@@ -51,7 +51,6 @@ internal class CreateOrderServiceTest
             assertThat(response.body).contains("\"storeName\":\"BeanFlow Test Store\"")
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isEqualTo(1)
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isEqualTo(1)
-            assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "inventory_stock_reservation")).isEqualTo(1)
             val optionSnapshot =
                 jdbcTemplate.queryForMap(
                     "SELECT option_selection_snapshot_state, normalized_option_ids_json::text " +
@@ -112,21 +111,21 @@ internal class CreateOrderServiceTest
         }
 
         @Test
-        fun `stock failure rolls back earlier pickup reservation`() {
+        fun `full pickup slot rejects order without reservations`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, stockAvailable = 0)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 0)
 
-            val response = createOrderUseCase.create("stock-fail-0001", fixture.command(expectedQuoteFingerprint = "0".repeat(64)))
+            val response = createOrderUseCase.create("slot-full-0001", fixture.command(expectedQuoteFingerprint = "0".repeat(64)))
 
             assertThat(response.status).isEqualTo(409)
-            assertThat(response.body).contains("\"code\":\"STOCK_NOT_AVAILABLE\"")
+            assertThat(response.body).contains("\"code\":\"PICKUP_SLOT_FULL\"")
             assertNoOrderOrReservation()
         }
 
         @Test
         fun `confirmed domain failure is stored and replayed exactly`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, stockAvailable = 0)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 0)
             val command = fixture.command(expectedQuoteFingerprint = "0".repeat(64))
 
             val first = createOrderUseCase.create("failure-replay-01", command)
@@ -140,7 +139,7 @@ internal class CreateOrderServiceTest
         }
 
         @Test
-        fun `coupon failure rolls back pickup and stock reservations`() {
+        fun `coupon failure rolls back pickup reservations`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
 
@@ -156,7 +155,7 @@ internal class CreateOrderServiceTest
         }
 
         @Test
-        fun `point failure rolls back pickup and stock reservations`() {
+        fun `point failure rolls back pickup reservations`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
 
@@ -217,15 +216,15 @@ internal class CreateOrderServiceTest
         @Test
         fun `reservation conflict identifies the owner without order identifiers`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, stockAvailable = 0)
-            val before = counter("beanflow.order.reservation.conflicts", "resource", "stock")
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 0)
+            val before = counter("beanflow.order.reservation.conflicts", "resource", "pickup")
 
             createOrderUseCase.create(
-                "metric-stock-001",
+                "metric-pickup-001",
                 fixture.command(expectedQuoteFingerprint = "0".repeat(64)),
             )
 
-            assertThat(counter("beanflow.order.reservation.conflicts", "resource", "stock") - before)
+            assertThat(counter("beanflow.order.reservation.conflicts", "resource", "pickup") - before)
                 .isEqualTo(1.0)
         }
 
@@ -283,7 +282,6 @@ internal class CreateOrderServiceTest
         private fun assertNoOrderOrReservation() {
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isZero()
-            assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "inventory_stock_reservation")).isZero()
         }
 
         private fun quotedCommand(

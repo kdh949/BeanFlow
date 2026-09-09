@@ -28,7 +28,7 @@ BeanFlow의 런타임 API에는 고객 쿠폰·즐겨찾기, 점주 매장 지�
 - `frontend/src/components/Shells.tsx`의 운영자 셸은 수동 Bearer Token 편집기를 노출한다.
 - `openapi/beanflow-v1-runtime.yaml`에는 선택된 기능의 런타임 API가 등록되어 있다.
 - Storybook 공통 MSW handler가 비어 있고 일부 page Story가 필요한 요청 handler를 제공하지 않는다.
-- 로그인 잠금·요청 제한, 위치 권한 거부, 장바구니 가격·재고 충돌, 주문 상태, 점주 주문보드
+- 로그인 잠금·요청 제한, 위치 권한 거부, 장바구니 가격·판매 상태 충돌, 주문 상태, 점주 주문보드
   충돌, 재주문 변경 상태를 직접 여는 Story가 부족하다.
 - 정산 이의제기 진입 Story의 보조 텍스트 색 대비가 WCAG AA 4.5:1을 충족하지 못한다.
 - Storybook 인벤토리 문서의 Story 파일·Story·Docs 수와 라우트 목록이 현재 코드와 다르다.

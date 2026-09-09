@@ -6,6 +6,7 @@ data class MerchantOrderQuoteSnapshot(
     val storeAcceptingOrders: Boolean,
     val storePickupEnabled: Boolean,
     val orderingPolicyVersion: Long,
+    val menuTradeVersions: Map<UUID, Long>,
     val lines: List<MenuLineQuote>,
 )
 

@@ -25,7 +25,7 @@ internal class AuditRetentionPolicyMigrationTest : IsolatedPostgresSupport() {
         flyway(dataSource).target("38").load().migrate()
         val jdbc = JdbcTemplate(dataSource)
         val originalExpiry = Instant.parse("2037-03-04T05:06:07.123456Z")
-        insertAudit(jdbc, "STOCK_RESERVED", originalExpiry)
+        insertAudit(jdbc, "PICKUP_RESERVED", originalExpiry)
 
         flyway(dataSource).target("39").load().migrate()
 
@@ -53,7 +53,7 @@ internal class AuditRetentionPolicyMigrationTest : IsolatedPostgresSupport() {
     fun `V39 allows an old binary audit insert through the database compatibility bridge`() {
         val jdbc = migrated("compatibility")
 
-        insertAudit(jdbc, "STOCK_RESERVED", Instant.parse("2031-01-01T00:00:00Z"))
+        insertAudit(jdbc, "PICKUP_RESERVED", Instant.parse("2031-01-01T00:00:00Z"))
 
         val row =
             jdbc.queryForMap(

@@ -96,7 +96,7 @@ internal class AuditRetentionPolicyIntegrationTest
             val actions =
                 mapOf(
                     AuditCategory.FINANCIAL_TRANSACTION to "PARTIAL_REFUND_REQUESTED",
-                    AuditCategory.ORDER_AND_FULFILLMENT to "STOCK_RESERVED",
+                    AuditCategory.ORDER_AND_FULFILLMENT to "PICKUP_RESERVED",
                     AuditCategory.SETTLEMENT_AND_DISPUTE to "SETTLEMENT_ADJUSTMENT_CREATED",
                     AuditCategory.SECURITY_AND_PERMISSION to "OPERATOR_PERMISSION_GRANTED",
                     AuditCategory.OPERATIONS_POLICY to "EXPIRED_BENEFIT_POLICY_READ",
@@ -203,7 +203,7 @@ internal class AuditRetentionPolicyIntegrationTest
                     operations.appendAll(
                         listOf(
                             command(AuditCategory.FINANCIAL_TRANSACTION, "PARTIAL_REFUND_REQUESTED"),
-                            command(AuditCategory.PII_ACCESS, "STOCK_RESERVED"),
+                            command(AuditCategory.PII_ACCESS, "PICKUP_RESERVED"),
                         ),
                     )
                 }

@@ -23,7 +23,7 @@ ADR-029가 별도 Cancellation Aggregate를 두지 않기로 해 이 식별자�
 ## Decision
 
 - 성공 응답은 취소 시점 Order 상태에 따라 두 갈래다.
-  - `PENDING_PAYMENT` 취소는 `200 OK`다. 슬롯·재고·쿠폰·포인트 해제와 Order 전이가
+  - `PENDING_PAYMENT` 취소는 `200 OK`다. 슬롯·쿠폰·포인트 해제와 Order 전이가
     모두 commit된 뒤에만 반환한다.
   - `PAID` 취소는 `202 Accepted`다. Order `CANCELLED`와 보상 착수 지점이 commit된
     것을 뜻하며 환불·복원·알림 성공을 뜻하지 않는다. 매장 거절의 `202`와 같은 의미다.

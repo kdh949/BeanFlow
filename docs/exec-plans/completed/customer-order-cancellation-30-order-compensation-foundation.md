@@ -12,19 +12,19 @@
 ## Purpose / Big Picture
 
 거절 전용 compensation을 `STORE_REJECTION`과 `CUSTOMER_CANCELLATION`이 공유하는
-OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefit 정책으로
+OrderCompensationCase, 다섯 step, source-aware owner 복원과 trigger×benefit 정책으로
 일반화한다. 기존 store rejection 동작을 보존하면서 고객 취소 command가 내구 후속
 작업을 열 수 있는 foundation을 제공한다.
 
 ## Current State
 
 - V8/V9/V22와 runtime은 rejection 전용 명칭 없이 공통 `OrderCompensation*`, 두 trigger,
-  여섯 step과 정확히 두 policy child를 사용한다.
+  다섯 step과 정확히 두 policy child를 사용한다.
 - Plan 11의 종료용 네 policy head를 COUPON→POINTS 순서로 선택해 Case와 두 V1 fact에
   immutable snapshot으로 저장한다. policy table/API/seed를 중복 구현하지 않는다.
-- Pickup·Stock·Coupon·Points는 공통 termination source/trigger 계약으로 수렴하고 benefit
+- Pickup·Coupon·Points는 공통 termination source/trigger 계약으로 수렴하고 benefit
   owner는 policy/disposition과 immutable compensation terms/lot lineage를 보존한다.
-- `OrderRejectedV1` producer와 여섯 consumer, `OrderCancelledV1` DTO와 네 owner consumer가
+- `OrderRejectedV1` producer와 다섯 consumer, `OrderCancelledV1` DTO와 세 owner consumer가
   stable listener ID로 정렬됐다. 고객 취소 producer/HTTP command는 Plan 40에 남아 있다.
 - publication recovery는 중앙 registry로 실패 target 한 step만 수동 검토하고 unknown target은
   Case를 변경하지 않는다. store projection은 축약되고 운영자 상세는 명시 권한과 Audit을 요구한다.
@@ -45,7 +45,7 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 
 - OrderCompensationCase/Step, trigger와 두 policy child snapshot
 - 기존 종료용 네 policy head를 Case의 두 policy child snapshot에 연결
-- Pickup/Stock 공통 termination release와 source/trigger conflict
+- Pickup 공통 termination release와 source/trigger conflict
 - Coupon/Points disposition, policy metadata와 보상 coupon terms/cost snapshot
 - `OrderRejectedV1` 목표 shape와 네/기존 owner consumer migration
 - listener별 publication exhaustion과 store API 공통 compensation projection
@@ -62,7 +62,7 @@ OrderCompensationCase, 여섯 step, source-aware owner 복원과 trigger×benefi
 ## Business Rules and Invariants
 
 - Order terminal version당 trigger/source가 일관된 Case 하나만 존재한다.
-- Case는 PAYMENT/PICKUP/STOCK/COUPON/POINTS/CUSTOMER_NOTIFICATION 여섯 step을 가진다.
+- Case는 PAYMENT/PICKUP/COUPON/POINTS/CUSTOMER_NOTIFICATION 다섯 step을 가진다.
 - Case는 혜택 사용 여부와 무관하게 COUPON/POINTS policy snapshot 두 개를 가진다.
 - 같은 source+trigger+policy만 멱등 성공이고 다른 조합은 conflict다.
 - publication exhaustion은 해당 owner step만 MANUAL_REVIEW로 바꾼다.
@@ -116,11 +116,11 @@ legacy row 수를 먼저 세고, 0이면 통과, 하나라도 있으면 backfill
 ## API and Event Contracts
 
 - 매장 response는 축약 `StoreCompensationSummary`(trigger·state·updatedAt),
-  운영자 response는 여섯 step을 담은 `CompensationSummary`를 감싼
+  운영자 response는 다섯 step을 담은 `CompensationSummary`를 감싼
   `OperatorCompensationView`를 쓴다. 매장 응답에는 step 배열, `attemptCount`,
   `lastErrorCode`, `caseId`와 policy version이 없다.
 - business response에 `replayed`를 넣지 않는다.
-- 고객 취소 event는 네 owner만 소비하며 Payment/Notification은 소비하지 않는다.
+- 고객 취소 event는 세 owner만 소비하며 Payment/Notification은 소비하지 않는다.
 - V1 변경 가능 여부와 payload version은 00 gate 결과를 따른다.
 
 중앙 `CompensationPublicationTargetRegistry`는 아래 exact mapping만 허용한다.
@@ -129,12 +129,10 @@ legacy row 수를 먼저 세고, 0이면 통과, 하나라도 있으면 backfill
 |---|---|---|
 | `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.payment.v1` | `PAYMENT` |
 | `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.pickup.v1` | `PICKUP` |
-| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.stock.v1` | `STOCK` |
 | `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.coupon.v1` | `COUPON` |
 | `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.points.v1` | `POINTS` |
 | `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.customer-notification.v1` | `CUSTOMER_NOTIFICATION` |
 | `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.pickup.v1` | `PICKUP` |
-| `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.stock.v1` | `STOCK` |
 | `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.coupon.v1` | `COUPON` |
 | `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.points.v1` | `POINTS` |
 
@@ -150,17 +148,17 @@ publication이 0이고 rollback 기간이 끝나기 전까지 제거하지 않�
 1. 00 clean-cutover 결과와 Plan 11 policy/Plan 20 lane completion evidence를 모두 검증한다.
 2. 공통 Case/step/trigger/two-policy domain과 schema를 구현한다.
 3. Plan 11의 종료용 네 policy head를 Case child snapshot에 연결한다.
-4. Pickup/Stock과 Coupon/Points owner 복원을 공통 계약으로 전환한다.
+4. Pickup과 Coupon/Points owner 복원을 공통 계약으로 전환한다.
 5. store rejection producer/consumer와 API를 회귀 없이 전환한다.
 6. listener별 publication exhaustion과 recovery를 구현한다.
 
 ## Required Tests
 
-- trigger 두 값, 여섯 step, policy child 정확히 두 개
+- trigger 두 값, 다섯 step, policy child 정확히 두 개
 - 같은/different source·trigger·version 중복
 - store rejection 기존 정상·timeout·refund·notification 회귀
 - 매장 응답의 step 배열·attemptCount·lastErrorCode·caseId·policy version 부재
-- 매장 응답의 trigger·case state·updatedAt 존재와 운영자 응답의 여섯 step 존재
+- 매장 응답의 trigger·case state·updatedAt 존재와 운영자 응답의 다섯 step 존재
 - 단일 listener exhaustion 시 해당 step만 manual review
 - 다른 publication 계속 완료와 attempt 분리
 - annotation listener ID·registry 표·실제 publication target 집합의 일치
@@ -227,15 +225,15 @@ ADR-033/034/040~043/055/059, event catalog, runbook, OpenAPI와 release evidence
 | 2026-08-01 | Accepted | versioned listener ID와 중앙 event-target-step registry를 사용 | 실패 target 하나만 정확히 수동 검토하고 method rename과 영속 계약을 분리 | ADR-010, ADR-034 |
 | 2026-08-03 | Accepted | Plan 20의 cause/cancelledAt와 Settlement completion evidence를 소비하고 Plan 30 migration lane을 준비 상태로 전환 | 정산 제외 증거와 compensation schema 소유권을 분리하고 단일 writer 순서를 유지 | ADR-029, ADR-067, ADR-072 |
 | 2026-08-03 | Implemented | V8/V9/V22 세 migration을 legacy 후보 0 precheck와 최종 shape로 직접 작성 | gate 무효화를 배포 시점에 fail-closed로 탐지하고 guessed backfill 제거 | ADR-033/040/042/059 |
-| 2026-08-03 | Implemented | 정확한 열 stable listener mapping과 unknown-target no-step-mutation 복구 | publication attempt와 owner business attempt를 분리하고 실패 범위를 한 step으로 제한 | ADR-010/034 |
+| 2026-08-03 | Implemented | 정확한 여덟 stable listener mapping과 unknown-target no-step-mutation 복구 | publication attempt와 owner business attempt를 분리하고 실패 범위를 한 step으로 제한 | ADR-010/034 |
 | 2026-08-03 | Implemented | 고객 취소 기본 알림 step은 PROCESSING으로 준비하고 producer는 Plan 40에 유지 | terminal step 재개방 없이 ADR-047 Tx C1 계약을 수용하고 조기 endpoint 활성화를 방지 | ADR-047, Plan 40 |
 
 ## Outcomes & Retrospective
 
-공통 `OrderCompensationCase`, trigger 두 값, 여섯 step과 정확히 두 immutable policy child를
+공통 `OrderCompensationCase`, trigger 두 값, 다섯 step과 정확히 두 immutable policy child를
 V8 최종 shape와 Application API로 구현했다. Store rejection은 Order/Case/Audit/publication/
-멱등 응답의 기존 local transaction을 유지하면서 two-policy `OrderRejectedV1`과 여섯 stable
-consumer로 회귀했다. `OrderCancelledV1`은 최소 DTO와 Pickup·Stock·Coupon·Points 네 consumer만
+멱등 응답의 기존 local transaction을 유지하면서 two-policy `OrderRejectedV1`과 다섯 stable
+consumer로 회귀했다. `OrderCancelledV1`은 최소 DTO와 Pickup·Coupon·Points 네 consumer만
 준비했으며 HTTP command, Refund와 production success endpoint는 추가하지 않았다.
 
 V9/V22는 owner의 공통 termination state, source/trigger/policy/disposition, immutable 보상

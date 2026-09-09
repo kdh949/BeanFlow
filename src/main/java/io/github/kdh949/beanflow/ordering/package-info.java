@@ -4,7 +4,6 @@
         "shared :: api",
         "merchant :: api",
         "fulfillment :: api",
-        "inventory :: api",
         "promotion :: api",
         "loyalty :: api",
         "payment :: api",

@@ -5,7 +5,7 @@
 
 ## Context
 
-BR-30과 ADR-022는 terminal Order 상태, 금액, 슬롯, 재고, 쿠폰, 포인트와 수동
+BR-30과 ADR-022는 terminal Order 상태, 금액, 슬롯, 쿠폰, 포인트와 수동
 재처리의 전후 상태를 append-only AuditRecord로 보존하고, 주문 생성·만료에서는 변경
 target마다 별도 record를 만들도록 정했다.
 
@@ -37,7 +37,6 @@ Tx C0은 실제 사용 여부에 따라 다음 target record를 함께 commit한
 
 - `ORDER_CUSTOMER_CANCELLED` — Order
 - `PICKUP_RESERVATION_RELEASED_BY_CUSTOMER_CANCELLATION` — PickupReservation
-- `STOCK_RESERVATION_RELEASED_BY_CUSTOMER_CANCELLATION` — 변경된 각 StockReservation
 - `COUPON_RESERVATION_RELEASED_BY_CUSTOMER_CANCELLATION` — CouponReservation
 - `POINT_RESERVATION_RELEASED_BY_CUSTOMER_CANCELLATION` — PointReservation
 - `ORDER_CANCELLATION_ACCEPTED_DELIVERY_CREATED` — NotificationDelivery
@@ -49,7 +48,7 @@ Tx C0은 실제 사용 여부에 따라 다음 target record를 함께 commit한
 Tx C1은 다음 record를 함께 commit한다.
 
 - `ORDER_CUSTOMER_CANCELLED` — Order
-- `ORDER_COMPENSATION_CASE_CREATED` — OrderCompensationCase; 여섯 step과 두 benefit
+- `ORDER_COMPENSATION_CASE_CREATED` — OrderCompensationCase; 다섯 step과 두 benefit
   policy version ID를 after summary에 포함
 - `PAYMENT_CANCELLATION_RECOVERY_SNAPSHOT_CREATED` —
   PaymentCancellationRecoverySnapshot
@@ -65,7 +64,7 @@ Event publication과 cancellation IdempotencyRecord는 자체 registry/record로
 
 ### After-commit owner work
 
-- Pickup, Stock, Coupon과 Points consumer는 실제 owner 상태·원장을 바꾸는 각 local
+- Pickup, Coupon과 Points consumer는 실제 owner 상태·원장을 바꾸는 각 local
   transaction에서 owner target AuditRecord를 함께 저장한다.
 - Refund worker는 외부 결과가 `SUCCEEDED`, `UNKNOWN`, `FAILED`,
   `MANUAL_REVIEW`로 의미 있게 전이할 때 Refund target AuditRecord를 함께 저장한다.
@@ -91,13 +90,13 @@ Event publication과 cancellation IdempotencyRecord는 자체 registry/record로
 ### 고객 취소 명령당 한 건
 
 - record 수와 index 비용이 작다.
-- 여러 StockReservation과 owner work의 개별 전후 상태, 부분 누락과 중복을 구분하기
+- 여러 owner work의 개별 전후 상태, 부분 누락과 중복을 구분하기
   어렵다.
 
 ### Order와 금융 target만
 
 - 핵심 상태와 금액은 추적한다.
-- 슬롯·재고·혜택·알림 work의 고객 취소 원인을 감사 원장에서 연결할 수 없다.
+- 슬롯·혜택·알림 work의 고객 취소 원인을 감사 원장에서 연결할 수 없다.
 
 ## Rationale
 
@@ -108,7 +107,6 @@ Event publication과 cancellation IdempotencyRecord는 자체 registry/record로
 
 ## Consequences
 
-- 다품목 주문은 StockReservation 수만큼 AuditRecord가 늘어난다.
 - Tx C0/C1 commit gate에는 단일 record가 아니라 대상별 필수 record 집합이 포함된다.
 - 운영 조회는 correlation/source로 한 cancellation의 record를 묶어야 한다.
 
@@ -126,7 +124,7 @@ Event publication과 cancellation IdempotencyRecord는 자체 registry/record로
 
 - 상태별 예상 target 집합과 실제 Audit 집합의 일치
 - 각 target 변경과 Audit의 원자적 commit/rollback
-- 다품목 stock target별 record
+- owner work별 record
 - replay의 Audit 수 불변
 - detail·client key·Provider reference 부재
 - worker 자동 attempt와 business 결과 Audit의 분리
@@ -135,7 +133,7 @@ Event publication과 cancellation IdempotencyRecord는 자체 registry/record로
 
 - PENDING_PAYMENT의 coupon/points 사용 여부 조합별 target 집합
 - PAID 외부결제와 BENEFIT_ONLY의 Audit 차이
-- StockReservation 여러 건의 target unique
+- owner work의 target unique
 - 각 Audit insert failure injection의 Tx C0/C1 전체 rollback
 - owner consumer Audit 실패의 해당 publication retry
 - Refund terminal/unknown 전이 Audit와 claim/retry Audit 부재

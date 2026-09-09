@@ -6,7 +6,7 @@
 ## Context
 
 BR-25는 `actorId + operation + Idempotency-Key` scope, canonical payload hash와
-응답 저장을 요구한다. ADR-005는 Order와 네 자원 예약 중 하나라도 실패하면 전체
+응답 저장을 요구한다. ADR-005는 Order와 세 자원 예약 중 하나라도 실패하면 전체
 주문 생성 트랜잭션을 롤백하도록 한다. IdempotencyRecord를 주문 트랜잭션에만 넣으면
 도메인 실패 때 record도 사라지고, 동시 같은 key의 insert-first arbitration과
 서버 crash 뒤 `PROCESSING` 상태를 설명할 수 없다.
@@ -26,7 +26,7 @@ BR-25는 `actorId + operation + Idempotency-Key` scope, canonical payload hash�
 4. 같은 hash의 `PROCESSING` record는
    `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와 `Retry-After`를 반환한다. 주문 생성은
    동기 명령이므로 이 상태를 완료되지 않은 성공이나 `202 Accepted`로 표현하지 않는다.
-5. **Tx O — order creation:** Order, 슬롯·재고·쿠폰·포인트 예약, 필요한 AuditRecord와
+5. **Tx O — order creation:** Order, 슬롯·쿠폰·포인트 예약, 필요한 AuditRecord와
    IdempotencyRecord의 `COMPLETED + 201 response` 갱신을 하나의 로컬 트랜잭션에서
    커밋한다.
 6. 확정된 validation/domain/dependency 실패로 Tx O가 롤백되면

@@ -138,7 +138,7 @@ internal class SupportOperationsSchemaInvariantTest : IsolatedPostgresSupport() 
         }.isInstanceOf(DataIntegrityViolationException::class.java)
         assertThatThrownBy {
             jdbc.update(
-                "UPDATE operations_audit_action_category SET audit_category = 'PII_ACCESS' WHERE action = 'STOCK_RESERVED'",
+                "UPDATE operations_audit_action_category SET audit_category = 'PII_ACCESS' WHERE action = 'PICKUP_RESERVED'",
             )
         }.isInstanceOf(DataIntegrityViolationException::class.java)
         assertThatThrownBy { insertClassifiedAudit("UNDECLARED_ACTION") }

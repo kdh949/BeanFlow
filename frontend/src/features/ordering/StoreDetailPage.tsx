@@ -249,7 +249,7 @@ function MenuRow({ menu, storeId, storeName, orderable }: { menu: Menu; storeId:
           <Button block onClick={addToCart}>
             {won.format(unitPriceKrw * quantity)} 담기
           </Button>
-          <p className="form-footnote">금액과 재고는 주문할 때 매장 기준으로 다시 확인해요.</p>
+          <p className="form-footnote">금액과 판매 상태는 주문할 때 매장 기준으로 다시 확인해요.</p>
         </div>
       ) : null}
 

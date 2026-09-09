@@ -48,7 +48,7 @@ OrderQuote
   guarantee: NONE
 ```
 
-quote 성공과 실패 모두 Order, 픽업·재고·쿠폰·포인트 reservation, Payment, 주문 생성 idempotency
+quote 성공과 실패 모두 Order, 픽업·쿠폰·포인트 reservation, Payment, 주문 생성 idempotency
 record, Audit 또는 event를 만들지 않는다. Provider를 호출하거나 lock을 장시간 보유하지 않으며
 `Idempotency-Key`도 받지 않는다. 의존성 실패는 typed 5xx로 드러내고 client 합계, 0원 할인,
 cached/stale owner 값 또는 가짜 슬롯으로 성공하지 않는다.
@@ -61,7 +61,7 @@ quote와 최종 주문 생성은 `order-quote-fingerprint/v2` canonical material
 
 V2 material은 최소한 다음 전체 의미를 결정적으로 포함한다. V2는 Store/Menu의 표시·이미지 변경에도
 증가하는 coarse persistence version을 제외하고, Store 주문/pickup policy와 선택된 메뉴·옵션의 이름,
-가격, 구성, 재고 요구량을 canonical value로 직접 포함한다.
+가격, 구성, 판매 상태를 canonical value로 직접 포함한다.
 
 - 정규화한 editable input: Store·slot·menu·option 식별자, 수량, coupon issuance, 요청 포인트
 - catalog snapshot: 메뉴·옵션 표시명, 가격, 판매 가능성, 선택 구성과 거래 전용 owner version 또는 canonical value

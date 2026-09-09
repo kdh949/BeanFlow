@@ -6,11 +6,6 @@ import io.github.kdh949.beanflow.eventing.api.BenefitRestorationPolicySnapshotV1
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderCancelledV1
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
-import io.github.kdh949.beanflow.inventory.api.ReserveStockCommand
-import io.github.kdh949.beanflow.inventory.api.StockRequirement
-import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
-import io.github.kdh949.beanflow.inventory.internal.SellableStockEntity
-import io.github.kdh949.beanflow.inventory.internal.SellableStockJpaRepository
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationPolicyOperations
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitRestorationTrigger
 import io.github.kdh949.beanflow.operations.api.ExpiredBenefitType
@@ -67,8 +62,6 @@ internal class EventPublicationRecoveryIntegrationTest
         private val publications: IncompleteEventPublications,
         private val recoveryWorker: EventPublicationRecoveryWorker,
         private val failingListener: FailingReadyPublicationListener,
-        private val stockOperations: StockReservationOperations,
-        private val stockRepository: SellableStockJpaRepository,
         private val compensationOperations: OrderCompensationOperations,
         private val policies: ExpiredBenefitRestorationPolicyOperations,
         private val jdbcTemplate: JdbcTemplate,
@@ -83,8 +76,8 @@ internal class EventPublicationRecoveryIntegrationTest
             jdbcTemplate.execute(
                 "TRUNCATE TABLE notification_customer_preference, notification_inbox_item, notification_delivery, " +
                     "operations_reprocessing_case, " +
-                    "operations_order_compensation_case, inventory_stock_reservation, " +
-                    "inventory_sellable_stock, event_publication CASCADE",
+                    "operations_order_compensation_case, " +
+                    "event_publication CASCADE",
             )
             failingListener.reset()
             clock.reset()
@@ -271,14 +264,12 @@ internal class EventPublicationRecoveryIntegrationTest
             assertThat(steps.getValue(OrderCompensationStepType.PICKUP).state)
                 .isEqualTo(OrderCompensationStepState.MANUAL_REVIEW)
             assertThat(steps.getValue(OrderCompensationStepType.PICKUP).attemptCount).isZero()
-            assertThat(steps.getValue(OrderCompensationStepType.STOCK).state)
-                .isEqualTo(OrderCompensationStepState.SUCCEEDED)
             assertThat(steps.getValue(OrderCompensationStepType.COUPON).state)
                 .isEqualTo(OrderCompensationStepState.NOT_REQUIRED)
             assertThat(steps.getValue(OrderCompensationStepType.POINTS).state)
                 .isEqualTo(OrderCompensationStepState.NOT_REQUIRED)
             assertThat(reprocessingReasonCount("EVENT_PUBLICATION_RETRY_EXHAUSTED")).isEqualTo(1)
-            assertThat(completedCancellationPublicationCount()).isEqualTo(3)
+            assertThat(completedCancellationPublicationCount()).isEqualTo(2)
         }
 
         @Test
@@ -299,26 +290,12 @@ internal class EventPublicationRecoveryIntegrationTest
             assertThat(after).isEqualTo(before)
             assertThat(reprocessingReasonCount("PUBLICATION_TARGET_UNMAPPED")).isEqualTo(1)
             assertThat(reprocessingReasonCount("EVENT_PUBLICATION_RETRY_EXHAUSTED")).isZero()
-            assertThat(completedCancellationPublicationCount()).isEqualTo(3)
+            assertThat(completedCancellationPublicationCount()).isEqualTo(2)
         }
 
         private fun cancellationWithMissingPickup(): CancellationFixture {
             val orderId = UUID.randomUUID()
             val storeId = UUID.randomUUID()
-            val stockId = UUID.randomUUID()
-            transactions.executeWithoutResult {
-                stockRepository.save(SellableStockEntity(stockId, storeId, 2))
-                stockOperations.reserve(
-                    ReserveStockCommand(
-                        orderId,
-                        storeId,
-                        listOf(StockRequirement(stockId, 1)),
-                        clock.instant().plusSeconds(300),
-                        "stock:$orderId",
-                    ),
-                )
-                stockOperations.confirm(orderId, "stock:$orderId")
-            }
             val couponPolicy =
                 policies.current(ExpiredBenefitRestorationTrigger.CUSTOMER_CANCELLATION, ExpiredBenefitType.COUPON)
             val pointsPolicy =

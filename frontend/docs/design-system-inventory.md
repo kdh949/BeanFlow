@@ -86,7 +86,7 @@ Router의 40개 path/index/layout entry에 연결된 36개 element component는 
 | `/app` | `CustomerHomePage` | active order, empty, recommendation unavailable, loading |
 | `/app/stores` | `StoreSearchPage` | results, empty, permission denied, unavailable, loading |
 | `/app/stores/:storeId` | `StoreDetailPage` | menu/slot success, closed, unavailable, loading, favorite action |
-| `/app/cart` | `CartPage` | items, empty/corrupt, stock and price conflict |
+| `/app/cart` | `CartPage` | items, empty/corrupt, availability and price conflict |
 | `/app/checkout/:orderId` | `CheckoutPage` | pending payment, reorder price change, unavailable, loading |
 | `/app/payments/:paymentId/success`, `/fail` | `PaymentSuccessPage`, `PaymentFailPage` | approved, declined, unknown/reconciling, manual review, dependency error |
 | `/app/orders`, `/app/orders/:orderReference` | `CustomerOrdersPage`, `CustomerOrderDetailPage` | active/past/empty and all order/reorder transition states |

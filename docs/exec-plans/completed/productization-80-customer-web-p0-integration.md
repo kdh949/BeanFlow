@@ -63,7 +63,7 @@ P0 13화면을 모두 API와 연결하고 공통 loading/empty/error 상태를 �
 1. customer 요청에 Authorization Bearer header를 붙이지 않는다. HttpOnly Session Cookie는 JS로 읽지 않는다.
 2. unsafe method는 customer CSRF cookie에 대응하는 header가 없으면 전송하지 않는다.
 3. customer ID, account ID와 order UUID를 입력 form이나 request body에서 받지 않는다.
-4. cart는 한 매장만 허용하고 가격·판매 가능·재고·슬롯·혜택은 주문 생성에서 서버가 다시 검증한다.
+4. cart는 한 매장만 허용하고 가격·판매 가능·슬롯·혜택은 주문 생성에서 서버가 다시 검증한다.
 5. `allowedActions`만 버튼 활성화 근거로 사용한다. 프론트가 Order 상태 머신을 복제하지 않는다.
 6. 결제 confirm timeout·network error·202 뒤에는 confirm을 새 key로 자동 재호출하지 않고 기존
    `/payments/{paymentId}`를 조회한다.
@@ -106,7 +106,7 @@ Customer routes
   호출한다. 누락은 `POINT_ACCOUNT_INTEGRITY_FAILURE` 503이다. legacy account UUID endpoint는 운영
   support 경로를 위해 유지한다.
 - reorder facade는 owner + publicReference로 source Order를 찾고 기존 FastReorder transaction에 내부
-  UUID를 전달한다. 상태·가격·재고·slot 검증은 새로 복제하지 않는다.
+  UUID를 전달한다. 상태·가격·slot 검증은 새로 복제하지 않는다.
 
 ## Alternatives Considered
 
@@ -122,7 +122,7 @@ Customer routes
 - `/me` 401은 login, 403은 actor mismatch, 503은 인증/Session dependency failure로 각각 렌더링한다.
 - signup duplicate 409는 login failure와 분리해 사용자명 수정 상태로 표시한다.
 - 검색·주문 목록·포인트 조회 실패를 empty/0으로 표시하지 않는다.
-- 주문 생성의 가격·재고·slot conflict는 cart를 자동 수정하지 않고 서버 detail과 재확인 행동을 보여준다.
+- 주문 생성의 가격·slot conflict는 cart를 자동 수정하지 않고 서버 detail과 재확인 행동을 보여준다.
 - Toss fail callback은 confirm을 호출하지 않는다. success callback 검증 실패는 새 결제를 만들지 않는다.
 - Payment 조회 202/UNKNOWN은 처리 중이며 backoff polling한다. 명시적 terminal failure일 때만 새 주문
   시작 행동을 노출한다.
@@ -203,12 +203,12 @@ POST /api/v1/me/orders/{orderReference}/reorders
 
 - customer client가 Bearer를 붙이지 않고 unsafe method에만 정확한 CSRF header를 보내는지 검증.
 - Session 401/403/503 route boundary와 logout 뒤 보호 route 차단.
-- cart 한 매장 제약, schema 손상, 가격·재고·slot conflict에서 자동 금액 신뢰 부재.
+- cart 한 매장 제약, schema 손상, 가격·slot conflict에서 자동 금액 신뢰 부재.
 - 결제 success callback replay, confirm network loss, 202/UNKNOWN, terminal decline와 offline/online 중복 event.
 - network loss 뒤 Provider confirm call 수가 증가하지 않고 status GET만 반복되는지 검증.
 - order 상태별 allowedActions와 실제 버튼, 202 취소와 환불 완료 분리.
 - `/me/points` 실제 0원, PointAccount 손상 503, 원장 cursor 격리와 internal accountId 비노출.
-- reorder가 publicReference ownership을 확인하고 현재 가격·판매·재고·slot을 재검증하는지 검증.
+- reorder가 publicReference ownership을 확인하고 현재 가격·판매·slot을 재검증하는지 검증.
 - loading/empty/success/validation/conflict/offline/retryable/terminal/401/403을 P0 화면별로 검증.
 - DOM·route·request body에 수동 token·customer/order/account UUID 입력 field가 없는지 검증.
 - 420px customer viewport에서 keyboard focus, label, error announcement와 reduced-motion 상태 검증.

@@ -26,7 +26,7 @@ evidence가 존재한다. 이 판정은 현재 source runtime capability에 대�
 - `GET /api/v1/orders/{orderId}`
   - 고객용 refund recovery projection을 제공하되 내부 attempt/error/manual-review detail은 숨긴다.
 - `GET /api/v1/operations/orders/{orderId}/compensation`
-  - audited operator grant와 access reason을 요구하고 여섯 step의 운영 상세를 제공한다.
+  - audited operator grant와 access reason을 요구하고 다섯 step의 운영 상세를 제공한다.
 - `POST /api/v1/operations/orders/{orderId}/customer-cancellation-refund-reconciliations`
   - 불명 환불을 성공으로 단정하지 않고 durable reconciliation work를 접수한다.
 - `GET/PATCH /api/v1/store-orders/...`
@@ -63,7 +63,7 @@ PointAccount read는 customer cancellation command/recovery와 독립적으로 �
 ## Protected invariants
 
 - 고객 취소 허용 상태와 acceptance deadline을 벗어나면 state conflict다.
-- `PENDING_PAYMENT`의 네 owner release가 하나라도 실패하면 취소 성공을 반환하지 않는다.
+- `PENDING_PAYMENT`의 세 owner release가 하나라도 실패하면 취소 성공을 반환하지 않는다.
 - `PAID`의 `202`는 환불·복원·알림 완료가 아니며 외부 결과 불명은 durable 상태로 남는다.
 - Refund 요청액, 선행 성공 환불액과 remaining refundable 금액은 snapshot/current 의미를
   섞지 않는다.

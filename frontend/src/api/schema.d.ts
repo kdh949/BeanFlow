@@ -511,29 +511,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/stores/{storeId}/menus": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 매장의 현재 노출 메뉴 목록을 조회합니다
-         * @description 해당 매장 사장님이 등록한 현재 카탈로그 전체를 반환합니다. 판매 중지된
-         *     메뉴/옵션도 포함됩니다. 200 응답은 페이지가 아닌 완전한 목록입니다. 메뉴가
-         *     1,000개, 옵션이 5,000개를 넘으면 카탈로그를 조용히 잘라내는 대신 503을
-         *     반환합니다. 존재하지 않는 매장이면 404를 반환합니다.
-         */
-        get: operations["listStoreMenus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/stores/{storeId}/menus/{menuId}/image": {
         parameters: {
             query?: never;
@@ -620,7 +597,7 @@ export interface paths {
         put?: never;
         /**
          * 현재 owner 상태로 비예약 주문 견적 계산
-         * @description 메뉴·옵션·재고·픽업 슬롯·쿠폰·포인트와 주문 정책을 현재 상태로 검증하고
+         * @description 메뉴·옵션·픽업 슬롯·쿠폰·포인트와 주문 정책을 현재 상태로 검증하고
          *     서버 권위 금액 및 opaque quoteFingerprint를 반환합니다. 이 계산은 Order,
          *     reservation, Payment, idempotency record, Audit, event를 만들지 않으며 Provider를
          *     호출하지 않습니다. quotedAt은 정보 필드이고 fingerprint 입력이 아닙니다.
@@ -644,7 +621,7 @@ export interface paths {
         /**
          * (고객) 주문 생성
          * @description 고객이 확인한 견적 fingerprint와 매장, 픽업 시간, 메뉴 목록을 보내 새 주문을 생성하는 API입니다.
-         *     서버 소유 장바구니가 없으므로 주문 항목 전체를 한 번에 보내며, 메뉴 가격·재고·
+         *     서버 소유 장바구니가 없으므로 주문 항목 전체를 한 번에 보내며, 메뉴 가격·판매 상태·
          *     픽업 슬롯·쿠폰·포인트를 이 요청 하나의 트랜잭션에서 다시 계산하며, fingerprint가
          *     정확히 일치한 뒤에만 모두 예약합니다. 불일치는 ORDER_QUOTE_STALE과 currentQuote를 반환합니다.
          *     같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 그대로 재생합니다.
@@ -653,7 +630,7 @@ export interface paths {
          *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
          *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
          *     - 403: 매장·쿠폰 등 접근 권한이 없는 경우
-         *     - 409: 메뉴 판매 불가, 재고·슬롯 부족, 쿠폰·포인트 사용 불가 또는 `Idempotency-Key`가 충돌한 경우
+         *     - 409: 메뉴 판매 불가, 픽업 슬롯 부족, 쿠폰·포인트 사용 불가 또는 `Idempotency-Key`가 충돌한 경우
          *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["createOrder"];
@@ -676,7 +653,7 @@ export interface paths {
          * 종료된 주문을 원본으로 새 주문 생성(재주문)
          * @description 소유 고객은 COMPLETED, CANCELLED, REJECTED, EXPIRED 상태의 원본(source)
          *     주문으로만 재주문할 수 있습니다. 서버는 메뉴 ID, 정규화된 옵션 ID, 수량만
-         *     복사한 뒤 현재 시점의 Merchant 가격과 재고를 다시 검증하고, 기존과 동일한
+         *     복사한 뒤 현재 시점의 Merchant 가격과 판매 상태를 다시 검증하고, 기존과 동일한
          *     원자적 예약(reservation) 흐름을 사용합니다. 과거의 혜택, 결제, 픽업 슬롯,
          *     정산 스냅샷은 절대 복사하지 않습니다. 원본 항목 중 하나라도 더 이상 이용할
          *     수 없으면 요청 전체가 실패하며, 부분 주문은 생성되지 않습니다.
@@ -737,7 +714,7 @@ export interface paths {
         /**
          * (고객) 주문 취소
          * @description 고객이 내부 주문 ID로 본인 주문을 취소하는 API입니다.
-         *     결제 전 주문(PENDING_PAYMENT)과 매장 수락 전 결제 완료 주문(PAID)만 취소할 수 있습니다. 같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 반환합니다. 결제 전 취소는 즉시 완료되어 200을 반환하고, 결제 완료 주문은 취소를 확정한 뒤 환불·쿠폰·포인트·재고 복구를 별도로 시작하므로 202를 반환할 수 있습니다. 202는 후속 복구가 모두 끝났다는 뜻이 아닙니다.
+         *     결제 전 주문(PENDING_PAYMENT)과 매장 수락 전 결제 완료 주문(PAID)만 취소할 수 있습니다. 같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 반환합니다. 결제 전 취소는 즉시 완료되어 200을 반환하고, 결제 완료 주문은 취소를 확정한 뒤 환불·쿠폰·포인트 복구를 별도로 시작하므로 202를 반환할 수 있습니다. 202는 후속 복구가 모두 끝났다는 뜻이 아닙니다.
          *
          *     주요 오류:
          *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
@@ -828,7 +805,7 @@ export interface paths {
         /**
          * (고객) 공개 주문번호로 주문 취소
          * @description 고객이 `BF-XXXX-XXXX` 형식의 공개 주문번호로 본인 주문을 찾아 취소하는 API입니다.
-         *     결제 전 주문(PENDING_PAYMENT)과 매장 수락 전 결제 완료 주문(PAID)만 취소할 수 있습니다. 같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 반환합니다. 결제 완료 주문은 취소 후 환불·혜택·재고 복구가 별도로 이어질 수 있습니다.
+         *     결제 전 주문(PENDING_PAYMENT)과 매장 수락 전 결제 완료 주문(PAID)만 취소할 수 있습니다. 같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 반환합니다. 결제 완료 주문은 취소 후 환불·혜택 복구가 별도로 이어질 수 있습니다.
          *
          *     주요 오류:
          *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
@@ -1234,7 +1211,7 @@ export interface paths {
         /**
          * (스토어) 주문 상세 조회
          * @description 스토어 구성원이 주문 상세를 조회하는 API입니다.
-         *     주문이 취소되거나 거절된 경우에는 환불, 쿠폰·포인트 반환, 재고·픽업 예약 해제 같은 후속 처리의 전체 진행 상태도 함께 보여 줍니다. 스토어 화면에는 업무에 필요한 요약만 제공하며 내부 오류 코드, 재시도 횟수, 처리 건 ID, 정책 버전은 제외합니다.
+         *     주문이 취소되거나 거절된 경우에는 환불, 쿠폰·포인트 반환, 픽업 예약 해제 같은 후속 처리의 전체 진행 상태도 함께 보여 줍니다. 스토어 화면에는 업무에 필요한 요약만 제공하며 내부 오류 코드, 재시도 횟수, 처리 건 ID, 정책 버전은 제외합니다.
          *
          *     주요 오류:
          *     - 401: 로그인 정보가 없거나 유효하지 않은 경우
@@ -1369,7 +1346,7 @@ export interface paths {
         /**
          * (스토어) 주문 처리 단계 변경
          * @description 스토어 구성원이 공개 주문번호로 주문을 찾아 수락, 거절, 제조 시작, 준비 완료, 픽업 완료 중 현재 상태에서 허용된 작업 하나를 실행하는 API입니다.
-         *     `expectedStatus`는 화면을 본 뒤 다른 요청이 주문 상태를 먼저 바꿨는지 확인하는 값입니다. 같은 Idempotency-Key와 같은 요청은 최초 결과를 반환합니다. 거절은 즉시 확정될 수 있지만 환불·혜택·재고 복구는 별도로 계속되므로 202를 반환할 수 있습니다.
+         *     `expectedStatus`는 화면을 본 뒤 다른 요청이 주문 상태를 먼저 바꿨는지 확인하는 값입니다. 같은 Idempotency-Key와 같은 요청은 최초 결과를 반환합니다. 거절은 즉시 확정될 수 있지만 환불·혜택 복구는 별도로 계속되므로 202를 반환할 수 있습니다.
          *
          *     주요 오류:
          *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
@@ -1431,7 +1408,7 @@ export interface paths {
         /**
          * (운영팀) 주문 취소·거절 후 처리 상태 조회
          * @description 운영팀이 취소되거나 거절된 주문의 후속 처리 상태를 조회하는 API입니다.
-         *     환불, 픽업 예약 해제, 재고 복구, 쿠폰·포인트 반환, 고객 알림의 단계별 상태와 시도 횟수를 확인할 수 있습니다. `ORDER_COMPENSATION_READ` 권한과 조회 사유를 담은 `X-Access-Reason` 헤더가 필요하며, 조회 사실은 감사 기록에 남습니다.
+         *     환불, 픽업 예약 해제, 쿠폰·포인트 반환, 고객 알림의 단계별 상태와 시도 횟수를 확인할 수 있습니다. `ORDER_COMPENSATION_READ` 권한과 조회 사유를 담은 `X-Access-Reason` 헤더가 필요하며, 조회 사실은 감사 기록에 남습니다.
          *
          *     주요 오류:
          *     - 400: 조회 사유가 비어 있거나 헤더 형식이 올바르지 않은 경우
@@ -2246,6 +2223,103 @@ export interface paths {
          */
         put: operations["replaceStoreOrderingPolicy"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/menu-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 점주 거래 메뉴 카탈로그 목록 조회
+         * @description ACTIVE same-store STORE_OWNER 또는 STORE_STAFF가 ACTIVE/ARCHIVED 중 한 lifecycle의 Menu를
+         *     `(name, menuId)` signed cursor로 조회합니다. cursor는 actor, Store, lifecycle과 limit에 묶입니다.
+         */
+        get: operations["listMerchantMenuCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/menus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 매장의 현재 노출 메뉴 목록을 조회합니다
+         * @description 해당 매장 사장님이 등록한 현재 카탈로그 전체를 반환합니다. 판매 중지된
+         *     메뉴/옵션도 포함됩니다. 200 응답은 페이지가 아닌 완전한 목록입니다. 메뉴가
+         *     1,000개, 옵션이 5,000개를 넘으면 카탈로그를 조용히 잘라내는 대신 503을
+         *     반환합니다. 존재하지 않는 매장이면 404를 반환합니다.
+         */
+        get: operations["listStoreMenus"];
+        put?: never;
+        /**
+         * 거래 Menu Aggregate 생성
+         * @description ACTIVE same-store STORE_OWNER 또는 STORE_STAFF가 client UUID를 포함한 Menu, Option,
+         *     Configuration과 requirement 전체를 한 transaction으로 생성합니다. 같은 Idempotency-Key와
+         *     payload는 최초 응답을 재생하고, 검색 색인과 Audit 실패는 전체 변경을 rollback합니다.
+         */
+        post: operations["createMerchantMenu"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/menus/{menuId}/trade-content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Active Menu 거래 내용 현재 편집본 조회
+         * @description ARCHIVED Menu는 목록의 요약만 제공하며 현재 편집본 조회는 409로 거절합니다.
+         */
+        get: operations["getMerchantMenuTradeContent"];
+        /**
+         * Menu 거래 내용 전체 교체
+         * @description Menu root와 active child의 원하는 전체 상태를 제출합니다. 빠진 기존 Option/Configuration은
+         *     보관하고 normalized 거래 의미가 같으면 version, updatedAt과 Audit를 바꾸지 않습니다.
+         *     stale expectedVersion은 MERCHANT_CONTENT_STALE입니다.
+         */
+        put: operations["replaceMerchantMenuTradeContent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/menus/{menuId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Menu Aggregate 보관
+         * @description ACTIVE Menu와 active Option/Configuration을 terminal ARCHIVED로 바꾸고 고객 메뉴와 검색에서
+         *     원자적으로 제거합니다. v1에는 복원과 물리 삭제가 없습니다.
+         */
+        post: operations["archiveMerchantMenu"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4386,11 +4460,11 @@ export interface components {
          */
         RuntimeStoreOrderResult: {
             order: components["schemas"]["StoreOrder"];
-            /** @description 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다. */
+            /** @description 매장에 허용된 범위로 축약한 환불·혜택 복구 진행 정보입니다. */
             compensationRecovery?: components["schemas"]["RuntimeStoreCompensationSummary"];
         };
         /**
-         * @description 스토어 주문 상태 변경 결과입니다. 거절 처리에서는 후속 복구 요약이 함께 올 수 있지만, 응답 시점에 환불·혜택·재고 복구가 모두 끝났다는 뜻은 아닙니다.
+         * @description 스토어 주문 상태 변경 결과입니다. 거절 처리에서는 후속 복구 요약이 함께 올 수 있지만, 응답 시점에 환불·혜택 복구가 모두 끝났다는 뜻은 아닙니다.
          * @example {
          *       "order": {
          *         "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
@@ -4436,11 +4510,11 @@ export interface components {
          */
         RuntimeStoreOrderTransitionResult: {
             order: components["schemas"]["StoreOrder"];
-            /** @description 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다. */
+            /** @description 매장에 허용된 범위로 축약한 환불·혜택 복구 진행 정보입니다. */
             compensationRecovery?: components["schemas"]["RuntimeStoreCompensationSummary"];
         };
         /**
-         * @description 주문 취소나 거절 뒤 진행되는 환불·혜택·재고 복구를 스토어에 간단히 보여 주는 정보입니다. 발생 원인, 전체 진행 상태, 마지막 갱신 시각만 포함하며 내부 오류·재시도 횟수·정책 버전은 제외합니다.
+         * @description 주문 취소나 거절 뒤 진행되는 환불·혜택 복구를 스토어에 간단히 보여 주는 정보입니다. 발생 원인, 전체 진행 상태, 마지막 갱신 시각만 포함하며 내부 오류·재시도 횟수·정책 버전은 제외합니다.
          * @example {
          *       "trigger": "STORE_REJECTION",
          *       "state": "PROCESSING",
@@ -4465,7 +4539,7 @@ export interface components {
             updatedAt: string;
         };
         /**
-         * @description 주문 거절이나 고객 취소 뒤 진행되는 환불·재고·쿠폰·포인트 복구 상황을 담는 운영자용 응답입니다.
+         * @description 주문 거절이나 고객 취소 뒤 진행되는 환불·쿠폰·포인트 복구 상황을 담는 운영자용 응답입니다.
          * @example {
          *       "compensation": {
          *         "caseId": "f33f27d6-8e6c-5712-8567-154b01cbb087",
@@ -4493,11 +4567,6 @@ export interface components {
          *             "attemptCount": 1
          *           },
          *           {
-         *             "type": "STOCK",
-         *             "state": "SUCCEEDED",
-         *             "attemptCount": 1
-         *           },
-         *           {
          *             "type": "COUPON",
          *             "state": "PROCESSING",
          *             "attemptCount": 1
@@ -4519,7 +4588,7 @@ export interface components {
          *     }
          */
         RuntimeOperatorCompensationView: {
-            /** @description 운영자 전용 전체 환불·혜택·재고 복구 진행 정보입니다. */
+            /** @description 운영자 전용 전체 환불·혜택 복구 진행 정보입니다. */
             compensation: components["schemas"]["CompensationSummary"];
         };
         OperationsOidcConfiguration: {
@@ -4909,87 +4978,6 @@ export interface components {
             directionsHint?: string | null;
             operatingHours?: components["schemas"]["StoreWeeklyOperatingHours"] | null;
         };
-        /**
-         * Format: int64
-         * @description 음수가 아닌 정수 원(KRW) 단위 금액입니다. 소수점 금액은 사용하지 않습니다.
-         * @example 12500
-         */
-        MoneyKrw: number;
-        /**
-         * @description 금액에 사용하는 통화 코드입니다. 현재는 원화(KRW)만 지원합니다.
-         * @example KRW
-         * @enum {string}
-         */
-        Currency: "KRW";
-        /**
-         * @description 메뉴에 추가로 붙일 수 있는 옵션입니다(예 - 샷 추가, 사이즈 업).
-         * @example {
-         *       "optionId": "5c2b3e2a-1c8e-4a5c-9c0a-8f1e2d3c4b6b",
-         *       "name": "샷 추가",
-         *       "additionalPriceKrw": 500,
-         *       "available": true
-         *     }
-         */
-        MenuOption: {
-            optionId: components["schemas"]["Identifier"];
-            name: string;
-            additionalPriceKrw: components["schemas"]["MoneyKrw"];
-            available: boolean;
-        };
-        /**
-         * @description 매장이 판매하는 메뉴 하나와 선택 가능한 옵션 목록입니다.
-         * @example {
-         *       "menuId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
-         *       "name": "아메리카노",
-         *       "basePriceKrw": 4500,
-         *       "currency": "KRW",
-         *       "available": true,
-         *       "options": [
-         *         {
-         *           "optionId": "5c2b3e2a-1c8e-4a5c-9c0a-8f1e2d3c4b6b",
-         *           "name": "샷 추가",
-         *           "additionalPriceKrw": 500,
-         *           "available": true
-         *         }
-         *       ]
-         *     }
-         */
-        Menu: {
-            menuId: components["schemas"]["Identifier"];
-            name: string;
-            basePriceKrw: components["schemas"]["MoneyKrw"];
-            currency: components["schemas"]["Currency"];
-            available: boolean;
-            displayCategory?: string;
-            description?: string;
-            options: components["schemas"]["MenuOption"][];
-            image?: components["schemas"]["StorefrontImage"];
-        };
-        /**
-         * @description 매장의 현재 노출 메뉴 전체 목록입니다. 페이지가 아닌 완전한 목록입니다.
-         * @example {
-         *       "items": [
-         *         {
-         *           "menuId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
-         *           "name": "아메리카노",
-         *           "basePriceKrw": 4500,
-         *           "currency": "KRW",
-         *           "available": true,
-         *           "options": [
-         *             {
-         *               "optionId": "5c2b3e2a-1c8e-4a5c-9c0a-8f1e2d3c4b6b",
-         *               "name": "샷 추가",
-         *               "additionalPriceKrw": 500,
-         *               "available": true
-         *             }
-         *           ]
-         *         }
-         *       ]
-         *     }
-         */
-        MenuList: {
-            items: components["schemas"]["Menu"][];
-        };
         MenuDisplayContentAuthoring: {
             displayCategory?: string;
             description?: string;
@@ -5053,6 +5041,12 @@ export interface components {
              */
             quantity: number;
         };
+        /**
+         * Format: int64
+         * @description 음수가 아닌 정수 원(KRW) 단위 금액입니다. 소수점 금액은 사용하지 않습니다.
+         * @example 12500
+         */
+        MoneyKrw: number;
         OrderQuoteRequest: {
             storeId: components["schemas"]["Identifier"];
             pickupSlotId: components["schemas"]["Identifier"];
@@ -5096,7 +5090,7 @@ export interface components {
         };
         /**
          * @description 신규 주문 생성 요청입니다. 서버 소유 장바구니가 없으므로 주문 항목 전체를 한
-         *     번에 보냅니다. 메뉴 가격, 재고, 픽업 슬롯, 쿠폰, 포인트를 이 요청 하나의
+         *     번에 보냅니다. 메뉴 가격, 픽업 슬롯, 쿠폰, 포인트를 이 요청 하나의
          *     트랜잭션에서 모두 재검증·예약합니다.
          * @example {
          *       "storeId": "9f1c2a3b-4d5e-6f70-8192-a3b4c5d6e7f8",
@@ -5165,6 +5159,12 @@ export interface components {
             /** @description 해당 주문 항목에 배분된 현금 결제 금액입니다. */
             cashPaidKrw: components["schemas"]["MoneyKrw"];
         };
+        /**
+         * @description 금액에 사용하는 통화 코드입니다. 현재는 원화(KRW)만 지원합니다.
+         * @example KRW
+         * @enum {string}
+         */
+        Currency: "KRW";
         /**
          * @description 고객이 주문을 취소한 뒤 현금 환불이 어디까지 진행됐는지 보여 주는 요약입니다.
          *     고객 화면에는 `NOT_REQUIRED`, `REQUESTED`, `PROCESSING`, `SUCCEEDED`만 사용합니다. 내부 재시도 예정, 결과 불명, 상태 재확인 중은 모두 `PROCESSING`으로 보여 주며, 자동 처리가 오래 지연되거나 수동 확인이 필요하면 `noticeCode: REFUND_DELAYED`를 함께 제공합니다. 서버가 금액을 확인할 수 없을 때는 0원으로 추정하지 않고 관련 금액 필드를 생략합니다.
@@ -6198,7 +6198,7 @@ export interface components {
             readyAt?: components["schemas"]["DateTime"];
         };
         /**
-         * @description 주문 거절이나 고객 취소 뒤 환불·재고·쿠폰·포인트 복구가 어디까지 진행됐는지 스토어에 보여 주는 요약입니다. 내부 오류와 재시도 횟수는 포함하지 않습니다.
+         * @description 주문 거절이나 고객 취소 뒤 환불·쿠폰·포인트 복구가 어디까지 진행됐는지 스토어에 보여 주는 요약입니다. 내부 오류와 재시도 횟수는 포함하지 않습니다.
          * @example {
          *       "trigger": "CUSTOMER_CANCELLATION",
          *       "state": "SUCCEEDED",
@@ -6271,7 +6271,7 @@ export interface components {
             allowedActions: components["schemas"]["StoreOrderAction"][];
             /** @description 실제 상태 전이 때 저장된 시각만 포함하며 ETag의 의미 표현에 참여합니다. */
             lifecycle?: components["schemas"]["StoreOrderBoardLifecycle"];
-            /** @description 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다. */
+            /** @description 매장에 허용된 범위로 축약한 환불·혜택 복구 진행 정보입니다. */
             compensationRecovery?: components["schemas"]["StoreCompensationSummary"];
         };
         StoreOrderBoardDateGroup: {
@@ -6414,7 +6414,7 @@ export interface components {
             policyVersionId: number;
         };
         /**
-         * @description 주문 취소·거절 뒤 처리해야 하는 환불, 픽업 예약, 재고, 쿠폰, 포인트, 고객 알림 중 한 단계의 상태입니다. 현재 상태, 시도 횟수와 선택적인 최근 오류 코드를 포함합니다.
+         * @description 주문 취소·거절 뒤 처리해야 하는 환불, 픽업 예약, 쿠폰, 포인트, 고객 알림 중 한 단계의 상태입니다. 현재 상태, 시도 횟수와 선택적인 최근 오류 코드를 포함합니다.
          * @example {
          *       "type": "PAYMENT",
          *       "state": "SUCCEEDED",
@@ -6423,10 +6423,10 @@ export interface components {
          */
         CompensationStep: {
             /**
-             * @description 환불, 픽업 예약, 재고, 쿠폰, 포인트, 고객 알림 중 어떤 복구 단계인지 나타냅니다.
+             * @description 환불, 픽업 예약, 쿠폰, 포인트, 고객 알림 중 어떤 복구 단계인지 나타냅니다.
              * @enum {string}
              */
-            type: "PAYMENT" | "PICKUP" | "STOCK" | "COUPON" | "POINTS" | "CUSTOMER_NOTIFICATION";
+            type: "PAYMENT" | "PICKUP" | "COUPON" | "POINTS" | "CUSTOMER_NOTIFICATION";
             /**
              * @description 해당 보상 단계의 현재 처리 상태입니다.
              * @enum {string}
@@ -6438,7 +6438,7 @@ export interface components {
             lastErrorCode?: string;
         };
         /**
-         * @description 주문 취소나 거절 뒤 진행되는 전체 후속 처리 상태입니다. 환불, 픽업 예약 해제, 재고 복구, 쿠폰·포인트 반환, 고객 알림의 단계별 상태와 시도 횟수를 운영팀에 제공합니다. 주문이 종료됐다고 모든 후속 처리가 끝난 것은 아닙니다.
+         * @description 주문 취소나 거절 뒤 진행되는 전체 후속 처리 상태입니다. 환불, 픽업 예약 해제, 쿠폰·포인트 반환, 고객 알림의 단계별 상태와 시도 횟수를 운영팀에 제공합니다. 주문이 종료됐다고 모든 후속 처리가 끝난 것은 아닙니다.
          * @example {
          *       "caseId": "f33f27d6-8e6c-5712-8567-154b01cbb087",
          *       "trigger": "STORE_REJECTION",
@@ -6461,11 +6461,6 @@ export interface components {
          *         },
          *         {
          *           "type": "PICKUP",
-         *           "state": "SUCCEEDED",
-         *           "attemptCount": 1
-         *         },
-         *         {
-         *           "type": "STOCK",
          *           "state": "SUCCEEDED",
          *           "attemptCount": 1
          *         },
@@ -6504,7 +6499,7 @@ export interface components {
              * @enum {string}
              */
             state: "PROCESSING" | "RETRY_SCHEDULED" | "UNKNOWN" | "SUCCEEDED" | "MANUAL_REVIEW";
-            /** @description PAYMENT, PICKUP, STOCK, COUPON, POINTS, CUSTOMER_NOTIFICATION 여섯 단계의 상세입니다. */
+            /** @description PAYMENT, PICKUP, COUPON, POINTS, CUSTOMER_NOTIFICATION 다섯 단계의 상세입니다. */
             steps: components["schemas"]["CompensationStep"][];
             /** @description 리소스가 마지막으로 변경된 시각입니다. */
             updatedAt: components["schemas"]["DateTime"];
@@ -7510,6 +7505,149 @@ export interface components {
         ReplaceStoreOrderingPolicyRequest: {
             acceptingOrders: boolean;
             pickupEnabled: boolean;
+            /** Format: int64 */
+            expectedVersion: number;
+        };
+        /** @enum {string} */
+        MenuCatalogLifecycle: "ACTIVE" | "ARCHIVED";
+        MenuCatalogSummary: {
+            /** Format: uuid */
+            menuId: string;
+            name: string;
+            /** Format: int64 */
+            basePriceKrw: number;
+            available: boolean;
+            lifecycle: components["schemas"]["MenuCatalogLifecycle"];
+            optionCount: number;
+            configurationCount: number;
+            /** Format: int64 */
+            version: number;
+            updatedAt: components["schemas"]["DateTime"];
+        };
+        MenuCatalogPage: {
+            items: components["schemas"]["MenuCatalogSummary"][];
+            nextCursor?: string;
+        };
+        /**
+         * @description 메뉴에 추가로 붙일 수 있는 옵션입니다(예 - 샷 추가, 사이즈 업).
+         * @example {
+         *       "optionId": "5c2b3e2a-1c8e-4a5c-9c0a-8f1e2d3c4b6b",
+         *       "name": "샷 추가",
+         *       "additionalPriceKrw": 500,
+         *       "available": true
+         *     }
+         */
+        MenuOption: {
+            optionId: components["schemas"]["Identifier"];
+            name: string;
+            additionalPriceKrw: components["schemas"]["MoneyKrw"];
+            available: boolean;
+        };
+        /**
+         * @description 매장이 판매하는 메뉴 하나와 선택 가능한 옵션 목록입니다.
+         * @example {
+         *       "menuId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *       "name": "아메리카노",
+         *       "basePriceKrw": 4500,
+         *       "currency": "KRW",
+         *       "available": true,
+         *       "options": [
+         *         {
+         *           "optionId": "5c2b3e2a-1c8e-4a5c-9c0a-8f1e2d3c4b6b",
+         *           "name": "샷 추가",
+         *           "additionalPriceKrw": 500,
+         *           "available": true
+         *         }
+         *       ]
+         *     }
+         */
+        Menu: {
+            menuId: components["schemas"]["Identifier"];
+            name: string;
+            basePriceKrw: components["schemas"]["MoneyKrw"];
+            currency: components["schemas"]["Currency"];
+            available: boolean;
+            displayCategory?: string;
+            description?: string;
+            options: components["schemas"]["MenuOption"][];
+            image?: components["schemas"]["StorefrontImage"];
+        };
+        /**
+         * @description 매장의 현재 노출 메뉴 전체 목록입니다. 페이지가 아닌 완전한 목록입니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "menuId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
+         *           "name": "아메리카노",
+         *           "basePriceKrw": 4500,
+         *           "currency": "KRW",
+         *           "available": true,
+         *           "options": [
+         *             {
+         *               "optionId": "5c2b3e2a-1c8e-4a5c-9c0a-8f1e2d3c4b6b",
+         *               "name": "샷 추가",
+         *               "additionalPriceKrw": 500,
+         *               "available": true
+         *             }
+         *           ]
+         *         }
+         *       ]
+         *     }
+         */
+        MenuList: {
+            items: components["schemas"]["Menu"][];
+        };
+        MenuOptionTradeContent: {
+            /** Format: uuid */
+            optionId: string;
+            name: string;
+            /** Format: int64 */
+            additionalPriceKrw: number;
+            available: boolean;
+        };
+        MenuConfigurationTradeContent: {
+            /** Format: uuid */
+            configurationId: string;
+            selectedOptionIds: string[];
+            available: boolean;
+        };
+        MenuTradeDefinition: {
+            /** Format: uuid */
+            menuId: string;
+            name: string;
+            /** Format: int64 */
+            basePriceKrw: number;
+            available: boolean;
+            options: components["schemas"]["MenuOptionTradeContent"][];
+            configurations: components["schemas"]["MenuConfigurationTradeContent"][];
+        };
+        MenuTradeContent: {
+            /** Format: uuid */
+            menuId: string;
+            name: string;
+            /** Format: int64 */
+            basePriceKrw: number;
+            available: boolean;
+            lifecycle: components["schemas"]["MenuCatalogLifecycle"];
+            options: components["schemas"]["MenuOptionTradeContent"][];
+            configurations: components["schemas"]["MenuConfigurationTradeContent"][];
+            /** Format: int64 */
+            version: number;
+            updatedAt: components["schemas"]["DateTime"];
+        };
+        ReplaceMenuTradeContentRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            /** Format: uuid */
+            menuId: string;
+            name: string;
+            /** Format: int64 */
+            basePriceKrw: number;
+            available: boolean;
+            options: components["schemas"]["MenuOptionTradeContent"][];
+            configurations: components["schemas"]["MenuConfigurationTradeContent"][];
+        };
+        ArchiveMenuRequest: {
             /** Format: int64 */
             expectedVersion: number;
         };
@@ -11424,31 +11562,6 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
-    listStoreMenus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                storeId: components["parameters"]["StoreId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 노출 중인 메뉴와 옵션 목록 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MenuList"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            503: components["responses"]["DependencyUnavailable"];
-        };
-    };
     replaceMenuImage: {
         parameters: {
             query?: never;
@@ -14143,6 +14256,214 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StoreOrderingPolicy"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listMerchantMenuCatalog: {
+        parameters: {
+            query?: {
+                /** @description 생략하면 ACTIVE입니다. */
+                lifecycle?: components["schemas"]["MenuCatalogLifecycle"];
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 요청한 lifecycle의 Menu authoring 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuCatalogPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listStoreMenus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 노출 중인 메뉴와 옵션 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createMerchantMenu: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MenuTradeDefinition"];
+            };
+        };
+        responses: {
+            /** @description 생성 또는 replay된 normalized Menu 거래 내용 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuTradeContent"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getMerchantMenuTradeContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 normalized Menu 거래 내용 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuTradeContent"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceMerchantMenuTradeContent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceMenuTradeContentRequest"];
+            };
+        };
+        responses: {
+            /** @description 교체, no-op 또는 replay 후 normalized 거래 내용 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuTradeContent"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    archiveMerchantMenu: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArchiveMenuRequest"];
+            };
+        };
+        responses: {
+            /** @description 보관 또는 replay된 Menu 거래 내용 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuTradeContent"];
                 };
             };
             400: components["responses"]["BadRequest"];

@@ -51,9 +51,9 @@
   `OrderCompensationStep`에 매핑한다. registry의 duplicate key/ID는 startup failure이며,
   retry exhaustion 시 unknown target은 어떤 step도 추측해 변경하지 않고 publication을
   incomplete로 유지한 채 `PUBLICATION_TARGET_UNMAPPED` 운영 case로 fail closed한다.
-- `OrderRejectedV1`은 PAYMENT, PICKUP, STOCK, COUPON, POINTS,
-  CUSTOMER_NOTIFICATION 여섯 stable target을, `OrderCancelledV1`은 PICKUP, STOCK,
-  COUPON, POINTS 네 stable target만 가진다. 각 exact ID는 Plan 30 Event Contract 표가
+- `OrderRejectedV1`은 PAYMENT, PICKUP, COUPON, POINTS,
+  CUSTOMER_NOTIFICATION 다섯 stable target을, `OrderCancelledV1`은 PICKUP,
+  COUPON, POINTS 세 stable target만 가진다. 각 exact ID는 Plan 30 Event Contract 표가
   canonical이다.
 - contract test는 실제 application listener ID 집합과 registry 표가 일치하는지, 하나의
   target retry exhaustion이 해당 step 하나만 변경하는지 검증한다. target rename/version

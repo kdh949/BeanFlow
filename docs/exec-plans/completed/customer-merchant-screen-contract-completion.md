@@ -99,7 +99,7 @@ snapshot에서 읽는다.
   저장·추정한 값이 아니다.
 - **non-reserving order quote:** customer가 제출할 Order 입력을 현재 owner state로 계산한 read 결과다.
   Order, slot/coupon/point reservation, Payment, idempotency response, Audit 또는 event를 만들지 않으며
-  최종 가격·재고·슬롯을 보장하지 않는다.
+  최종 가격·슬롯을 보장하지 않는다.
 - **quote fingerprint:** server가 normalized quote input, line/option 구성, price/benefit/slot 결과와
   관련 owner version을 canonicalize해 만든 opaque optimistic-concurrency precondition이다. 금액,
   reservation ID, 권한 또는 결제 Provider input이 아니며, browser가 바꿔 보내도 server가 final transaction
@@ -823,7 +823,7 @@ gate are **Not run** until explicitly scheduled; they must not be inferred from 
   migration/OpenAPI runtime parity/인증 경로와 frontend typecheck, 23 unit files/169 tests, design check,
   app/Storybook build, Sites 4 tests, Storybook docs 39 entries/49 state surfaces 및 live Storybook 전체
   interaction/a11y가 통과했다. Provider sandbox와 full release gate는 실행하지 않았다.
-- 2026-08-26: Non-reserving quote vertical slice에 Merchant/Fulfillment/Inventory/Promotion/Loyalty/Operations
+- 2026-08-26: Non-reserving quote vertical slice에 Merchant/Fulfillment/Promotion/Loyalty/Operations
   owner snapshot read와 `POST /me/order-quotes`를 추가했다. quote는 `REPEATABLE_READ` read-only transaction에서
   계산하고 아무 거래 resource도 만들지 않는다. 최종 `POST /orders`는 같은 owner 순서로 lock·re-quote한
   fingerprint가 일치할 때만 기존 reservation과 immutable Order snapshot을 만든다.

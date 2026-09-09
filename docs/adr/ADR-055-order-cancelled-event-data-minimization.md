@@ -12,7 +12,7 @@ ADR-034의 초기 `OrderCancelledV1` payload에는 `customerId`, `storeId`와
 식별자가 필요할 수 있었다. ADR-044는 취소 접수 NotificationDelivery를 Tx C1에서
 직접 저장하도록 바꾸고 Notification consumer를 제거했다.
 
-남은 Fulfillment, Inventory, Promotion과 Loyalty consumer는 각자 Order ID로 연결된
+남은 Fulfillment, Promotion과 Loyalty consumer는 각자 Order ID로 연결된
 예약·원장을 소유하며 source reference의 Order terminal version으로 중복을 판정한다.
 고객 취소 사유도 owner 복원 결과를 바꾸지 않는다. 따라서 세 필드는 현재 consumer의
 결정 입력이 아니며 persistent publication에 불필요한 고객·매장·행동 사유를
@@ -37,7 +37,6 @@ ADR-034의 초기 `OrderCancelledV1` payload에는 `customerId`, `storeId`와
   사용하지 않는다. `aggregateId`는 Order ID다.
 - 네 consumer는 `orderId`로 자기 Context의 reservation/ledger를 찾는다.
   - Fulfillment: PickupReservation
-  - Inventory: StockReservation
   - Promotion: CouponReservation/Issuance
   - Loyalty: PointReservation/allocation
 - owner record가 없거나 source·trigger·version이 모순이면 현재 Ordering의 고객·매장
@@ -69,7 +68,7 @@ ADR-034의 초기 `OrderCancelledV1` payload에는 `customerId`, `storeId`와
 ### storeId만 유지
 
 - 매장 단위 routing·관측이 쉽다.
-- 네 owner가 이미 order-linked record를 소유하고 있어 처리에 필요하지 않으며 metric
+- 세 owner가 이미 order-linked record를 소유하고 있어 처리에 필요하지 않으며 metric
   tag로도 사용하지 않는다.
 
 ## Rationale
@@ -127,7 +126,7 @@ Order, Store, Customer와 reason code는 metric tag로 사용하지 않는다.
 ## Implementation Checkpoint (2026-08-03)
 
 - `OrderCancelledV1` public DTO와 exact contract fixture는 이 ADR의 최소 필드 집합만 가진다.
-- Fulfillment·Inventory·Promotion·Loyalty 네 stable listener만 등록됐고 Payment·Notification
+- Fulfillment·Promotion·Loyalty 네 stable listener만 등록됐고 Payment·Notification
   target은 없다. 각 listener는 Order-linked owner row와 terminal version source만 사용한다.
 - Plan 30은 이 consumer foundation만 활성화하며 고객 취소 producer/HTTP command는 만들지
   않는다. 최초 운영 publication 전 gate 재확인과 이후 V1 동결 조건은 유지한다.

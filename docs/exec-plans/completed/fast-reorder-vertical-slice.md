@@ -17,7 +17,7 @@
 `POST /api/v1/orders/{sourceOrderId}/reorders`를 호출하면, BeanFlow는 과거 주문을 복제하지
 않고 현재 판매 조건으로 새 Order를 즉시 만든다. source에서는 메뉴 ID, 검증된 정규화 option
 ID와 수량만 가져오고, 새 pickup slot·선택적 coupon·point 사용은 새 request에서 받는다.
-Merchant 가격과 판매 가능성, Fulfillment capacity, Inventory 수량, Promotion coupon과 Loyalty
+Merchant 가격과 판매 가능성, Fulfillment capacity, Promotion coupon과 Loyalty
 point는 일반 주문 생성과 같은 원자적 workflow에서 다시 검증·예약한다.
 
 완료 후 관찰 가능한 결과는 다음과 같다.
@@ -54,7 +54,7 @@ commit으로 대체된 잔여물이며 수정하거나 lease holder로 간주하
   `POST /api/v1/orders`, customer GET, cancellation, payment-confirmation을 제공하지만 재주문
   mapping은 없다.
 - `CreateOrderService`가 Tx I1과 Tx I2를 조정하고 `OrderCreationTransaction.create`가 Tx O에서
-  current Merchant quote, pickup/stock/coupon/point reservation, benefit-only Payment,
+  current Merchant quote, pickup/coupon/point reservation, benefit-only Payment,
   Order/OrderLine, settlement/point-accrual snapshot, Audit와 최초 201 idempotency completion을
   원자적으로 저장한다.
 - `OrderIdempotencyService`는 `CREATE_ORDER` operation을 내부 상수로 고정한다. operation을
@@ -63,8 +63,8 @@ commit으로 대체된 잔여물이며 수정하거나 lease holder로 간주하
   pessimistic write 조회가 있다. customer GET projection은 재주문 입력 원천이 아니며 내부 owner
   model을 transaction 안에서 읽어야 한다.
 - `OrderLineEntity`는 `menuId`, `menuName`, `optionNamesJson`,
-  `sellableRequirementsJson`, 가격과 수량을 저장하지만 option ID를 저장하지 않는다. 따라서 기존
-  row에서 이름이나 sellable unit으로 option ID를 안전하게 복구할 수 없다.
+  가격과 수량을 저장하지만 option ID를 저장하지 않는다. 따라서 기존
+  row에서 이름으로 option ID를 안전하게 복구할 수 없다.
 - Merchant `MenuQuoteUseCase`와 `MenuQuoteCalculator`는 current quote와 option ID가 포함된
   `OptionSnapshot`을 반환하지만 첫 실패에서 generic `DomainFailure`를 던진다. 빠른 재주문이 모든
   unavailable source line의 stable reason을 반환하려면 같은 owner validation을 쓰는 typed batch
@@ -92,9 +92,9 @@ ADR-064, ADR-077, `docs/api/api-conventions.md`, `docs/api/error-catalog.md`,
 - **Normalized option ID snapshot:** source line이 주문될 때 ID 오름차순, 중복 없는 형태로
   검증·저장한 option ID 배열. 빈 배열은 검증된 무옵션 선택이다.
 - **Legacy unavailable snapshot:** migration 전 OrderLine처럼 검증된 option ID가 없음을 명시하는
-  상태. 빈 배열과 다르고 이름·현재 Merchant·sellable requirement로 추론하지 않는다.
+  상태. 빈 배열과 다르고 이름·현재 Merchant로 추론하지 않는다.
 - **Current quote:** Tx O 안에서 Merchant owner contract가 반환한 현재 메뉴명, 옵션명, 단가와
-  sellable requirement. 새 Order snapshot의 원천이다.
+  판매 상태. 새 Order snapshot의 원천이다.
 - **Price comparison:** source/current의 coupon·point 적용 전 가격을 비교한 재주문 201 전용
   snapshot. signed difference는 `current - source`다.
 - **Tx I1 / Tx O / Tx I2:** 각각 멱등 `PROCESSING` 사전등록, 원자적 주문 생성, 확정 실패 응답
@@ -133,7 +133,7 @@ ADR-064, ADR-077, `docs/api/api-conventions.md`, `docs/api/error-catalog.md`,
 - 자동 외부 결제 승인; 1원 이상은 기존 payment-confirmation API를 사용한다.
 - 추천·개인화·주문 빈도 분석
 - 새 cache, Redis, Kafka, scheduler 제품 또는 production dependency
-- 이름·현재 Merchant·sellable requirement를 이용한 legacy option ID backfill
+- 이름·현재 Merchant를 이용한 legacy option ID backfill
 - 측정 없는 성능 개선 주장
 
 ## Business Rules and Invariants
@@ -155,7 +155,7 @@ ADR-064, ADR-077, `docs/api/api-conventions.md`, `docs/api/error-catalog.md`,
 - 새 request는 `pickupSlotId`와 non-negative `pointsToUseKrw`를 필수로,
   `couponIssuanceId`를 nullable 선택으로 받는다.
 - source store ID는 owner Order에서 가져오고 request에 받지 않는다.
-- 새 OrderLine은 current Merchant가 반환한 menu/option 이름·단가·sellable requirement와 검증된
+- 새 OrderLine은 current Merchant가 반환한 menu/option 이름·단가와 검증된
   normalized option IDs를 새 immutable snapshot으로 저장한다.
 - source의 menu/option ID와 quantity 외 필드는 새 주문 계산의 입력이 아니다. source unit price와
   gross는 price comparison에만 사용한다.
@@ -166,7 +166,7 @@ ADR-064, ADR-077, `docs/api/api-conventions.md`, `docs/api/error-catalog.md`,
 
 - legacy option snapshot line 또는 current unavailable line이 하나라도 있으면 새 Order와 모든
   reservation은 0건이다. item을 지우거나 quantity를 줄이지 않는다.
-- Merchant quote, pickup, stock, coupon, point, settlement input, point accrual snapshot 또는 Audit
+- Merchant quote, pickup, coupon, point, settlement input, point accrual snapshot 또는 Audit
   하나라도 실패하면 기존 주문 생성 원자성에 따라 전체 rollback한다.
 - 새 Order 가격·coupon·point·payable·allocation은 기존 KRW 계산과 tie-out 규칙을 그대로 쓴다.
 - payable이 0이면 기존 benefit-only branch가 같은 Tx O에서 Payment 승인과 reservation confirm을
@@ -209,7 +209,7 @@ store와 past snapshot을 Controller DTO에 넣지 않는다.
 `OrderCreationOutcome(order, benefitOnlyPayment?)`을 반환한다.
 
 1. current Merchant quote와 applicable settlement terms 조회
-2. Pickup, Stock, optional Coupon, optional Point reserve
+2. Pickup, optional Coupon, optional Point reserve
 3. 기존 money/allocation 계산과 benefit-only confirm
 4. Order/OrderLine 및 normalized option snapshot 저장
 5. settlement input과 point accrual snapshot 저장
@@ -223,7 +223,7 @@ complete한다. public `CreateOrderUseCase`, request, 최초 body, metric와 fai
 Order를 write lock으로 읽고, 존재→ownership→state→line snapshot 순서로 검증한다. source line을
 `CreateOrderCommand`로 변환해 shared workflow를 호출하고 `FastReorderResponseFactory`가 price
 comparison을 포함한 body를 만든 뒤 `REORDER_ORDER_V1` record를 같은 transaction에서 complete한다.
-shared workflow는 새 transaction을 열지 않으므로 새 Order, 네 owner reservation, immutable
+shared workflow는 새 transaction을 열지 않으므로 새 Order, 세 owner reservation, immutable
 snapshots, Audit, price comparison과 최초 201 idempotency response가 기존 원자성 안에서 함께
 commit한다.
 
@@ -255,8 +255,8 @@ failure details는 source line 순서, 같은 line에서 위 reason 순서, opti
 - Merchant current quote call이 새 Order 가격·catalogue snapshot의 선형화 지점이다. quote 뒤
   Merchant가 바뀌어도 같은 Tx O가 고정한 current quote를 새 Order snapshot으로 사용하며 이는 direct
   create와 같은 의미다.
-- Fulfillment/Inventory/Promotion/Loyalty는 각 owner의 기존 lock·conditional write가 예약 시점을
-  직렬화한다. 사전 catalogue 조회 성공은 capacity·stock·benefit을 보장하지 않는다.
+- Fulfillment/Promotion/Loyalty는 각 owner의 기존 lock·conditional write가 예약 시점을
+  직렬화한다. 사전 catalogue 조회 성공은 capacity·benefit을 보장하지 않는다.
 - Tx O rollback 뒤 Tx I2가 확정 실패를 저장한다. Tx I2까지 실패해 `PROCESSING`이 남으면 기존
   reconciliation을 operation-aware하게 확장해 intended Order와 owner sources를 검사한다. 새 재주문을
   자동 실행하지 않는다.
@@ -264,8 +264,8 @@ failure details는 source line 순서, 같은 line에서 위 reason 순서, opti
 ### Concurrency and lock order
 
 - 순서는 idempotency Tx I1 commit 후 Tx O의 source Order lock, Merchant quote, Fulfillment,
-  Inventory, Promotion, Loyalty, Payment benefit-only, Ordering snapshots/Audit/idempotency completion이다.
-- 같은 source를 다른 key로 동시에 재주문하는 것은 허용되며 capacity/stock/coupon/point owner guard가
+  Promotion, Loyalty, Payment benefit-only, Ordering snapshots/Audit/idempotency completion이다.
+- 같은 source를 다른 key로 동시에 재주문하는 것은 허용되며 capacity/coupon/point owner guard가
   실제 경쟁을 결정한다. source당 한 번이라는 제약은 없다.
 - source Order lock 대기가 timeout 또는 DB 장애로 끝나면 business conflict가 아닌 503이다.
 - owner lock 순서는 기존 direct create와 같아야 한다. 재주문을 이유로 역순 lock이나 source
@@ -292,7 +292,7 @@ failure details는 source line 순서, 같은 line에서 위 reason 순서, opti
   경쟁의 identity가 아니다.
 - 선택하지 않은 이유: ADR-064에 따라 결과 root가 없는 생성 명령은 Tx I1 사전등록을 쓴다.
 
-### 과거 option 이름 또는 sellable requirement로 option ID 복구
+### 과거 option 이름 로 option ID 복구
 
 - 장점: 기존 주문의 재주문 성공 범위가 넓다.
 - 단점: 이름 중복·변경과 구성 변경 때문에 다른 상품을 주문할 수 있고 검증 가능한 provenance가 없다.
@@ -320,7 +320,7 @@ failure details는 source line 순서, 같은 line에서 위 reason 순서, opti
 | source 타 고객 소유 | 403 `ACCESS_DENIED` | 최초 실패 record | 권한 변경 전 재시도 불필요 |
 | source non-terminal | 409 `REORDER_SOURCE_STATE_INVALID` | 최초 실패 record | terminal 전이 후 새 key |
 | legacy/current unavailable line | 409 `REORDER_ITEMS_UNAVAILABLE` + typed details | 최초 실패 record | source/current catalogue가 달라졌으면 새 key |
-| slot/stock/coupon/point conflict | 기존 stable 409 | 최초 실패 record | owner 상태 변경 뒤 새 key |
+| slot/coupon/point conflict | 기존 stable 409 | 최초 실패 record | owner 상태 변경 뒤 새 key |
 | same key, different source/request | 409 `IDEMPOTENCY_KEY_REUSED` | 기존 record 불변 | 새 key |
 | same key/payload PROCESSING | 409 `IDEMPOTENCY_REQUEST_IN_PROGRESS` + `Retry-After` | PROCESSING 유지 | same key after delay |
 | owner/DB/Audit/snapshot dependency failure | 503 `DEPENDENCY_UNAVAILABLE` 또는 `SETTLEMENT_INPUT_UNAVAILABLE` | Tx O rollback, 가능하면 Tx I2 최초 실패 | Tx I2가 저장했으면 same key는 exact replay이므로 원인 복구 뒤 새 key |
@@ -522,12 +522,12 @@ snapshot 및 이후 lifecycle을 사용한다. event payload에 sourceOrderId를
 
 ### Transaction, concurrency and idempotency
 
-- 새 Order와 Pickup/Stock/Coupon/Point, benefit-only Payment, settlement/accrual snapshot, Audit와 최초 201
+- 새 Order와 Pickup/Coupon/Point, benefit-only Payment, settlement/accrual snapshot, Audit와 최초 201
   response의 단일 Tx O commit
 - owner 각 단계 실패에서 전체 rollback과 Tx I2 failure replay
 - same key/payload 순차·동시 요청이 Order 하나와 exact first status/body를 반환
 - same key/different source, pickupSlot, coupon null/value, points conflict
-- same source/different keys는 정책상 허용하되 owner capacity/stock/benefit constraint가 초과를 막음
+- same source/different keys는 정책상 허용하되 owner capacity/benefit constraint가 초과를 막음
 - PROCESSING은 Retry-After 409이고 재실행하지 않음
 - Tx I1 후 crash, Tx O commit 전/후 crash, Tx I2 failure의 reconciliation이 자동 재주문하지 않음
 - source lock과 기존 owner lock ordering에서 deadlock/timeout이 business 409로 위장되지 않음
@@ -535,7 +535,7 @@ snapshot 및 이후 lifecycle을 사용한다. event payload에 sourceOrderId를
 ### Architecture and contract
 
 - Controller가 Repository를 직접 호출하지 않음
-- Ordering이 Merchant/Fulfillment/Inventory/Promotion/Loyalty Repository를 참조하지 않음
+- Ordering이 Merchant/Fulfillment/Promotion/Loyalty Repository를 참조하지 않음
 - shared workflow가 transaction mandatory이고 direct/reorder Tx O 밖에서 호출되지 않음
 - Spring Modulith와 ArchUnit 통과
 - target/runtime OpenAPI schema validation과 runtime handler exact parity
@@ -640,7 +640,7 @@ test/migration evidence와 이 ExecPlan의 Outcomes를 갱신한다. 운영 thre
 ## Surprises & Discoveries
 
 - 2026-08-09: 현재 Order read projection과 `ordering_order_line` 모두 option 이름은 보존하지만 option
-  ID는 보존하지 않는다. source option을 이름이나 sellable requirement로 복원하면 상품 identity를
+  ID는 보존하지 않는다. source option을 이름로 복원하면 상품 identity를
   바꿀 수 있으므로 legacy explicit failure와 future immutable ID snapshot이 필요하다.
 - 2026-08-09: BR-26은 주문 생성 terminal idempotency 90일 보존을 Accepted로 두지만
   `ordering_idempotency_record`에는 retention column과 purge worker 경로가 없다. 빠른 재주문만 같은

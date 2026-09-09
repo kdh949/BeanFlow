@@ -34,7 +34,7 @@ S70은 상담원이 고객 API를 가장하지 않고 전용 Support execution c
   target version, executor와 approval lineage를 보호하지만 실행 terminal state와 outcome은 없다.
 - S50 ActionPolicy는 PENDING_PAYMENT/PAID cancel·reschedule을 BASIC `ALLOWED`, ACCEPTED를
   ENHANCED `APPROVAL_REQUIRED`로 평가하며 실행 시 재평가를 요구한다.
-- 기존 customer cancellation은 PENDING_PAYMENT/PAID에서 Order row를 잠그고 예약·재고·혜택 release,
+- 기존 customer cancellation은 PENDING_PAYMENT/PAID에서 Order row를 잠그고 예약·혜택 release,
   payment snapshot/refund intent, compensation case와 event를 한 transaction에 만든다. Customer actor
   authorization과 `CUSTOMER_REQUEST` cause에 고정돼 Support가 재사용할 public command는 없다.
 - `PickupReservationOperations.reserve`는 order당 reservation 하나를 강제하고 기존 reservation이
@@ -68,7 +68,7 @@ S70은 상담원이 고객 API를 가장하지 않고 전용 Support execution c
    못한다.
 5. 같은 actor+operation+Idempotency-Key+canonical payload는 같은 terminal outcome을 replay하고 같은
    key의 다른 payload는 409다.
-6. PENDING_PAYMENT 취소는 Order와 예약·재고·쿠폰·포인트 자원을 같은 transaction에서 해제하며
+6. PENDING_PAYMENT 취소는 Order와 예약·쿠폰·포인트 자원을 같은 transaction에서 해제하며
    하나라도 실패하면 전부 rollback한다.
 7. PAID 취소는 기존 refund/restoration/settlement exclusion 흐름을 owner command로 재사용하고 누적
    성공 refund가 approved amount를 넘지 않게 Payment owner가 잠금 아래 검증한다.
@@ -96,7 +96,7 @@ S70은 상담원이 고객 API를 가장하지 않고 전용 Support execution c
 - Ordering: `Order`, customer cancellation owner core, cancellation/reschedule history
 - Fulfillment: `PickupReservation`, `PickupSlot`, atomic slot swap
 - Payment: cancellation refund snapshot/intent와 durable projection
-- Loyalty/Promotion/Inventory: 기존 release/restoration owner ports
+- Loyalty/Promotion: 기존 release/restoration owner ports
 - Settlement: Support cancellation cause와 responsibility evidence
 - Merchant: store actor membership 확인 public API
 - Operations: persistent permission과 PII-free Audit
@@ -443,7 +443,7 @@ owner command와 same-local-transaction 규칙 안에 있으므로 신규 ADR은
 - 2026-08-12: commits `b9b95d6`와 `de40d3e`에서 terminal execution/store authorization domain 및 V45
   closed constraints/unique execution/use budget/idempotency schema를 구현했다.
 - 2026-08-12: commits `b2cceb4`와 `1b2f3db`에서 Fulfillment new-slot-first atomic swap과 Ordering
-  Support cancellation/reschedule public owner commands를 구현했다. 기존 Payment/Loyalty/Promotion/Inventory/
+  Support cancellation/reschedule public owner commands를 구현했다. 기존 Payment/Loyalty/Promotion/
   Settlement cancellation pipeline은 typed `SUPPORT_REQUEST` cause로 재사용한다.
 - 2026-08-12: commit `081e36f`에서 Support authorization/execution API, current permission/assignment/
   revision/policy/verification/target rechecks, exact replay, Audit atomicity와 pickup notification intent를
@@ -467,7 +467,7 @@ owner command와 same-local-transaction 규칙 안에 있으므로 신규 ADR은
 
 - Productization Draft branch도 V43/V44를 사용하고 있었지만 Support stack의 V43/V44와 서로 다른
   migration이다. 사용자가 Support를 우선해 Productization lease/readiness를 명시적으로 해제했다.
-- 기존 CustomerCancellation flow는 Payment/Loyalty/Promotion/Inventory/Settlement semantics가 이미
+- 기존 CustomerCancellation flow는 Payment/Loyalty/Promotion/Settlement semantics가 이미
   강하지만 customer authorization과 cause에 결합돼 있다. 복사보다 owner core를 typed initiator로
   추출하는 편이 invariant drift를 줄인다.
 - Fulfillment reservation은 order당 한 row와 immutable slot ID를 전제로 해 reschedule에 필요한

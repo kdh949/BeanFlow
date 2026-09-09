@@ -89,7 +89,7 @@ internal class StoreOrderBoardIntegrationTest
         @Test
         fun `board scopes in SQL and groups every active state including a future paid order without private data`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 10, stockAvailable = 10)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 10)
             val actorId = UUID.randomUUID()
             insertMembership(actorId, fixture.storeId, "ACTIVE")
             val nextDayFixture = addPickupSlot(fixture, "2030-01-02T00:10:00Z", "2030-01-02T00:20:00Z")
@@ -157,7 +157,7 @@ internal class StoreOrderBoardIntegrationTest
         @Test
         fun `board query keeps two projection statements for one and fifty active orders`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 60, stockAvailable = 60)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 60)
             val actorId = UUID.randomUUID()
             insertMembership(actorId, fixture.storeId, "ACTIVE")
             activate(create(fixture, "board-count-00").orderId, "ACCEPTED")
@@ -183,7 +183,7 @@ internal class StoreOrderBoardIntegrationTest
         @Test
         fun `board bounds every lane and exposes exact older work through a signed queue`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 240, stockAvailable = 240)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 240)
             val actorId = UUID.randomUUID()
             insertMembership(actorId, fixture.storeId, "ACTIVE")
             val referencesByState = linkedMapOf<String, MutableSet<String>>()

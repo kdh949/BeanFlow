@@ -47,7 +47,7 @@ ADR-044는 `PENDING_PAYMENT`와 `PAID` 고객 취소가 확정되면
   Provider 식별자, 내부 상태·오류 code·retry 횟수는 넣지 않는다.
 - Notification Provider 발송 실패는 Refund나 Order 상태를 되돌리지 않고 BR-27의
   delivery retry와 `MANUAL_REVIEW`로 남긴다.
-- OrderCompensationCase 전체 `SUCCEEDED`, 슬롯·재고 복원 완료와 쿠폰·포인트 복원
+- OrderCompensationCase 전체 `SUCCEEDED`, 슬롯 복원 완료와 쿠폰·포인트 복원
   완료에는 별도 고객 알림을 보내지 않는다. Notification용
   `OrderCompensationCompleted` event나 Delivery를 만들지 않는다.
 - 고객은 쿠폰·포인트 결과를 기존 보유 내역에서 확인하고, 보상 step 상세는 운영자

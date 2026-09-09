@@ -196,7 +196,7 @@ event 전체 snapshot은 owner 처리의 시간 독립성과 재현성을 유지
 - 정책 변경 경쟁에서 혼합 snapshot 부재
 - required false여도 두 event snapshot 존재
 - OrderRejectedV1 구 단일 필드 compile·fixture 부재
-- OrderRejectedV1 producer와 여섯 consumer 새 snapshot contract
+- OrderRejectedV1 producer와 다섯 consumer 새 snapshot contract
 - 구 payload compatibility layer·V2·이중 발행 부재
 - 재시도 중 최신 head 조회 부재
 

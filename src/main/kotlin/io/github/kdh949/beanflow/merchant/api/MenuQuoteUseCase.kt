@@ -8,11 +8,6 @@ data class QuoteOrderLine(
     val quantity: Long,
 )
 
-data class SellableUnitRequirement(
-    val sellableUnitId: UUID,
-    val quantityPerLineUnit: Long,
-)
-
 data class OptionSnapshot(
     val optionId: UUID,
     val name: String,
@@ -25,7 +20,6 @@ data class MenuLineQuote(
     val optionSnapshots: List<OptionSnapshot>,
     val unitPriceKrw: Long,
     val quantity: Long,
-    val sellableUnitRequirements: List<SellableUnitRequirement>,
 )
 
 enum class MenuItemUnavailableReason {

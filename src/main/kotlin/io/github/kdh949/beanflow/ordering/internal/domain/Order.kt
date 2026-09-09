@@ -2,7 +2,6 @@ package io.github.kdh949.beanflow.ordering.internal.domain
 
 import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
 import io.github.kdh949.beanflow.merchant.api.OptionSnapshot
-import io.github.kdh949.beanflow.merchant.api.SellableUnitRequirement
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import java.time.Duration
@@ -28,7 +27,6 @@ data class OrderLineSnapshot(
     val menuId: UUID,
     val menuName: String,
     val options: List<OptionSnapshot>,
-    val sellableUnitRequirements: List<SellableUnitRequirement>,
     val unitPriceKrw: Long,
     val quantity: Long,
     val grossKrw: Long,
@@ -179,7 +177,6 @@ class Order private constructor(
                     menuId = quote.menuId,
                     menuName = quote.menuName,
                     options = quote.optionSnapshots.toList(),
-                    sellableUnitRequirements = quote.sellableUnitRequirements.toList(),
                     unitPriceKrw = quote.unitPriceKrw,
                     quantity = quote.quantity,
                     grossKrw = priced.gross.value,

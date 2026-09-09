@@ -47,7 +47,6 @@ internal class FastReorderConcurrencyTest
             }
             assertThat(count("ordering_order")).isEqualTo(2)
             assertThat(count("fulfillment_pickup_reservation")).isEqualTo(2)
-            assertThat(count("inventory_stock_reservation")).isEqualTo(2)
         }
 
         @Test
@@ -59,7 +58,6 @@ internal class FastReorderConcurrencyTest
             assertThat(responses.map(StoredHttpResponse::status)).containsOnly(201)
             assertThat(count("ordering_order")).isEqualTo(3)
             assertThat(count("fulfillment_pickup_reservation")).isEqualTo(3)
-            assertThat(count("inventory_stock_reservation")).isEqualTo(3)
         }
 
         private fun sourceCommand(): ReorderOrderCommand {

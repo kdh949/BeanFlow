@@ -33,12 +33,10 @@ internal class CompensationPublicationTargetRegistry {
             listOf(
                 target(REJECTED_EVENT, "payment", OrderCompensationStepType.PAYMENT),
                 target(REJECTED_EVENT, "pickup", OrderCompensationStepType.PICKUP),
-                target(REJECTED_EVENT, "stock", OrderCompensationStepType.STOCK),
                 target(REJECTED_EVENT, "coupon", OrderCompensationStepType.COUPON),
                 target(REJECTED_EVENT, "points", OrderCompensationStepType.POINTS),
                 target(REJECTED_EVENT, "customer-notification", OrderCompensationStepType.CUSTOMER_NOTIFICATION),
                 target(CANCELLED_EVENT, "pickup", OrderCompensationStepType.PICKUP),
-                target(CANCELLED_EVENT, "stock", OrderCompensationStepType.STOCK),
                 target(CANCELLED_EVENT, "coupon", OrderCompensationStepType.COUPON),
                 target(CANCELLED_EVENT, "points", OrderCompensationStepType.POINTS),
             )

@@ -4,7 +4,6 @@ import io.github.kdh949.beanflow.eventing.api.BenefitRestorationPolicySnapshotV1
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderCancelledV1
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
-import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.notification.api.CustomerCancellationNotificationOperations
 import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
@@ -186,7 +185,6 @@ internal class CustomerCancellationTransaction(
     private val timeoutWorks: AcceptanceTimeoutWorkJpaRepository,
     private val expiryUseCase: ReservationExpiryUseCase,
     private val pickupOperations: PickupReservationOperations,
-    private val stockOperations: StockReservationOperations,
     private val couponOperations: CouponReservationOperations,
     private val pointOperations: PointReservationOperations,
     private val paymentOperations: CustomerCancellationPaymentOperations,
@@ -358,8 +356,6 @@ internal class CustomerCancellationTransaction(
         metrics.phase = "c0"
         metrics.rollbackTarget = "pickup"
         val pickup = requireApplied("PICKUP", pickupOperations.release(order.id, now, OrderCreationTransaction.pickupSource(order.id)))
-        metrics.rollbackTarget = "stock"
-        val stock = requireApplied("STOCK", stockOperations.release(order.id, now, OrderCreationTransaction.stockSource(order.id)))
         val coupon =
             if (order.couponDiscountKrw > 0) {
                 metrics.rollbackTarget = "coupon"
@@ -397,9 +393,6 @@ internal class CustomerCancellationTransaction(
             )
         pickup.targetIds.forEach {
             audits += releaseAudit(context, "PICKUP", it, reasonCode, now, sourcePrefix, correlationId)
-        }
-        stock.targetIds.forEach {
-            audits += releaseAudit(context, "STOCK", it, reasonCode, now, sourcePrefix, correlationId)
         }
         coupon?.targetIds?.forEach {
             audits += releaseAudit(context, "COUPON", it, reasonCode, now, sourcePrefix, correlationId)

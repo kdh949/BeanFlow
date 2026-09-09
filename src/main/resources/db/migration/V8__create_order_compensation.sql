@@ -123,7 +123,7 @@ CREATE TABLE operations_order_compensation_step (
     id uuid PRIMARY KEY,
     case_id uuid NOT NULL REFERENCES operations_order_compensation_case(id) ON DELETE CASCADE,
     step_type varchar(32) NOT NULL CHECK (
-        step_type IN ('PAYMENT', 'PICKUP', 'STOCK', 'COUPON', 'POINTS', 'CUSTOMER_NOTIFICATION')
+        step_type IN ('PAYMENT', 'PICKUP', 'COUPON', 'POINTS', 'CUSTOMER_NOTIFICATION')
     ),
     state varchar(24) NOT NULL CHECK (
         state IN (
@@ -161,10 +161,10 @@ BEGIN
       FROM operations_order_compensation_step
      WHERE case_id = target_case_id;
 
-    IF policy_count <> 2 OR step_count <> 6 THEN
+    IF policy_count <> 2 OR step_count <> 5 THEN
         RAISE EXCEPTION USING
             ERRCODE = '23514',
-            MESSAGE = 'OrderCompensationCase requires exactly two benefit policies and six steps';
+            MESSAGE = 'OrderCompensationCase requires exactly two benefit policies and five steps';
     END IF;
     RETURN;
 END

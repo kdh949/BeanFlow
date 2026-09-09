@@ -298,9 +298,9 @@ internal class OrdinaryPointAccrualPolicyMigrationTest : IsolatedPostgresSupport
             """
             INSERT INTO ordering_order_line (
                 id, order_id, line_sequence, menu_id, menu_name, option_names_json,
-                sellable_requirements_json, unit_price_krw, quantity, gross_krw,
+                unit_price_krw, quantity, gross_krw,
                 coupon_discount_krw, points_applied_krw, cash_payable_krw
-            ) VALUES (?, ?, 0, ?, 'Migration test menu', '[]', '[]', 100, 2, 200, 0, 0, 200)
+            ) VALUES (?, ?, 0, ?, 'Migration test menu', '[]', 100, 2, 200, 0, 0, 200)
             """.trimIndent(),
             UUID.randomUUID(),
             orderId,

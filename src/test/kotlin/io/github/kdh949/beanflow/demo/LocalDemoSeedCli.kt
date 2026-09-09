@@ -12,14 +12,10 @@ import io.github.kdh949.beanflow.identity.internal.MerchantAccountJpaRepository
 import io.github.kdh949.beanflow.identity.internal.StoreMembershipEntity
 import io.github.kdh949.beanflow.identity.internal.StoreMembershipJpaRepository
 import io.github.kdh949.beanflow.identity.internal.StoreMembershipStatus
-import io.github.kdh949.beanflow.inventory.internal.SellableStockEntity
-import io.github.kdh949.beanflow.inventory.internal.SellableStockJpaRepository
 import io.github.kdh949.beanflow.loyalty.internal.PointAccountEntity
 import io.github.kdh949.beanflow.loyalty.internal.PointAccountJpaRepository
 import io.github.kdh949.beanflow.merchant.internal.MenuConfigurationEntity
 import io.github.kdh949.beanflow.merchant.internal.MenuConfigurationJpaRepository
-import io.github.kdh949.beanflow.merchant.internal.MenuConfigurationRequirementEntity
-import io.github.kdh949.beanflow.merchant.internal.MenuConfigurationRequirementJpaRepository
 import io.github.kdh949.beanflow.merchant.internal.MenuEntity
 import io.github.kdh949.beanflow.merchant.internal.MenuJpaRepository
 import io.github.kdh949.beanflow.merchant.internal.MenuOptionEntity
@@ -131,13 +127,11 @@ internal class LocalDemoSeeder(
     private val menus: MenuJpaRepository,
     private val menuOptions: MenuOptionJpaRepository,
     private val menuConfigurations: MenuConfigurationJpaRepository,
-    private val menuRequirements: MenuConfigurationRequirementJpaRepository,
     private val settlementTerms: StoreSettlementTermsJpaRepository,
     private val memberships: StoreMembershipJpaRepository,
     private val customerAccounts: CustomerAccountJpaRepository,
     private val merchantAccounts: MerchantAccountJpaRepository,
     private val customerPasswords: CustomerPasswordSecurity,
-    private val stock: SellableStockJpaRepository,
     private val pickupSlots: PickupSlotJpaRepository,
     private val pointAccounts: PointAccountJpaRepository,
     private val paymentMethods: PaymentMethodJpaRepository,
@@ -191,7 +185,6 @@ internal class LocalDemoSeeder(
         )
         seedCustomerAccount(now, created)
         seedMenus(created)
-        seedStock(created)
         seedPickupSlots(now, created)
         seedLoyalty(created)
         seedSettlementTerms(now, created)
@@ -359,21 +352,17 @@ internal class LocalDemoSeeder(
             )
             created += "unavailableMenuOption=${LocalDemoFixture.OAT_MILK_OPTION_ID}"
         }
-        seedConfiguration(LocalDemoFixture.PLAIN_CONFIGURATION_ID, LocalDemoFixture.PLAIN_REQUIREMENT_ID, "", 1, created)
+        seedConfiguration(LocalDemoFixture.PLAIN_CONFIGURATION_ID, "", created)
         seedConfiguration(
             LocalDemoFixture.EXTRA_SHOT_CONFIGURATION_ID,
-            LocalDemoFixture.EXTRA_SHOT_REQUIREMENT_ID,
             LocalDemoFixture.EXTRA_SHOT_OPTION_ID.toString(),
-            2,
             created,
         )
     }
 
     private fun seedConfiguration(
         configurationId: UUID,
-        requirementId: UUID,
         normalizedOptionKey: String,
-        quantityPerLineUnit: Long,
         created: MutableList<String>,
     ) {
         if (!menuConfigurations.existsById(configurationId)) {
@@ -387,29 +376,6 @@ internal class LocalDemoSeeder(
             )
             created += "menuConfiguration=$configurationId"
         }
-        if (!menuRequirements.existsById(requirementId)) {
-            menuRequirements.save(
-                MenuConfigurationRequirementEntity(
-                    id = requirementId,
-                    menuConfigurationId = configurationId,
-                    sellableUnitId = LocalDemoFixture.COFFEE_SELLABLE_UNIT_ID,
-                    quantityPerLineUnit = quantityPerLineUnit,
-                ),
-            )
-            created += "menuConfigurationRequirement=$requirementId"
-        }
-    }
-
-    private fun seedStock(created: MutableList<String>) {
-        if (stock.existsById(LocalDemoFixture.COFFEE_SELLABLE_UNIT_ID)) return
-        stock.save(
-            SellableStockEntity(
-                id = LocalDemoFixture.COFFEE_SELLABLE_UNIT_ID,
-                storeId = LocalDemoFixture.STORE_ID,
-                availableQuantity = LocalDemoFixture.STOCK_QUANTITY,
-            ),
-        )
-        created += "sellableStock=${LocalDemoFixture.COFFEE_SELLABLE_UNIT_ID}"
     }
 
     /**
@@ -771,7 +737,6 @@ internal class LocalDemoSeeder(
                     optionNamesJson = "[]",
                     optionSelectionSnapshotState = OptionSelectionSnapshotState.SNAPSHOTTED,
                     normalizedOptionIds = emptyList(),
-                    sellableRequirementsJson = "[]",
                     unitPriceKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,
                     quantity = 1,
                     grossKrw = LocalDemoFixture.HISTORICAL_ORDER_GROSS_KRW,

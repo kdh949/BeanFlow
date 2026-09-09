@@ -33,7 +33,7 @@ internal class JpaMenuQuoteServiceQueryCountTest
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
-                    merchant_menu_configuration_requirement,
+
                     merchant_menu_configuration,
                     merchant_menu_option,
                     merchant_menu,
@@ -44,7 +44,7 @@ internal class JpaMenuQuoteServiceQueryCountTest
         }
 
         @Test
-        fun `batch quote uses five statements regardless of menu and configuration count`() {
+        fun `batch quote uses four statements regardless of menu and configuration count`() {
             val small = seed(storeSequence = 1, menuCount = 1, configurationsPerMenu = 1)
             val smallCount = countStatements { quoteUseCase.quoteCurrentBatch(small.storeId, small.lines) }
 
@@ -56,8 +56,8 @@ internal class JpaMenuQuoteServiceQueryCountTest
                     assertThat(quotes).allMatch { it is CurrentMenuLineQuoteResult.Available }
                 }
 
-            assertThat(smallCount).isEqualTo(5)
-            assertThat(largeCount).isEqualTo(5)
+            assertThat(smallCount).isEqualTo(4)
+            assertThat(largeCount).isEqualTo(4)
         }
 
         private fun seed(
@@ -110,14 +110,6 @@ internal class JpaMenuQuoteServiceQueryCountTest
                             configurationId,
                             menuId,
                             optionId.toString(),
-                        )
-                        jdbcTemplate.update(
-                            "INSERT INTO merchant_menu_configuration_requirement " +
-                                "(id, menu_configuration_id, sellable_unit_id, quantity_per_line_unit) " +
-                                "VALUES (?, ?, ?, 1)",
-                            uuid(storeSequence, menuSequence, 200 + configurationSequence),
-                            configurationId,
-                            uuid(storeSequence, menuSequence, 300 + configurationSequence),
                         )
                     }
                     QuoteOrderLine(menuId, listOf(selectedOptionId), 1)

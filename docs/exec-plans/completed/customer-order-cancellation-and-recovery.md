@@ -55,7 +55,7 @@ deployment 증거가 아니다.
 ## Business Rules and Invariants
 
 - 고객 취소 허용 상태는 `PENDING_PAYMENT`와 매장 수락 전 `PAID`다.
-- `PENDING_PAYMENT` 취소는 Order와 네 예약 자원 해제가 한 local transaction에서 모두
+- `PENDING_PAYMENT` 취소는 Order와 세 예약 자원 해제가 한 local transaction에서 모두
   commit된 뒤에만 `200`이다.
 - `PAID` 취소의 `202`는 Order 취소와 durable compensation 시작만 뜻하며 외부 환불 성공을
   뜻하지 않는다.

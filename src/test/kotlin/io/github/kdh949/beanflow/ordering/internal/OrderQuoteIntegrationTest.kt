@@ -314,20 +314,12 @@ internal class OrderQuoteIntegrationTest
                 fixture.menuId,
                 optionId.toString(),
             )
-            jdbcTemplate.update(
-                "INSERT INTO merchant_menu_configuration_requirement " +
-                    "(id, menu_configuration_id, sellable_unit_id, quantity_per_line_unit) VALUES (?, ?, ?, 1)",
-                UUID.randomUUID(),
-                configurationId,
-                fixture.sellableUnitId,
-            )
             return optionId
         }
 
         private fun assertNoTransactionWrites() {
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isZero()
-            assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "inventory_stock_reservation")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "promotion_coupon_reservation")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "loyalty_point_reservation")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "payment_payment")).isZero()

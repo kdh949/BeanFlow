@@ -42,7 +42,7 @@ bash scripts/demo/smoke.sh --customer-checkpoint  # Plan 30: 승인 결제 조�
 bash scripts/demo/smoke.sh                        # Plan 40: Merchant 포함 전체 흐름
 ```
 
-`start.sh`는 여섯 단계를 순서대로 수행하고 각 단계를 출력한다.
+`start.sh`는 다섯 단계를 순서대로 수행하고 각 단계를 출력한다.
 
 1. PostgreSQL 17 / PostGIS 3.5 컨테이너 기동과 준비 대기
 2. ephemeral identity server 기동과 JWK set endpoint 준비 대기
@@ -106,7 +106,7 @@ tracked file에 private key, JWT, demo secret이 들어가지 않는 것은
 | 있는 것 | 없는 것 |
 |---|---|
 | 매장 2곳(합성 좌표), 메뉴 2종(하나는 판매 불가), 옵션 2종 | 고객 좌표 — BR-28상 어디에도 저장하지 않는다 |
-| 합성 고객 로그인 계정, INITIAL/ACTIVE 점주 계정과 매장 membership, 픽업 슬롯 3개, 재고, 0 KRW 포인트 계정, AVAILABLE 쿠폰 Campaign | 초기 PointLot·PointTransaction, 카드번호, CVC, 유효기간 — ADR-021 |
+| 합성 고객 로그인 계정, INITIAL/ACTIVE 점주 계정과 매장 membership, 픽업 슬롯 3개, 0 KRW 포인트 계정, AVAILABLE 쿠폰 Campaign | 초기 PointLot·PointTransaction, 카드번호, CVC, 유효기간 — ADR-021 |
 | local-only scripted payment config와 paymentKey 상태 규칙 | 실제 개인정보, 실제 Toss credential |
 | 과거 완료 주문 2건, 승인 결제, 5,000 KRW 부분 환불, immutable 정산 item·confirmed batch 2건·환불 조정 1건 | paymentKey, provider secret, PAN/CVC 또는 실제 고객 결제 자료 |
 | — | 매장 검색 색인(`discovery_store_search_term`) — seed는 색인을 만들지 않는다 |

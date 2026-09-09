@@ -12,17 +12,17 @@
 ## Purpose / Big Picture
 
 인증된 고객이 자신의 `PENDING_PAYMENT` 또는 acceptance deadline 전 `PAID` 주문을
-전체 취소하게 한다. C0는 네 예약 해제까지 동기 완결해 200, C1은 모든 내구 후속 작업
+전체 취소하게 한다. C0는 세 예약 해제까지 동기 완결해 200, C1은 모든 내구 후속 작업
 착수를 원자 저장해 202를 반환한다.
 
 ## Current State
 
 - Plan 30 완료 main `5f52320`에서 migration-writer lease를 얻고 V23을 선택했다.
 - Order 고객 취소 전이, reason/detail DB 불변식, command endpoint와 최초 응답 재생이 구현됐다.
-- C0는 Order와 사용 중인 Pickup·Stock·Coupon·Point 예약, accepted Delivery, target Audit와
+- C0는 Order와 사용 중인 Pickup·Coupon·Point 예약, accepted Delivery, target Audit와
   terminal 멱등 응답을 한 transaction에 저장한다.
-- C1은 Payment recovery snapshot, 필요한 Refund, 공통 Case와 여섯 step, 두 policy snapshot,
-  accepted Delivery, Audit, 네 owner publication과 최초 202 응답을 한 transaction에 저장한다.
+- C1은 Payment recovery snapshot, 필요한 Refund, 공통 Case와 다섯 step, 두 policy snapshot,
+  accepted Delivery, Audit, 세 owner publication과 최초 202 응답을 한 transaction에 저장한다.
 - CT는 deduplicated AcceptanceTimeoutWork와 Audit만 commit하고 409를 반환하며, 4회 bounded
   claim/retry와 source-aware `REJECTED | NOT_APPLICABLE | MANUAL_REVIEW` 수렴을 제공한다.
 - 고객·매장 command idempotency는 90일 terminal 보존과 table별 독립 chunk cleanup을 사용한다.
@@ -31,7 +31,7 @@
 
 ## Definitions
 
-- **C0:** PENDING_PAYMENT Order, 네 예약 해제, Audit, accepted Delivery와 저장 응답.
+- **C0:** PENDING_PAYMENT Order, 세 예약 해제, Audit, accepted Delivery와 저장 응답.
 - **C1:** PAID Order, Payment/snapshot/Refund, Case, 두 policy, Delivery, Audit,
   owner publications와 저장 응답.
 - **CT:** deadline이 지난 PAID 요청이 timeout work와 Audit만 저장하는 transaction.
@@ -45,7 +45,7 @@
 - cancellation command idempotency와 최초 body 저장
 - Tx C0/C1/CT, lock order와 target별 Audit
 - C1 recovery snapshot, 필요한 Refund와 accepted NotificationDelivery 생성
-- `OrderCancelledV1` 네 owner publication
+- `OrderCancelledV1` 세 owner publication
 - POST/GET customer projection mapper의 command-time snapshot 연결
 
 ### Non-goals
@@ -66,7 +66,7 @@
 
 ## Architecture and Transaction Boundaries
 
-- C0 lock: Order → Pickup → sorted Stock → Coupon → Point.
+- C0 lock: Order → Pickup → sorted Coupon → Point.
 - C1 lock: Order → Payment → sorted Refund/allocation → COUPON head → POINTS head.
 - CT lock: Order → AcceptanceTimeoutWork.
 - 외부 Payment/Notification Provider와 owner restoration은 command transaction에서
@@ -114,7 +114,7 @@ migration으로 기록했다. timeout due와 expired claim은 각각 부분 inde
 
 1. Plan 20의 cause/cancelledAt 불변식을 소비해 reason/detail과 고객 취소 전이 validation을 구현한다.
 2. cancellation idempotency와 canonical payload를 구현한다.
-3. C0의 네 owner release/Audit/Delivery를 원자화한다.
+3. C0의 세 owner release/Audit/Delivery를 원자화한다.
 4. CT durable timeout work와 정확한 deadline 경계를 구현한다.
 5. C1 snapshot/Refund/Case/policy/Delivery/publication commit gate를 구현한다.
 6. Controller/OpenAPI contract, Draft-only no-deploy workflow gate와 Plan 50 release-PR handoff를 연결한다.
@@ -188,9 +188,9 @@ ADR-072, OpenAPI, state machine, transaction boundaries, authorization/error cat
 
 ## Outcomes & Retrospective
 
-Plan 30 main을 기준으로 V23과 C0/C1/CT command를 구현했다. C0는 사용 중인 네 owner 예약,
+Plan 30 main을 기준으로 V23과 C0/C1/CT command를 구현했다. C0는 사용 중인 세 owner 예약,
 accepted Delivery, Audit와 200 응답을 원자 commit하고 event/Case/Refund를 만들지 않는다. C1은
-Payment snapshot과 필요한 Refund, 공통 Case·policy, accepted Delivery, target Audit, 네 owner
+Payment snapshot과 필요한 Refund, 공통 Case·policy, accepted Delivery, target Audit, 세 owner
 publication과 202 응답을 원자 commit하되 Provider는 호출하지 않는다. CT는 취소 승자로 가장하지
 않고 timeout work와 Audit가 commit된 뒤 409를 반환한다.
 

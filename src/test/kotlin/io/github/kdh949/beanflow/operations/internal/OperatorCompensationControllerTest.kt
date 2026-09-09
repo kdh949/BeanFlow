@@ -87,7 +87,7 @@ internal class OperatorCompensationControllerTest
                 .andExpect(jsonPath("$.compensation.caseId").isString)
                 .andExpect(jsonPath("$.compensation.trigger").value("STORE_REJECTION"))
                 .andExpect(jsonPath("$.compensation.benefitPolicies.length()").value(2))
-                .andExpect(jsonPath("$.compensation.steps.length()").value(6))
+                .andExpect(jsonPath("$.compensation.steps.length()").value(5))
                 .andExpect(jsonPath("$.compensation.orderId").doesNotExist())
                 .andExpect(jsonPath("$.compensation.terminalOrderVersion").doesNotExist())
                 .andExpect(jsonPath("$.compensation.benefitPolicies[0].mode").doesNotExist())

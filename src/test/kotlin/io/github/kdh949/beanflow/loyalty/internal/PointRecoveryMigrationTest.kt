@@ -233,9 +233,9 @@ internal class PointRecoveryMigrationTest : IsolatedPostgresSupport() {
                 """
                 INSERT INTO ordering_order_line (
                     id, order_id, line_sequence, menu_id, menu_name, option_names_json,
-                    sellable_requirements_json, unit_price_krw, quantity, gross_krw,
+                    unit_price_krw, quantity, gross_krw,
                     coupon_discount_krw, points_applied_krw, cash_payable_krw
-                ) VALUES (?, ?, 0, ?, 'Migration test menu', '[]', '[]', 100, 1, 100, 0, 0, 100)
+                ) VALUES (?, ?, 0, ?, 'Migration test menu', '[]', 100, 1, 100, 0, 0, 100)
                 """.trimIndent(),
                 lineId,
                 orderId,

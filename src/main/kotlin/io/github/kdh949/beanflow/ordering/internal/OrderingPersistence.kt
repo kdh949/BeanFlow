@@ -330,8 +330,6 @@ internal class OrderLineEntity(
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "normalized_option_ids_json", columnDefinition = "jsonb")
     val normalizedOptionIds: List<UUID>?,
-    @Column(name = "sellable_requirements_json", nullable = false, columnDefinition = "text")
-    val sellableRequirementsJson: String,
     @Column(name = "unit_price_krw", nullable = false)
     val unitPriceKrw: Long,
     @Column(nullable = false)

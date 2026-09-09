@@ -111,7 +111,7 @@ marker가 `true`인 동안 새 운영 명령을 보내지 않는다. LOOKUP 결�
 
 ## Owner compensation
 
-`OrderCancelledV1`은 Pickup, Stock, Coupon, Points 네 stable listener target을 갖는다.
+`OrderCancelledV1`은 Pickup, Coupon, Points 네 stable listener target을 갖는다.
 한 target의 publication retry가 소진되면 해당 step만 `MANUAL_REVIEW`로 전환한다. 다른
 owner step을 함께 실패시키거나 이미 확정된 Order `CANCELLED`를 되돌리지 않는다.
 

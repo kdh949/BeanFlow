@@ -13,11 +13,11 @@
 
 1원 이상인 `PENDING_PAYMENT` 주문에 대해 고객이 토큰화 결제수단으로 승인을
 요청한다. BeanFlow는 Provider 대기 중 DB connection을 점유하지 않고, 승인 성공은
-Order와 네 예약에 원자적으로 반영하며, 결과 불명은 새 승인 없이 조회로 복구한다.
+Order와 세 예약에 원자적으로 반영하며, 결과 불명은 새 승인 없이 조회로 복구한다.
 
 ## Current State
 
-주문 생성, 5분 lease, 슬롯·재고·쿠폰·포인트 예약, 주문 생성 멱등성과
+주문 생성, 5분 lease, 슬롯·쿠폰·포인트 예약, 주문 생성 멱등성과
 `BENEFIT_ONLY` Payment가 구현돼 있다. 외부 결제 endpoint는 OpenAPI skeleton만 있고
 Payment schema는 `BENEFIT_ONLY/APPROVED/0 KRW`만 허용한다.
 
@@ -50,7 +50,7 @@ Payment schema는 `BENEFIT_ONLY/APPROVED/0 KRW`만 허용한다.
 
 - BR-03~05, BR-25~26, BR-29~30을 적용한다.
 - Order당 Payment는 하나이며 같은 Provider transaction을 중복 기록하지 않는다.
-- 명시 거절은 Order `CANCELLED`와 네 예약 해제를 한 번만 수행한다.
+- 명시 거절은 Order `CANCELLED`와 세 예약 해제를 한 번만 수행한다.
 - timeout과 응답 유실은 `UNKNOWN`이며 승인 요청을 다시 보내지 않는다.
 - 만료 Order와 예약은 늦은 승인으로 복구하지 않는다.
 - PAN, CVC, 전체 유효기간과 Provider 원문 응답을 저장하지 않는다.

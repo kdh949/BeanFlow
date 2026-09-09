@@ -39,7 +39,7 @@
 - nearby store search at multiple data sizes (measured 2026-08-07)
 - customer store discovery index access plans (measured 2026-08-16)
 - order list query and N+1
-- last stock/slot/coupon contention
+- last slot/coupon contention
 - external PG latency with transaction inside versus outside only as controlled experiment
 - settlement batch chunk size
 - point expiration batch

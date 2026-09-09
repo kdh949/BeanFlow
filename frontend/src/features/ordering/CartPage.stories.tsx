@@ -231,9 +231,3 @@ export const PriceConfigurationChanged = conflictStory(
   "메뉴 가격 또는 옵션 구성이 변경되었습니다.",
   "지금 주문할 수 없는 메뉴 구성이에요",
 );
-
-export const StockChanged = conflictStory(
-  "STOCK_NOT_AVAILABLE",
-  "오트 라떼 재고가 부족합니다.",
-  "재고가 부족한 메뉴가 있어요",
-);

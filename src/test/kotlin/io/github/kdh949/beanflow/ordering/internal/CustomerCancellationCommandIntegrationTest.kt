@@ -173,15 +173,13 @@ internal class CustomerCancellationCommandIntegrationTest
             assertThat(value("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("CANCELLED")
             assertThat(value("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId))
                 .isEqualTo("RELEASED")
-            assertThat(value("SELECT state FROM inventory_stock_reservation WHERE order_id = ?", orderId))
-                .isEqualTo("RELEASED")
             assertThat(value("SELECT state FROM promotion_coupon_reservation WHERE order_id = ?", orderId))
                 .isEqualTo("RELEASED")
             assertThat(value("SELECT state FROM loyalty_point_reservation WHERE order_id = ?", orderId))
                 .isEqualTo("RELEASED")
             assertThat(count("ordering_cancellation_command_idempotency")).isEqualTo(1)
             assertThat(count("notification_delivery")).isEqualTo(1)
-            assertThat(countCommandAudits()).isEqualTo(6)
+            assertThat(countCommandAudits()).isEqualTo(5)
             assertThat(count("operations_order_compensation_case")).isZero()
             assertThat(count("payment_refund")).isZero()
             assertThat(count("event_publication")).isZero()
@@ -192,7 +190,7 @@ internal class CustomerCancellationCommandIntegrationTest
                         "AND action IN ($COMMAND_AUDIT_ACTIONS)",
                     Long::class.java,
                 ),
-            ).isEqualTo(6)
+            ).isEqualTo(5)
             assertThat(
                 jdbcTemplate.queryForObject(
                     "SELECT count(*) FROM operations_audit_record WHERE action IN ($COMMAND_AUDIT_ACTIONS) " +
@@ -205,7 +203,7 @@ internal class CustomerCancellationCommandIntegrationTest
                 .also { assertThat(it.status).isEqualTo(409) }
             cancel(orderId, fixture.customerId, "c0-another-key", "ORDER_MISTAKE", null)
                 .also { assertThat(it.status).isEqualTo(409) }
-            assertThat(countCommandAudits()).isEqualTo(6)
+            assertThat(countCommandAudits()).isEqualTo(5)
         }
 
         @Test
@@ -262,8 +260,6 @@ internal class CustomerCancellationCommandIntegrationTest
             assertThat(value("SELECT cancellation_cause FROM ordering_order WHERE id = ?", orderId))
                 .isEqualTo("SUPPORT_REQUEST")
             assertThat(value("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId))
-                .isEqualTo("RELEASED")
-            assertThat(value("SELECT state FROM inventory_stock_reservation WHERE order_id = ?", orderId))
                 .isEqualTo("RELEASED")
             assertThat(count("ordering_support_order_change_history")).isOne()
             assertThat(
@@ -333,7 +329,7 @@ internal class CustomerCancellationCommandIntegrationTest
         }
 
         @Test
-        fun `C1 commits refund case delivery audits and exactly four owner publications without provider calls`() {
+        fun `C1 commits refund case delivery audits and exactly three owner publications without provider calls`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             val orderId = createOrder(fixture, "c1-create-key")
@@ -350,17 +346,16 @@ internal class CustomerCancellationCommandIntegrationTest
             assertThat(count("payment_refund")).isEqualTo(1)
             assertThat(value("SELECT state FROM payment_refund WHERE order_id = ?", orderId)).isEqualTo("REQUESTED")
             assertThat(count("operations_order_compensation_case")).isEqualTo(1)
-            assertThat(count("operations_order_compensation_step")).isEqualTo(6)
+            assertThat(count("operations_order_compensation_step")).isEqualTo(5)
             assertThat(count("operations_order_compensation_benefit_policy_snapshot")).isEqualTo(2)
             assertThat(count("notification_delivery")).isEqualTo(1)
             assertThat(count("ordering_cancellation_command_idempotency")).isEqualTo(1)
             assertThat(countCommandAudits()).isEqualTo(5)
-            assertThat(count("event_publication")).isEqualTo(4)
+            assertThat(count("event_publication")).isEqualTo(3)
             assertThat(
                 jdbcTemplate.queryForList("SELECT listener_id FROM event_publication", String::class.java),
             ).containsExactlyInAnyOrder(
                 "beanflow.order-compensation.order-cancelled.pickup.v1",
-                "beanflow.order-compensation.order-cancelled.stock.v1",
                 "beanflow.order-compensation.order-cancelled.coupon.v1",
                 "beanflow.order-compensation.order-cancelled.points.v1",
             )
@@ -403,7 +398,7 @@ internal class CustomerCancellationCommandIntegrationTest
                     "SELECT state FROM operations_order_compensation_step WHERE step_type = 'PAYMENT'",
                 ),
             ).isEqualTo("NOT_REQUIRED")
-            assertThat(count("event_publication")).isEqualTo(4)
+            assertThat(count("event_publication")).isEqualTo(3)
             assertThat(countCommandAudits()).isEqualTo(4)
         }
 
@@ -543,7 +538,6 @@ internal class CustomerCancellationCommandIntegrationTest
             val dueAt = Timestamp.from(Instant.now().minusSeconds(1))
             jdbcTemplate.update("UPDATE ordering_order SET reservation_expires_at = ? WHERE id = ?", dueAt, orderId)
             jdbcTemplate.update("UPDATE fulfillment_pickup_reservation SET expires_at = ? WHERE order_id = ?", dueAt, orderId)
-            jdbcTemplate.update("UPDATE inventory_stock_reservation SET expires_at = ? WHERE order_id = ?", dueAt, orderId)
 
             val response = cancel(orderId, fixture.customerId, "expiry-cancel-key", "OTHER", null)
 
@@ -660,7 +654,7 @@ internal class CustomerCancellationCommandIntegrationTest
             assertThat(count("payment_refund")).isEqualTo(1)
             assertThat(count("operations_order_compensation_case")).isEqualTo(1)
             assertThat(count("notification_delivery")).isEqualTo(1)
-            assertThat(count("event_publication")).isEqualTo(4)
+            assertThat(count("event_publication")).isEqualTo(3)
             assertThat(countCommandAudits()).isEqualTo(5)
             assertThat(paymentGateway.rejectionRefundCalls.get()).isZero()
             assertThat(notificationProvider.calls.get()).isZero()
@@ -672,7 +666,6 @@ internal class CustomerCancellationCommandIntegrationTest
                 listOf(
                     FaultTarget("ordering_order", "UPDATE"),
                     FaultTarget("fulfillment_pickup_reservation", "UPDATE"),
-                    FaultTarget("inventory_stock_reservation", "UPDATE"),
                     FaultTarget("promotion_coupon_reservation", "UPDATE"),
                     FaultTarget("loyalty_point_reservation", "UPDATE"),
                     FaultTarget("notification_delivery", "INSERT"),
@@ -696,8 +689,6 @@ internal class CustomerCancellationCommandIntegrationTest
                 assertThat(response.contentAsString).doesNotContain("private fault detail")
                 assertThat(value("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PENDING_PAYMENT")
                 assertThat(value("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId))
-                    .isEqualTo("RESERVED")
-                assertThat(value("SELECT state FROM inventory_stock_reservation WHERE order_id = ?", orderId))
                     .isEqualTo("RESERVED")
                 assertThat(value("SELECT state FROM promotion_coupon_reservation WHERE order_id = ?", orderId))
                     .isEqualTo("RESERVED")
@@ -818,7 +809,6 @@ internal class CustomerCancellationCommandIntegrationTest
             val dueAt = Timestamp.from(Instant.now().minusSeconds(1))
             jdbcTemplate.update("UPDATE ordering_order SET reservation_expires_at = ? WHERE id = ?", dueAt, orderId)
             jdbcTemplate.update("UPDATE fulfillment_pickup_reservation SET expires_at = ? WHERE order_id = ?", dueAt, orderId)
-            jdbcTemplate.update("UPDATE inventory_stock_reservation SET expires_at = ? WHERE order_id = ?", dueAt, orderId)
             val barrier = java.util.concurrent.CyclicBarrier(2)
             val executor =
                 java.util.concurrent.Executors
@@ -858,8 +848,6 @@ internal class CustomerCancellationCommandIntegrationTest
                 )
             assertThat(value("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("EXPIRED")
             assertThat(value("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId))
-                .isEqualTo("EXPIRED")
-            assertThat(value("SELECT state FROM inventory_stock_reservation WHERE order_id = ?", orderId))
                 .isEqualTo("EXPIRED")
             assertThat(count("ordering_cancellation_command_idempotency")).isZero()
             assertThat(count("notification_delivery")).isZero()
@@ -1162,7 +1150,6 @@ internal class CustomerCancellationCommandIntegrationTest
             const val COMMAND_AUDIT_ACTIONS =
                 "'ORDER_CUSTOMER_CANCELLED'," +
                     "'PICKUP_RESERVATION_RELEASED_BY_CUSTOMER_CANCELLATION'," +
-                    "'STOCK_RESERVATION_RELEASED_BY_CUSTOMER_CANCELLATION'," +
                     "'COUPON_RESERVATION_RELEASED_BY_CUSTOMER_CANCELLATION'," +
                     "'POINT_RESERVATION_RELEASED_BY_CUSTOMER_CANCELLATION'," +
                     "'ORDER_COMPENSATION_CASE_CREATED'," +

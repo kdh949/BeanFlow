@@ -14,7 +14,6 @@ internal data class OrderCreationFixture(
     val storeId: UUID = UUID.randomUUID(),
     val menuId: UUID = UUID.randomUUID(),
     val pickupSlotId: UUID = UUID.randomUUID(),
-    val sellableUnitId: UUID = UUID.randomUUID(),
 ) {
     fun command(
         pointsToUseKrw: Long = 0,
@@ -128,11 +127,11 @@ internal object OrderCreationDatabaseFixture {
                 promotion_coupon_issuance,
                 promotion_campaign_eligible_menu,
                 promotion_campaign,
-                inventory_stock_reservation,
-                inventory_sellable_stock,
+
+
                 fulfillment_pickup_reservation,
                 fulfillment_pickup_slot,
-                merchant_menu_configuration_requirement,
+
                 merchant_menu_configuration,
                 merchant_menu_option,
                 merchant_menu,
@@ -217,7 +216,6 @@ internal object OrderCreationDatabaseFixture {
         jdbcTemplate: JdbcTemplate,
         fixture: OrderCreationFixture,
         slotCapacity: Long = 10,
-        stockAvailable: Long = 10,
         priceKrw: Long = 1_000,
         includeSettlementTerms: Boolean = true,
         includeDisplayProfile: Boolean = true,
@@ -275,17 +273,6 @@ internal object OrderCreationDatabaseFixture {
         )
         jdbcTemplate.update(
             """
-            INSERT INTO merchant_menu_configuration_requirement (
-                id, menu_configuration_id, sellable_unit_id, quantity_per_line_unit
-            )
-            VALUES (?, ?, ?, 1)
-            """.trimIndent(),
-            UUID.randomUUID(),
-            configurationId,
-            fixture.sellableUnitId,
-        )
-        jdbcTemplate.update(
-            """
             INSERT INTO fulfillment_pickup_slot (
                 id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count
             )
@@ -296,17 +283,6 @@ internal object OrderCreationDatabaseFixture {
             Timestamp.from(Instant.parse("2030-01-01T00:10:00Z")),
             Timestamp.from(Instant.parse("2030-01-01T00:20:00Z")),
             slotCapacity,
-        )
-        jdbcTemplate.update(
-            """
-            INSERT INTO inventory_sellable_stock (
-                id, store_id, available_quantity, reserved_quantity, confirmed_quantity
-            )
-            VALUES (?, ?, ?, 0, 0)
-            """.trimIndent(),
-            fixture.sellableUnitId,
-            fixture.storeId,
-            stockAvailable,
         )
     }
 

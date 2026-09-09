@@ -9,7 +9,7 @@
 
 ## Decision
 
-Identity, Merchant, Discovery, Ordering, Fulfillment, Inventory, Promotion, Loyalty, Payment, Settlement, Dispute, Notification, Analytics, Operations를 논리적 Context 후보로 둔다. MVP 물리 모듈 수는 구현 복잡도에 맞춰 합칠 수 있으나 소유권은 유지한다.
+Identity, Merchant, Discovery, Ordering, Fulfillment, Promotion, Loyalty, Payment, Settlement, Dispute, Notification, Analytics, Operations를 논리적 Context 후보로 둔다. MVP 물리 모듈 수는 구현 복잡도에 맞춰 합칠 수 있으나 소유권은 유지한다.
 
 ## Alternatives Considered
 

@@ -1,12 +1,12 @@
-# ADR-040: 주문 종료 후 확정 픽업·재고 복원 상태
+# ADR-040: 주문 종료 후 확정 픽업 복원 상태
 
 - **Status:** Accepted
 - **Date:** 2026-07-31
 
 ## Context
 
-미수락 `PAID` 고객 취소는 매장 거절과 동일하게 확정 픽업 슬롯과 재고를 복원한다.
-현재 Fulfillment와 Inventory는 상태 `RELEASED_BY_REJECTION`, 메서드
+미수락 `PAID` 고객 취소는 매장 거절과 동일하게 확정 픽업 슬롯를 복원한다.
+현재 Fulfillment는 상태 `RELEASED_BY_REJECTION`, 메서드
 `releaseConfirmedByRejection`·`restoreConfirmedByRejection`과
 `restoration_source_reference`를 사용한다. 고객 취소 listener가 이 경로를 그대로
 호출하면 취소 복원이 거절로 저장된다.
@@ -17,9 +17,9 @@
 
 ## Decision
 
-- PickupReservation과 StockReservation의
+- PickupReservation의
   `RELEASED_BY_REJECTION`을 `RELEASED_AFTER_TERMINATION`으로 일반화한다.
-- 두 owner에 nullable `restoration_trigger`를 추가하고 닫힌 초기 값
+- Fulfillment owner에 nullable `restoration_trigger`를 추가하고 닫힌 초기 값
   `STORE_REJECTION`, `CUSTOMER_CANCELLATION`을 CHECK로 강제한다.
 - `RELEASED_AFTER_TERMINATION`일 때 `restoration_trigger`와
   `restoration_source_reference`는 모두 필수다. 다른 상태에서는 둘 다 null이어야
@@ -35,7 +35,6 @@
   | Owner | 변경 후 API |
   |---|---|
   | Fulfillment | `releaseConfirmedAfterTermination(orderId, trigger, now, sourceReference)` |
-  | Inventory | `restoreConfirmedAfterTermination(orderId, trigger, now, sourceReference)` |
 
 - trigger enum은 Operations 타입을 참조하지 않는 안정적인 shared owner API 계약으로
   둔다. listener가 `OrderRejectedV1 → STORE_REJECTION`,
@@ -49,10 +48,10 @@
 - 다른 source reference 또는 trigger가 이미 terminal row를 점유했거나 현재 상태가
   `CONFIRMED`가 아니면 상태와 수량을 덮어쓰지 않고
   `COMPENSATION_SOURCE_CONFLICT`로 owner publication을 실패시킨다.
-- 충돌은 bounded publication retry 뒤 해당 PICKUP 또는 STOCK step만
+- 충돌은 bounded publication retry 뒤 해당 PICKUP step만
   `MANUAL_REVIEW`로 전환한다. Order terminal 상태와 다른 owner step은 되돌리거나
   중단하지 않는다.
-- Pickup과 Stock 복원은 각각 owner listener transaction에서 row lock과 guarded
+- Pickup 복원은 owner listener transaction에서 row lock과 guarded
   transition으로 수행한다. 둘을 한 distributed transaction으로 묶지 않는다.
 
 ## Alternatives Considered
@@ -87,7 +86,7 @@
   trigger/source CHECK로 직접 작성한다. legacy 후보가 하나라도 있으면 V9 precheck가
   backfill을 추측하지 않고 실패한다. gate가 무효화된 forward 경로에서만 상태 update와
   trigger backfill을 별도 migration으로 설계한다.
-- 두 owner enum, entity, public API, 거절 listener와 테스트 이름이 바뀐다.
+- Fulfillment owner enum, entity, public API, 거절 listener와 테스트 이름이 바뀐다.
 - 기존 거절 source reference는 그대로 유지되므로 진행 중 publication replay와
   migration 후 row 멱등성이 깨지지 않는다.
 - 고객 취소 listener는 event ID가 아닌 Order terminal version 기반 source를
@@ -102,8 +101,8 @@
   분류된다.
 - 다른 trigger의 terminal row를 성공으로 간주하면 원인 충돌이 숨겨지고 잘못된
   publication이 완료된다.
-- 동일 event의 재전달에서 수량을 다시 더하면 슬롯 capacity와 재고 수량이 부풀려진다.
-- Inventory와 Fulfillment를 한 transaction으로 묶으면 owner 경계와 독립 복구를
+- 동일 event의 재전달에서 수량을 다시 더하면 슬롯 capacity가 부풀려진다.
+- Fulfillment를 한 transaction으로 묶으면 owner 경계와 독립 복구를
   깨뜨린다.
 
 ## Verification
@@ -119,13 +118,11 @@
 - V9 기존 거절 row의 상태·trigger forward migration
 - migration 재실행 안전성과 CHECK 검증
 - Pickup 고객 취소 `CONFIRMED → RELEASED_AFTER_TERMINATION`
-- Stock 고객 취소 전 row의 동일 전이와 수량 tie-out
 - 거절·취소 trigger 매핑
 - 상태별 trigger/source nullability CHECK
 - 같은 source·trigger duplicate의 `ALREADY_APPLIED`
 - 다른 source 또는 trigger의 `COMPENSATION_SOURCE_CONFLICT`
 - event ID가 다른 같은 Order version 재처리의 수량 한 번 복원
-- Pickup 실패와 Stock 성공의 독립 step 상태
 - bounded retry 소진 시 해당 step만 manual review
 
 ## Metrics
@@ -134,15 +131,15 @@
 - `beanflow.resource.restoration.source_conflict.count{owner,trigger}`
 - `beanflow.resource.restoration.lag{owner,trigger}`
 
-Order, reservation, stock unit, store와 customer ID는 metric tag로 사용하지 않는다.
+Order, reservation, store와 customer ID는 metric tag로 사용하지 않는다.
 
 - **Not measured:** trigger별 확정 자원 복원량과 충돌 원인 분포
 
 ## Implementation Checkpoint (2026-08-03)
 
-- V9가 Pickup·Stock의 `RELEASED_AFTER_TERMINATION`, trigger/source nullability와 legacy
+- V9가 Pickup의 `RELEASED_AFTER_TERMINATION`, trigger/source nullability와 legacy
   `RELEASED_BY_REJECTION` 후보 0 precheck를 직접 만든다.
-- 두 owner API와 `OrderRejectedV1`/`OrderCancelledV1` listener는 trigger를 명시적으로
+- Fulfillment owner API와 `OrderRejectedV1`/`OrderCancelledV1` listener는 trigger를 명시적으로
   전달하며 source 문자열을 파싱하지 않는다.
 - owner transaction은 각 reservation row만 잠그고 동일 source/trigger replay에는 수량을
   다시 변경하지 않으며 mismatch는 `COMPENSATION_SOURCE_CONFLICT`로 실패한다.

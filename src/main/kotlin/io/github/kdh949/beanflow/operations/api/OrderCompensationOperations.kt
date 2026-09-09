@@ -19,7 +19,6 @@ enum class OrderCompensationState {
 enum class OrderCompensationStepType {
     PAYMENT,
     PICKUP,
-    STOCK,
     COUPON,
     POINTS,
     CUSTOMER_NOTIFICATION,

@@ -10,7 +10,7 @@ Initial decision:
 
 - Tx I1에서 intended Order ID, scope, canonical payload hash와
   `IdempotencyRecord(PROCESSING)`을 짧게 먼저 커밋한다.
-- Order, 슬롯·재고·쿠폰·포인트 예약은 같은 PostgreSQL 배포 단위의 로컬 트랜잭션에서 공개 Application API를 통해 조정한다.
+- Order, 슬롯·쿠폰·포인트 예약은 같은 PostgreSQL 배포 단위의 로컬 트랜잭션에서 공개 Application API를 통해 조정한다.
 - Ordering이 다른 모듈의 Repository를 직접 호출하지 않는다.
 - Merchant applicable settlement terms, Promotion CouponReservation final burden legs와 Loyalty
   PointReservation issuer allocations이 모두 검증된 뒤 같은 transaction에
@@ -18,7 +18,7 @@ Initial decision:
   부분 성공이나 default fee/cost로 대체하지 않고 전체 rollback한다.
 - 2026-08-02 Plan 15 구현은 V18–V20 owner source FK/trigger와 Order unique snapshot을 이
   경계에 연결했다. snapshot insert failure, missing terms, coupon burden 또는 cross-store
-  point issuer는 `SETTLEMENT_INPUT_UNAVAILABLE`로 Order·Pickup·Stock·Coupon·Point 변경을
+  point issuer는 `SETTLEMENT_INPUT_UNAVAILABLE`로 Order·Pickup·Coupon·Point 변경을
   함께 rollback한다. concurrent future terms publication은 주문 시각에 적용되는 기존 version을
   바꾸지 않는다.
 - Order와 OrderLine을 저장한 뒤 같은 transaction에서 Operations의 typed selector로
@@ -33,11 +33,10 @@ Initial decision:
   Order, 모든 owner 예약·benefit-only 승인, Audit와 성공 idempotency response를 함께 rollback한다.
   missing policy를 0 bps, current cache 또는 legacy marker로 대체하지 않는다.
 - 일부 실패 시 주문과 모든 예약을 롤백한다.
-- Merchant는 정규화한 메뉴·옵션 구성을 sellable unit 요구량으로 번역하고,
-  Ordering은 같은 unit 요구량을 주문 전체에서 합산하여 Inventory 공개 API에
-  전달한다. Inventory는 메뉴·옵션을 역으로 조회하지 않는다.
+- Merchant는 정규화한 메뉴·옵션 구성의 판매 상태와 가격을 검증한다.
+  Ordering의 최종 검증은 Store shared lock을 주문 transaction 종료까지 유지한다.
 - payable이 0이면 같은 주문 생성 트랜잭션에서
-  `BENEFIT_ONLY Payment(APPROVED)`를 만들고 네 예약을 확정한 뒤 Order를 `PAID`로
+  `BENEFIT_ONLY Payment(APPROVED)`를 만들고 세 예약을 확정한 뒤 Order를 `PAID`로
   커밋한다. 중간 `PENDING_PAYMENT`와 `RESERVED` 상태는 외부에 커밋하지 않으며
   외부 Provider를 호출하지 않는다.
 - 성공 Tx O는 Order, 예약, AuditRecord와 IdempotencyRecord의
@@ -63,7 +62,7 @@ Tx I1: actor + REORDER_ORDER_V1 + key unique arbitration
 commit
 Tx O:  source Order lock + owner/state/option snapshot 검증
        + source menu/normalized option/quantity를 shared order-creation input으로 변환
-       + current quote + Pickup/Stock/Coupon/Point reserve
+       + current quote + Pickup/Coupon/Point reserve
        + new Order/immutable snapshots/Audit/priceComparison
        + idempotency COMPLETED + first 201 status/body
 commit
@@ -72,7 +71,7 @@ Tx I2: Tx O의 확정 실패 status/body를 idempotency FAILED로 저장
 
 - source Order lock은 snapshot 읽기와 향후 허용 상태 변화 경쟁을 일관되게 처리한다. source가
   terminal이 아니면 `REORDER_SOURCE_STATE_INVALID`이며 새 Order와 예약을 만들지 않는다.
-- Tx I1과 Tx O 사이 또는 source read와 current owner validation 사이의 메뉴·옵션·가격·slot·재고·
+- Tx I1과 Tx O 사이 또는 source read와 current owner validation 사이의 메뉴·옵션·가격·slot·
   coupon·point 변화는 Tx O가 다시 읽고 잠근 현재 owner 상태로 판정한다. client가 보았던 과거 상태나
   사전 read를 보장하지 않는다.
 - Tx O는 기존 주문 생성 owner orchestration을 transaction-mandatory internal shared boundary로
@@ -182,8 +181,8 @@ Browser: Toss V2 Standard CARD 인증
 Tx B: Payment lock + owner/providerOrder/amount/paymentKey binding + callback claim
 commit
 External Toss confirm
-Tx C approved: Order lock + 네 예약 확정 + Order PAID + Payment/Attempt APPROVED + Audit
-Tx C declined: Order lock + 네 예약 해제 + Order CANCELLED + Payment/Attempt FAILED + Audit
+Tx C approved: Order lock + 세 예약 확정 + Order PAID + Payment/Attempt APPROVED + Audit
+Tx C declined: Order lock + 세 예약 해제 + Order CANCELLED + Payment/Attempt FAILED + Audit
 Tx C unknown: Payment/Attempt UNKNOWN + query reconciliation schedule
 ```
 
@@ -198,7 +197,7 @@ Tx C unknown: Payment/Attempt UNKNOWN + query reconciliation schedule
 - PG 성공 후 Tx C 실패는 reconciliation으로 복구한다.
 - Tx A에서 최초 reconciliation due 시각을 함께 저장해 PG 성공 후 Tx C 전체 실패도
   stuck `APPROVING` 조회로 복구한다.
-- Tx C 잠금 순서는 Order → Pickup → 정렬된 Stock → Coupon → Point →
+- Tx C 잠금 순서는 Order → Pickup → Coupon → Point →
   Payment/Idempotency/Audit다.
 - 명시 거절은 422와 terminal idempotency result를 저장한다. timeout, 연결 오류,
   응답 유실과 해석 불가 응답은 거절로 바꾸지 않는다.
@@ -232,7 +231,7 @@ Tx E3: SUCCEEDED | UNKNOWN | RECONCILING | MANUAL_REVIEW 기록
 - scheduled worker, Order 조회와 결제 명령은 같은 idempotent expiry Application
   Service를 호출한다.
 - `now >= reservationExpiresAt`이고 Order가 `PENDING_PAYMENT`이면 Order row를
-  guarded lock한 뒤 Order `EXPIRED`, 슬롯·재고 예약 `EXPIRED`, 쿠폰 release와
+  guarded lock한 뒤 Order `EXPIRED`, 슬롯 예약 `EXPIRED`, 쿠폰 release와
   PointReservation release를 한 로컬 transaction에서 실행한다.
 - 모든 owner release와 AuditRecord가 commit된 뒤에만 조회는 `EXPIRED`를 반환하고
   결제 명령은 `RESERVATION_EXPIRED`를 반환한다.
@@ -314,7 +313,7 @@ After commit: wake existing timeout worker
 
 ```text
 Tx C0: Order lock + ownership/deadline/idempotency 검증
-     + Order CANCELLED + 네 예약 해제 + target별 AuditRecords
+     + Order CANCELLED + 세 예약 해제 + target별 AuditRecords
      + ORDER_CANCELLATION_ACCEPTED NotificationDelivery PENDING
      + 최초 200 response와 cancellation command idempotency 저장
 commit
@@ -330,22 +329,22 @@ Notification worker: claim transaction -> external Provider -> result transactio
 ```text
 Tx C1: Order lock + ownership/deadline/idempotency 검증
      + Order CANCELLED와 cancellation fields
-     + OrderCompensationCase와 여섯 steps
+     + OrderCompensationCase와 다섯 steps
      + Payment cancellation recovery snapshot
      + 남은 refundable cash가 양수이면 그 금액의 Refund REQUESTED
      + ORDER_CANCELLATION_ACCEPTED NotificationDelivery PENDING
      + 변경·생성 target별 AuditRecords
-     + OrderCancelledV1과 Pickup, Stock, Coupon, Points persistent publications
+     + OrderCancelledV1과 Pickup, Coupon, Points persistent publications
      + 최초 202 response와 cancellation command idempotency 저장
 commit
-After commit: Pickup, Stock, Coupon, Points owner listeners
+After commit: Pickup, Coupon, Points owner listeners
 Refund worker: claim transaction -> external Provider -> result transaction
 Notification worker: claim transaction -> external Provider -> result transaction
 ```
 
 - Tx C1 항목 중 하나라도 저장되지 않으면 전체 rollback하고 `202`를 반환하지 않는다.
 - `202`는 외부 환불, 자원 복원 또는 알림 성공을 뜻하지 않는다.
-- 외부 Provider 호출과 픽업·재고·쿠폰·포인트 복원은 Tx C1에 포함하지 않는다.
+- 외부 Provider 호출과 픽업·쿠폰·포인트 복원은 Tx C1에 포함하지 않는다.
   NotificationDelivery 생성은 포함하되 Provider 호출은 포함하지 않는다.
 - Tx C1은 Payment와 성공 refund allocation을 잠가
   `approvedAmountKrw - succeededRefundAmountKrw`를 계산한다. 선행 성공 부분 환불이
@@ -364,7 +363,7 @@ Notification worker: claim transaction -> external Provider -> result transactio
 - `BENEFIT_ONLY`는 snapshot 0/0/0과 null Refund ID, PAYMENT step
   `NOT_REQUIRED`를 Tx C1에 저장한다. Refund와 Provider 호출은 만들지 않으며 다른
   다섯 보상 step은 일반 `PAID` 취소와 같다. NotificationDelivery는 직접 저장하고
-  네 자원 publication만 생성한다.
+  세 자원 publication만 생성한다.
 - 매장 거절과 고객 취소의 원 transaction은 해당 trigger의 COUPON, POINTS policy
   head를 이 순서로 잠그고 두 immutable version을 선택한다. Case의 두 benefit
   policy FK row와 event의 두 전체 snapshot을 같은 transaction에서 저장한다.

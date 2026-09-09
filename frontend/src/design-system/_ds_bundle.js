@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"BeanFlowDesignSystem_c0ae52","components":[{"name":"BalanceCard","sourcePath":"components/commerce/BalanceCard.jsx"},{"name":"CouponCard","sourcePath":"components/commerce/CouponCard.jsx"},{"name":"DataTable","sourcePath":"components/commerce/DataTable.jsx"},{"name":"MenuItem","sourcePath":"components/commerce/MenuItem.jsx"},{"name":"OrderStatus","sourcePath":"components/commerce/OrderStatus.jsx"},{"name":"OrderTicket","sourcePath":"components/commerce/OrderTicket.jsx"},{"name":"PickupSlots","sourcePath":"components/commerce/PickupSlots.jsx"},{"name":"StatTile","sourcePath":"components/commerce/StatTile.jsx"},{"name":"StoreCard","sourcePath":"components/commerce/StoreCard.jsx"},{"name":"Badge","sourcePath":"components/core/Badge.jsx"},{"name":"Button","sourcePath":"components/core/Button.jsx"},{"name":"Card","sourcePath":"components/core/Card.jsx"},{"name":"Icon","sourcePath":"components/core/Icon.jsx"},{"name":"IconButton","sourcePath":"components/core/IconButton.jsx"},{"name":"SectionHeader","sourcePath":"components/core/SectionHeader.jsx"},{"name":"Alert","sourcePath":"components/feedback/Alert.jsx"},{"name":"Dialog","sourcePath":"components/feedback/Dialog.jsx"},{"name":"EmptyState","sourcePath":"components/feedback/EmptyState.jsx"},{"name":"ProgressBar","sourcePath":"components/feedback/ProgressBar.jsx"},{"name":"Toast","sourcePath":"components/feedback/Toast.jsx"},{"name":"Checkbox","sourcePath":"components/forms/Checkbox.jsx"},{"name":"Input","sourcePath":"components/forms/Input.jsx"},{"name":"QuantityStepper","sourcePath":"components/forms/QuantityStepper.jsx"},{"name":"Radio","sourcePath":"components/forms/Radio.jsx"},{"name":"SearchField","sourcePath":"components/forms/SearchField.jsx"},{"name":"Select","sourcePath":"components/forms/Select.jsx"},{"name":"Switch","sourcePath":"components/forms/Switch.jsx"},{"name":"ListRow","sourcePath":"components/navigation/ListRow.jsx"},{"name":"SideNav","sourcePath":"components/navigation/SideNav.jsx"},{"name":"TabBar","sourcePath":"components/navigation/TabBar.jsx"},{"name":"Tabs","sourcePath":"components/navigation/Tabs.jsx"},{"name":"TopBar","sourcePath":"components/navigation/TopBar.jsx"}],"sourceHashes":{"components/commerce/BalanceCard.jsx":"5e6fb5e48efa","components/commerce/CouponCard.jsx":"9054b9d8042b","components/commerce/DataTable.jsx":"f5e77111ac69","components/commerce/MenuItem.jsx":"812336ffdac5","components/commerce/OrderStatus.jsx":"b4e5edcb8f50","components/commerce/OrderTicket.jsx":"73e2f3ba0fb0","components/commerce/PickupSlots.jsx":"7c6b2b88716d","components/commerce/StatTile.jsx":"f54d4fa2a6fa","components/commerce/StoreCard.jsx":"f87a6b0659f5","components/core/Badge.jsx":"6e9810f1b811","components/core/Button.jsx":"56fc733cbcb1","components/core/Card.jsx":"a5463b6fea63","components/core/Icon.jsx":"7c3a0c4ac6ab","components/core/IconButton.jsx":"64241e7057a9","components/core/SectionHeader.jsx":"ae8c5e1adaa9","components/feedback/Alert.jsx":"5ac6c3fc49f1","components/feedback/Dialog.jsx":"dbd6ff231b86","components/feedback/EmptyState.jsx":"8a30653dddc1","components/feedback/ProgressBar.jsx":"e8b36044536e","components/feedback/Toast.jsx":"0ee343d9c92d","components/forms/Checkbox.jsx":"0b6351e7892d","components/forms/Input.jsx":"cf1c334b55fe","components/forms/QuantityStepper.jsx":"509da958b71b","components/forms/Radio.jsx":"459c7c56241e","components/forms/SearchField.jsx":"8c7f01959eb1","components/forms/Select.jsx":"4ff0581a1df0","components/forms/Switch.jsx":"966ac00e156f","components/navigation/ListRow.jsx":"a4592ec1e95b","components/navigation/SideNav.jsx":"c0fd11bf7abf","components/navigation/TabBar.jsx":"22dce5c9bf07","components/navigation/Tabs.jsx":"e199c77d78c3","components/navigation/TopBar.jsx":"000e9b59247b","ui_kits/customer_app/App.jsx":"80db820acef9","ui_kits/customer_app/CheckoutScreen.jsx":"f3bbb3718ced","ui_kits/customer_app/HomeScreen.jsx":"a8fd3a28f311","ui_kits/customer_app/OrderScreen.jsx":"d92465d370cb","ui_kits/customer_app/StoreScreen.jsx":"54baefdbdb76","ui_kits/customer_app/WalletScreen.jsx":"936852d9ff70","ui_kits/merchant_console/ConsoleApp.jsx":"614e0755a4ea","ui_kits/merchant_console/DashboardScreen.jsx":"aa2a94afbbf1","ui_kits/merchant_console/PosScreen.jsx":"42500860dd02","ui_kits/merchant_console/SettlementScreen.jsx":"b2f66e1ee99f","ui_kits/merchant_console/StockScreen.jsx":"7ac1da1a4b63"},"inlinedExternals":[],"unexposedExports":[]} */
+/* @ds-bundle: {"format":4,"namespace":"BeanFlowDesignSystem_c0ae52","components":[{"name":"BalanceCard","sourcePath":"components/commerce/BalanceCard.jsx"},{"name":"CouponCard","sourcePath":"components/commerce/CouponCard.jsx"},{"name":"DataTable","sourcePath":"components/commerce/DataTable.jsx"},{"name":"MenuItem","sourcePath":"components/commerce/MenuItem.jsx"},{"name":"OrderStatus","sourcePath":"components/commerce/OrderStatus.jsx"},{"name":"OrderTicket","sourcePath":"components/commerce/OrderTicket.jsx"},{"name":"PickupSlots","sourcePath":"components/commerce/PickupSlots.jsx"},{"name":"StatTile","sourcePath":"components/commerce/StatTile.jsx"},{"name":"StoreCard","sourcePath":"components/commerce/StoreCard.jsx"},{"name":"Badge","sourcePath":"components/core/Badge.jsx"},{"name":"Button","sourcePath":"components/core/Button.jsx"},{"name":"Card","sourcePath":"components/core/Card.jsx"},{"name":"Icon","sourcePath":"components/core/Icon.jsx"},{"name":"IconButton","sourcePath":"components/core/IconButton.jsx"},{"name":"SectionHeader","sourcePath":"components/core/SectionHeader.jsx"},{"name":"Alert","sourcePath":"components/feedback/Alert.jsx"},{"name":"Dialog","sourcePath":"components/feedback/Dialog.jsx"},{"name":"EmptyState","sourcePath":"components/feedback/EmptyState.jsx"},{"name":"ProgressBar","sourcePath":"components/feedback/ProgressBar.jsx"},{"name":"Toast","sourcePath":"components/feedback/Toast.jsx"},{"name":"Checkbox","sourcePath":"components/forms/Checkbox.jsx"},{"name":"Input","sourcePath":"components/forms/Input.jsx"},{"name":"QuantityStepper","sourcePath":"components/forms/QuantityStepper.jsx"},{"name":"Radio","sourcePath":"components/forms/Radio.jsx"},{"name":"SearchField","sourcePath":"components/forms/SearchField.jsx"},{"name":"Select","sourcePath":"components/forms/Select.jsx"},{"name":"Switch","sourcePath":"components/forms/Switch.jsx"},{"name":"ListRow","sourcePath":"components/navigation/ListRow.jsx"},{"name":"SideNav","sourcePath":"components/navigation/SideNav.jsx"},{"name":"TabBar","sourcePath":"components/navigation/TabBar.jsx"},{"name":"Tabs","sourcePath":"components/navigation/Tabs.jsx"},{"name":"TopBar","sourcePath":"components/navigation/TopBar.jsx"}],"sourceHashes":{"components/commerce/BalanceCard.jsx":"5e6fb5e48efa","components/commerce/CouponCard.jsx":"9054b9d8042b","components/commerce/DataTable.jsx":"f5e77111ac69","components/commerce/MenuItem.jsx":"812336ffdac5","components/commerce/OrderStatus.jsx":"b4e5edcb8f50","components/commerce/OrderTicket.jsx":"73e2f3ba0fb0","components/commerce/PickupSlots.jsx":"7c6b2b88716d","components/commerce/StatTile.jsx":"f54d4fa2a6fa","components/commerce/StoreCard.jsx":"f87a6b0659f5","components/core/Badge.jsx":"6e9810f1b811","components/core/Button.jsx":"56fc733cbcb1","components/core/Card.jsx":"a5463b6fea63","components/core/Icon.jsx":"7c3a0c4ac6ab","components/core/IconButton.jsx":"64241e7057a9","components/core/SectionHeader.jsx":"ae8c5e1adaa9","components/feedback/Alert.jsx":"5ac6c3fc49f1","components/feedback/Dialog.jsx":"dbd6ff231b86","components/feedback/EmptyState.jsx":"8a30653dddc1","components/feedback/ProgressBar.jsx":"e8b36044536e","components/feedback/Toast.jsx":"0ee343d9c92d","components/forms/Checkbox.jsx":"0b6351e7892d","components/forms/Input.jsx":"cf1c334b55fe","components/forms/QuantityStepper.jsx":"509da958b71b","components/forms/Radio.jsx":"459c7c56241e","components/forms/SearchField.jsx":"8c7f01959eb1","components/forms/Select.jsx":"4ff0581a1df0","components/forms/Switch.jsx":"966ac00e156f","components/navigation/ListRow.jsx":"a4592ec1e95b","components/navigation/SideNav.jsx":"c0fd11bf7abf","components/navigation/TabBar.jsx":"22dce5c9bf07","components/navigation/Tabs.jsx":"e199c77d78c3","components/navigation/TopBar.jsx":"000e9b59247b","ui_kits/customer_app/App.jsx":"80db820acef9","ui_kits/customer_app/CheckoutScreen.jsx":"f3bbb3718ced","ui_kits/customer_app/HomeScreen.jsx":"a8fd3a28f311","ui_kits/customer_app/OrderScreen.jsx":"d92465d370cb","ui_kits/customer_app/WalletScreen.jsx":"936852d9ff70","ui_kits/merchant_console/PosScreen.jsx":"42500860dd02","ui_kits/merchant_console/SettlementScreen.jsx":"b2f66e1ee99f"},"inlinedExternals":[],"unexposedExports":[]} */
 
 (() => {
 
@@ -1977,7 +1977,7 @@ const MENU = {
     price: 5300
   }, {
     name: '오트 라떼',
-    description: '오늘 재고 3잔',
+    description: '오늘의 추천 메뉴',
     price: 5800
   }, {
     name: '콜드브루',
@@ -2368,7 +2368,7 @@ const {
 const TITLES = {
   dashboard: '대시보드',
   pos: 'POS 주문보드',
-  stock: '재고 관리',
+
   settle: '정산 · 이의제기'
 };
 function ConsoleApp() {
@@ -2381,7 +2381,7 @@ function ConsoleApp() {
   const Screen = {
     dashboard: DashboardScreen,
     pos: PosScreen,
-    stock: StockScreen,
+
     settle: SettlementScreen
   }[view];
   return /*#__PURE__*/React.createElement("div", {
@@ -2426,10 +2426,6 @@ function ConsoleApp() {
         label: 'POS 주문보드',
         icon: 'monitor',
         badge: 6
-      }, {
-        value: 'stock',
-        label: '재고 관리',
-        icon: 'package'
       }]
     }, {
       label: '정산',
@@ -2671,7 +2667,7 @@ function DashboardScreen({
       fontSize: 14,
       lineHeight: 1.75
     }
-  }, /*#__PURE__*/React.createElement("li", null, "12:10\u201312:30 \uC2AC\uB86F\uC774 3\uC77C \uC5F0\uC18D \uB9C8\uAC10\uB410\uC5B4\uC694. \uC2AC\uB86F\uB2F9 \uC794 \uC218\uB97C 5 \u2192 7\uB85C \uC62C\uB9AC\uBA74 \uD558\uB8E8 \uC57D ", /*#__PURE__*/React.createElement("b", null, "62,000\uC6D0"), "\uC758 \uC774\uD0C8 \uB9E4\uCD9C\uC744 \uD68C\uC218\uD560 \uC218 \uC788\uC5B4\uC694."), /*#__PURE__*/React.createElement("li", null, "\uC624\uD2B8\uBC00\uD06C \uC18C\uC9C4 \uC18D\uB3C4\uAC00 \uC608\uCE21\uBCF4\uB2E4 22% \uBE68\uB77C\uC694. \uBAA9\uC694\uC77C \uBC1C\uC8FC\uB7C9\uC744 2\uBC15\uC2A4 \uB298\uB9AC\uB294 \uAC78 \uAD8C\uC7A5\uD574\uC694."), /*#__PURE__*/React.createElement("li", null, "\"\uC810\uC2EC \uD55C\uC815 \uCFE0\uD3F0\" \uC0AC\uC6A9\uB960 68% \u2014 \uC7AC\uBC1C\uAE09 \uC2DC \uC2E0\uADDC \uACE0\uAC1D \uC720\uC785\uC774 \uAC00\uC7A5 \uD070 \uC2DC\uAC04\uB300\uB294 11:20\uC785\uB2C8\uB2E4.")), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("li", null, "12:10\u201312:30 \uC2AC\uB86F\uC774 3\uC77C \uC5F0\uC18D \uB9C8\uAC10\uB410\uC5B4\uC694. \uC2AC\uB86F\uB2F9 \uC794 \uC218\uB97C 5 \u2192 7\uB85C \uC62C\uB9AC\uBA74 \uD558\uB8E8 \uC57D ", /*#__PURE__*/React.createElement("b", null, "62,000\uC6D0"), "\uC758 \uC774\uD0C8 \uB9E4\uCD9C\uC744 \uD68C\uC218\uD560 \uC218 \uC788\uC5B4\uC694."),  /*#__PURE__*/React.createElement("li", null, "\"\uC810\uC2EC \uD55C\uC815 \uCFE0\uD3F0\" \uC0AC\uC6A9\uB960 68% \u2014 \uC7AC\uBC1C\uAE09 \uC2DC \uC2E0\uADDC \uACE0\uAC1D \uC720\uC785\uC774 \uAC00\uC7A5 \uD070 \uC2DC\uAC04\uB300\uB294 11:20\uC785\uB2C8\uB2E4.")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8,
@@ -2683,11 +2679,7 @@ function DashboardScreen({
       title: '슬롯 정원을 7잔으로 변경했어요',
       icon: 'check'
     })
-  }, "\uC2AC\uB86F \uC815\uC6D0 \uC870\uC815"), /*#__PURE__*/React.createElement(Button, {
-    size: "sm",
-    variant: "secondary",
-    onClick: () => go('stock')
-  }, "\uBC1C\uC8FC \uAC80\uD1A0"))))), /*#__PURE__*/React.createElement("div", {
+  }, "\uC2AC\uB86F \uC815\uC6D0 \uC870\uC815"))))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1.6fr 1fr',
@@ -3336,254 +3328,6 @@ Object.assign(window, {
   SettlementScreen
 });
 })(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/merchant_console/SettlementScreen.jsx", error: String((e && e.message) || e) }); }
-
-// ui_kits/merchant_console/StockScreen.jsx
-try { (() => {
-const {
-  Card,
-  DataTable,
-  Badge,
-  Button,
-  Switch,
-  SearchField,
-  Select,
-  ProgressBar,
-  Alert,
-  QuantityStepper,
-  SectionHeader,
-  Icon
-} = window.BeanFlowDesignSystem_c0ae52;
-const ITEMS = [{
-  name: '원두 (하우스 블렌드)',
-  unit: 'kg',
-  stock: 12.4,
-  par: 20,
-  sold: 4.2,
-  status: 'ok'
-}, {
-  name: '오트밀크',
-  unit: '팩',
-  stock: 6,
-  par: 24,
-  sold: 11,
-  status: 'low'
-}, {
-  name: '우유 (1L)',
-  unit: '팩',
-  stock: 18,
-  par: 30,
-  sold: 9,
-  status: 'ok'
-}, {
-  name: '아이스컵 (16oz)',
-  unit: '개',
-  stock: 240,
-  par: 500,
-  sold: 186,
-  status: 'low'
-}, {
-  name: '바스크 치즈케이크',
-  unit: '조각',
-  stock: 2,
-  par: 12,
-  sold: 10,
-  status: 'critical'
-}, {
-  name: '크루아상',
-  unit: '개',
-  stock: 0,
-  par: 20,
-  sold: 20,
-  status: 'out'
-}];
-const TONE = {
-  ok: ['success', '충분'],
-  low: ['warning', '부족'],
-  critical: ['danger', '임박'],
-  out: ['neutral', '품절']
-};
-function StockScreen({
-  notify
-}) {
-  const [q, setQ] = React.useState('');
-  const rows = ITEMS.filter(i => i.name.includes(q));
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 18
-    }
-  }, /*#__PURE__*/React.createElement(Alert, {
-    tone: "danger",
-    title: "\uD488\uC808 \uD56D\uBAA9 1\uAC74 \xB7 \uC784\uBC15 1\uAC74",
-    action: /*#__PURE__*/React.createElement(Button, {
-      size: "sm",
-      variant: "secondary",
-      onClick: () => notify({
-        title: '발주서를 생성했어요',
-        icon: 'package'
-      })
-    }, "\uBC1C\uC8FC\uC11C \uB9CC\uB4E4\uAE30")
-  }, "\uD06C\uB8E8\uC544\uC0C1\uC774 \uD488\uC808 \uCC98\uB9AC\uB418\uC5B4 \uACE0\uAC1D \uBA54\uB274\uC5D0\uC11C \uC790\uB3D9\uC73C\uB85C \uBE44\uD65C\uC131\uD654\uB410\uC5B4\uC694."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 12,
-      alignItems: 'center'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 320
-    }
-  }, /*#__PURE__*/React.createElement(SearchField, {
-    value: q,
-    onChange: e => setQ(e.target.value),
-    onClear: () => setQ(''),
-    placeholder: "\uD488\uBAA9 \uAC80\uC0C9",
-    size: "sm"
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 170
-    }
-  }, /*#__PURE__*/React.createElement(Select, {
-    size: "sm",
-    options: [{
-      value: 'all',
-      label: '전체 카테고리'
-    }, {
-      value: 'bean',
-      label: '원두'
-    }, {
-      value: 'dairy',
-      label: '유제품'
-    }, {
-      value: 'pkg',
-      label: '부자재'
-    }]
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginLeft: 'auto',
-      display: 'flex',
-      gap: 10,
-      alignItems: 'center'
-    }
-  }, /*#__PURE__*/React.createElement(Switch, {
-    label: "\uC790\uB3D9 \uD488\uC808 \uC5F0\uB3D9",
-    defaultChecked: true
-  }), /*#__PURE__*/React.createElement(Button, {
-    size: "sm",
-    iconLeft: "plus"
-  }, "\uD488\uBAA9 \uCD94\uAC00"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: '1.9fr 1fr',
-      gap: 18,
-      alignItems: 'start'
-    }
-  }, /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(DataTable, {
-    columns: [{
-      key: 'name',
-      header: '품목'
-    }, {
-      key: 'level',
-      header: '재고 수준',
-      render: r => /*#__PURE__*/React.createElement("div", {
-        style: {
-          width: 150
-        }
-      }, /*#__PURE__*/React.createElement(ProgressBar, {
-        value: r.stock,
-        max: r.par,
-        tone: r.status === 'ok' ? 'brand' : 'accent'
-      }))
-    }, {
-      key: 'stock',
-      header: '현재고',
-      align: 'right',
-      render: r => `${r.stock.toLocaleString('ko-KR')}${r.unit}`
-    }, {
-      key: 'sold',
-      header: '오늘 소진',
-      align: 'right',
-      render: r => `${r.sold}${r.unit}`
-    }, {
-      key: 'status',
-      header: '상태',
-      render: r => /*#__PURE__*/React.createElement(Badge, {
-        tone: TONE[r.status][0],
-        dot: true
-      }, TONE[r.status][1])
-    }, {
-      key: 'adj',
-      header: '조정',
-      render: r => /*#__PURE__*/React.createElement(QuantityStepper, {
-        value: Math.max(1, Math.round(r.stock)),
-        onChange: () => {}
-      })
-    }],
-    rows: rows,
-    empty: "\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC5B4\uC694"
-  })), /*#__PURE__*/React.createElement(Card, {
-    padded: true
-  }, /*#__PURE__*/React.createElement(SectionHeader, {
-    title: "\uC624\uB298\uC758 \uBC1C\uC8FC \uC81C\uC548",
-    eyebrow: "AI \uC778\uC0AC\uC774\uD2B8",
-    description: "\uCD5C\uADFC 4\uC8FC \uC18C\uC9C4 \uC18D\uB3C4 \uAE30\uC900"
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 12
-    }
-  }, [['오트밀크', '+2박스', '소진 속도 +22%'], ['아이스컵 16oz', '+1박스', '피크 3일 연속 부족'], ['크루아상', '+20개', '오전 완판']].map(([n, qy, why]) => /*#__PURE__*/React.createElement("div", {
-    key: n,
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10,
-      padding: '10px 12px',
-      border: '1px solid var(--border-hair)',
-      borderRadius: 'var(--r-md)'
-    }
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "package",
-    size: 18,
-    style: {
-      color: 'var(--caramel-600)'
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      minWidth: 0
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      color: 'var(--text-strong)',
-      fontSize: 14
-    }
-  }, n, " ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'var(--caramel-600)'
-    }
-  }, qy)), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: 'var(--text-muted)'
-    }
-  }, why))))), /*#__PURE__*/React.createElement(Button, {
-    block: true,
-    style: {
-      marginTop: 16
-    },
-    onClick: () => notify({
-      title: '발주 제안을 담았어요',
-      icon: 'check'
-    })
-  }, "\uC81C\uC548 \uC804\uCCB4 \uB2F4\uAE30"))));
-}
-Object.assign(window, {
-  StockScreen
-});
-})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/merchant_console/StockScreen.jsx", error: String((e && e.message) || e) }); }
 
 __ds_ns.BalanceCard = __ds_scope.BalanceCard;
 

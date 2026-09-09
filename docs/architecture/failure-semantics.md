@@ -26,7 +26,6 @@ Behavior:
 Examples:
 
 - 주문 생성 중 DB 장애
-- 재고 예약 저장 실패
 - 결제 승인 요청 결과 불명
 
 Behavior:
@@ -133,7 +132,7 @@ Behavior:
   event와 모순이면 원하는 terminal 상태가 같더라도 성공으로 간주하지 않는다.
 - 충돌 상태를 덮어쓰지 않고 `COMPENSATION_SOURCE_CONFLICT`로 publication을
   실패시켜 bounded retry와 `MANUAL_REVIEW`로 보낸다.
-- Pickup·Stock의 `RELEASED_AFTER_TERMINATION`도 동일 source reference와 동일
+- Pickup의 `RELEASED_AFTER_TERMINATION`도 동일 source reference와 동일
   `restoration_trigger`일 때만 멱등 성공이다. 다른 source 또는 trigger는 terminal
   상태가 같아도 충돌이며 수량·원인을 덮어쓰지 않는다.
 - Coupon·Points owner도 source reference, restoration trigger와 policy version ID가
@@ -151,14 +150,14 @@ Behavior:
 #### Paid customer cancellation commit gate
 
 - `202`를 반환하기 전에 Order 취소, 취소 멱등 응답, 주문 보상 Case, 필요한 Refund
-  `REQUESTED`, 취소 접수 NotificationDelivery `PENDING`, AuditRecord와 네 owner
+  `REQUESTED`, 취소 접수 NotificationDelivery `PENDING`, AuditRecord와 세 owner
   영속 event publication이 한 로컬 transaction으로 commit돼야 한다.
 - `CUSTOMER_CANCELLATION × COUPON/POINTS` policy head 또는 version이 없거나 Case의
   두 FK snapshot과 event 전체 snapshot이 일치하지 않으면 필수 설정·commit-gate
   손상이다. fallback policy나 최신 head 추측 없이 transaction을 rollback하고
   `503 DEPENDENCY_UNAVAILABLE`로 실패한다.
 - 위 저장 중 하나라도 실패하면 전체 rollback하고 business success를 반환하지 않는다.
-- `PENDING_PAYMENT` 취소도 접수 NotificationDelivery 저장 실패 시 Order와 네 예약
+- `PENDING_PAYMENT` 취소도 접수 NotificationDelivery 저장 실패 시 Order와 세 예약
   해제를 함께 rollback한다. 두 상태 모두 Provider 발송은 transaction 밖에서
   수행하고 commit 후 발송 실패로 취소를 되돌리지 않는다.
 - rollback된 요청은 취소 멱등 레코드를 남기지 않으며 같은 key 재시도가 명령을 다시

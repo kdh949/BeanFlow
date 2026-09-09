@@ -145,7 +145,6 @@ internal class OrderCreationPointAccrualSnapshotIntegrationTest
             assertThat(response.body).contains("\"code\":\"DEPENDENCY_UNAVAILABLE\"")
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isZero()
-            assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "inventory_stock_reservation")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order_point_accrual_source")).isZero()
         }
 

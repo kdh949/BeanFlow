@@ -3,7 +3,6 @@ package io.github.kdh949.beanflow.ordering
 import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
 import io.github.kdh949.beanflow.merchant.api.OptionSnapshot
 import io.github.kdh949.beanflow.merchant.api.QuoteOrderLine
-import io.github.kdh949.beanflow.merchant.api.SellableUnitRequirement
 import io.github.kdh949.beanflow.merchant.internal.domain.MenuConfigurationDefinition
 import io.github.kdh949.beanflow.merchant.internal.domain.MenuDefinition
 import io.github.kdh949.beanflow.merchant.internal.domain.MenuOptionDefinition
@@ -25,7 +24,7 @@ import java.util.UUID
 
 class OrderTest {
     @Test
-    fun `order snapshots menu option price and requirements`() {
+    fun `order snapshots menu name options and price`() {
         val fixture = menuFixture()
         val mutableOptions = fixture.menu.options.toMutableList()
         val quote =
@@ -66,8 +65,6 @@ class OrderTest {
                 .map(OptionSnapshot::name),
         ).containsExactly("Extra shot")
         assertThat(order.lines.single().unitPriceKrw).isEqualTo(4_500)
-        assertThat(order.lines.single().sellableUnitRequirements)
-            .containsExactly(SellableUnitRequirement(fixture.sellableUnitId, 1))
         assertThat(order.reservationExpiresAt).isEqualTo(createdAt.plusSeconds(300))
     }
 
@@ -127,11 +124,9 @@ class OrderTest {
         val storeId = UUID.randomUUID()
         val menuId = UUID.randomUUID()
         val option = MenuOptionDefinition(UUID.randomUUID(), "Extra shot", 500, true)
-        val sellableUnitId = UUID.randomUUID()
         return MenuFixture(
             store = StoreDefinition(storeId, acceptingOrders = true, pickupEnabled = true),
             option = option,
-            sellableUnitId = sellableUnitId,
             menu =
                 MenuDefinition(
                     id = menuId,
@@ -145,7 +140,6 @@ class OrderTest {
                             MenuConfigurationDefinition(
                                 optionIds = setOf(option.id),
                                 available = true,
-                                requirements = listOf(SellableUnitRequirement(sellableUnitId, 1)),
                             ),
                         ),
                 ),
@@ -166,6 +160,5 @@ class OrderTest {
         val store: StoreDefinition,
         val menu: MenuDefinition,
         val option: MenuOptionDefinition,
-        val sellableUnitId: UUID,
     )
 }

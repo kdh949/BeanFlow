@@ -31,7 +31,7 @@ PR 46의 catalogue·local demo 보강 뒤에도 남은 false-success와 거래 �
 
 ### In Scope
 
-- effective lease의 픽업 예약·재고·쿠폰·포인트·Order deadline 전파와 payment/late-approval 경계 테스트
+- effective lease의 픽업 예약·쿠폰·포인트·Order deadline 전파와 payment/late-approval 경계 테스트
 - slot `bound+1 → 503`, V35 composite indexes, multiple-store PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)` evidence
 - PointAccount zero-balance demo seed, source-bound `ACCRUAL` transaction 및 balance delta smoke assertion
 - exact bootstrap result, owned process-group shutdown, Docker failure propagation, settlement probe 제거

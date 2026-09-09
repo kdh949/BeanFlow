@@ -83,17 +83,17 @@ inventory를 다시 확인하며 하나라도 생기면 V8/V9/V22 clean cutover�
 ## Plan 30 implementation evidence
 
 - V8은 legacy rejection Case/step 후보를 먼저 세고 0일 때만 공통 Case, trigger, 두 benefit
-  child와 여섯 step의 최종 shape를 만든다.
-- V9는 legacy `RELEASED_BY_REJECTION` 후보를 먼저 세고 0일 때만 Pickup·Stock의 공통
+  child와 다섯 step의 최종 shape를 만든다.
+- V9는 legacy `RELEASED_BY_REJECTION` 후보를 먼저 세고 0일 때만 Pickup의 공통
   termination state와 trigger/source CHECK를 만든다.
 - V22는 legacy Coupon/Point 종료 복원 후보를 먼저 세고 0일 때만 owner metadata,
   compensation coupon terms와 allocation-aware point restoration shape를 만든다.
 - PostgreSQL migration fixture는 empty full migration, 각 migration별 legacy row 주입 실패,
   최종 CHECK/FK/UNIQUE/deferred cardinality를 검증한다.
-- producer, annotation listener ID, 중앙 target registry와 실제 publication target은 열 개의
+- producer, annotation listener ID, 중앙 target registry와 실제 publication target은 여덟 개의
   Plan 30 mapping으로 일치한다. legacy/default listener shim, V1/V2 이중 발행과 guessed
   backfill은 없다.
-- `OrderCancelledV1` DTO와 네 owner consumer foundation만 준비됐고 고객 취소 HTTP command,
+- `OrderCancelledV1` DTO와 세 owner consumer foundation만 준비됐고 고객 취소 HTTP command,
   Refund 생성과 production success endpoint는 포함하지 않았다.
 
 ### Validation result (2026-08-03)
@@ -158,7 +158,7 @@ inventory를 다시 확인하며 하나라도 생기면 V8/V9/V22 clean cutover�
   V26 two-person repair, V27 terminal Refund operator reconciliation을 forward migration으로 추가했다.
   적용된 migration 수정, checksum repair, guessed financial backfill은 없다.
 - **Runtime:** Refund REQUEST는 allowlist 안에서 최초 포함 최대 3회, UNKNOWN 뒤 LOOKUP은 별도 최대
-  5회다. 네 owner 수렴, 고객/운영자 projection, terminal notification, Settlement
+  5회다. 세 owner 수렴, 고객/운영자 projection, terminal notification, Settlement
   `NOT_APPLICABLE`, setup detector/scanner, LOOKUP-only two-person repair와 terminal Refund
   single-operator LOOKUP이 명시적 상태로 수렴한다. 직접 저장하는 financial target publication은
   최초 `FAILED`/attempt 0으로 남겨 실제 bounded recovery worker가 consumer를 호출한다.

@@ -6,7 +6,7 @@ const CART_SCHEMA_VERSION = 1;
 
 /**
  * `display` is a snapshot for rendering only. The server recomputes price,
- * availability, stock, slot and benefits when the order is created, so nothing
+ * availability, slot and benefits when the order is created, so nothing
  * here is ever treated as the amount the customer will pay.
  */
 export type CartLine = {

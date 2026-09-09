@@ -13,7 +13,7 @@
 
 결제 완료 Order가 `PAID`에 머무르지 않고 매장 수락, 제조, 준비 완료, 인도 완료까지
 전이할 수 있게 한다. 매장이 3분 안에 응답하지 않거나 명시적으로 거절하면 Order는
-`REJECTED`가 되고, 환불·재고·슬롯·쿠폰·포인트·고객 알림은 원본 전이와 분리된
+`REJECTED`가 되고, 환불·슬롯·쿠폰·포인트·고객 알림은 원본 전이와 분리된
 멱등 보상으로 완료한다. 보상 실패는 성공으로 숨기지 않고 조회 가능한 상태와 운영
 case로 남긴다.
 
@@ -23,7 +23,7 @@ case로 남긴다.
   `REJECTED` 전이와 각 시각 불변식을 보호한다.
 - Store API는 role과 `ACTIVE` membership을 함께 검증하고 정상 전이에 `200`,
   거절과 보상 진행에 `202`를 반환한다.
-- Spring Modulith JPA publication, rejection compensation case, 네 owner 자원 복원,
+- Spring Modulith JPA publication, rejection compensation case, 세 owner 자원 복원,
   전액 Refund와 NotificationDelivery가 영속·멱등 경로로 연결됐다.
 - 2분 warning과 정확한 3분 timeout이 같은 Order row lock과 상태 guard로 수락과
   경쟁한다.
@@ -52,7 +52,7 @@ case로 남긴다.
 - 2분 경고와 정확한 3분 자동 거절
 - Spring Modulith JPA Event Publication Registry
 - 거절 보상 case와 owner별 진행 상태
-- 확정 슬롯·재고와 사용 쿠폰·포인트 복원
+- 확정 슬롯와 사용 쿠폰·포인트 복원
 - 매장 거절용 전액 Refund와 reconciliation
 - store warning, rejection, ready NotificationDelivery
 - 동적 만료 혜택 정책 조회·변경 API
@@ -154,7 +154,7 @@ Tx 2: SUCCEEDED | FAILED | UNKNOWN | RETRY_SCHEDULED | MANUAL_REVIEW
 1. 정책·ADR·OpenAPI와 이 ExecPlan을 확정한다.
 2. Identity membership과 Order lifecycle Aggregate/API를 구현한다.
 3. 영속 publication, warning/timeout worker와 compensation case를 구현한다.
-4. 슬롯·재고·쿠폰·포인트 owner 보상을 구현한다.
+4. 슬롯·쿠폰·포인트 owner 보상을 구현한다.
 5. Refund와 Notification의 외부 호출 분리·reconciliation을 구현한다.
 6. end-to-end 동시성·장애 테스트와 운영 관측을 완료한다.
 
@@ -250,7 +250,7 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 
 - 문서/OpenAPI, Identity membership, Order lifecycle, Store API, warning/timeout,
   정책 snapshot, compensation case, JPA publication recovery,
-  Pickup/Stock/Coupon/Points 복원 consumer, 일반 Refund와 Provider 조회 복구,
+  Pickup/Coupon/Points 복원 consumer, 일반 Refund와 Provider 조회 복구,
   NotificationDelivery, local scripted adapter와 운영 runbook을 완료했다.
 - PAYMENT와 CUSTOMER_NOTIFICATION step은 각 외부 작업의 실제 결과로만
   `SUCCEEDED`, `UNKNOWN`, `RETRY_SCHEDULED`, `MANUAL_REVIEW`가 되며 Order 거절과
@@ -273,7 +273,7 @@ Order, Store와 Customer ID는 metric tag로 사용하지 않는다.
 - 2026-07-30: Store API, 2분 경고·3분 timeout, 정책 snapshot, compensation case와
   JPA publication bounded recovery 구현. V8 migration과 실제 listener 재시작 복구는
   owner consumer 통합 뒤 Docker 환경에서 검증 예정.
-- 2026-07-30: 네 owner의 멱등 복원 consumer와 V9 migration 추가. Eventing 계약
+- 2026-07-30: 세 owner의 멱등 복원 consumer와 V9 migration 추가. Eventing 계약
   모듈로 cycle 제거. 사용자 요청에 따라 Refund/Notification 이전에서 중간 인계.
 - 2026-07-30: V10 Refund 조회 복구와 V11 NotificationDelivery bounded retry 추가.
   Docker 불가로 repository test는 컴파일까지만 확인하고 최종 통합 검증을 재개 지점으로

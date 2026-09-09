@@ -94,7 +94,6 @@ internal class OrderPointAccrualSnapshotPersistenceTest
                         "[]",
                         OptionSelectionSnapshotState.SNAPSHOTTED,
                         emptyList(),
-                        "[]",
                         100,
                         2,
                         200,

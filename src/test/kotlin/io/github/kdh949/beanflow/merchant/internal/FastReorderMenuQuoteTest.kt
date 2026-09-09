@@ -4,7 +4,6 @@ import io.github.kdh949.beanflow.merchant.api.CurrentMenuLineQuoteResult
 import io.github.kdh949.beanflow.merchant.api.MenuItemUnavailability
 import io.github.kdh949.beanflow.merchant.api.MenuItemUnavailableReason
 import io.github.kdh949.beanflow.merchant.api.QuoteOrderLine
-import io.github.kdh949.beanflow.merchant.api.SellableUnitRequirement
 import io.github.kdh949.beanflow.merchant.internal.domain.MenuConfigurationDefinition
 import io.github.kdh949.beanflow.merchant.internal.domain.MenuDefinition
 import io.github.kdh949.beanflow.merchant.internal.domain.MenuOptionDefinition
@@ -79,7 +78,6 @@ internal class FastReorderMenuQuoteTest {
     @Test
     fun `available batch quote reuses normalized current price and requirement calculation`() {
         val optionId = UUID.randomUUID()
-        val sellableUnitId = UUID.randomUUID()
         val menu =
             menu(
                 basePriceKrw = 4_000,
@@ -89,7 +87,6 @@ internal class FastReorderMenuQuoteTest {
                         MenuConfigurationDefinition(
                             setOf(optionId),
                             available = true,
-                            requirements = listOf(SellableUnitRequirement(sellableUnitId, 2)),
                         ),
                     ),
             )
@@ -104,7 +101,6 @@ internal class FastReorderMenuQuoteTest {
         val quote = (result.single() as CurrentMenuLineQuoteResult.Available).quote
         assertThat(quote.unitPriceKrw).isEqualTo(4_500)
         assertThat(quote.optionSnapshots.map { it.optionId }).containsExactly(optionId)
-        assertThat(quote.sellableUnitRequirements).containsExactly(SellableUnitRequirement(sellableUnitId, 2))
     }
 
     @Test
@@ -112,7 +108,7 @@ internal class FastReorderMenuQuoteTest {
         val menu =
             menu(
                 configurations =
-                    listOf(MenuConfigurationDefinition(emptySet(), available = true, requirements = emptyList())),
+                    listOf(MenuConfigurationDefinition(emptySet(), available = true)),
             )
 
         assertThatThrownBy {
@@ -127,7 +123,7 @@ internal class FastReorderMenuQuoteTest {
         assertThatThrownBy {
             calculator.quoteCurrentBatch(
                 store,
-                mapOf(menu.id to menu),
+                mapOf(menu.id to menu.copy(basePriceKrw = -1)),
                 listOf(QuoteOrderLine(menu.id, emptyList(), 1)),
             )
         }.isInstanceOfSatisfying(DomainFailure::class.java) {
@@ -144,7 +140,6 @@ internal class FastReorderMenuQuoteTest {
                 MenuConfigurationDefinition(
                     emptySet(),
                     available = true,
-                    requirements = listOf(SellableUnitRequirement(UUID.randomUUID(), 1)),
                 ),
             ),
     ): MenuDefinition =

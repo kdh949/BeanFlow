@@ -22,10 +22,10 @@
 | Refund lookup budget | UNKNOWN 뒤 REQUEST 중단, LOOKUP 최대 5 | ADR-037 | Yes | Yes | 2026-07-31 | 분리 attempt schema |
 | Customer projection | 내부 진행/불명은 PROCESSING, 실패/manual/setup 손상은 PROCESSING+REFUND_DELAYED | ADR-038, ADR-050 | Yes | Yes | 2026-07-31 | snapshot/setup detector |
 | BENEFIT_ONLY | Refund 없음, PAYMENT NOT_REQUIRED, 네 금액 0, C1 202 | ADR-039 | Yes | Yes | 2026-07-31 | common Case |
-| Compensation model | trigger-aware OrderCompensationCase와 six steps | ADR-033 | Yes | Yes | 2026-07-31 | migration strategy |
+| Compensation model | trigger-aware OrderCompensationCase와 five steps | ADR-033 | Yes | Yes | 2026-07-31 | migration strategy |
 | Benefit policy | 종료용 trigger×COUPON/POINTS 네 head와 PARTIAL_REFUND×POINTS 한 head; 종료 Case당 두 snapshot | ADR-041, ADR-063 | Yes | Yes | 2026-08-01 | Plan 11 policy foundation |
 | Owner resource state | common RELEASED_AFTER_TERMINATION + trigger/source | ADR-040 | Yes | Yes | 2026-07-31 | owner migration |
-| Cancellation event | PAID에서 four-owner `OrderCancelledV1`; Payment/Notification 제외 | ADR-034, ADR-044 | Yes | Yes | 2026-07-31 | event compatibility strategy |
+| Cancellation event | PAID에서 three-owner `OrderCancelledV1`; Payment/Notification 제외 | ADR-034, ADR-044 | Yes | Yes | 2026-07-31 | event compatibility strategy |
 | Event payload | customer/store/reason/payment/detail 없는 최소 payload | ADR-055 | Yes | Yes | 2026-07-31 | contract serialization test |
 | Release paths | gate 전체 0은 clean cutover, nonzero/unknown은 forward migration/compatibility | ADR-059, BR-14 | Yes | Yes | 2026-07-31 | point-in-time release evidence와 재확인 |
 | Accepted notification | C0/C1에서 Delivery 직접 저장 | ADR-044 | Yes | Yes | 2026-07-31 | Notification public API |
