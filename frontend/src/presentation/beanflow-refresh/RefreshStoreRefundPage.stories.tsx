@@ -192,8 +192,8 @@ export const QuantityNoLongerAvailable: Story = {
     }));
     await userEvent.click(canvas.getByRole("button", { name: /부분 환불 실행/ }));
     await expect(await canvas.findByText(/환불 가능 수량이 바뀌었습니다/)).toBeVisible();
+    await waitFor(() => expect(canvas.getByLabelText("환불 사유")).toBeEnabled());
     await expect(previewBody).toEqual({});
-    await expect(canvas.getByLabelText("환불 사유")).toBeEnabled();
     await expect(canvas.getByRole("button", { name: /부분 환불 실행/ })).toBeDisabled();
     await expect(canvas.queryByRole("button", { name: "같은 요청 결과 확인" })).not.toBeInTheDocument();
     await expect(canvas.getByText("남은 환불 가능 1개")).toBeVisible();
