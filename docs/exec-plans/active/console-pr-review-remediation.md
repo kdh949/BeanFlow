@@ -94,7 +94,7 @@ StoreOrderBoardIntegrationTest, RuntimeOpenApiParityTest, spotlessCheck, assembl
 
 - [x] 세 PR의 authoritative reviewThreads와 현재 branch 확인.
 - [x] 격리 worktree 및 Storybook MCP prerequisite 확인.
-- [ ] #144 수정·검증·push.
+- [x] #144 수정·로컬 검증·push. 원격 CI에서 수량 변경 Story의 완료 대기 보완 필요.
 - [ ] #145 수정·검증·push.
 - [ ] #146 수정·전체 검증·push.
 
@@ -111,6 +111,10 @@ StoreOrderBoardIntegrationTest, RuntimeOpenApiParityTest, spotlessCheck, assembl
 #144: typecheck, npm test (unit 185개, presentation 10개, product-copy 11개), check:design,
 문서/OpenAPI 검사와 Storybook MCP 환불 오류·멱등 재시도 10개 및 a11y 통과.
 전체 Storybook/제품 빌드와 전체 회귀는 마지막 PR에서 실행한다. 운영 환경 검증: Not run.
+
+#145: 실제 DB에서 품목을 삭제한 테스트는 기존 guard에서도 503으로 통과했다. 상세 경계 guard를
+추가한 뒤 보드 통합 10개, 정책·ETag 5개, Runtime OpenAPI parity 1개, spotlessCheck와 assemble 통과.
+고립 fixture에서 불변 포인트 적립 unit은 TRUNCATE로 정리하며 production 제약을 완화하지 않는다.
 
 ## Revision Notes
 

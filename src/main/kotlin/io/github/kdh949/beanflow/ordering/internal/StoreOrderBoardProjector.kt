@@ -39,6 +39,7 @@ internal class StoreOrderBoardProjector(
     ): StoreOrderBoardItemResponse {
         val order = rows.orders.singleOrNull() ?: dependency("Store order detail projection is not singular")
         val lineProjections = rows.linesByOrderId[order.orderId].orEmpty()
+        if (lineProjections.isEmpty()) dependency("Store order detail has no preparation lines")
         val item = item(order, lineProjections, compensationRecovery, now)
         val lines =
             lineProjections.sortedBy { it.lineSequence }.map { line ->
