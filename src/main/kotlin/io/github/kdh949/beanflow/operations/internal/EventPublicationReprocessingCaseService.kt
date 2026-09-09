@@ -1,37 +1,50 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import io.github.kdh949.beanflow.operations.api.EventPublicationManualReviewResult
 import io.github.kdh949.beanflow.operations.api.EventPublicationReprocessingCaseOperations
 import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
-import java.util.UUID
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
+import java.sql.Timestamp
 
 @Service
 internal class EventPublicationReprocessingCaseService(
     private val repository: ReprocessingCaseJpaRepository,
     private val identifierSource: IdentifierSource,
+    private val jdbcTemplate: JdbcTemplate,
 ) : EventPublicationReprocessingCaseOperations {
-    override fun openEventPublicationCase(command: OpenReprocessingCaseCommand): UUID {
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun openEventPublicationCase(command: OpenReprocessingCaseCommand): EventPublicationManualReviewResult {
         require(command.ownerReference.isNotBlank())
         require(command.reason.isNotBlank())
         require(command.correlationId.isNotBlank())
-        repository
-            .findByCaseTypeAndOwnerReference(
-                ReprocessingCaseType.EVENT_PUBLICATION,
+        val id = identifierSource.next()
+        val inserted =
+            jdbcTemplate.update(
+                """
+                INSERT INTO operations_reprocessing_case
+                    (id, case_type, owner_reference, status, reason, correlation_id, created_at, updated_at, version)
+                VALUES (?, 'EVENT_PUBLICATION', ?, 'MANUAL_REVIEW', ?, ?, ?, ?, 0)
+                ON CONFLICT (case_type, owner_reference) DO NOTHING
+                """.trimIndent(),
+                id,
                 command.ownerReference,
-            )?.let { return it.id }
-        return repository
-            .save(
-                ReprocessingCaseEntity(
-                    id = identifierSource.next(),
-                    caseType = ReprocessingCaseType.EVENT_PUBLICATION,
-                    ownerReference = command.ownerReference,
-                    status = ReprocessingCaseStatus.MANUAL_REVIEW,
-                    reason = command.reason,
-                    correlationId = command.correlationId,
-                    createdAt = command.now,
-                    updatedAt = command.now,
+                command.reason,
+                command.correlationId,
+                Timestamp.from(command.now),
+                Timestamp.from(command.now),
+            )
+        if (inserted == 1) return EventPublicationManualReviewResult(id, true)
+        val existing =
+            requireNotNull(
+                repository.findByCaseTypeAndOwnerReference(
+                    ReprocessingCaseType.EVENT_PUBLICATION,
+                    command.ownerReference,
                 ),
-            ).id
+            )
+        return EventPublicationManualReviewResult(existing.id, false)
     }
 }

@@ -13,6 +13,11 @@ internal object EventPublicationRetrySchedule {
             Duration.ofMinutes(15),
         )
 
+    val maximumResubmissions: Int get() = delays.size
+
+    // The candidate query uses this same policy before its batch limit.
+    fun delaySecondsByAttempt(): List<Long> = listOf(delays.first().seconds) + delays.map { it.seconds }
+
     fun exhausted(completionAttempts: Int): Boolean = completionAttempts > delays.size
 
     fun isDue(
