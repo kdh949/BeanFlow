@@ -1,4 +1,4 @@
-import { CalendarClock, Plus, TicketPercent } from "lucide-react";
+import { CalendarClock, List, Plus, TicketPercent } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
@@ -241,7 +241,7 @@ export function CouponCampaignsPage() {
     <div className="console-page coupon-campaign-page">
       <PageHeading
         title="선착순 쿠폰 캠페인"
-        action={<Button onClick={() => setShowForm((current) => !current)}><Plus size={17} aria-hidden="true" />{showForm ? "목록 보기" : "새 캠페인"}</Button>}
+        action={<Button onClick={() => setShowForm((current) => !current)}>{showForm ? <List size={17} aria-hidden="true" /> : <Plus size={17} aria-hidden="true" />}{showForm ? "목록 보기" : "새 캠페인"}</Button>}
       />
 
       {showForm ? (
@@ -269,7 +269,7 @@ export function CouponCampaignsPage() {
               {form.discountType === "RATE_BPS" ? <TextField label="최대 할인 금액(원)" type="number" value={form.maximumDiscountKrw} onValueChange={(value) => update("maximumDiscountKrw", value)} /> : null}
               <TextField label="최소 주문 금액(원)" type="number" value={form.minimumOrderKrw} onValueChange={(value) => update("minimumOrderKrw", value)} />
             </div>
-            <Checkbox label="모든 메뉴에 적용" description="끄면 아래에 적용할 메뉴 UUID를 입력해야 합니다." checked={form.allMenusEligible} onCheckedChange={(value) => update("allMenusEligible", value)} />
+            <Checkbox label="모든 메뉴에 적용" description="끄면 아래 목록에서 적용할 메뉴를 선택해 주세요." checked={form.allMenusEligible} onCheckedChange={(value) => update("allMenusEligible", value)} />
             {!form.allMenusEligible ? (
               <div className="campaign-menu-options" aria-label="적용 메뉴 선택">
                 {loadingMenus ? <p>메뉴를 불러오는 중입니다.</p> : null}

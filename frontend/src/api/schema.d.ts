@@ -647,6 +647,8 @@ export interface paths {
          *     서버 소유 장바구니가 없으므로 주문 항목 전체를 한 번에 보내며, 메뉴 가격·재고·
          *     픽업 슬롯·쿠폰·포인트를 이 요청 하나의 트랜잭션에서 다시 계산하며, fingerprint가
          *     정확히 일치한 뒤에만 모두 예약합니다. 불일치는 ORDER_QUOTE_STALE과 currentQuote를 반환합니다.
+         *     다른 주문의 재고·슬롯 사용량 변화는 fingerprint를 바꾸지 않으며, 잠금 아래의 현재 가용성
+         *     검사는 유지합니다. 가격·구성·혜택·픽업 시간/정원 변경에는 새 견적의 명시적 확인이 필요합니다.
          *     같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 그대로 재생합니다.
          *
          *     주요 오류:
@@ -1384,6 +1386,7 @@ export interface paths {
         /**
          * (스토어) 공개 주문번호로 주문 조회
          * @description 스토어 구성원이 `BF-XXXX-XXXX` 형식의 공개 주문번호로 매장 주문을 조회하는 API입니다.
+         *     성공 응답의 `lines`에는 주문 당시 메뉴명, 옵션명과 수량을 순서대로 포함합니다.
          *     고객이 선택한 취소 사유나 고객용 환불 상세처럼 스토어 업무에 필요하지 않은 정보는 응답에서 제외합니다.
          *
          *     주요 오류:
@@ -5247,7 +5250,7 @@ export interface components {
         };
         OrderQuote: {
             quotedAt: components["schemas"]["DateTime"];
-            /** @description order-quote-fingerprint/v1으로 생성한 opaque optimistic-concurrency precondition입니다. */
+            /** @description order-quote-fingerprint/v3으로 생성한 opaque 거래 조건 사전조건입니다. 공유 재고와 슬롯의 사용량 및 기술적 version은 비교하지 않으며 최종 주문의 잠금 아래에서 현재 가용성을 별도로 검증합니다. 가격·구성·혜택·픽업 시간/정원 변경은 재확인이 필요합니다. */
             quoteFingerprint: string;
             store: components["schemas"]["OrderQuoteStore"];
             pickupWindow: components["schemas"]["OrderQuotePickupWindow"];
@@ -6427,6 +6430,20 @@ export interface components {
             /** @description 리소스가 마지막으로 변경된 시각입니다. */
             updatedAt: components["schemas"]["DateTime"];
         };
+        /** @description 현재 메뉴가 아닌 주문 생성 시 저장한 제조 품목 snapshot입니다. */
+        StoreOrderPreparationLine: {
+            /** @description 주문 당시의 품목 순서입니다. */
+            lineSequence: number;
+            /** @description 주문 당시 메뉴명입니다. */
+            menuName: string;
+            /** @description 주문 당시 선택한 옵션명입니다. 옵션 없는 품목은 빈 배열입니다. */
+            optionNames: string[];
+            /**
+             * Format: int64
+             * @description 해당 품목의 주문 수량입니다.
+             */
+            quantity: number;
+        };
         /**
          * @description 스토어 주문 현황판에 표시할 주문 한 건입니다. 공개 주문번호, 픽업 번호·시간, 현재 상태, 메뉴 요약과 지금 수행할 수 있는 작업을 포함합니다.
          * @example {
@@ -6481,6 +6498,8 @@ export interface components {
             lifecycle?: components["schemas"]["StoreOrderBoardLifecycle"];
             /** @description 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다. */
             compensationRecovery?: components["schemas"]["StoreCompensationSummary"];
+            /** @description 상세 조회 성공 응답에 포함하는 주문 당시 전체 제조 품목입니다. 기본 polling·overflow·전이 응답에는 생략합니다. */
+            lines?: components["schemas"]["StoreOrderPreparationLine"][];
         };
         StoreOrderBoardDateGroup: {
             /** Format: date */

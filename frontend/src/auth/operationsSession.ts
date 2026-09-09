@@ -9,13 +9,13 @@ export type OperationsAuthState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "unauthenticated" }
-  | { status: "authenticated"; expiresAt: number | null }
+  | { status: "authenticated"; expiresAt: number | null; displayName?: string }
   | { status: "unavailable"; error: unknown };
 
 type KeycloakAdapter = {
   authenticated?: boolean;
   token?: string;
-  tokenParsed?: { exp?: number };
+  tokenParsed?: { exp?: number; preferred_username?: string; name?: string };
   onTokenExpired?: () => void;
   init(options: KeycloakInitOptions): Promise<boolean>;
   login(options?: { redirectUri?: string; scope?: string }): Promise<void>;
@@ -144,7 +144,8 @@ export function createOperationsAuthSession(overrides: Partial<OperationsAuthDep
       const remainingMs = Math.max(0, expiresAt * 1000 - Date.now());
       expiryTimer = window.setTimeout(clear, remainingMs);
     }
-    publish({ status: "authenticated", expiresAt });
+    const displayName = adapter.tokenParsed?.preferred_username ?? adapter.tokenParsed?.name;
+    publish({ status: "authenticated", expiresAt, ...(displayName ? { displayName } : {}) });
   }
 
   async function initialize(): Promise<OperationsAuthState> {

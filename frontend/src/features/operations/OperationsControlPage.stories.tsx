@@ -17,6 +17,7 @@ const meta = {
   tags: ["autodocs"],
   args: { scenario: "ready", ...records },
   parameters: {
+    a11y: { test: "error" },
     docs: { description: { component: "환불 승인, 이의제기 라우팅, 거래 추적, 쿠폰·캠페인과 지급 파일을 분리된 탭에서 처리합니다." }, story: { inline: false, height: "860px" } },
     routing: { path: "/ops/control", initialEntry: "/ops/control" },
   },
@@ -47,5 +48,5 @@ export const WorkspaceChange: Story = {
 };
 export const ContractPending: Story = {
   args: { scenario: "contract-pending", initialWorkspace: "refunds", refundApprovals: [], disputes: [], traces: [], couponJobs: [], campaigns: [], payoutFiles: [] },
-  play: async ({ canvas }) => { await expect(await canvas.findByRole("alert")).toHaveTextContent("이 화면을 준비하고 있습니다"); },
+  play: async ({ canvas }) => { await expect(await canvas.findByText("이 화면을 준비하고 있습니다")).toBeVisible(); await expect(canvas.queryByRole("alert")).not.toBeInTheDocument(); },
 };

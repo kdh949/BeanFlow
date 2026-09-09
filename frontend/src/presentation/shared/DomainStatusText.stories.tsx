@@ -26,3 +26,7 @@ export const StoreStatus: Story = { args: { state: "SOLD_OUT" }, play: async ({ 
 export const OperationsStatus: Story = { args: { state: "ACTION_REQUIRED" }, play: async ({ canvas }) => { await expect(canvas.getByText("조치 필요")).toBeVisible(); } };
 export const SupportStatus: Story = { args: { state: "READY_FOR_EXECUTION" }, play: async ({ canvas }) => { await expect(canvas.getByText("실행 준비")).toBeVisible(); } };
 export const UnknownCodePreserved: Story = { args: { state: "NEW_STATE" }, play: async ({ canvas }) => { await expect(canvas.getByText("NEW_STATE")).toBeVisible(); } };
+
+export const ActiveAccount: Story = { args: { state: "ACTIVE", domain: "account" }, play: async ({ canvas }) => { await expect(canvas.getByText("사용 가능")).toBeVisible(); await expect(canvas.queryByText("판매 중")).not.toBeInTheDocument(); } };
+export const AcceptedDispute: Story = { args: { state: "ACCEPTED", domain: "dispute" }, play: async ({ canvas }) => { await expect(canvas.getByText("인정")).toBeVisible(); } };
+export const ActiveGrant: Story = { args: { state: "ACTIVE", domain: "grant" }, play: async ({ canvas }) => { await expect(canvas.getByText("열람 승인")).toBeVisible(); } };

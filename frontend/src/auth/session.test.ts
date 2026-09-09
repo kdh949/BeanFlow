@@ -58,6 +58,15 @@ describe("operations OIDC session", () => {
     expect(authToken.get()).toBe("operator-access-token");
   });
 
+  it("shows the current account and removes its label when the session clears", async () => {
+    const keycloak = { ...adapter(), tokenParsed: { exp: Math.floor(Date.now() / 1000) + 300, preferred_username: "operator@example.test" } };
+    const session = createOperationsAuthSession({ loadConfiguration: vi.fn().mockResolvedValue(configuration), createKeycloak: () => keycloak });
+    await session.initialize();
+    expect(session.get()).toMatchObject({ status: "authenticated", displayName: "operator@example.test" });
+    session.clear();
+    expect(session.get()).toEqual({ status: "unauthenticated" });
+  });
+
   it("keeps the access token only in memory", async () => {
     const keycloak = adapter();
     const session = createOperationsAuthSession({

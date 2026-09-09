@@ -35,6 +35,7 @@ const meta = {
     metrics,
   },
   parameters: {
+    a11y: { test: "error" },
     docs: { description: { component: "점주가 메뉴, 재고, 영업시간, 고객 혜택과 매출을 한곳에서 확인하는 화면입니다." }, story: { inline: false, height: "820px" } },
     routing: { path: "/store/management", initialEntry: "/store/management" },
   },
@@ -98,6 +99,6 @@ export const KeyboardWorkspaceChange: Story = {
 export const ContractPending: Story = {
   args: { scenario: "contract-pending", initialWorkspace: "catalog", catalog: [], inventory: [], schedule: [], metrics: [] },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByRole("alert")).toHaveTextContent("메뉴 관리를 준비하고 있습니다");
+    await expect(await canvas.findByText("메뉴 관리를 준비하고 있습니다")).toBeVisible(); await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
   },
 };

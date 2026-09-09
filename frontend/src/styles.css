@@ -239,7 +239,7 @@
 .support-timeline li > span { width: var(--sp-5); height: var(--sp-5); margin-top: var(--sp-1); border: var(--bw-focus) solid var(--surface-card); outline: var(--bw-hair) solid var(--border-accent); border-radius: 50%; background: var(--primary-bg); }
 .support-timeline li:not(:last-child)::after { content: ""; width: var(--bw-hair); position: absolute; top: var(--sp-4); bottom: calc(var(--sp-4) * -1); left: var(--sp-3); background: var(--border-hair); }
 .support-timeline li > div { display: flex; flex-direction: column; gap: var(--sp-1); }
-.support-timeline small { color: var(--text-faint); font-size: var(--fs-micro); }
+.support-timeline small { color: var(--text-muted); font-size: var(--fs-caption); }
 .support-timeline strong { color: var(--text-strong); font-size: var(--fs-body-sm); }
 .support-timeline p { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; color: var(--text-muted); font-size: var(--fs-caption); }
 .support-compensation-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-4); }
@@ -247,7 +247,7 @@
 .support-compensation-result span:not(.bf-status-text), .support-compensation-result small { color: var(--text-muted); font-size: var(--fs-caption); }
 .support-compensation-result code { width: 100%; overflow-wrap: anywhere; font-size: var(--fs-micro); }
 .merchant-account-lookup { padding: var(--sp-5); display: flex; align-items: flex-end; gap: var(--sp-4); }
-.lookup-fields { min-width: 0; flex: 1; display: grid; grid-template-columns: auto minmax(180px, .7fr) auto minmax(220px, 1fr); align-items: center; gap: var(--sp-3); }
+.lookup-fields { min-width: 0; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: var(--sp-3); }
 .merchant-account-workspace { align-items: start; }
 .merchant-account-summary { min-width: 0; }
 .merchant-memberships { margin-top: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-3); }
@@ -326,7 +326,7 @@
 .failed-store-list code { color: var(--text-body); font-size: var(--fs-caption); overflow-wrap: anywhere; }
 
 
-.settlement-list, .dispute-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--sp-5); }
+.settlement-list, .dispute-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: var(--sp-5); }
 .settlement-card, .dispute-card { padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-4); }
 .settlement-card header, .dispute-card header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); }
 .settlement-card header strong, .dispute-card header strong { display: block; margin-top: var(--sp-1); color: var(--text-strong); font-size: var(--fs-title-3); }
@@ -361,7 +361,7 @@
 .dispute-summary p { margin-top: var(--sp-1); color: var(--text-muted); font-size: var(--fs-caption); line-height: 1.6; }
 .operation-success { padding: var(--sp-4); border: var(--bw-hair) solid var(--success-fg); border-radius: var(--r-md); background: var(--success-bg); color: var(--success-fg); font-size: var(--fs-body-sm); font-weight: var(--fw-semibold); }
 .operations-recovery-page, .operations-control-page, .recovery-workspace, .control-workspace { display: flex; flex-direction: column; gap: var(--sp-5); }
-.recovery-list, .control-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--sp-5); }
+.recovery-list, .control-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: var(--sp-5); }
 .recovery-card, .control-card { padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-4); }
 .recovery-card .panel-heading h3, .control-card .panel-heading h3 { max-width: 42ch; overflow-wrap: anywhere; color: var(--text-strong); font-size: var(--fs-body-lg); line-height: 1.45; }
 .recovery-card .detail-list, .control-card .detail-list { margin: 0; }
@@ -463,9 +463,12 @@
   .console-intro { align-items: flex-start; flex-wrap: wrap; }
   .console-intro .bf-action { width: 100%; }
   .lookup-bar > form, .lookup-bar > div { align-items: stretch; flex-direction: column; }
+  .merchant-account-lookup { align-items: stretch; flex-direction: column; }
+  .lookup-fields { width: 100%; grid-template-columns: 1fr; }
   .detail-list { grid-template-columns: 1fr; }
   .support-case-header { align-items: flex-start; flex-direction: column; }
-  .support-case-header > div:last-child { width: 100%; justify-content: space-between; }
+  .support-case-header > div:last-child { width: 100%; flex-wrap: wrap; justify-content: flex-start; }
+  .support-case-header > div:last-child > .bf-action { flex: 1 1 auto; }
   .candidate-case-options, .support-compensation-grid { grid-template-columns: 1fr; }
   .inline-fields { grid-template-columns: 1fr; }
   .field-grid, .policy-card-list, .campaign-card-metrics, .campaign-menu-options, .campaign-publication-fields { grid-template-columns: 1fr; }
@@ -482,3 +485,7 @@
   .follow-up-case-summary > div:nth-child(2) { grid-column: auto; grid-row: auto; }
   .follow-up-event-list > li, .follow-up-steps > li { align-items: flex-start; flex-direction: column; }
 }
+
+.support-case-reference { overflow-wrap: anywhere; font-size: var(--fs-body-sm); }
+
+.support-timeline-panel > h2 { margin: 0; font-size: var(--fs-body); }

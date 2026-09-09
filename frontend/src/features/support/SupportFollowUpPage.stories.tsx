@@ -30,7 +30,8 @@ const meta = {
     onCommand: async () => undefined,
   },
   parameters: {
-    docs: { description: { component: "상담 건에 연결된 기록, 주문 처리, 보상, 정보 변경과 긴급 열람 업무를 확인하는 화면입니다." }, story: { inline: false, height: "880px" } },
+    a11y: { test: "error" }, layout: "fullscreen",
+    docs: { description: { component: "후속 업무의 디자인 상태를 검증하는 fixture입니다. 현재 제품 route는 Follow-up route에서 제공되는 실제 상담 조회·타임라인을 사용합니다." }, story: { inline: false, height: "880px" } },
     routing: { path: "/support/follow-up", initialEntry: "/support/follow-up?caseId=case-demo-01" },
   },
 } satisfies Meta<typeof SupportFollowUpPage>;
@@ -57,4 +58,13 @@ export const BreakGlassReview: Story = { args: { initialWorkspace: "break-glass"
 export const CaseRequired: Story = {
   args: { scenario: "case-required", supportCase: undefined, events: [], actionRequests: [], resolutions: [], compensations: [], profileChanges: [], breakGlassRequests: [], onCommand: undefined },
   play: async ({ canvas }) => { await expect(await canvas.findByText("상담 건을 먼저 열어 주세요")).toBeVisible(); },
+};
+
+export const CommandFailure: Story = {
+  args: { onCommand: async () => { throw new Error("unavailable"); } },
+  play: async ({ canvas }) => {
+    await userEvent.click(canvas.getByRole("button", { name: "담당자 바꾸기" }));
+    await expect(await canvas.findByRole("alert")).toHaveTextContent("요청 결과를 확인하지 못했습니다");
+    await expect(canvas.queryByText("요청을 보냈습니다")).not.toBeInTheDocument();
+  },
 };

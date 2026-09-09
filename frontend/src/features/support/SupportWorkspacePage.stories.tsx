@@ -33,7 +33,7 @@ const timeline = {
     source: "ORDERING",
     type: "ORDER_STATE",
     state: "COMPLETED",
-    summary: "주문 픽업 완료",
+    summary: "ORDER_STATE:COMPLETED",
     amountKrw: 7500,
     occurredAt: "2026-08-23T09:30:00Z",
   }, {
@@ -41,7 +41,7 @@ const timeline = {
     source: "PAYMENT",
     type: "REFUND_STATE",
     state: "RECONCILING",
-    summary: "환불 결과 재확인 중",
+    summary: "REFUND_STATE:RECONCILING",
     amountKrw: 7500,
     occurredAt: "2026-08-23T09:35:00Z",
   }],
@@ -58,6 +58,7 @@ const meta = {
   component: SupportWorkspacePage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" }, layout: "fullscreen",
     docs: {
       description: {
         component:
@@ -65,7 +66,7 @@ const meta = {
       },
       story: { inline: false, height: "1200px" },
     },
-    routing: { path: "/support", initialEntry: "/support" },
+    routing: { surface: "support", path: "/support", initialEntry: "/support" },
   },
 } satisfies Meta<typeof SupportWorkspacePage>;
 
@@ -75,7 +76,7 @@ type Story = StoryObj<typeof meta>;
 async function openCase(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) {
   await userEvent.type(canvas.getByLabelText("기존 상담 건 ID"), caseId);
   await userEvent.click(canvas.getByRole("button", { name: "상담 건 열기" }));
-  await expect(await canvas.findByText(`상담 ${caseId}`)).toBeVisible();
+  await expect(await canvas.findByText(`상담 ID ${caseId}`)).toBeVisible();
 }
 
 export const MaskedExactSearch: Story = {
@@ -169,7 +170,7 @@ export const VerificationLocked: Story = {
   play: async ({ canvas }) => {
     await openCase(canvas);
     await userEvent.click(canvas.getByRole("button", { name: "강화 본인확인 시작" }));
-    await expect(await canvas.findByText("LOCKED")).toBeVisible();
+    await expect(await canvas.findByText("잠김")).toBeVisible();
     await expect(canvas.queryByRole("button", { name: "등록 전화로 인증 코드 발급" })).not.toBeInTheDocument();
   },
 };
@@ -200,5 +201,14 @@ export const SearchRateLimited: Story = {
     await userEvent.type(canvas.getByLabelText("전화번호 또는 이메일"), "010-0000-0000");
     await userEvent.click(canvas.getByRole("button", { name: "정확 검색" }));
     await expect(await canvas.findByText("검색 요청이 너무 많습니다")).toBeVisible();
+  },
+};
+
+export const OpenCaseFromLink: Story = {
+  parameters: { routing: { path: "/support", initialEntry: `/support?caseId=${caseId}`, surface: "support" }, msw: { handlers: caseHandlers } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText(`상담 ID ${caseId}`)).toBeVisible();
+    await expect(canvas.getByText("주문 픽업 완료")).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "상담 후속 업무" })).toHaveAttribute("href", `/support/follow-up?caseId=${caseId}`);
   },
 };

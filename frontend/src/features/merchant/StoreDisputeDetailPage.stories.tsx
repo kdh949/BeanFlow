@@ -20,6 +20,7 @@ const meta = {
   component: StoreDisputeDetailPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: { description: { component: "점주가 이의제기 내용과 검토 결과를 확인하고 다시 검토를 요청하는 화면입니다." }, story: { inline: false, height: "760px" } },
     routing: { path: "/store/disputes/:disputeId", initialEntry: "/store/disputes/dispute-demo-01" },
   },
@@ -50,6 +51,6 @@ export const UnderReview: Story = {
 export const ContractPending: Story = {
   args: { scenario: "contract-pending" },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByRole("alert")).toHaveTextContent("상세 내용을 준비하고 있습니다");
+    await expect(await canvas.findByText("상세 내용을 준비하고 있습니다")).toBeVisible(); await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
   },
 };

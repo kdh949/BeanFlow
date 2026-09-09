@@ -30,6 +30,7 @@ internal data class StoreOrderBoardLineProjection(
     val lineSequence: Int,
     val menuName: String,
     val quantity: Long,
+    val optionNamesJson: String? = null,
 )
 
 internal data class StoreOrderBoardRows(
@@ -159,8 +160,19 @@ internal class StoreOrderBoardQueryRepository(
         val placeholders = List(orderIds.size) { "?" }.joinToString(", ")
         return jdbcTemplate
             .query(
-                "$LINE_SELECT WHERE order_id IN ($placeholders) ORDER BY order_id, line_sequence",
-                ::line,
+                "${if (operation == DETAIL) DETAIL_LINE_SELECT else LINE_SELECT} WHERE order_id IN ($placeholders) ORDER BY order_id, line_sequence",
+                { resultSet, row ->
+                    line(resultSet, row).copy(
+                        optionNamesJson =
+                            if (operation ==
+                                DETAIL
+                            ) {
+                                resultSet.getString("option_names_json")
+                            } else {
+                                null
+                            },
+                    )
+                },
                 *orderIds.toTypedArray(),
             ).groupBy { it.orderId }
     }
@@ -273,6 +285,8 @@ internal class StoreOrderBoardQueryRepository(
         const val LIST = "list"
         const val OVERFLOW = "overflow"
         const val DETAIL = "detail"
+        val DETAIL_LINE_SELECT = "SELECT order_id, line_sequence, menu_name, quantity, option_names_json FROM ordering_order_line"
+
         val LINE_SELECT =
             """
             SELECT order_id, line_sequence, menu_name, quantity

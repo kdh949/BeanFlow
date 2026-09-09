@@ -7,6 +7,7 @@ const meta = {
   component: OpsDashboardPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: { description: { component: "운영팀이 지금 확인하거나 처리할 업무를 한눈에 보는 화면입니다." } },
     routing: { path: "/ops", initialEntry: "/ops" },
   },
@@ -29,12 +30,12 @@ export const Dashboard: Story = {
   },
   play: async ({ canvas }) => {
     await expect(canvas.getByText("11건")).toBeVisible();
-    await expect(canvas.getByRole("link", { name: /문제와 정산 확인/ })).toBeVisible();
+    await expect(canvas.getByRole("link", { name: /점주 계정 관리/ })).toBeVisible();
   },
 };
 
 export const ContractPending: Story = {
   play: async ({ canvas }) => {
-    await expect(await canvas.findByRole("alert")).toHaveTextContent("운영 요약을 준비하고 있습니다");
+    await expect(await canvas.findByText("운영 요약을 준비하고 있습니다")).toBeVisible(); await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
   },
 };

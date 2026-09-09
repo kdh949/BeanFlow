@@ -1,16 +1,15 @@
 import {
-  BarChart3, Bell, ChevronDown, CircleDotDashed, ClipboardCheck, Headset, Home, LifeBuoy, LogOut, MapPin, PackageCheck, ReceiptText,
-  Search, Settings2, ShieldCheck, ShoppingBag, Store, UserRound, WalletCards,
-  TicketPercent,
+  Bell, Headset, Home, ReceiptText, Search, ShieldCheck, ShoppingBag, Store, UserRound,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router";
 import { ApiRequestError, unwrap } from "../api/client";
 import { customerApi } from "../api/customerClient";
 import { operationsAuth, useOperationsAuth } from "../auth/session";
-import { BrandLockup, Button, ButtonLink } from "../design-system";
+import { BrandLockup, ButtonLink } from "../design-system";
 import { merchantSession, requestMerchantStores, useMerchantSession } from "../features/auth/merchant/merchantSession";
 import { CUSTOMER_NOTIFICATION_SUMMARY_CHANGED } from "../features/notification/notificationSummary";
+import { ConsoleFrame, type ConsoleAccess, type ConsoleKind } from "./ConsoleFrame";
 import "./beanflow-refresh/refresh.css";
 
 type BellState = "loading" | "read" | "unread" | "failed" | "unauthenticated";
@@ -69,90 +68,34 @@ export function CustomerShell() {
   );
 }
 
-type ConsoleKind = "store" | "ops" | "support";
-
-/** Shared dense workspace frame for store, operations, and support routes. */
+/** Shared session adapter for all console routes. */
 export function ConsoleShell({ kind }: { kind: ConsoleKind }) {
-  const ownsAnyStore = useOwnerMembership(kind === "store");
   const merchant = useMerchantSession();
   const operations = useOperationsAuth();
-  const [logoutFailed, setLogoutFailed] = useState(false);
-  const storeItems = [
-    { to: "/store", label: "주문 관리", icon: PackageCheck, end: true },
-    ...(ownsAnyStore ? [
-      { to: "/store/settlements", label: "정산 내역", icon: WalletCards, end: false },
-      { to: "/store/disputes", label: "이의제기", icon: ReceiptText, end: false },
-    ] : []),
-    { to: "/store/management", label: "매장 관리", icon: Settings2, end: false },
-    { to: "/store/region", label: "매장 설정", icon: MapPin, end: false },
-  ];
-  const opsItems = [
-    { to: "/ops", label: "운영 현황", icon: BarChart3, end: true },
-    { to: "/ops/orders", label: "주문 조회", icon: Search, end: false },
-    { to: "/ops/merchant-accounts", label: "점주 계정", icon: UserRound, end: false },
-    { to: "/ops/recovery", label: "문제 확인 및 복구", icon: LifeBuoy, end: false },
-    { to: "/ops/control", label: "운영 업무", icon: CircleDotDashed, end: false },
-    { to: "/ops/policies", label: "정책 관리", icon: Settings2, end: false },
-    { to: "/ops/campaigns", label: "쿠폰 캠페인", icon: TicketPercent, end: false },
-  ];
-  const supportItems = [
-    { to: "/support", label: "고객지원", icon: Headset, end: true },
-    { to: "/support/follow-up", label: "상담 후속 업무", icon: ClipboardCheck, end: false },
-  ];
-  const items = kind === "store" ? storeItems : kind === "ops" ? opsItems : supportItems;
-  const basePath = kind === "store" ? "/store" : kind === "ops" ? "/ops" : "/support";
-  const context = kind === "store" ? "매장 운영" : kind === "ops" ? "플랫폼 운영" : "고객지원";
-  const actor = kind === "store"
-    ? merchant.status === "authenticated" || merchant.status === "initialPassword" ? merchant.actor.displayName : "인증 필요"
-    : operations.status === "authenticated" ? "OIDC 인증됨" : operations.status === "unavailable" ? "인증 설정 오류" : "로그인 필요";
-
-  async function logOut() {
-    setLogoutFailed(false);
-    try {
-      if (kind === "store") await merchantSession.logOut();
-      else await operationsAuth.logOut();
-    } catch {
-      setLogoutFailed(true);
-    }
-  }
-
-  return (
-    <div className="bfr-store-shell">
-      <aside className="bfr-store-sidebar">
-        <BrandLockup to={basePath} />
-        <span className="bfr-store-context">{context}</span>
-        <nav aria-label={`${context} 메뉴`}>
-          {items.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end}><Icon size={18} /><span>{label}</span></NavLink>)}
-        </nav>
-        <div className="bfr-store-sidebar-foot">
-          <Link to="/app"><Store size={17} />고객 앱</Link>
-          <Button variant="ghost" size="sm" onClick={() => void logOut()}><LogOut size={17} />로그아웃</Button>
-          {logoutFailed ? <p role="alert">로그아웃에 실패했습니다. 다시 시도해 주세요.</p> : null}
-        </div>
-      </aside>
-      <section className="bfr-store-main">
-        <header className="bfr-store-topbar">
-          <div><span>{context}</span></div>
-          <div className="bfr-store-actor" aria-label={`${context} 계정 상태`}><span>{actor.slice(0, 1)}</span>{actor}<ChevronDown size={15} aria-hidden="true" /></div>
-        </header>
-        <main className="bfr-store-content"><Outlet /></main>
-      </section>
-    </div>
-  );
+  const membership = useOwnerMembership(kind === "store" && merchant.status === "authenticated", merchant.status === "authenticated" ? merchant.actor.merchantId : null);
+  const access: ConsoleAccess = kind === "store"
+    ? merchant.status === "authenticated" ? "authenticated" : merchant.status === "initialPassword" ? "initial-password" : merchant.status === "loading" ? "checking" : merchant.status === "unauthenticated" ? "unauthenticated" : "unavailable"
+    : operations.status === "authenticated" ? "authenticated" : operations.status === "unauthenticated" ? "unauthenticated" : operations.status === "unavailable" ? "unavailable" : "checking";
+  const actorLabel = kind === "store" && (merchant.status === "authenticated" || merchant.status === "initialPassword")
+    ? merchant.actor.displayName
+    : kind !== "store" && operations.status === "authenticated" ? operations.displayName ?? "조직 계정 로그인됨"
+    : access === "checking" ? "로그인 확인 중" : access === "unavailable" ? "로그인 확인 필요" : "로그인 필요";
+  return <ConsoleFrame kind={kind} access={access} actorLabel={actorLabel} ownsAnyStore={membership.ownsAnyStore} membershipState={kind === "store" ? membership.status : undefined} onRetryMembership={membership.retry} onLogOut={() => kind === "store" ? merchantSession.logOut() : operationsAuth.logOut()}><Outlet /></ConsoleFrame>;
 }
 
-function useOwnerMembership(enabled: boolean): boolean {
-  const [ownsAnyStore, setOwnsAnyStore] = useState(false);
-  const session = useMerchantSession();
+function useOwnerMembership(enabled: boolean, accountId: string | null) {
+  const [state, setState] = useState<{ status: "checking" | "ready" | "failed"; ownsAnyStore: boolean }>({ status: "checking", ownsAnyStore: false });
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (!enabled || session.status !== "authenticated") { setOwnsAnyStore(false); return; }
+    if (!enabled) { setState({ status: "ready", ownsAnyStore: false }); return; }
     let disposed = false;
+    setState({ status: "checking", ownsAnyStore: false });
     void requestMerchantStores()
-      .then((stores) => { if (!disposed) setOwnsAnyStore(stores.some((store) => store.membershipRole === "OWNER")); })
-      .catch(() => { if (!disposed) setOwnsAnyStore(false); });
+      .then((stores) => { if (!disposed) setState({ status: "ready", ownsAnyStore: stores.some((store) => store.membershipRole === "OWNER") }); })
+      .catch(() => { if (!disposed) setState({ status: "failed", ownsAnyStore: false }); });
     return () => { disposed = true; };
-  }, [enabled, session.status]);
-  return ownsAnyStore;
+  }, [enabled, accountId, attempt]);
+  return { ...state, retry: () => setAttempt((value) => value + 1) };
 }
 
 export function RootRedirect() {

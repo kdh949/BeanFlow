@@ -4,7 +4,7 @@ import { unwrap } from "../../api/client";
 import { merchantApi } from "../../api/merchantClient";
 import { EmptyState, LoadingState } from "../../design-system";
 import { PageHeading } from "../../design-system";
-import { Button, ButtonLink, ChipButton } from "../../design-system";
+import { Button, ChipButton } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
 import { compactId, shortDateTime, won } from "../../lib/format";
 import { useMerchantStores } from "./useMerchantStores";
@@ -112,7 +112,7 @@ export function StoreDisputesPage() {
                       <span className="context-label">명세 {compactId(dispute.settlementItemId)}</span>
                       <strong className="bf-num">{won.format(dispute.expectedAdjustmentKrw)}</strong>
                     </div>
-                    <StatusText state={dispute.state} />
+                    <StatusText domain="dispute" state={dispute.state} />
                   </header>
                   <dl className="detail-list">
                     <div><dt>보류 금액</dt><dd className="bf-num">{won.format(dispute.heldAmountKrw)}</dd></div>
@@ -122,7 +122,7 @@ export function StoreDisputesPage() {
                       <dd>{dispute.decidedAt ? shortDateTime.format(new Date(dispute.decidedAt)) : "진행 중"}</dd>
                     </div>
                   </dl>
-                  <ButtonLink variant="secondary" to={`/store/disputes/${encodeURIComponent(dispute.disputeId)}`}>자세히 보기</ButtonLink>
+                  <Button variant="secondary" disabled>상세 내용 준비 중</Button>
                 </article>
               ))}
             </section>

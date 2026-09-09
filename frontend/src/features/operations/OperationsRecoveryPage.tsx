@@ -132,5 +132,5 @@ function RecoverySection({ eyebrow, title, children }: { eyebrow: string; title:
 }
 
 function PendingProjection() {
-  return <InlineNotice tone="danger" announce="assertive" title="문제 확인 화면을 준비하고 있습니다" description="지금은 실패 업무, 정산과 감사 기록을 조회할 수 없습니다." />;
+  return <InlineNotice tone="info" title="문제 확인 화면을 준비하고 있습니다" description="지금은 실패 업무, 정산과 감사 기록을 조회할 수 없습니다." />;
 }

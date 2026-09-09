@@ -370,7 +370,7 @@ function BrandWorkspace() {
           <section className="policy-card-list" aria-label="브랜드 목록">
             {brands.map((brand) => (
               <article className={selected?.brandId === brand.brandId ? "surface-card compact-policy-card is-selected" : "surface-card compact-policy-card"} key={brand.brandId}>
-                <div><span className="context-label">브랜드</span><h3>{brand.name}</h3></div><StatusText state={brand.status} />
+                <div><span className="context-label">브랜드</span><h3>{brand.name}</h3></div><StatusText domain="brand" state={brand.status} />
                 <p>소속 매장 {brand.assignedStoreCount}개</p><small>버전 {brand.version}</small>
                 <Button size="sm" variant="secondary" onClick={() => edit(brand)}>브랜드 편집</Button>
               </article>
