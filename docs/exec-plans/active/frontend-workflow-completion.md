@@ -148,7 +148,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] O3/F16: 브랜드 관리에 20개씩 이전/다음 커서를 연결하고 페이지 조회 실패 시 이전 결과를 제거했다. 생성·이름 변경 후 서버 정렬 목록을 다시 조회하며 결과를 별도 안내한다. 소속 매장이 있으면 이름도 바꿀 수 없다는 잘못된 설명과 사유 200자 제한을 수정했다. 관련 Storybook 4개, typecheck/check:design, 단위 224개와 boundary/copy 21개 Passed.
 - [x] O3/M12: 매장별 포인트 설정 목록/필터/커서, 실제 적용 정책 조회/변경, 공통·매장별 이력 구현. 불완전한 공통 정책을 0%로 표시하지 않고 편집을 차단한다. 관련 Storybook 16개 및 전체 393개, backend 정책/동시성/Runtime parity 8개, frontend 단위 224개와 boundary/copy 21개 Passed. typecheck/check:design/build/build-storybook/docs smoke(79 docs/47 states)/sites(4개), 문서 검증(18개) Passed. 390px 포인트 화면 넘침 없음 확인. 운영 PR 생성은 아래 이력에 기록한다.
 - [x] R1: 점주 상세/철회/새 증빙 재접수와 운영 매장별 목록/검토/판정 구현. 명령 실패 후 현재 pending 판정을 다시 확인하며 상충 판정을 숨긴다. BR-22의 14개 달력 날짜 및 BR-24의 종결 건 재접수에 맞춰 예시 설명을 수정했다. 관련 Storybook 23개, PostgreSQL/도메인 19개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 판정 일부 처리 화면 넘침 없음 확인.
-- [ ] R2–R3 복구 구현·검증·커밋·PR.
+- [x] R2: 알림/이벤트 수동 복구 목록·커서·원본 상세·1회 재시도·결과 확인 구현. 202 접수와 완료를 분리하고 UNKNOWN 재실행은 recoverable/차단 사유를 따른다. 관련 Storybook 13개, PostgreSQL 복구/동시성/부분 실패 19개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 결과 불명 화면 넘침 없음 확인.
+- [ ] R3 주문 취소·환불·포인트 조사 및 복구 구현·검증·커밋·PR.
 - [ ] H1–H2 상담 관리 구현·검증·커밋·PR.
 - [ ] H3–H4 상담 후속 처리 구현·검증·커밋·PR.
 - [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.
