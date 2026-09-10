@@ -94,6 +94,68 @@ internal class PostAcceptanceResolutionIntegrationTest
             gateway.reset()
         }
 
+        @Test
+        fun `workflow locates planned resolution and preserves authorized follow up after approval consumption`() {
+            val fixture = seed(PostAcceptanceState.PREPARING, PostAcceptanceResolutionOutcome.NO_MONETARY_RESOLUTION, cashRefundKrw = 0)
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions[0]").value("EXECUTE"))
+                .andExpect(jsonPath("$.resolutionId").isEmpty)
+                .andExpect(jsonPath("$.order.version").value(ORDER_VERSION))
+                .andExpect(jsonPath("$.order.customerId").doesNotExist())
+            val resolutionId = create(fixture, "workflow-planned-resolution").andReturn().resolutionId()
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.resolutionId").value(resolutionId.toString()))
+            execute(fixture, resolutionId, "workflow-consumed-resolution").andExpect(status().isOk)
+            jdbc.update(
+                "UPDATE support_action_revision SET expires_at = created_at + interval '1 microsecond' WHERE request_id = ?",
+                fixture.requestId,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.allowedActions[0]").value("ADVANCE_RESOLUTION"))
+                .andExpect(jsonPath("$.request.terminalResolutionId").value(resolutionId.toString()))
+            jdbc.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_RESOLUTION_EXECUTE'",
+                EXECUTOR_ID,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+        }
+
+        @Test
+        fun `resolution request permission cannot replace execution permission`() {
+            val fixture = seed(PostAcceptanceState.PREPARING, PostAcceptanceResolutionOutcome.NO_MONETARY_RESOLUTION, cashRefundKrw = 0)
+            jdbc.update(
+                "UPDATE operations_operator_permission_grant SET permission = 'SUPPORT_RESOLUTION_REQUEST' " +
+                    "WHERE actor_id = ? AND permission = 'SUPPORT_RESOLUTION_EXECUTE'",
+                EXECUTOR_ID,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.request.state").value("REASSIGNMENT_REQUIRED"))
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+            create(fixture, "request-only-cannot-execute").andExpect(status().isForbidden)
+        }
+
         @ParameterizedTest
         @EnumSource(PostAcceptanceState::class)
         fun `post acceptance state matrix resolves without rewriting order facts`(state: PostAcceptanceState) {

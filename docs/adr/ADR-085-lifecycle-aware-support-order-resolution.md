@@ -25,6 +25,17 @@ Settlement step은 `BLOCKED`로 남는다. Store/Platform cost owner를 자동 �
 조회는 동의를 생성하거나 budget을 소비하지 않으며, 건별 동의 명령은 현재 binding과 서로 다른 actor를
 다시 검증한다. 화면에서 STORE 비용 책임을 명시 수락한 경우에만 동의 또는 한시 위임을 제출한다.
 
+### 상담 화면의 해결 후속 조회
+
+승인 workflow는 기존 조회 권한 안에서 생성된 Resolution ID와 현재 주문 버전을 반환한다.
+이미 소비된 승인안의 만료와 금융 후속 처리는 구분하며, 현재 Case 담당자·실행 권한을 가진
+실행자는 기존 Resolution의 진행 또는 안전한 환불 LOOKUP을 요청할 수 있다. 각 명령은
+현재 버전과 관계를 다시 검증한다. `SUPPORT_RESOLUTION_EXECUTE`를 가진 조회자는 기존 해결
+응답이 이미 노출하는 주문 ID·상태·버전의 현재 값만 조회할 수 있으며 개인정보는 반환하지 않는다.
+승인 요청의 실행 권한 재검사와 재배정도 S80 명령과 동일하게 `SUPPORT_RESOLUTION_EXECUTE`를
+검사한다. 요청 권한 `SUPPORT_RESOLUTION_REQUEST`는 실행 권한을 대신하지 않는다.
+화면은 금융 4단계와 고객 알림 상태를 구분한다.
+
 ## Alternatives Considered
 
 - 기존 customer endpoint impersonation: actor/audit/permission 오류로 기각.

@@ -220,6 +220,7 @@ internal fun SupportActionType.capabilityPermission(): OperatorPermission =
 
 internal fun SupportActionType.executionCapabilityPermission(): OperatorPermission =
     when (this) {
+        SupportActionType.POST_ACCEPTANCE_RESOLUTION -> OperatorPermission.SUPPORT_RESOLUTION_EXECUTE
         SupportActionType.GOODWILL_COMPENSATION -> OperatorPermission.SUPPORT_COMPENSATION_EXECUTE
         SupportActionType.PROFILE_CHANGE -> OperatorPermission.SUPPORT_PROFILE_R3_REQUEST
         else -> capabilityPermission()

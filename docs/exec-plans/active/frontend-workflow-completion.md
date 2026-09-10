@@ -155,9 +155,12 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] H1a: 상담 목록/필터/커서/모든 요청 유형 접수와 상태·배정·접촉·내부 노트·대상 연결 관리 구현. 명령 후 현재 상태를 재조회하고 응답 유실은 같은 요청으로 확인한다. 부분 접수 뒤 연결 실패도 생성된 Case 진입을 남긴다. 관련 Storybook 26개, PostgreSQL/도메인 14개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 기존 토큰의 카드 여백을 재사용했으며 390px 화면에서 가로 넘침 없음 확인.
 - [x] H1b: 대상·목적·두 인증 수단/현재 조회/철회와 필드별 열람 요청·별도 승인자 검토·한시 열람 구현. 기존 권한의 Grant 메타데이터 GET을 추가했다. 관련 Storybook 24개, PostgreSQL 인증/권한·PII 비노출/Runtime parity 17개, frontend 단위 228개 및 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. 창 이탈·늦은 원문 응답·권한 회수·만료를 검증했고 390px 검토 화면 넘침 없음 확인.
 - [x] H2: 현재 주문/요청 권한/매장 동의 대상 조회와 주문 조치 평가·생성·수정·별도 승인·재배정·실행, 점주 건별 동의·한시 위임 구현. typed 선택값과 canonical digest를 대조하고 기존 트랜잭션·정책 버전을 유지한다. PostgreSQL 평가·승인·실행/Runtime parity 20개 및 서버 digest 1개, frontend 단위 229개와 boundary/copy 21개 Passed. 전체 Storybook MCP 488개, typecheck/check:design/build/build-storybook/docs smoke(93 docs/47 states)/sites(4개), 문서 검증 18개 Passed. 상담·매장 동의의 모바일 렌더링과 가로 넘침 없음 확인. 상담 관리 PR 생성은 아래 이력에 기록한다.
-- [ ] H3–H4 상담 후속 처리 구현·검증·커밋·PR.
+- [x] H3a: 수락 후 해결 승인안·현재 승인·실행 계획·5단계 상태/결과·환불 LOOKUP 재조정 구현. 생성된 Resolution ID를 다시 조회하고 소비된 승인안의 만료와 후속 처리를 구분한다. 실제 실행 권한과 달랐던 S60 재검사를 SUPPORT_RESOLUTION_EXECUTE로 맞췄다. PostgreSQL/도메인/승인/Runtime parity 및 서버 digest 34개, frontend 단위 231개와 boundary/copy 21개 Passed. 전체 실행 로그에서 497개 interaction 통과 후 최종 변경의 MCP 29개 interaction/a11y Passed. typecheck/check:design/build/sites(4개)/문서(18개) Passed. 390px 단계 화면 넘침 없음 확인. static Storybook과 문서 화면 전체 검사는 H3b–H4 후 PR 검증에서 실행한다.
+- [ ] H3b–H4 보상·정보 정정·운영 결정·긴급 열람 구현·검증·커밋·PR.
 - [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.
 - [ ] 전체 로컬 검증, 원격 CI 확인, 최종 diff/PR topology 검토.
+
+- 상담 관리 PR: https://github.com/kdh949/BeanFlow/pull/164 (`feature/frontend-support-management`, head `33122ac`, base `feature/frontend-dispute-recovery`). 세 커밋으로 접수·본인확인·주문 변경을 나눴다. 상담 노트 저장 뒤 재조회 완료를 기다리도록 CI 테스트를 별도 수정했다. 정확한 head의 원격 CI는 진행 중이다.
 
 - 고객 PR: https://github.com/kdh949/BeanFlow/pull/160 (`feature/frontend-customer-consistency`, head `d777992`, base `main`). 후속 점주 branch: `feature/frontend-store-management`.
 - 고객 PR #160의 preflight/frontend/backend-build/6개 backend test shard/CodeQL 및 집계 build 원격 CI가 모두 통과했다.

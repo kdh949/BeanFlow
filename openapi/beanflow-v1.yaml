@@ -9323,6 +9323,7 @@ components:
       - DECIDE_SUPPORT_MANAGER
       - REASSIGN
       - EXECUTE
+      - ADVANCE_RESOLUTION
       example: EXECUTE
     StoreSupportOrderChangeRequestResource:
       type: object
@@ -9385,7 +9386,12 @@ components:
       - caseVersion
       - order
       - allowedActions
+      - resolutionId
       properties:
+        resolutionId:
+          type: [string, 'null']
+          format: uuid
+          description: 이 승인안으로 이미 생성된 수락 후 해결 건의 ID입니다.
         request:
           $ref: '#/components/schemas/SupportActionRequestResource'
         caseVersion:
@@ -9401,6 +9407,7 @@ components:
           - $ref: '#/components/schemas/SupportOrderContextResource'
           - type: 'null'
       example:
+        resolutionId: null
         request:
           requestId: 47fb7c92-195e-51a5-929c-6a6b891f764b
           caseId: f33f27d6-8e6c-5712-8567-154b01cbb087
@@ -9426,6 +9433,8 @@ components:
             decidedAt: '2026-08-15T15:10:00+09:00'
           terminalExecutionId: null
           terminalResolutionId: null
+          terminalCompensationId: null
+          terminalProfileChangeId: null
         order: null
         caseVersion: 2
         allowedActions:
@@ -17192,6 +17201,8 @@ components:
             decidedAt: '2026-08-15T15:10:00+09:00'
         terminalExecutionId: null
         terminalResolutionId: null
+        terminalCompensationId: null
+        terminalProfileChangeId: null
       required:
         - requestId
         - caseId
@@ -17213,6 +17224,8 @@ components:
         - approvalSteps
         - terminalExecutionId
         - terminalResolutionId
+        - terminalCompensationId
+        - terminalProfileChangeId
       properties:
         requestId:
           $ref: '#/components/schemas/Identifier'
@@ -17291,6 +17304,14 @@ components:
             - 'null'
           format: uuid
           description: 주문 변경 작업이 완료됐을 때 생성된 실행 ID입니다. 아직 실행되지 않았으면 `null`입니다.
+        terminalCompensationId:
+          type: [string, 'null']
+          format: uuid
+          description: 완료된 고객 보상 요청 식별자입니다.
+        terminalProfileChangeId:
+          type: [string, 'null']
+          format: uuid
+          description: 완료된 정보 정정 요청 식별자입니다.
         terminalResolutionId:
           type:
             - string
@@ -18031,12 +18052,14 @@ components:
           $ref: "#/components/schemas/Identifier"
     SupportActionType:
       type: string
-      description: 고객센터가 요청할 수 있는 주문 취소, 픽업 시간 변경, 수락 후 문제 해결 작업입니다.
+      description: 주문 변경·수락 후 해결·보상·정보 정정의 승인 요청 유형입니다. 유형별 전용 명령으로 요청합니다.
       example: ORDER_CANCELLATION
       enum:
         - ORDER_CANCELLATION
         - PICKUP_RESCHEDULE
         - POST_ACCEPTANCE_RESOLUTION
+        - GOODWILL_COMPENSATION
+        - PROFILE_CHANGE
     SupportActionApprovalRoute:
       type: string
       description: 주문 변경 또는 고객 보상 요청이 거쳐야 하는 승인 순서입니다. 승인 없음, 고객센터 관리자, 운영팀 또는 순차 승인을 구분합니다.

@@ -33,13 +33,14 @@ internal data class SupportOrderContextResource(
     val version: Long,
 )
 
-internal enum class SupportOrderWorkflowAction { REVISE, DECIDE_SUPPORT_MANAGER, REASSIGN, EXECUTE }
+internal enum class SupportOrderWorkflowAction { REVISE, DECIDE_SUPPORT_MANAGER, REASSIGN, EXECUTE, ADVANCE_RESOLUTION }
 
 internal data class SupportOrderWorkflowResource(
     val request: SupportActionRequestResource,
     val caseVersion: Long,
     val order: SupportOrderContextResource?,
     val allowedActions: List<SupportOrderWorkflowAction>,
+    val resolutionId: UUID?,
 )
 
 internal data class StoreSupportOrderChangeRequestResource(
@@ -62,6 +63,7 @@ internal class SupportOrderWorkflowQuery(
     private val cases: SupportCaseJpaRepository,
     private val requests: SupportActionRequestJpaRepository,
     private val revisions: SupportActionRevisionJpaRepository,
+    private val resolutions: PostAcceptanceResolutionJpaRepository,
     private val permissions: OperatorPermissionAuthorization,
     private val storeAccess: StoreAccessOperations,
     private val clock: Clock,
@@ -86,7 +88,7 @@ internal class SupportOrderWorkflowQuery(
         val supportCase = cases.findLockedById(request.caseId) ?: missing()
         val actions = mutableListOf<SupportOrderWorkflowAction>()
         val current = clock.instant().isBefore(request.expiresAt) && supportCase.state in ACTIVE_CASE_STATES
-        val direct = request.action in DIRECT_ACTIONS
+        val direct = request.action in ORDER_ACTIONS
 
         fun has(permission: OperatorPermission) = permissions.hasActive(actorId, permission)
         if (direct && current) {
@@ -108,19 +110,41 @@ internal class SupportOrderWorkflowQuery(
             if (request.state == SupportActionRequestState.READY_FOR_EXECUTION &&
                 actorId == request.executorActorId && actorId == supportCase.currentAssigneeId &&
                 has(OperatorPermission.SUPPORT_ACTION_EXECUTE) && has(request.action.executionCapabilityPermission()) &&
-                has(OperatorPermission.SUPPORT_ORDER_READ)
+                (request.action == SupportActionType.POST_ACCEPTANCE_RESOLUTION || has(OperatorPermission.SUPPORT_ORDER_READ)) &&
+                (request.action != SupportActionType.POST_ACCEPTANCE_RESOLUTION || actorId != request.requesterActorId)
             ) {
                 actions += SupportOrderWorkflowAction.EXECUTE
             }
         }
+        if (request.action == SupportActionType.POST_ACCEPTANCE_RESOLUTION &&
+            request.state == SupportActionRequestState.EXECUTED && request.terminalResolutionId != null &&
+            supportCase.state in ACTIVE_CASE_STATES && actorId == request.executorActorId &&
+            actorId == supportCase.currentAssigneeId && has(OperatorPermission.SUPPORT_ACTION_EXECUTE) &&
+            has(OperatorPermission.SUPPORT_RESOLUTION_EXECUTE)
+        ) {
+            actions += SupportOrderWorkflowAction.ADVANCE_RESOLUTION
+        }
+        val canReadOrder =
+            has(OperatorPermission.SUPPORT_ORDER_READ) ||
+                (request.action == SupportActionType.POST_ACCEPTANCE_RESOLUTION && has(OperatorPermission.SUPPORT_RESOLUTION_EXECUTE))
         val order =
-            if (direct && has(OperatorPermission.SUPPORT_ORDER_READ)) {
+            if (direct && canReadOrder) {
                 val snapshot = ordering.findOrderSnapshots(setOf(request.targetId)).singleOrNull() ?: missing()
                 SupportOrderContextResource(snapshot.orderId, snapshot.storeId, snapshot.state, snapshot.version)
             } else {
                 null
             }
-        return SupportOrderWorkflowResource(request, supportCase.version, order, actions)
+        return SupportOrderWorkflowResource(
+            request,
+            supportCase.version,
+            order,
+            actions,
+            if (request.action == SupportActionType.POST_ACCEPTANCE_RESOLUTION) {
+                resolutions.findBySupportActionRequestId(requestId)?.id
+            } else {
+                null
+            },
+        )
     }
 
     @Transactional
@@ -160,6 +184,7 @@ internal class SupportOrderWorkflowQuery(
 
     private companion object {
         val DIRECT_ACTIONS = setOf(SupportActionType.ORDER_CANCELLATION, SupportActionType.PICKUP_RESCHEDULE)
+        val ORDER_ACTIONS = DIRECT_ACTIONS + SupportActionType.POST_ACCEPTANCE_RESOLUTION
         val ACTIVE_CASE_STATES = setOf(SupportCaseState.OPEN, SupportCaseState.IN_PROGRESS, SupportCaseState.WAITING)
         val REVISION_STATES =
             setOf(

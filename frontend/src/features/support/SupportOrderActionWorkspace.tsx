@@ -9,6 +9,10 @@ import { ErrorState, StatusText } from "../../presentation/shared";
 import { shortDateTime } from "../../lib/format";
 import { cancellationReasonLabels, orderActionLabels, orderChangeDigest, supportDigest, type CancellationReason, type OrderChangeAction } from "../../lib/supportOrderPayload";
 import { useResource } from "../shared/useResource";
+import { initialResolutionDraft, validResolutionDraft, resolutionPlan, resolutionDigest, type ResolutionDraft } from "../../lib/supportResolutionPayload";
+import { SupportResolutionPlanFields } from "./SupportResolutionPlanFields";
+import { SupportResolutionWorkspace } from "./SupportResolutionWorkspace";
+import { useExpired } from "./useSupportExpiry";
 import { useSupportCommand } from "./useSupportCommand";
 
 type Case = { caseId: string; state: string; subjectLinks: readonly { subjectType: string; subjectId: string; relationship: string }[] };
@@ -40,16 +44,12 @@ export function SupportOrderActionPage() {
   return <div className="console-page"><PageHeading title="주문 변경 승인과 실행" /><SupportOrderActionWorkspace initialRequestId={requestId} /></div>;
 }
 
-function useExpired(expiresAt?: string) {
-  const [clock, setClock] = useState(Date.now());
-  useEffect(() => { if (!expiresAt) return; const timer = window.setTimeout(() => setClock(Date.now()), Math.max(0, new Date(expiresAt).getTime() - Date.now()) + 1); return () => window.clearTimeout(timer); }, [expiresAt]);
-  return !!expiresAt && new Date(expiresAt).getTime() <= Math.max(clock, Date.now());
-}
 
 function CreateOrderRequest({ supportCase, verification, onCreated, revision, onBusyChange }: { onBusyChange?: (value: boolean) => void; supportCase: Case; verification?: Verification | null; onCreated: (id: string) => void; revision?: Request }) {
   const orders = supportCase.subjectLinks.filter(link => link.subjectType === "ORDER" && link.relationship === "RELATED_ORDER");
   const [orderId, setOrderId] = useState(revision?.targetId ?? orders[0]?.subjectId ?? "");
-  const [action, setAction] = useState<OrderChangeAction>(revision?.action === "PICKUP_RESCHEDULE" ? "PICKUP_RESCHEDULE" : "ORDER_CANCELLATION");
+  const [action, setAction] = useState<OrderChangeAction | "POST_ACCEPTANCE_RESOLUTION">(revision?.action === "POST_ACCEPTANCE_RESOLUTION" ? "POST_ACCEPTANCE_RESOLUTION" : revision?.action === "PICKUP_RESCHEDULE" ? "PICKUP_RESCHEDULE" : "ORDER_CANCELLATION");
+  const [resolutionDraft, setResolutionDraft] = useState<ResolutionDraft>(initialResolutionDraft);
   const [reasonCode, setReasonCode] = useState<CancellationReason>("CHANGED_MIND");
   const [slotId, setSlotId] = useState("");
   const [reason, setReason] = useState(""); const [evidence, setEvidence] = useState("");
@@ -76,7 +76,9 @@ function CreateOrderRequest({ supportCase, verification, onCreated, revision, on
     if (!current || !verified || !verification || !evaluation || evaluationExpired || evaluation.decision === "DENIED" || disabled) return;
     setPreparing(true); setError(null);
     try {
-      const body = { expectedTargetVersion: current.version, verificationSessionId: verification.sessionId, actionPayloadDigest: await orderChangeDigest(action, orderId, reasonCode, slotId), reason: reason.trim(), evidenceDigest: await supportDigest(evidence.trim()) };
+      const plan = action === "POST_ACCEPTANCE_RESOLUTION" ? await resolutionPlan(resolutionDraft) : null;
+      if (plan && !validResolutionDraft(resolutionDraft)) return;
+      const body = { expectedTargetVersion: current.version, verificationSessionId: verification.sessionId, actionPayloadDigest: plan ? await resolutionDigest(orderId, plan) : await orderChangeDigest(action as OrderChangeAction, orderId, reasonCode, slotId), reason: reason.trim(), evidenceDigest: plan?.evidenceDigest ?? await supportDigest(evidence.trim()), ...(plan ? { amountKrw: plan.cashRefundKrw } : {}) };
       if (revision) {
         const next = { ...body, expectedRevisionNumber: revision.revisionNumber, expectedRequestVersion: revision.requestVersion };
         command.submit(JSON.stringify(next), key => operationsApi.POST("/support/action-requests/{requestId}/revisions", { params: { path: { requestId: revision.requestId }, header: { "Idempotency-Key": key } }, body: next }).then(unwrap), () => onCreated(revision.requestId));
@@ -92,17 +94,17 @@ function CreateOrderRequest({ supportCase, verification, onCreated, revision, on
   return <div className="surface-card management-card management-workspace">
     <h3>{revision ? "새 승인안 작성" : "새 주문 변경 요청"}</h3>
     <SelectField label="연결된 주문" value={orderId} disabled={!!revision || disabled} onValueChange={setOrderId}>{orders.map(link => <option key={link.subjectId} value={link.subjectId}>{link.subjectId}</option>)}</SelectField>
-    <SelectField label="주문 변경 업무" value={action} disabled={!!revision || disabled} onValueChange={value => { setAction(value as OrderChangeAction); setSlotId(""); }}>{Object.entries(orderActionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>
+    <SelectField label="주문 변경 업무" value={action} disabled={!!revision || disabled} onValueChange={value => { setAction(value as typeof action); setSlotId(""); }}>{Object.entries({ ...orderActionLabels, POST_ACCEPTANCE_RESOLUTION: " 수락 후 해결" }).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>
     {orderRead.state.status === "loading" ? <LoadingState label="현재 주문 정보를 읽는 중" /> : orderRead.state.status === "failed" ? <ErrorState error={orderRead.state.error} retry={orderRead.reload} /> : current ? <>
       <p>현재 주문 <StatusText state={current.state} /> · 버전 {current.version}</p>
-      <OrderPayloadFields action={action} storeId={current.storeId} reason={reasonCode} slotId={slotId} onReason={setReasonCode} onSlot={setSlotId} disabled={disabled} />
+      {action === "POST_ACCEPTANCE_RESOLUTION" ? <SupportResolutionPlanFields value={resolutionDraft} onChange={setResolutionDraft} disabled={disabled} /> : <OrderPayloadFields action={action} storeId={current.storeId} reason={reasonCode} slotId={slotId} onReason={setReasonCode} onSlot={setSlotId} disabled={disabled} />}
       <Button variant="secondary" disabled={disabled} loading={evaluating} onClick={() => void evaluate()}>현재 주문 변경 가능 여부 확인</Button>
     </> : null}
     {evaluation ? <InlineNotice tone={evaluation.decision === "DENIED" ? "warning" : "info"} title={evaluation.decision === "DENIED" ? "현재 요청할 수 없습니다" : evaluation.decision === "APPROVAL_REQUIRED" ? "승인 후 실행할 수 있습니다" : "현재 요청할 수 있습니다"} description={`${evaluation.reasonCodes.map(code => evaluationReasons[code] ?? code).join(" · ")} · 필요한 본인확인 ${evaluation.requiredVerificationLevel === "ENHANCED" ? "강화" : "기본"}`} /> : null}
     {evaluation && evaluation.decision !== "DENIED" && !evaluationExpired && current ? <form className="operation-form" onSubmit={event => { event.preventDefault(); void submit(); }}>
       <TextAreaField label="요청 사유" value={reason} onValueChange={setReason} required maxLength={500} disabled={disabled} description="개인정보와 인증 원문은 적지 않습니다." />
-      <TextField label="증빙 참조" value={evidence} onValueChange={setEvidence} required maxLength={500} disabled={disabled} description="확인한 상담 기록 등의 참조를 입력합니다. 서버에는 해시만 전송합니다." />
-      <Button type="submit" disabled={disabled || !reason.trim() || !evidence.trim() || (action === "PICKUP_RESCHEDULE" && !slotId)}>{revision ? "새 승인안 제출" : "주문 변경 요청 등록"}</Button>
+      {action !== "POST_ACCEPTANCE_RESOLUTION" ? <TextField label="증빙 참조" value={evidence} onValueChange={setEvidence} required maxLength={500} disabled={disabled} description="확인한 상담 기록 등의 참조를 입력합니다. 서버에는 해시만 전송합니다." /> : null}
+      <Button type="submit" disabled={disabled || !reason.trim() || (action === "POST_ACCEPTANCE_RESOLUTION" ? !validResolutionDraft(resolutionDraft) : !evidence.trim()) || (action === "PICKUP_RESCHEDULE" && !slotId)}>{revision ? "새 승인안 제출" : "주문 변경 요청 등록"}</Button>
     </form> : null}
     {evaluationExpired ? <InlineNotice tone="warning" title="평가 유효 시간이 지났습니다" description="현재 주문 변경 가능 여부를 다시 확인해 주세요." /> : null}
     {error ? <ErrorState error={error} /> : null}<CommandResult command={command} />
@@ -115,17 +117,23 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
   const [message, setMessage] = useState(""); const [execution, setExecution] = useState<components["schemas"]["SupportOrderChangeExecutionResource"] | null>(null);
   const [reasonCode, setReasonCode] = useState<CancellationReason>("CHANGED_MIND"); const [slotId, setSlotId] = useState(""); const [digest, setDigest] = useState("");
   const [decision, setDecision] = useState<components["schemas"]["SupportApprovalDecision"]>("APPROVE"); const [reason, setReason] = useState(""); const [assignee, setAssignee] = useState(""); const [authorizationId, setAuthorizationId] = useState("");
+  const [resolutionDraft, setResolutionDraft] = useState<ResolutionDraft>(initialResolutionDraft);
+  const [resolutionBusy, setResolutionBusy] = useState(false);
+  const [preparingResolution, setPreparingResolution] = useState(false);
+  const [resolutionError, setResolutionError] = useState<unknown>(null);
+  const [createdResolutionId, setCreatedResolutionId] = useState("");
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [revisionBusy, setRevisionBusy] = useState(false);
-  const navigatingBlocked = command.busy || command.pending || revisionBusy;
+  const navigatingBlocked = command.busy || command.pending || revisionBusy || resolutionBusy || preparingResolution;
   useEffect(() => { onBusyChange(navigatingBlocked); return () => onBusyChange(false); }, [navigatingBlocked, onBusyChange]);
   const value = read.state.status === "ready" ? read.state.value : null;
   const request = value?.request;
   const direct = request?.action === "ORDER_CANCELLATION" || request?.action === "PICKUP_RESCHEDULE";
   const expired = useExpired(request?.expiresAt);
   useEffect(() => { let live = true; setDigest(""); if (request && direct && (request.action === "ORDER_CANCELLATION" || slotId)) void orderChangeDigest(request.action as OrderChangeAction, request.targetId, reasonCode, slotId).then(result => { if (live) setDigest(result); }); return () => { live = false; }; }, [request?.targetId, request?.action, reasonCode, slotId]);
+  useEffect(() => { let live = true; if (request?.action !== "POST_ACCEPTANCE_RESOLUTION") return; setDigest(""); if (validResolutionDraft(resolutionDraft)) void resolutionPlan(resolutionDraft).then(plan => resolutionDigest(request.targetId, plan)).then(result => { if (live) setDigest(result); }).catch(setResolutionError); return () => { live = false; }; }, [request?.action, request?.targetId, resolutionDraft]);
   const allowed = (name: Workflow["allowedActions"][number]) => !!value && !expired && value.allowedActions.includes(name);
-  const blocked = command.busy || command.pending || read.refreshing || revisionBusy;
+  const blocked = command.busy || command.pending || read.refreshing || revisionBusy || resolutionBusy || preparingResolution;
   const matches = !!request && digest === request.actionPayloadDigest;
   function decide() {
     if (!request || !allowed("DECIDE_SUPPORT_MANAGER") || !reason.trim() || (decision === "APPROVE" && !matches)) return;
@@ -143,27 +151,39 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
     const body = request.action === "ORDER_CANCELLATION" ? { ...common, action: "ORDER_CANCELLATION" as const, reasonCode } : { ...common, action: "PICKUP_RESCHEDULE" as const, newPickupSlotId: slotId };
     command.submit(JSON.stringify(body), async key => { const result = unwrap(await operationsApi.POST("/support/action-requests/{requestId}/executions", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body })); setExecution(result); setMessage(result.outcome === "RESOLUTION_REQUIRED" ? "수락 후 해결 업무로 전환해야 합니다" : "주문 변경을 처리했습니다"); }, () => undefined);
   }
+  async function createResolution() {
+    if (!request || !matches || !allowed("EXECUTE") || blocked || !validResolutionDraft(resolutionDraft)) return;
+    setPreparingResolution(true); setResolutionError(null);
+    try {
+      const plan = await resolutionPlan(resolutionDraft);
+      const body = { ...plan, requestId, revisionNumber: request.revisionNumber, expectedRequestVersion: request.requestVersion, expectedOrderVersion: request.targetVersion };
+      command.submit(JSON.stringify(body), async key => { const created = unwrap(await operationsApi.POST("/support/orders/{orderId}/post-acceptance-resolutions", { params: { path: { orderId: request.targetId }, header: { "Idempotency-Key": key } }, body })); setCreatedResolutionId(created.resolutionId); }, () => setMessage("해결 실행 계획을 등록했습니다. 단계별 처리를 시작해 주세요."));
+    } catch (error) { setResolutionError(error); } finally { setPreparingResolution(false); }
+  }
   return <section className="surface-card management-card management-workspace" aria-label="현재 주문 변경 요청">
     {message ? <p role="status">{message}</p> : null}
+    {createdResolutionId ? <ButtonLink variant="secondary" to={`/support/resolutions/${createdResolutionId}`}>생성된 해결 건 열기</ButtonLink> : null}
     {execution ? <div><p>{execution.outcome === "RESOLUTION_REQUIRED" ? "주문이 제조 단계로 진행되어 별도 해결이 필요합니다" : "주문 변경 실행 결과"} · <StatusText state={execution.currentTargetState} /></p><p>{execution.paymentRecoveryState === "REQUESTED" ? "환불 요청 접수" : execution.paymentRecoveryState === "NOT_REQUIRED" ? "추가 환불 처리 없음" : `환불 후속 처리 ${execution.paymentRecoveryState ?? "해당 없음"}`}</p></div> : null}
-    <CommandResult command={command} />
+    <CommandResult command={command} />{resolutionError ? <ErrorState error={resolutionError} /> : null}
     {read.state.status === "loading" ? <LoadingState label="현재 승인안을 읽는 중" /> : read.state.status === "failed" ? <ErrorState error={read.state.error} retry={read.reload} /> : request && value ? <>
       <h3>{direct ? orderActionLabels[request.action as OrderChangeAction] : "상담 후속 요청"}</h3>
       <p className="support-case-reference">요청 ID {requestId}</p>
       <StatusText state={request.state} label={requestStates[request.state]} />
       <dl className="detail-list"><div><dt>승인안 / 요청 버전</dt><dd>{request.revisionNumber} / {request.requestVersion}</dd></div><div><dt>대상 주문 버전</dt><dd>{request.targetVersion}</dd></div><div><dt>유효 시간</dt><dd>{shortDateTime.format(new Date(request.expiresAt))}까지</dd></div><div><dt>실행 담당자</dt><dd className="support-case-reference">{request.executorActorId}</dd></div></dl>
       {request.approvalSteps.map(step => <p key={step.stepType}>{step.stepType === "SUPPORT_MANAGER" ? "상담 관리자" : "운영 검토"} · <StatusText state={step.state} /></p>)}
-      <div className="button-row"><Button variant="secondary" onClick={read.reload} disabled={command.busy}>요청 상태 새로고침</Button><ButtonLink variant="secondary" to={`/support/action-requests/${requestId}`}>요청 검토 주소</ButtonLink><ButtonLink variant="secondary" to={`/support/follow-up?caseId=${request.caseId}&requestId=${requestId}`}>상담에서 요청 이어가기</ButtonLink></div>
-      {expired ? <InlineNotice tone="warning" title="승인안의 유효 시간이 지났습니다" description="현재 상태를 다시 확인하고 필요한 경우 새 요청을 시작해 주세요." /> : null}
-      {direct && (allowed("EXECUTE") || allowed("DECIDE_SUPPORT_MANAGER")) ? <>
-        <OrderPayloadFields action={request.action as OrderChangeAction} storeId={value.order?.storeId} reason={reasonCode} slotId={slotId} onReason={setReasonCode} onSlot={setSlotId} disabled={blocked} />
-        <InlineNotice tone={matches ? "info" : "warning"} title={matches ? "선택한 내용이 현재 승인안과 일치합니다" : "선택한 내용이 현재 승인안과 다릅니다"} description="승인 요청 때 선택한 취소 사유 또는 픽업 시간을 확인합니다. 내용이 다르면 새 승인안이 필요합니다." />
+      <div className="button-row"><Button variant="secondary" onClick={read.reload} disabled={command.busy || resolutionBusy || preparingResolution}>요청 상태 새로고침</Button><ButtonLink variant="secondary" to={`/support/action-requests/${requestId}`}>요청 검토 주소</ButtonLink><ButtonLink variant="secondary" to={`/support/follow-up?caseId=${request.caseId}&requestId=${requestId}`}>상담에서 요청 이어가기</ButtonLink></div>
+      {expired && request.state !== "EXECUTED" ? <InlineNotice tone="warning" title="승인안의 유효 시간이 지났습니다" description="현재 상태를 다시 확인하고 필요한 경우 새 요청을 시작해 주세요." /> : null}
+      {(direct || request.action === "POST_ACCEPTANCE_RESOLUTION") && !value.resolutionId && !createdResolutionId && (allowed("EXECUTE") || allowed("DECIDE_SUPPORT_MANAGER")) ? <>
+        {request.action === "POST_ACCEPTANCE_RESOLUTION" ? <SupportResolutionPlanFields value={resolutionDraft} onChange={setResolutionDraft} disabled={blocked} /> : <OrderPayloadFields action={request.action as OrderChangeAction} storeId={value.order?.storeId} reason={reasonCode} slotId={slotId} onReason={setReasonCode} onSlot={setSlotId} disabled={blocked} />}
+        <InlineNotice tone={matches ? "info" : "warning"} title={matches ? "선택한 내용이 현재 승인안과 일치합니다" : "선택한 내용이 현재 승인안과 다릅니다"} description="승인 요청 때 선택한 변경 내용과 증빙을 확인합니다. 내용이 다르면 새 승인안이 필요합니다." />
       </> : null}
       {allowed("DECIDE_SUPPORT_MANAGER") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); decide(); }}><SelectField label="승인 결정" value={decision} onValueChange={value => setDecision(value as typeof decision)} disabled={blocked}><option value="APPROVE">승인</option><option value="DENY">반려</option><option value="RETURN_FOR_REVISION">수정 요청</option></SelectField><TextAreaField label="결정 사유" value={reason} onValueChange={setReason} required maxLength={500} disabled={blocked} /><Button type="submit" disabled={blocked || (decision === "APPROVE" && !matches) || !reason.trim()}>승인 결정 기록</Button></form> : null}
-      {allowed("EXECUTE") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); execute(); }}>
+      {direct && allowed("EXECUTE") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); execute(); }}>
         {value.order?.state === "ACCEPTED" ? <TextField label="매장 동의 또는 위임 ID" value={authorizationId} onValueChange={setAuthorizationId} required disabled={blocked} description="매장이 비용 책임을 수락하고 발급한 현재 동의 ID를 입력합니다." /> : null}
         <Button type="submit" disabled={blocked || !matches || (value.order?.state === "ACCEPTED" && !authorizationId.trim())}>확인한 주문 변경 실행</Button>
       </form> : null}
+      {request.action === "POST_ACCEPTANCE_RESOLUTION" && allowed("EXECUTE") && !value.resolutionId && !createdResolutionId ? <Button disabled={blocked || !matches} onClick={() => void createResolution()}>확인한 해결 실행 계획 등록</Button> : null}
+      {value.resolutionId ? <SupportResolutionWorkspace key={value.resolutionId} resolutionId={value.resolutionId} onBusyChange={setResolutionBusy} /> : null}
       {allowed("REASSIGN") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); reassign(); }}><TextField label="새 실행 담당자 ID" value={assignee} onValueChange={setAssignee} required disabled={blocked} /><TextAreaField label="배정 사유" value={reason} onValueChange={setReason} required maxLength={500} disabled={blocked} /><Button variant="secondary" type="submit" disabled={blocked || !assignee.trim() || !reason.trim()}>상담과 요청 함께 재배정</Button></form> : null}
       {allowed("REVISE") && supportCase ? <><Button variant="secondary" disabled={blocked} onClick={() => setRevisionOpen(value => !value)}>승인안 수정</Button>{revisionOpen ? <CreateOrderRequest onBusyChange={setRevisionBusy} key={request.revisionNumber} supportCase={supportCase} verification={verification} revision={request} onCreated={() => { setRevisionOpen(false); setMessage("새 승인안을 제출했습니다"); read.reload(); }} /> : null}</> : null}
       {!expired && value.allowedActions.length === 0 ? <InlineNotice tone="info" title="현재 담당자가 실행할 명령이 없습니다" description="다른 담당자의 승인 대기, 권한 또는 요청 상태를 확인해 주세요." /> : null}

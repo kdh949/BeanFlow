@@ -5280,7 +5280,7 @@ export interface components {
          * @example EXECUTE
          * @enum {string}
          */
-        SupportOrderWorkflowAction: "REVISE" | "DECIDE_SUPPORT_MANAGER" | "REASSIGN" | "EXECUTE";
+        SupportOrderWorkflowAction: "REVISE" | "DECIDE_SUPPORT_MANAGER" | "REASSIGN" | "EXECUTE" | "ADVANCE_RESOLUTION";
         /**
          * @description 소속 매장의 수락된 주문에 대한 건별 동의 대상입니다. 상담원과 본인확인 식별자 및 증거를 제외합니다.
          * @example {
@@ -5312,6 +5312,7 @@ export interface components {
         /**
          * @description 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다.
          * @example {
+         *       "resolutionId": null,
          *       "request": {
          *         "requestId": "47fb7c92-195e-51a5-929c-6a6b891f764b",
          *         "caseId": "f33f27d6-8e6c-5712-8567-154b01cbb087",
@@ -5339,7 +5340,9 @@ export interface components {
          *           }
          *         ],
          *         "terminalExecutionId": null,
-         *         "terminalResolutionId": null
+         *         "terminalResolutionId": null,
+         *         "terminalCompensationId": null,
+         *         "terminalProfileChangeId": null
          *       },
          *       "order": null,
          *       "caseVersion": 2,
@@ -5349,6 +5352,11 @@ export interface components {
          *     }
          */
         SupportOrderWorkflowResource: {
+            /**
+             * Format: uuid
+             * @description 이 승인안으로 이미 생성된 수락 후 해결 건의 ID입니다.
+             */
+            resolutionId: string | null;
             request: components["schemas"]["SupportActionRequestResource"];
             /** Format: int64 */
             caseVersion: number;
@@ -9443,11 +9451,11 @@ export interface components {
             nextCursor: string | null;
         };
         /**
-         * @description 고객센터가 요청할 수 있는 주문 취소, 픽업 시간 변경, 수락 후 문제 해결 작업입니다.
+         * @description 주문 변경·수락 후 해결·보상·정보 정정의 승인 요청 유형입니다. 유형별 전용 명령으로 요청합니다.
          * @example ORDER_CANCELLATION
          * @enum {string}
          */
-        SupportActionType: "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE" | "POST_ACCEPTANCE_RESOLUTION";
+        SupportActionType: "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE" | "POST_ACCEPTANCE_RESOLUTION" | "GOODWILL_COMPENSATION" | "PROFILE_CHANGE";
         /**
          * @description 현재 주문 상태에서 고객센터 주문 변경이 가능한지 확인하는 요청입니다. 작업 종류, 주문 ID, 현재 버전, 본인 확인 세션을 포함합니다.
          * @example {
@@ -9671,7 +9679,9 @@ export interface components {
          *         }
          *       ],
          *       "terminalExecutionId": null,
-         *       "terminalResolutionId": null
+         *       "terminalResolutionId": null,
+         *       "terminalCompensationId": null,
+         *       "terminalProfileChangeId": null
          *     }
          */
         SupportActionRequestResource: {
@@ -9728,6 +9738,16 @@ export interface components {
              * @description 주문 변경 작업이 완료됐을 때 생성된 실행 ID입니다. 아직 실행되지 않았으면 `null`입니다.
              */
             terminalExecutionId: string | null;
+            /**
+             * Format: uuid
+             * @description 완료된 고객 보상 요청 식별자입니다.
+             */
+            terminalCompensationId: string | null;
+            /**
+             * Format: uuid
+             * @description 완료된 정보 정정 요청 식별자입니다.
+             */
+            terminalProfileChangeId: string | null;
             /**
              * Format: uuid
              * @description 수락 후 주문 문제 해결 계획이 만들어졌을 때의 ID입니다. 해당하지 않으면 `null`입니다.
