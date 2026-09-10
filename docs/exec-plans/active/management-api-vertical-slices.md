@@ -313,7 +313,7 @@ publication 후보 선택·결과 대사를 추가한다. 각 PR은 자체 Runti
 ### 알림 수동 복구 슬라이스 검증 (2026-09-10)
 
 - 소속 PR #155 head `10bcff3` 위에 알림 복구를 분리하고 V79를 작성했다. 선행 픽업 PR의 고객 주문
-  스냅샷 회귀 테스트 수정은 #154/#155를 거쳐 반영했다. 해당 수정은 고객 취소 23 + 픽업 관리 6 tests를 통과했다.
+  스냅샷 회귀 테스트 수정은 #154/#155를 거쳐 반영했다. 해당 수정은 고객 취소 21 + 픽업 관리 6 tests를 통과했다.
 - Passed: 알림 관리 5, 기존 알림 repository 12, 상태 4, 기존 publication 복구 9, Runtime API parity 1,
   Modulith 1, Flyway smoke 1 = 33 tests. SpotlessCheck, bootJar, 문서 검증도 통과했다.
 - 문서 검증: target 204 paths/231 operations, runtime 194 paths/221 operations, 414 schemas.
