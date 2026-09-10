@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-10
-- **Implementation owner:** [관리 API 실행 계획](../exec-plans/active/management-api-vertical-slices.md)
+- **Implementation owner:** [관리 API 실행 계획](../exec-plans/completed/management-api-vertical-slices.md)
 
 ## Context
 

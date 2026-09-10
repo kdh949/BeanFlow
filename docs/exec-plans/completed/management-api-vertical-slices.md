@@ -1,11 +1,11 @@
 # 매장 운영과 정산·장애 복구 관리 API 완성
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-09-10`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다. 기능별 변경은 조회·명령·권한·감사·멱등성·
 DB 제약·테스트·OpenAPI를 함께 제공하는 수직 슬라이스로 검토한다.
@@ -25,6 +25,12 @@ DB 제약·테스트·OpenAPI를 함께 제공하는 수직 슬라이스로 검�
 원격 CI 통과·PR 병합·배포 완료를 구분한다. UI 구현은 이 요청의 범위에 포함하지 않는다.
 
 ## Current State
+
+재고를 제외한 여섯 기능의 관리 API 28개, V74~V80, 권한·감사·멱등성과 복구 경로를 구현했다.
+일곱 기능 PR은 직전 branch를 base로 유지하며 최종 통합 로컬 검증 61 tests를 통과했다.
+전체 원격 검증의 최종 상태와 head 증거는 문서 하단에 기록한다.
+
+### 착수 당시 확인한 상태
 
 - 조사 checkout은 `main`의 `70733ce`였으며 미커밋 변경이 있다. 원래 checkout은 보존한다.
 - 작업용 worktree는 `/private/tmp/beanflow-management-api-20260910`, 최초 branch는
@@ -92,16 +98,16 @@ DB 제약·테스트·OpenAPI를 함께 제공하는 수직 슬라이스로 검�
 3. Store와 검색 profile 및 검색어는 같은 owner transaction으로 저장한다. 좌표는 범위와 SRID를 검증한다.
 4. 새 Store는 기본 주문 차단 상태로 생성한다. 계약·카탈로그·픽업 조건이 없는데 정상 주문 가능 상태를
    추정하지 않는다. 실제 값을 받지 않은 수수료·재고·픽업 슬롯을 생성하지 않는다.
-6. PickupSlot 정원은 `reservedCount + confirmedCount`보다 작아질 수 없다. 예약/확정이 있는 슬롯의
+5. PickupSlot 정원은 `reservedCount + confirmedCount`보다 작아질 수 없다. 예약/확정이 있는 슬롯의
    시간 변경은 거절하고, 슬롯 변경과 신규 예약은 같은 slot row lock으로 직렬화한다.
-7. 수수료 계약 구간은 store별 중첩되지 않는다. 새 버전은 과거 OrderSettlementInputSnapshot을 바꾸지 않는다.
+6. 수수료 계약 구간은 store별 중첩되지 않는다. 새 버전은 과거 OrderSettlementInputSnapshot을 바꾸지 않는다.
    ADR-071과 V18에 따라 기존 구간은 수정하지 않는다. 새 구간은 Store lock 아래 중첩 없이 추가한다.
    종료일이 없는 계약과 겹치는 등록은 409이며 계약 종료/정정 정책은 별도 결정이 필요하다.
-8. membership의 `(actorId,storeId)` 유일성과 현재 상태 검증을 유지한다. 철회와 authoring의 lock 순서를
+7. membership의 `(actorId,storeId)` 유일성과 현재 상태 검증을 유지한다. 철회와 authoring의 lock 순서를
    고정하여 이미 철회된 권한으로 새 명령이 commit되지 않도록 한다.
-9. 수동 복구는 동일 owner source만 재개하며 source payload·정산액·Provider key를 새로 추정하지 않는다.
+8. 수동 복구는 동일 owner source만 재개하며 source payload·정산액·Provider key를 새로 추정하지 않는다.
    결과불명 외부 발송을 새 delivery로 복제하지 않는다. 미지원 recovery target은 명시적으로 거절한다.
-10. 동일 actor/operation/key와 payload는 최초 결과를 재생하고 다른 payload는 409다. 권한 검증은 replay
+9. 동일 actor/operation/key와 payload는 최초 결과를 재생하고 다른 payload는 409다. 권한 검증은 replay
     전에 수행한다. business state, response ledger, Audit 실패는 함께 rollback한다.
 
 ## Architecture and Transaction Boundaries
@@ -149,10 +155,10 @@ Controller는 DTO·입력 검증·actor·correlation을 Application Service에 �
 
 ## API and Event Contracts
 
-아래는 endpoint 설계 후보이며 아직 runtime 계약으로 게시하지 않는다. 권한·정책과 기능별 원자성 설계가
-닫힌 뒤 해당 slice에서 target/runtime OpenAPI를 함께 추가한다.
+아래 HTTP surface는 기능별 owner 경계에 따라 구현했고 target/runtime OpenAPI에 함께 반영했다.
+세부 필드·상태·오류는 OpenAPI와 [운영 절차](../../operations/management-api-runbook.md)를 따른다.
 
-| Slice | 후보 HTTP surface | 검토해야 할 핵심 |
+| Slice | HTTP surface | 검토해야 할 핵심 |
 |---|---|---|
 | Dispute | Operations 목록/상세/검토/판정, same-store OWNER 철회 | 승인 intent와 별도 Adjustment commit, 동일 source 재시도 |
 | Store | Operations 매장 목록/상세/개설/식별 정보 교체 | profile 필수 필드, 좌표, 검색 동기화, 초기 주문 차단 |
@@ -170,7 +176,7 @@ Controller는 DTO·입력 검증·actor·correlation을 Application Service에 �
 4. 수수료 계약 관리 슬라이스 구현·검증·commit·child PR.
 5. membership 관리 슬라이스 구현·검증·commit·child PR.
 6. 일반 알림 복구와 event publication 복구를 각각 수직 슬라이스 commit·child PR로 구현·검증한다.
-8. combined regression, PR별 exact base/head ancestry·원격 CI 확인 및 completion 기록.
+7. combined regression, PR별 exact base/head ancestry·원격 CI 확인 및 completion 기록.
 
 ## Required Tests
 
@@ -193,11 +199,11 @@ Controller는 DTO·입력 검증·actor·correlation을 Application Service에 �
 ```sh
 ./gradlew test --tests '*RuntimeOpenApiParityTest' --tests '*AuthenticationPath*'
 ./gradlew spotlessCheck bootJar
-PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
+bash scripts/verify-docs.sh
 ```
 
-환경: Docker 29.7.2 응답 확인. production 테스트·빌드·runtime HTTP 실행은 아직 Not run이다.
-문서 verifier는 최초 metadata 형식 오류를 수정한 뒤 통과했다: verifier 단위 테스트 18개,
+최초 환경 확인: Docker 29.7.2 응답 확인. 아래는 구현 전 문서 검증 기록이며, 실제 기능/통합 검증은
+Progress와 최종 검증에 별도로 기록한다. 문서 verifier는 최초 metadata 형식 오류를 수정한 뒤 통과했다: verifier 단위 테스트 18개,
 target 199/runtime 189 operation, 377 schema, Business Policy 53개, ADR 123개, Markdown 350개,
 ExecPlan 97개 검증. 이 결과는 새 API 구현이나 runtime 성공의 증거가 아니다.
 
@@ -260,12 +266,12 @@ Provider credential 또는 개인 정보를 metric label/log에 추가하지 않
 
 - [x] 현재 main과 원래 미커밋 변경 조사; 별도 clean worktree 생성
 - [x] 원격 main/열린 PR 갱신 및 Inventory 정책·migration lane 충돌 확인
-- [x] 일곱 기능의 owner 경계·불변식·API/검증·PR 분할 초안 작성
+- [x] 재고를 제외한 여섯 기능의 owner 경계·불변식·API/검증·PR 분할 초안 작성
 - [x] 계획 metadata 보정 뒤 `scripts/verify-docs.sh` 통과
 - [x] 권한 승인 및 Inventory 제외 결정
 - [x] #150 exact head에서 사용자 승인 sequential writer 시작
-- [ ] 각 수직 슬라이스 구현·검증·commit·PR
-- [ ] combined validation 및 exact remote gates
+- [x] 각 수직 슬라이스 구현·검증·commit·PR
+- [x] combined validation 및 exact remote gates
 
 ## Surprises & Discoveries
 
@@ -281,11 +287,13 @@ Provider credential 또는 개인 정보를 metric label/log에 추가하지 않
 
 ## Outcomes & Retrospective
 
-구현 진행 중이다. 아래 검증 결과와 PR은 각 수직 슬라이스 완료 시 기록한다.
+여섯 기능의 구현·계약·기능별 검증을 마치고 일곱 Draft PR을 순서대로 연결했다.
+최종 통합 검증과 원격 head/base 및 ancestry 확인을 완료했다. 28개 새 API의 계약·권한·상태 전이와
+실패 복구를 제공하며 각 PR의 전체 backend CI도 통과했다. 병합·배포는 별도다.
 
 ## Revision Notes
 
-- 2026-09-10: 일곱 관리 기능 조사 결과를 구현 계획으로 정리하고 최신 #150과의 충돌을 기록했다.
+- 2026-09-10: 재고를 제외한 여섯 관리 기능 조사 결과를 구현 계획으로 정리하고 최신 #150과의 충돌을 기록했다.
 
 ### 수수료 계약 슬라이스 검증 (2026-09-10)
 
@@ -339,6 +347,28 @@ publication 후보 선택·결과 대사를 추가한다. 각 PR은 자체 Runti
   unsupported target 거절, corrupt payload 503, Audit rollback, concurrent 접수, 결과 저장 건별 실패 격리를 확인했다.
 - 전체 backend regression과 최종 원격 head/base 및 ancestry 확인을 이어서 수행한다.
 
+## 최종 검증
+
+- 일곱 Draft PR: [#151 이의제기](https://github.com/kdh949/BeanFlow/pull/151) →
+  [#152 매장](https://github.com/kdh949/BeanFlow/pull/152) →
+  [#153 픽업](https://github.com/kdh949/BeanFlow/pull/153) →
+  [#154 계약](https://github.com/kdh949/BeanFlow/pull/154) →
+  [#155 소속](https://github.com/kdh949/BeanFlow/pull/155) →
+  [#156 알림](https://github.com/kdh949/BeanFlow/pull/156) →
+  [#157 이벤트](https://github.com/kdh949/BeanFlow/pull/157).
+- 갱신 부모 `8882806`를 정상 merge로 전파했고 기능 commit을 보존했다. 각 PR은 직전 branch가 base다.
+- Passed: 최종 문서 검증 18 tests, target 207 paths/234 operations, runtime 197 paths/224 operations,
+  416 schemas, 54 policies, 124 ADRs, 352 Markdown files, 97 ExecPlans.
+- Passed: 최종 통합 코드 `9ca68aea023f197e691c9af388b9a343491d44d5`에서 일곱 기능 통합 52,
+  조회 계획 1, Flyway 1, runtime parity 1, Modulith 1, 인증 경로 1, 인증 ArchUnit 3, 테스트 격리 1
+  = 61 tests (failure/error/skip 0), spotlessCheck, bootJar, verifyCiTestShards.
+- 전체 로컬 `check bootJar`는 `dd95779`에서 중복 픽업 index의 조회 계획 회귀 실패를 발견한 뒤
+  중단했다. 이를 전체 통과로 표시하지 않는다. 픽업 PR `959449a`에서 원인을 수정했고 9 tests 및
+  최종 통합 61 tests를 통과했다. 최종 전체 backend gate는 각 최신 PR head의 CI 6개 shard로 확인한다.
+- Passed: 아래 일곱 기능 head의 전체 backend CI (preflight, backend-build, 6개 shard, 집계 build).
+  원격 base/head와 local head 및 모든 predecessor ancestry도 대조했다.
+- Not run: 운영 권한 발급, API의 운영 데이터 조작, 배포와 부하 측정. 관리 UI는 구현 범위 밖이다.
+
 ### 픽업 목록 인덱스 중복 제거 (2026-09-10)
 
 최종 stack 전체 검증에서 V35 조회 계획 회귀가 실패했다. V76의 목록 index는 V35 covering index와
@@ -348,3 +378,20 @@ publication 후보 선택·결과 대사를 추가한다. 각 PR은 자체 Runti
 
 - Passed: StoreCatalogQueryMigrationTest 1 + PickupSlotManagementIntegrationTest 6 + FlywayMigrationSmokeTest 1
   + RuntimeOpenApiParityTest 1 = 9 tests, spotlessCheck, bootJar. 기존 조회 계획 테스트 기준은 유지했다.
+
+### PR별 검증한 기능 head
+
+| PR | 검증한 기능 head | 전체 backend CI |
+|---|---|---|
+| #151 | `2d9a233d7907ace60b19acc3351e7cc505bf0ece` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34447078941) |
+| #152 | `cacab47a4187bb4304c09d86d4cf1ae8fbf5ff35` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34447099575) |
+| #153 | `959449ad350fe14b55dfc43ad3b961952793fc54` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34448097824) |
+| #154 | `33d2616ee3069f214835c7728a688517e988136e` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34448137650) |
+| #155 | `3e63dbd770a00db56ac203cf4277d32981a52c6c` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34448161282) |
+| #156 | `e8f7a022ea9c516628d3dab7cba632cc8a3b72b6` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34448198624) |
+| #157 | `9ca68aea023f197e691c9af388b9a343491d44d5` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34448240554) |
+
+CI Passed는 해당 head의 preflight, backend-build, 6개 test shard와 집계 build가 모두 성공한 상태다.
+관리 API 변경은 backend scope로 분류되어 각 PR의 frontend job은 Skipped이며, 상속한 부모 #150의
+frontend/CodeQL은 `8882806`에서 별도로 통과했다. 이 완료 기록 이후 commit은 문서만 변경하며
+위 최종 기능 head의 source, 테스트, OpenAPI, migration 및 build 설정을 변경하지 않는다.

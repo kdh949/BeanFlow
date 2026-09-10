@@ -1,7 +1,7 @@
 # 관리 API 운영 절차
 
-API 추가가 운영 grant 발급이나 배포를 수행하지는 않는다. 기존 운영 권한 발급 절차에서 목적별 grant를
-명시적으로 발급해야 한다. 원장 replay도 현재 grant 또는 ACTIVE membership을 다시 확인한다.
+API 추가가 운영 grant 발급이나 배포를 수행하지는 않는다.
+[운영 권한 발급 절차](operator-permission-bootstrap-runbook.md)에서 목적별 grant를 명시적으로 발급해야 한다. 원장 replay도 현재 grant 또는 ACTIVE membership을 다시 확인한다.
 
 ## 정산 이의제기
 
