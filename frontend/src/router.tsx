@@ -35,6 +35,7 @@ import { NotificationInboxPage } from "./features/notification/NotificationInbox
 import {
   RefreshCartPage,
   RefreshCheckoutPage,
+  RefreshLegacyCheckoutPage,
   RefreshCustomerHomePage,
   EventCampaignPage,
   RefreshCustomerOrderDetailPage,
@@ -65,7 +66,8 @@ export const router = createBrowserRouter([
             { path: "stores", element: <RefreshStoreSearchPage /> },
             { path: "stores/:storeId", element: <RefreshStoreDetailPage /> },
             { path: "cart", element: <RefreshCartPage /> },
-            { path: "checkout/:orderId", element: <RefreshCheckoutPage /> },
+            { path: "checkout/:orderId", element: <RefreshLegacyCheckoutPage /> },
+            { path: "orders/:orderReference/checkout", element: <RefreshCheckoutPage /> },
             { path: "orders/:orderReference", element: <RefreshCustomerOrderDetailPage /> },
           ] },
           { element: <CustomerShell />, children: [

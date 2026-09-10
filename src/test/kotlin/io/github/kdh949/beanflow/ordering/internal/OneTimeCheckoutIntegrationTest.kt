@@ -13,13 +13,23 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
+import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
+@AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class, PickupSlotPaymentDeadlineTestConfiguration::class)
 @BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
@@ -36,6 +46,8 @@ internal class OneTimeCheckoutIntegrationTest
         private val createOrderUseCase: CreateOrderUseCase,
         private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val checkoutService: OneTimeCheckoutService,
+        private val publicCheckout: PublicCheckoutService,
+        private val mockMvc: MockMvc,
         private val reconciliationWorker: PaymentReconciliationWorker,
         private val gateway: ScriptedTestPaymentGateway,
         private val testClock: PickupSlotPaymentDeadlineTestClock,
@@ -46,6 +58,78 @@ internal class OneTimeCheckoutIntegrationTest
             OrderCreationDatabaseFixture.clean(jdbcTemplate)
             gateway.reset()
             testClock.reset()
+        }
+
+        @Test
+        fun `public checkout resolves owned order and resumes the same ready attempt without another payment`() {
+            val fixture = OrderCreationFixture()
+            val orderId = pendingOrder(fixture, "public-checkout-order")
+            val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+            assertThat(publicCheckout.get(fixture.customerId, reference).canPay).isTrue()
+            assertThat(value<Long>("SELECT count(*) FROM payment_payment")).isZero()
+            val actor = jwt().jwt { it.subject(fixture.customerId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_CUSTOMER"))
+            val body =
+                mockMvc
+                    .perform(
+                        post(
+                            "/api/v1/me/orders/$reference/payment-attempts",
+                        ).with(actor).with(csrf()).header("Idempotency-Key", "public-checkout-key"),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.orderReference").value(reference))
+                    .andExpect(jsonPath("$.orderId").doesNotExist())
+                    .andReturn()
+                    .response.contentAsString
+            assertThat(body).doesNotContain(orderId.toString())
+            val first = publicCheckout.get(fixture.customerId, reference)
+            val second = publicCheckout.get(fixture.customerId, reference)
+            assertThat(first.readyAttempt).isNotNull()
+            assertThat(second.readyAttempt).isEqualTo(first.readyAttempt)
+            assertThat(value<Long>("SELECT count(*) FROM payment_payment")).isOne()
+            mockMvc
+                .perform(get("/api/v1/me/orders/$reference/checkout").with(actor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.canPay").value(true))
+                .andExpect(jsonPath("$.order.orderReference").value(reference))
+                .andExpect(jsonPath("$.order.orderId").doesNotExist())
+                .andExpect(jsonPath("$.readyAttempt.orderId").doesNotExist())
+            assertNoProviderCalls()
+        }
+
+        @Test
+        fun `public checkout never exposes an attempt outside customer ownership`() {
+            val fixture = OrderCreationFixture()
+            val orderId = pendingOrder(fixture, "public-checkout-ownership")
+            val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+            assertThatThrownBy { publicCheckout.get(UUID.randomUUID(), reference) }
+                .isInstanceOfSatisfying(DomainFailure::class.java) { assertThat(it.code).isEqualTo(FailureCode.ACCESS_DENIED) }
+            assertThatThrownBy { publicCheckout.prepare(UUID.randomUUID(), reference, "public-forbidden-key") }
+                .isInstanceOfSatisfying(DomainFailure::class.java) { assertThat(it.code).isEqualTo(FailureCode.ACCESS_DENIED) }
+            assertThat(value<Long>("SELECT count(*) FROM payment_payment")).isZero()
+        }
+
+        @Test
+        fun `public checkout omits uncertain payment attempts and expires an open checkout`() {
+            val fixture = OrderCreationFixture()
+            val orderId = pendingOrder(fixture, "public-checkout-unknown")
+            val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+            val attempt = checkoutService.prepare(fixture.customerId, orderId, "public-unknown-prepare")
+            gateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Unknown("TIMEOUT"))
+            checkoutService.confirm(
+                fixture.customerId,
+                attempt.paymentId,
+                "public-unknown-confirm",
+                OneTimePaymentConfirmationRequest("unknown-key", attempt.providerOrderId, 1000),
+            )
+            val current = publicCheckout.get(fixture.customerId, reference)
+            assertThat(current.paymentState).isEqualTo("UNKNOWN")
+            assertThat(current.canPay).isFalse()
+            assertThat(current.readyAttempt).isNull()
+            assertThat(gateway.oneTimeConfirmationCalls.get()).isOne()
+            testClock.set(value<Timestamp>("SELECT reservation_expires_at FROM ordering_order WHERE id = ?", orderId).toInstant())
+            val expired = publicCheckout.get(fixture.customerId, reference)
+            assertThat(expired.order.status).isEqualTo("EXPIRED")
+            assertThat(expired.canPay).isFalse()
+            assertThat(expired.readyAttempt).isNull()
         }
 
         @Test

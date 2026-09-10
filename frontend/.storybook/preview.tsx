@@ -1,3 +1,4 @@
+import { sb } from "storybook/test";
 import type { Preview } from "@storybook/react-vite";
 import { useEffect } from "react";
 import { createMemoryRouter, Outlet } from "react-router";
@@ -9,6 +10,8 @@ import { merchantSession } from "../src/features/auth/merchant/merchantSession";
 import "../src/design-system/styles.css";
 import "../src/styles.css";
 import { mswHandlers } from "./msw-handlers";
+
+sb.mock(import("../src/payment/toss.ts"), { spy: true });
 
 const storybookA11yTestMode =
   import.meta.env["VITE_STORYBOOK_A11Y_TEST"] === "off" ? "off" : "error";

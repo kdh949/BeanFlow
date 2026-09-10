@@ -2,6 +2,7 @@ import { ArrowRight, CalendarDays, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
+import { useAttentionRefresh } from "../shared/useAttentionRefresh";
 import { unwrap } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
 import { Button, ButtonLink, EmptyState, LoadingState, PageHeading, Tab, TabList, TabPanel, Tabs, TextField } from "../../design-system";
@@ -45,7 +46,9 @@ export function CustomerOrdersPage() {
     } catch (failure) { if (generation.current === requestGeneration) setError(failure); }
     finally { if (generation.current === requestGeneration) setLoadingMore(false); }
   }, [from, status, to]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); return () => { ++generation.current; }; }, [load]);
+  const refresh = useCallback(() => void load(), [load]);
+  useAttentionRefresh(refresh, { enabled: status === "ACTIVE" && !loadingMore, intervalMs: 30_000 });
 
   function update(next: Partial<{ status: CustomerOrderStatus; from: string; to: string }>) {
     const values = new URLSearchParams(searchParams);

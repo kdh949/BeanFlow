@@ -115,7 +115,7 @@ describe("customer coupon selection", () => {
       <MemoryRouter initialEntries={["/app/cart"]}>
         <Routes>
           <Route path="/app/cart" element={<RefreshCartPage />} />
-          <Route path="/app/checkout/:orderId" element={<p>결제 이동 완료</p>} />
+          <Route path="/app/orders/:orderReference/checkout" element={<p>결제 이동 완료</p>} />
         </Routes>
       </MemoryRouter>,
     );

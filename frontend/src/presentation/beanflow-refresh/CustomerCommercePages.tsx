@@ -175,7 +175,7 @@ function RefreshCartContents({ storeId, savedStoreName, lines }: { storeId: stri
     try {
       const created = unwrap(await customerApi.POST("/orders", { params: { header: { "Idempotency-Key": intent.current.keyFor(JSON.stringify(body)), ...(await customerCsrfHeader()) } }, body })).order as Order;
       intent.current.complete(); cart.clear(); couponSelection.clear(storeId);
-      navigate(created.payableKrw > 0 ? `/app/checkout/${created.orderId}` : `/app/orders/${created.publicReference}`);
+      navigate(created.payableKrw > 0 ? `/app/orders/${created.publicReference}/checkout` : `/app/orders/${created.publicReference}`);
     } catch (error) {
       const current = staleQuote(error);
       if (current) setQuoteState({ status: "stale", quote: current });

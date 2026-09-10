@@ -10,18 +10,22 @@ export type Resource<T> =
  * failed: it never falls back to an empty list or a zero value, because a
  * failure and "there is nothing" are different answers.
  */
-export function useResource<T>(load: () => Promise<T>): { state: Resource<T>; reload: () => void } {
+export function useResource<T>(load: () => Promise<T>): { state: Resource<T>; reload: () => void; refresh: () => void; refreshing: boolean } {
   const [state, setState] = useState<Resource<T>>({ status: "loading" });
+  const [refreshing, setRefreshing] = useState(false);
   const generation = useRef(0);
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (clear = true) => {
     const current = ++generation.current;
-    setState({ status: "loading" });
+    if (clear) setState({ status: "loading" });
+    setRefreshing(true);
     try {
       const value = await load();
       if (generation.current === current) setState({ status: "ready", value });
     } catch (error) {
       if (generation.current === current) setState({ status: "failed", error });
+    } finally {
+      if (generation.current === current) setRefreshing(false);
     }
   }, [load]);
 
@@ -31,5 +35,7 @@ export function useResource<T>(load: () => Promise<T>): { state: Resource<T>; re
   }, [run]);
 
   const reload = useCallback(() => void run(), [run]);
-  return { state, reload };
+  // Keep controls mounted during a background read; failed reads still remove the old value.
+  const refresh = useCallback(() => void run(false), [run]);
+  return { state, reload, refresh, refreshing };
 }

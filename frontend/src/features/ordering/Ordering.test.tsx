@@ -84,7 +84,7 @@ function renderCart() {
     <MemoryRouter initialEntries={["/app/cart"]}>
       <Routes>
         <Route path="/app/cart" element={<RefreshCartPage />} />
-        <Route path="/app/checkout/:orderId" element={<h1>결제 화면</h1>} />
+        <Route path="/app/orders/:orderReference/checkout" element={<h1>결제 화면</h1>} />
       </Routes>
     </MemoryRouter>,
   );

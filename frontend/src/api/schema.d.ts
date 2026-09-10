@@ -840,6 +840,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/orders/{orderReference}/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 공개 주문번호로 현재 결제 가능 여부 조회
+         * @description 소유 주문의 만료를 반영하고 Payment owner 상태를 조회합니다. 내부 orderId는 반환하지 않습니다.
+         *     canPay는 예약 유효/PENDING_PAYMENT/양수 결제액이며, Payment가 없거나 기존 Payment와 attempt가
+         *     모두 READY일 때만 true입니다. readyAttempt는 동일 준비 정보이며 새 Payment를 만들지 않습니다.
+         *     UNKNOWN, 확인 중 또는 종료 상태는 readyAttempt를 반환하지 않습니다.
+         */
+        get: operations["getPublicCheckout"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/orders/{orderReference}/payment-attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 공개 주문번호로 일회성 결제 준비
+         * @description 기존 Order/Payment 잠금과 멱등 결제 준비를 사용합니다. 서버 금액만 사용하며 내부 orderId를
+         *     반환하지 않습니다. READY 이외의 replay는 결제창을 열지 않고 현재 결제 결과를 조회해야 합니다.
+         */
+        post: operations["preparePublicCheckoutPayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/orders/{orderReference}/cancellations": {
         parameters: {
             query?: never;
@@ -6471,6 +6515,7 @@ export interface components {
             pickupNumber: string;
             storeName: string;
             status: components["schemas"]["OrderState"];
+            reservationExpiresAt?: components["schemas"]["DateTime"];
             orderedAt: components["schemas"]["DateTime"];
             pickupWindowStart: components["schemas"]["DateTime"];
             pickupWindowEnd: components["schemas"]["DateTime"];
@@ -6485,6 +6530,36 @@ export interface components {
              */
             cancellationPreview?: components["schemas"]["CustomerCancellationPreview"];
             paymentRecovery?: components["schemas"]["CancellationRefundRecoverySummary"];
+        };
+        OneTimePaymentAmount: {
+            value: components["schemas"]["MoneyKrw"];
+            currency: components["schemas"]["Currency"];
+        };
+        PublicOneTimePaymentAttempt: {
+            paymentId: components["schemas"]["Identifier"];
+            orderReference: string;
+            /** @enum {string} */
+            state: "READY" | "CONFIRMING" | "APPROVED" | "FAILED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW";
+            providerOrderId: string;
+            customerKey: string;
+            orderName: string;
+            amount: components["schemas"]["OneTimePaymentAmount"];
+            /** @constant */
+            method: "CARD";
+            /** Format: uri */
+            successUrl: string;
+            /** Format: uri */
+            failUrl: string;
+            expiresAt: components["schemas"]["DateTime"];
+            updatedAt: components["schemas"]["DateTime"];
+            correlationId: string;
+        };
+        PublicCheckout: {
+            order: components["schemas"]["CustomerOrderDetail"];
+            canPay: boolean;
+            paymentId?: components["schemas"]["Identifier"];
+            paymentState?: string;
+            readyAttempt?: components["schemas"]["PublicOneTimePaymentAttempt"];
         };
         /**
          * @description 공개 주문 참조번호로 요청한 고객 취소 결과입니다. 내부 주문 ID 대신 공개 참조번호와 취소 상태, 환불 복구 요약, 추적 정보를 제공합니다.
@@ -6627,10 +6702,6 @@ export interface components {
             /** @constant */
             sdkVersion: "V2_STANDARD";
             clientKey: string;
-        };
-        OneTimePaymentAmount: {
-            value: components["schemas"]["MoneyKrw"];
-            currency: components["schemas"]["Currency"];
         };
         OneTimePaymentAttempt: {
             paymentId: components["schemas"]["Identifier"];
@@ -13146,6 +13217,76 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getPublicCheckout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description 사람이 읽을 수 있는 공개 주문번호입니다. `BF-XXXX-XXXX` 형식이며 서버는 대문자로 정리합니다. 주문번호만으로 접근 권한이 생기지는 않습니다. 본인 또는 해당 매장 범위가 아니면 403, 번호가 없으면 404를 반환합니다.
+                 * @example BF-7K4M-Q2XZ
+                 */
+                orderReference: components["parameters"]["OrderReference"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 주문과 결제 가능 여부 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCheckout"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    preparePublicCheckoutPayment: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path: {
+                /**
+                 * @description 사람이 읽을 수 있는 공개 주문번호입니다. `BF-XXXX-XXXX` 형식이며 서버는 대문자로 정리합니다. 주문번호만으로 접근 권한이 생기지는 않습니다. 본인 또는 해당 매장 범위가 아니면 403, 번호가 없으면 404를 반환합니다.
+                 * @example BF-7K4M-Q2XZ
+                 */
+                orderReference: components["parameters"]["OrderReference"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 준비되거나 재생된 결제 시도 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicOneTimePaymentAttempt"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

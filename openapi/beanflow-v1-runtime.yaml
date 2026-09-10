@@ -278,6 +278,10 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1events~1{campaignId}~1claims"
   /me/orders/{orderReference}:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1orders~1{orderReference}"
+  /me/orders/{orderReference}/checkout:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1orders~1{orderReference}~1checkout"
+  /me/orders/{orderReference}/payment-attempts:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1orders~1{orderReference}~1payment-attempts"
   /me/orders/{orderReference}/cancellations:
     post:
       tags:

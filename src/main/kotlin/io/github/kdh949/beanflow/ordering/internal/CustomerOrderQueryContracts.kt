@@ -71,4 +71,5 @@ internal data class CustomerOrderDetailResponse(
     val lines: List<CustomerOrderLineResponse>,
     val allowedActions: List<CustomerOrderAllowedAction>,
     val paymentRecovery: CancellationRefundRecoverySummary? = null,
+    val reservationExpiresAt: Instant? = null,
 )

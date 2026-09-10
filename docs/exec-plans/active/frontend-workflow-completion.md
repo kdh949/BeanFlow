@@ -139,7 +139,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] C1: 검색 버튼 겹침·즐겨찾기 긴 내용·중요 글자 토큰 수정. Storybook MCP 전체 324개 interaction/a11y Passed, tsc/check:design Passed. 320/390px 렌더링 확인.
 - [x] C2: 픽업 날짜/요일·주간 운영시간·현재 견적 이름·이미지 lease 재조회 구현. 관련 Storybook 11개 interaction/a11y와 날짜 단위 3개 Passed. 만료 응답은 명시적 실패.
 - [x] C3: 메뉴별 공개 구성 조회, 인증 경로, bounded owner projection, 구성 선택/품절/조회 실패 구현. PostgreSQL·쿼리 수·인증·Runtime parity 36개 Passed; 관련 Storybook 6개 Passed; frontend 단위 217개 및 boundary/copy 21개 Passed, typecheck/check:design Passed. 생성 타입 21개 누락 경로도 동기화(F17).
-- [ ] C4–C5 고객 거래 정합성 구현·검증·커밋·PR.
+- [x] C4: 공개 주문번호 checkout/기존 READY 시도 재개, UNKNOWN 차단, 예약 만료·주문 갱신 실패·종료 타임라인·화면 복귀 갱신 구현. 관련 PostgreSQL/계약 21개, Storybook 10개, frontend 단위 221개와 boundary/copy 21개, typecheck/check:design/docs Passed. 결제 SDK는 테스트에서 명시적으로 대체했으며 실결제는 실행하지 않았다.
+- [ ] C5 고객 진입/코드 분할 및 고객 PR 검증·생성.
 - [ ] S1–S2 점주 매장 관리 구현·검증·커밋·PR.
 - [ ] O1–O3 운영 매장/정책 구현·검증·커밋·PR.
 - [ ] R1–R3 이의/복구 구현·검증·커밋·PR.

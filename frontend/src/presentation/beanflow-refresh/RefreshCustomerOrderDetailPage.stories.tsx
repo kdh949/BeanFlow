@@ -41,9 +41,34 @@ export const CancellableBeforeAcceptance: Story = {
 
 export const Cancelled: Story = {
   parameters: { msw: { handlers: [...signedInHandlers, ...orderDetailHandlers({ status: "CANCELLED", allowedActions: [] })] } },
-  play: async ({ canvas }) => {
+  play: async ({ canvas, canvasElement }) => {
     await expect(await canvas.findByText("취소된 주문이에요")).toBeVisible();
     await expect(canvas.queryByText("픽업 번호")).not.toBeInTheDocument();
+    await expect(canvasElement.querySelector('[aria-current="step"]')).toBeNull();
+  },
+};
+
+let detailFailed = false;
+export const FailedRefresh: Story = {
+  tags: ["!autodocs"],
+  beforeEach: () => { detailFailed = false; },
+  parameters: { msw: { handlers: [http.get("/api/v1/me/orders/:orderReference", () => detailFailed ? HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE" }, { status: 503 }) : HttpResponse.json(orderDetail)), ...signedInHandlers] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("픽업할 준비가 끝났어요")).toBeVisible();
+    detailFailed = true;
+    await userEvent.click(canvas.getByRole("button", { name: "새로고침" }));
+    await expect(await canvas.findByRole("alert")).toBeVisible();
+    await expect(canvas.queryByText("픽업할 준비가 끝났어요")).not.toBeInTheDocument();
+    detailFailed = false;
+    await userEvent.click(canvas.getByRole("button", { name: /다시 시도/ }));
+    await expect(await canvas.findByText("픽업할 준비가 끝났어요")).toBeVisible();
+  },
+};
+
+export const PaymentCanBeCheckedAgain: Story = {
+  parameters: { msw: { handlers: [...signedInHandlers, ...orderDetailHandlers({ status: "PENDING_PAYMENT", allowedActions: ["CANCEL"] })] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("link", { name: "결제 확인·이어하기" })).toHaveAttribute("href", `/app/orders/${orderDetail.orderReference}/checkout`);
   },
 };
 

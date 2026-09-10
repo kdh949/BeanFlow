@@ -469,6 +469,54 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/orders/{orderReference}/checkout:
+    get:
+      tags: [Ordering]
+      operationId: getPublicCheckout
+      summary: 공개 주문번호로 현재 결제 가능 여부 조회
+      security: [{ customerSession: [] }]
+      description: |
+        소유 주문의 만료를 반영하고 Payment owner 상태를 조회합니다. 내부 orderId는 반환하지 않습니다.
+        canPay는 예약 유효/PENDING_PAYMENT/양수 결제액이며, Payment가 없거나 기존 Payment와 attempt가
+        모두 READY일 때만 true입니다. readyAttempt는 동일 준비 정보이며 새 Payment를 만들지 않습니다.
+        UNKNOWN, 확인 중 또는 종료 상태는 readyAttempt를 반환하지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/OrderReference"
+      responses:
+        "200":
+          description: 현재 주문과 결제 가능 여부
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicCheckout" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/orders/{orderReference}/payment-attempts:
+    post:
+      tags: [Ordering]
+      operationId: preparePublicCheckoutPayment
+      summary: 공개 주문번호로 일회성 결제 준비
+      security: [{ customerSession: [] }]
+      description: |
+        기존 Order/Payment 잠금과 멱등 결제 준비를 사용합니다. 서버 금액만 사용하며 내부 orderId를
+        반환하지 않습니다. READY 이외의 replay는 결제창을 열지 않고 현재 결제 결과를 조회해야 합니다.
+      parameters:
+        - $ref: "#/components/parameters/OrderReference"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      responses:
+        "200":
+          description: 준비되거나 재생된 결제 시도
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicOneTimePaymentAttempt" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /me/orders/{orderReference}/cancellations:
     post:
       tags: [Ordering]
@@ -10602,6 +10650,16 @@ components:
         preparingAt: { $ref: "#/components/schemas/DateTime" }
         readyAt: { $ref: "#/components/schemas/DateTime" }
         completedAt: { $ref: "#/components/schemas/DateTime" }
+    PublicCheckout:
+      type: object
+      additionalProperties: false
+      required: [order, canPay]
+      properties:
+        order: { $ref: "#/components/schemas/CustomerOrderDetail" }
+        canPay: { type: boolean }
+        paymentId: { $ref: "#/components/schemas/Identifier" }
+        paymentState: { type: string }
+        readyAttempt: { $ref: "#/components/schemas/PublicOneTimePaymentAttempt" }
     CustomerOrderDetail:
       type: object
       additionalProperties: false
@@ -10618,6 +10676,7 @@ components:
         pickupNumber: { type: string, minLength: 1, maxLength: 32 }
         storeName: { type: string, minLength: 1, maxLength: 200 }
         status: { $ref: "#/components/schemas/OrderState" }
+        reservationExpiresAt: { $ref: "#/components/schemas/DateTime" }
         orderedAt: { $ref: "#/components/schemas/DateTime" }
         pickupWindowStart: { $ref: "#/components/schemas/DateTime" }
         pickupWindowEnd: { $ref: "#/components/schemas/DateTime" }
@@ -13898,6 +13957,50 @@ components:
           $ref: "#/components/schemas/Identifier"
         orderId:
           $ref: "#/components/schemas/Identifier"
+        state:
+          type: string
+          enum: [READY, CONFIRMING, APPROVED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
+        providerOrderId:
+          type: string
+          minLength: 6
+          maxLength: 64
+        customerKey:
+          type: string
+          minLength: 1
+          maxLength: 64
+        orderName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        amount:
+          $ref: "#/components/schemas/OneTimePaymentAmount"
+        method:
+          type: string
+          const: CARD
+        successUrl:
+          type: string
+          format: uri
+        failUrl:
+          type: string
+          format: uri
+        expiresAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+        correlationId:
+          type: string
+          minLength: 1
+    PublicOneTimePaymentAttempt:
+      type: object
+      additionalProperties: false
+      required:
+        [paymentId, orderReference, state, providerOrderId, customerKey, orderName, amount, method, successUrl, failUrl, expiresAt, updatedAt, correlationId]
+      properties:
+        paymentId:
+          $ref: "#/components/schemas/Identifier"
+        orderReference:
+          type: string
+          pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
         state:
           type: string
           enum: [READY, CONFIRMING, APPROVED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW]

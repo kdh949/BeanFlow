@@ -115,6 +115,11 @@ export const checkoutOrder = {
   updatedAt: "2026-08-15T02:50:00Z",
 };
 
+export const publicCheckout = {
+  order: { ...orderDetail, status: "PENDING_PAYMENT", lifecycle: undefined, allowedActions: ["CANCEL"], reservationExpiresAt: checkoutOrder.reservationExpiresAt, pricing: { subtotalKrw: 12800, couponDiscountKrw: 0, pointsAppliedKrw: 0, payableKrw: 12800, currency: "KRW" }, lines: checkoutOrder.lines.map((line, index) => ({ lineSequence: index + 1, menuName: line.menuName, optionNames: line.optionNames, quantity: line.quantity, lineTotalKrw: line.subtotalKrw })) },
+  canPay: true,
+};
+
 export function payment(approvalState: string) {
   return {
     paymentId: ids.payment,
@@ -250,6 +255,7 @@ export const catalogHandlers = [
 ];
 
 export const checkoutHandlers = [
+  http.get("/api/v1/me/orders/:orderReference/checkout", () => HttpResponse.json(publicCheckout)),
   http.get("/api/v1/orders/:orderId", () => HttpResponse.json(checkoutOrder)),
 ];
 

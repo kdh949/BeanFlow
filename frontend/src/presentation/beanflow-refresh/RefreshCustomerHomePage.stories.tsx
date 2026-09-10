@@ -57,3 +57,16 @@ export const LongStoreName: Story = {
   parameters: { msw: { handlers: [http.get("/api/v1/me/store-recommendations", () => HttpResponse.json({ items: [{ store: { ...customerStore, name: "빈플로우 서울시청광장 테이크아웃 전문점", image: { url: "/demo/catalog/store-01.webp" } }, reason: "FAVORITE" }] })), ...homeHandlers] } },
   play: async ({ canvas }) => { await expect(await canvas.findByText("자주 찾는 매장")).toBeVisible(); await expect(canvas.queryByText("최근 주문한 매장")).not.toBeInTheDocument(); },
 };
+
+let activeReady = false;
+export const RefreshOnReturn: Story = {
+  tags: ["!autodocs"],
+  beforeEach: () => { activeReady = false; },
+  parameters: { msw: { handlers: [http.get("/api/v1/me/orders", ({ request }) => new URL(request.url).searchParams.get("status") === "ACTIVE" ? HttpResponse.json({ items: [{ ...orderSummary, status: activeReady ? "READY" : "PAID" }], page: { nextCursor: null } }) : HttpResponse.json({ items: [], page: { nextCursor: null } })), ...homeHandlers] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("link", { name: /A-142.*아이스 아메리카노/ })).toBeVisible();
+    activeReady = true;
+    window.dispatchEvent(new Event("focus"));
+    await expect(await canvas.findByRole("link", { name: /A-142 준비 완료/ })).toBeVisible();
+  },
+};

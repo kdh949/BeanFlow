@@ -8,11 +8,12 @@ import {
   Timer,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, idempotencyKey, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
 import { couponSelection, useCouponSelection } from "../../features/customer/couponSelection";
+import { useAttentionRefresh } from "../../features/shared/useAttentionRefresh";
 import { useResource } from "../../features/shared/useResource";
 import { pickupDateTimeLabel } from "../../features/discovery/storeDisplay";
 import { shortDateTime, shortTime, won } from "../../lib/format";
@@ -25,47 +26,83 @@ import { Button, ButtonLink, RadioCard, RadioGroup, SelectField, TextAreaField }
 import { PointUseField, usePointUse } from "../../features/loyalty/PointUseField";
 
 type Order = components["schemas"]["Order"];
+type PublicCheckout = components["schemas"]["PublicCheckout"];
 type ReorderPriceComparison = components["schemas"]["ReorderPriceComparison"];
 type CustomerOrderDetail = components["schemas"]["CustomerOrderDetail"];
 type CancellationReasonCode = components["schemas"]["CancellationReasonCode"];
 type PickupSlot = components["schemas"]["PickupSlot"];
 
-export function RefreshCheckoutPage() {
+/** Compatibility for existing saved checkout URLs; new journeys use the public reference. */
+export function RefreshLegacyCheckoutPage() {
   const { orderId = "" } = useParams();
+  const resource = useResource<Order>(useCallback(async () => unwrap(await customerApi.GET("/orders/{orderId}", { params: { path: { orderId } } })), [orderId]));
+  if (resource.state.status === "loading") return <RefreshLoading label="주문서를 확인하는 중" />;
+  if (resource.state.status === "failed") return <RefreshError error={resource.state.error} retry={resource.reload} />;
+  return <Navigate to={`/app/orders/${resource.state.value.publicReference}/checkout`} replace />;
+}
+
+export function RefreshCheckoutPage() {
+  const { orderReference = "" } = useParams();
   const routeState = useLocation().state as { reorderPriceComparison?: ReorderPriceComparison } | null;
   const [failure, setFailure] = useState<unknown>(null);
   const [paying, setPaying] = useState(false);
-  const resource = useResource<Order>(useCallback(async () => unwrap(await customerApi.GET("/orders/{orderId}", { params: { path: { orderId } } })), [orderId]));
+  const [deadlineReached, setDeadlineReached] = useState(false);
+  const expiryRefresh = useRef("");
+  const read = useCallback(async () => unwrap(await customerApi.GET("/me/orders/{orderReference}/checkout", { params: { path: { orderReference } } })), [orderReference]);
+  const resource = useResource<PublicCheckout>(read);
+  const { state, reload } = resource;
+  useAttentionRefresh(resource.refresh, { enabled: !paying && state.status !== "loading", intervalMs: 15_000 });
+  useEffect(() => {
+    if (state.status !== "ready") return;
+    const deadline = state.value.order.reservationExpiresAt;
+    const remaining = deadline ? Date.parse(deadline) - Date.now() : 0;
+    setDeadlineReached(remaining <= 0);
+    if (state.value.order.status !== "PENDING_PAYMENT" || !deadline) return;
+    const key = `${orderReference}.${deadline}`;
+    if (remaining <= 0) { if (expiryRefresh.current !== key) { expiryRefresh.current = key; reload(); } return; }
+    const timer = window.setTimeout(() => { expiryRefresh.current = key; setDeadlineReached(true); reload(); }, Math.min(remaining, 2_147_483_647));
+    return () => window.clearTimeout(timer);
+  }, [state, reload, orderReference]);
 
-  async function pay(order: Order) {
-    if (order.state !== "PENDING_PAYMENT") return;
+  async function pay() {
+    if (paying) return;
     setPaying(true); setFailure(null);
     try {
-      const attempt = unwrap(await customerApi.POST("/orders/{orderId}/payment-attempts", { params: { path: { orderId }, header: { "Idempotency-Key": idempotencyKey(`payment-attempt.${orderId}`), ...(await customerCsrfHeader()) } } }));
+      const current = await read();
+      if (!current.canPay || !current.order.reservationExpiresAt || Date.parse(current.order.reservationExpiresAt) <= Date.now()) { reload(); return; }
+      const attempt = current.readyAttempt ?? unwrap(await customerApi.POST("/me/orders/{orderReference}/payment-attempts", { params: { path: { orderReference }, header: { "Idempotency-Key": idempotencyKey(`payment-attempt.${orderReference}`), ...(await customerCsrfHeader()) } } }));
+      if (attempt.state !== "READY" || Date.parse(attempt.expiresAt) <= Date.now()) { reload(); return; }
       attemptStorage.save(attempt);
       const config = unwrap(await customerApi.GET("/payment-config"));
       await requestTossStandardPayment(config.clientKey, { customerKey: attempt.customerKey, method: attempt.method, amount: attempt.amount, orderId: attempt.providerOrderId, orderName: attempt.orderName, successUrl: attempt.successUrl, failUrl: attempt.failUrl });
-    } catch (error) { setFailure(error); setPaying(false); }
+    } catch (error) { setFailure(error); }
+    finally { setPaying(false); reload(); }
   }
 
-  if (resource.state.status === "loading") return <div className="bfr-page"><RefreshLoading label="주문서를 불러오는 중" /></div>;
-  if (resource.state.status === "failed") return <div className="bfr-page"><RefreshError error={resource.state.error} retry={resource.reload} /></div>;
-  const order = resource.state.value;
+  if (state.status === "loading") return <div className="bfr-page"><RefreshLoading label="주문서를 불러오는 중" /></div>;
+  if (state.status === "failed") return <div className="bfr-page"><RefreshError error={state.error} retry={reload} /></div>;
+  const checkout = state.value;
+  const order = checkout.order;
   return (
     <div className="bfr-page bfr-checkout bfr-has-page-topbar">
-      <RefreshMobileTopbar title="결제" backTo={`/app/orders/${order.publicReference}`} />
-      {order.state === "PENDING_PAYMENT" && order.reservationExpiresAt ? <p className="bfr-lease" role="status"><Timer size={16} /><span><strong>결제 가능 시간</strong>{shortDateTime.format(new Date(order.reservationExpiresAt))}까지 결제해 주세요.</span></p> : null}
-      <section className="bfr-checkout-store"><div><strong>{order.storeName}</strong><span>픽업 시간 {pickupDateTimeLabel(order.pickupWindowStart)}</span></div><Link to={`/app/orders/${order.publicReference}`}>주문 내역 <ChevronRight size={15} /></Link></section>
+      <RefreshMobileTopbar title="결제" backTo={`/app/orders/${order.orderReference}`} />
+      {resource.refreshing ? <p role="status">최신 결제 상태를 확인하는 중이에요.</p> : null}
+      {order.status === "PENDING_PAYMENT" && order.reservationExpiresAt ? <p className="bfr-lease" role="status"><Timer size={16} /><span><strong>결제 가능 시간</strong>{shortDateTime.format(new Date(order.reservationExpiresAt))}까지 결제해 주세요.</span></p> : null}
+      <section className="bfr-checkout-store"><div><strong>{order.storeName}</strong><span>픽업 시간 {pickupDateTimeLabel(order.pickupWindowStart)}</span></div><Link to={`/app/orders/${order.orderReference}`}>주문 내역 <ChevronRight size={15} /></Link></section>
       {routeState?.reorderPriceComparison?.hasPriceChanges ? <section className="bfr-price-change" role="status"><strong>현재 가격으로 다시 계산했어요</strong><span>이전 {won.format(routeState.reorderPriceComparison.sourceSubtotalKrw)} → 현재 {won.format(routeState.reorderPriceComparison.currentSubtotalKrw)}</span></section> : null}
       <section className="bfr-checkout-card">
         <header><h2>주문 메뉴</h2><span>{order.lines.length}개 품목</span></header>
-        {order.lines.map((line) => <div className="bfr-checkout-line" key={line.orderLineId}><span><strong>{line.menuName}</strong><small>{line.optionNames.join(" · ") || "기본 옵션"} · {line.quantity}개</small></span><b>{won.format(line.cashPaidKrw)}</b></div>)}
-        <Pricing pricing={{ subtotalKrw: order.subtotalKrw, couponDiscountKrw: order.couponDiscountKrw, pointsAppliedKrw: order.pointsAppliedKrw, payableKrw: order.payableKrw }} />
+        {order.lines.map((line) => <div className="bfr-checkout-line" key={line.lineSequence}><span><strong>{line.menuName}</strong><small>{line.optionNames.join(" · ") || "기본 옵션"} · {line.quantity}개</small></span><b>{won.format(line.lineTotalKrw)}</b></div>)}
+        <Pricing pricing={order.pricing} />
       </section>
       <section className="bfr-payment-method"><header><h2>결제 수단</h2></header><div><span><CreditCard size={22} /></span><p><strong>다음 결제창에서 카드·간편결제를 선택해 주세요.</strong><small>Toss Payments 결제창으로 이동합니다.</small></p></div><p><ShieldCheck size={14} />BeanFlow는 카드 번호를 저장하거나 처리하지 않습니다.</p></section>
-      {order.state === "EXPIRED" ? <p className="bfr-inline-status" role="alert">결제 시간이 만료됐어요. 주문 상태에서 새 주문이 필요한지 확인해 주세요.</p> : null}
+      {order.status === "EXPIRED" ? <p className="bfr-inline-status" role="alert">결제 시간이 만료됐어요. 주문 상태에서 새 주문이 필요한지 확인해 주세요.</p> : null}
+      {!checkout.canPay && order.status === "PENDING_PAYMENT" ? <p role="status">결제 결과를 확인하고 있어요. 새 결제를 시작하지 마세요.</p> : null}
+      {deadlineReached && order.status === "PENDING_PAYMENT" && checkout.canPay ? <p role="status">결제 가능한 시간을 다시 확인해 주세요.</p> : null}
+      {checkout.paymentId && !checkout.canPay ? <ButtonLink variant="secondary" to={`/app/payments/${checkout.paymentId}/success`}>결제 처리 상태 확인</ButtonLink> : null}
       {failure ? <RefreshError error={failure} /> : null}
-      <Button variant="brand" size="xl" block loading={paying} disabled={order.state !== "PENDING_PAYMENT"} onClick={() => void pay(order)}>{paying ? "Toss 결제창을 여는 중" : `${won.format(order.payableKrw)} 결제하기`}</Button>
+      <Button variant="brand" size="xl" block loading={paying} disabled={!checkout.canPay || deadlineReached} onClick={() => void pay()}>{paying ? "Toss 결제창을 여는 중" : `${won.format(order.pricing.payableKrw)} 결제하기`}</Button>
+      <div><Button variant="ghost" onClick={reload} disabled={paying}>현재 상태 새로고침</Button></div>
       <p className="bfr-legal">결제 버튼을 누르면 주문 내용과 결제 진행에 동의합니다.</p>
     </div>
   );
@@ -78,6 +115,7 @@ export function RefreshCustomerOrderDetailPage() {
   const [nonce, setNonce] = useState(0);
   const reload = useCallback(() => setNonce((value) => value + 1), []);
 
+  useAttentionRefresh(reload);
   useEffect(() => { setOrder(null); setError(null); }, [orderReference]);
   useEffect(() => {
     let disposed = false; let timer = 0;
@@ -86,7 +124,7 @@ export function RefreshCustomerOrderDetailPage() {
         const next = unwrap(await customerApi.GET("/me/orders/{orderReference}", { params: { path: { orderReference } } }));
         if (disposed) return; setOrder(next); setError(null);
         if (isLive(next.status) || ["REQUESTED", "PROCESSING"].includes(next.paymentRecovery?.state ?? "")) timer = window.setTimeout(() => void load(), 5_000);
-      } catch (failure) { if (!disposed) setError(failure); }
+      } catch (failure) { if (!disposed) { setOrder(null); setError(failure); timer = window.setTimeout(() => void load(), 5_000); } }
     }
     void load(); return () => { disposed = true; window.clearTimeout(timer); };
   }, [orderReference, nonce]);
@@ -108,6 +146,7 @@ export function RefreshCustomerOrderDetailPage() {
       {order.paymentRecovery ? <PaymentRecovery recovery={order.paymentRecovery} /> : null}
       {error ? <RefreshError error={error} retry={reload} /> : null}
       <div className="bfr-order-actions">
+        {order.status === "PENDING_PAYMENT" ? <ButtonLink variant="brand" block to={`/app/orders/${order.orderReference}/checkout`}>결제 확인·이어하기</ButtonLink> : null}
         {order.allowedActions.includes("CANCEL") ? <RefreshCancelAction order={order} onDone={reload} /> : null}
         {order.allowedActions.includes("REORDER") ? <RefreshReorderAction order={order} /> : null}
         <Button block variant="ghost" onClick={reload}><RefreshCw size={16} />새로고침</Button>
@@ -155,7 +194,7 @@ function RefreshReorderAction({ order }: { order: CustomerOrderDetail }) {
     try {
       const created = unwrap(await customerApi.POST("/me/orders/{orderReference}/reorders", { params: { path: { orderReference: order.orderReference }, header: { "Idempotency-Key": intent.current.keyFor(JSON.stringify({ orderReference: order.orderReference, ...body })), ...(await customerCsrfHeader()) } }, body }));
       intent.current.complete(); couponSelection.clear(order.storeId);
-      navigate(created.order.payableKrw > 0 ? `/app/checkout/${created.order.orderId}` : `/app/orders/${created.order.publicReference}`, { state: { reorderPriceComparison: created.priceComparison } });
+      navigate(created.order.payableKrw > 0 ? `/app/orders/${created.order.publicReference}/checkout` : `/app/orders/${created.order.publicReference}`, { state: { reorderPriceComparison: created.priceComparison } });
     } catch (error) { if (error instanceof ApiRequestError && error.code === "IDEMPOTENCY_KEY_REUSED") intent.current.rotate(); setFailure(error); } finally { setSubmitting(false); }
   }
   if (!open) return <Button block variant="secondary" onClick={() => setOpen(true)}><RotateCcw size={16} />같은 메뉴로 다시 주문</Button>;
@@ -173,7 +212,7 @@ function OrderTimeline({ order }: { order: CustomerOrderDetail }) {
   const steps = [["paidAt", "결제 완료"], ["acceptedAt", "주문 접수"], ["preparingAt", "제조 중"], ["readyAt", "픽업 준비"], ["completedAt", "픽업 완료"]] as const;
   const lastOccurred = steps.reduce((last, [field], index) => order.lifecycle?.[field] ? index : last, -1);
   if (lastOccurred < 0) return null;
-  return <ol className="bfr-order-timeline" aria-label="주문 진행 단계">{steps.map(([field, label], index) => { const timestamp = order.lifecycle?.[field]; return <li className={`${timestamp ? "is-complete" : ""} ${index === lastOccurred ? "is-current" : ""}`} aria-current={index === lastOccurred ? "step" : undefined} key={field}><span>{index + 1}</span><div><strong>{label}</strong><small>{timestamp ? shortTime.format(new Date(timestamp)) : isLive(order.status) ? "예정" : "진행 기록 없음"}</small></div></li>; })}</ol>;
+  return <ol className="bfr-order-timeline" aria-label="주문 진행 단계">{steps.map(([field, label], index) => { const timestamp = order.lifecycle?.[field]; return <li className={`${timestamp ? "is-complete" : ""} ${(isLive(order.status) || order.status === "COMPLETED") && index === lastOccurred ? "is-current" : ""}`} aria-current={(isLive(order.status) || order.status === "COMPLETED") && index === lastOccurred ? "step" : undefined} key={field}><span>{index + 1}</span><div><strong>{label}</strong><small>{timestamp ? shortTime.format(new Date(timestamp)) : isLive(order.status) ? "예정" : "진행 기록 없음"}</small></div></li>; })}</ol>;
 }
 
 function Pricing({ pricing }: { pricing: { subtotalKrw: number; couponDiscountKrw: number; pointsAppliedKrw: number; payableKrw: number } }) {
