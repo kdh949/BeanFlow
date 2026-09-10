@@ -222,3 +222,5 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 
 - H4b 완료: 긴급 한 필드 요청·별도 승인/반려·1회 열람·독립 사후 검토를 연결했다. 원문 없는 workflow GET은 현재 권한·배정·만료와 실제 사후 검토 결과를 제공한다. 원문은 60초·화면 이탈·만료·권한 상실에 지우며, 늦은 응답을 버리고 불명 열람을 자동 재요청하지 않는다. 종료된 Case의 사후 검토도 가능하다.
 - H4b 검증: PostgreSQL/API 5개·도메인 4개·Runtime parity 1개 Passed. 초기 조회의 read-only transaction과 권한 검사 잠금 충돌을 확인하고 정상 transaction으로 수정 후 10개 전부 재실행했다. 최종 frontend 단위 233개와 boundary/copy 21개, 전체 546개 MCP interaction/a11y, typecheck·디자인 검사(190 tokens, 99 story files, 54 routes), 앱·정적 Storybook build, Sites 4개, Docs 103개/47개 상태 화면, 문서 18개 Passed. 390px 긴급 열람 사후 검토 화면에서 가로 넘침 없음과 본문 15px 토큰 확인.
+
+- H4 마지막 검토에서 원 요청자의 실행 권한을 승인 요청 행 잠금 전에 확인하도록 순서를 맞췄다. 정정 통합 16개를 다시 실행해 Passed를 확인했다.

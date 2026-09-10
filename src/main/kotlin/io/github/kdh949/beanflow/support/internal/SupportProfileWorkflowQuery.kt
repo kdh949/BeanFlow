@@ -97,6 +97,13 @@ internal class SupportProfileWorkflowQuery(
         profileChangeId: UUID,
     ): SupportProfileWorkflowResource {
         val profile = transactions.get(actorId, profileChangeId)
+        // Authorize requester grants before the approval row, matching profile revision writers.
+        val requesterCanExecute = profile.executorActorId == actorId && listOf(
+            OperatorPermission.SUPPORT_CASE_READ,
+            OperatorPermission.SUPPORT_CASE_WRITE,
+            OperatorPermission.SUPPORT_ACTION_REQUEST,
+            OperatorPermission.SUPPORT_PROFILE_R3_REQUEST,
+        ).all { permissions.hasActive(profile.requesterActorId, it) }
         val request = profile.actionRequestId?.let { actions.get(actorId, it) }
         if (request != null && (
                 request.action != SupportActionType.PROFILE_CHANGE || request.targetId != profileChangeId ||
@@ -140,12 +147,7 @@ internal class SupportProfileWorkflowQuery(
             if (fresh && assigned && request.state == SupportActionRequestState.READY_FOR_EXECUTION &&
                 actorId == request.executorActorId && has(OperatorPermission.SUPPORT_ACTION_EXECUTE) &&
                 has(OperatorPermission.SUPPORT_PROFILE_R3_REQUEST) &&
-                listOf(
-                    OperatorPermission.SUPPORT_CASE_READ,
-                    OperatorPermission.SUPPORT_CASE_WRITE,
-                    OperatorPermission.SUPPORT_ACTION_REQUEST,
-                    OperatorPermission.SUPPORT_PROFILE_R3_REQUEST,
-                ).all { permissions.hasActive(profile.requesterActorId, it) } &&
+                requesterCanExecute &&
                 request.approvalSteps.none { it.decidedByActorId == actorId }
             ) {
                 allowed += SupportProfileWorkflowAction.EXECUTE
