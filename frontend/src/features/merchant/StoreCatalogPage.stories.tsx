@@ -352,6 +352,7 @@ export const ManualMenuAvailability: Story = {
     await userEvent.click(available);
     await userEvent.click(canvas.getByRole("button", { name: "거래 내용 저장" }));
     await expect(await editor.findByText("3번째 저장")).toBeVisible();
+    await waitFor(() => expect(editor.getByRole("button", { name: "거래 내용 저장" })).toBeEnabled());
     await expect(available).not.toBeChecked();
     await userEvent.click(available);
     await userEvent.click(canvas.getByRole("button", { name: "거래 내용 저장" }));
@@ -399,6 +400,13 @@ export const SavingMenu: Story = {
     await userEvent.type(await canvas.findByLabelText("메뉴 이름"), " 수정");
     await userEvent.click(canvas.getByRole("button", { name: "거래 내용 저장" }));
     await expect(canvas.getByRole("button", { name: "저장 중" })).toBeDisabled();
+    const editor = within(canvas.getByRole("region", { name: "메뉴 거래 내용" }));
+    for (const input of [...editor.getAllByRole("textbox"), ...editor.getAllByRole("spinbutton"), ...editor.getAllByRole("checkbox")]) {
+      await expect(input).toBeDisabled();
+    }
+    for (const name of ["새 메뉴", "편집 닫기", "취소", "옵션 추가", "옵션 제거", "판매 구성 추가", "구성 제거", "보관된 메뉴", "카페 라테 편집"]) {
+      await expect(editor.getByRole("button", { name })).toBeDisabled();
+    }
   },
 };
 
@@ -540,6 +548,7 @@ export const ConfigurationAvailability: Story = {
     await userEvent.click(await editor.findByRole("checkbox", { name: "이 구성 판매 가능" }));
     await userEvent.click(editor.getByRole("button", { name: "거래 내용 저장" }));
     await expect(await editor.findByText("3번째 저장")).toBeVisible();
+    await waitFor(() => expect(editor.getByRole("button", { name: "거래 내용 저장" })).toBeEnabled());
     await expect(editor.getByRole("checkbox", { name: "이 구성 판매 가능" })).not.toBeChecked();
     await userEvent.click(editor.getByRole("checkbox", { name: "이 구성 판매 가능" }));
     await userEvent.click(editor.getByRole("button", { name: "거래 내용 저장" }));

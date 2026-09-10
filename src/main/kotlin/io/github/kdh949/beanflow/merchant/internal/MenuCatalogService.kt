@@ -66,18 +66,15 @@ internal class MenuCatalogService(
                 PageRequest.of(0, limit + 1),
             )
         val page = rows.take(limit)
+        val menuIds = page.map(MenuEntity::id)
         val optionCounts =
             options
-                .findAllByMenuIdIn(page.map(MenuEntity::id))
-                .filter { it.lifecycle == it.menuLifecycle(page) }
-                .groupingBy(MenuOptionEntity::menuId)
-                .eachCount()
+                .countByMenuIdsAndLifecycle(menuIds, lifecycle.internal())
+                .associate { it.menuId to Math.toIntExact(it.total) }
         val configurationCounts =
             configurations
-                .findAllByMenuIdIn(page.map(MenuEntity::id))
-                .filter { configuration -> page.any { it.id == configuration.menuId && it.lifecycle == configuration.lifecycle } }
-                .groupingBy(MenuConfigurationEntity::menuId)
-                .eachCount()
+                .countByMenuIdsAndLifecycle(menuIds, lifecycle.internal())
+                .associate { it.menuId to Math.toIntExact(it.total) }
         val last = page.lastOrNull()
         return MenuCatalogPage(
             items =
@@ -120,7 +117,7 @@ internal class MenuCatalogService(
         val hash = payloadHash(CREATE, command.storeId, definition, null)
         commands.lockCommandKey(command.actorId, CREATE, command.idempotencyKey)
         replay(command.actorId, CREATE, command.idempotencyKey, hash)?.let {
-            return MenuCatalogMutation(it, null, changed = false, replayed = true)
+            return it.copy(previous = null)
         }
         requireStoreForWrite(command.storeId)
         if (menus.existsById(definition.menuId)) conflict("Menu id is already in use")
@@ -147,8 +144,8 @@ internal class MenuCatalogService(
         }
         replaceMenuSearchTerms(command.storeId)
         val content = loadMenu(command.storeId, menu.id).snapshot()
-        record(command.actorId, command.idempotencyKey, CREATE, hash, command.storeId, menu.id, content, command.now)
-        return MenuCatalogMutation(content, null, changed = true, replayed = false)
+        val commandId = record(command.actorId, command.idempotencyKey, CREATE, hash, command.storeId, menu.id, content, command.now)
+        return MenuCatalogMutation(commandId, content, null, changed = true, replayed = false)
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -160,7 +157,7 @@ internal class MenuCatalogService(
         val hash = payloadHash(REPLACE, command.storeId, definition, command.expectedVersion)
         commands.lockCommandKey(command.actorId, REPLACE, command.idempotencyKey)
         replay(command.actorId, REPLACE, command.idempotencyKey, hash)?.let {
-            return MenuCatalogMutation(it, it, changed = false, replayed = true)
+            return it
         }
         requireStoreForWrite(command.storeId)
         val aggregate = loadMenu(command.storeId, command.menuId)
@@ -169,8 +166,8 @@ internal class MenuCatalogService(
         if (menu.tradeVersion != command.expectedVersion) stale()
         val previous = aggregate.snapshot()
         if (previous.sameTradeMeaning(definition)) {
-            record(command.actorId, command.idempotencyKey, REPLACE, hash, command.storeId, menu.id, previous, command.now)
-            return MenuCatalogMutation(previous, previous, changed = false, replayed = false)
+            val commandId = record(command.actorId, command.idempotencyKey, REPLACE, hash, command.storeId, menu.id, previous, command.now)
+            return MenuCatalogMutation(commandId, previous, previous, changed = false, replayed = false)
         }
 
         val activeOptions = aggregate.options.filter { it.lifecycle == MenuLifecycle.ACTIVE }
@@ -189,8 +186,8 @@ internal class MenuCatalogService(
         menus.flush()
         if (searchMeaningChanged) replaceMenuSearchTerms(command.storeId)
         val content = loadMenu(command.storeId, menu.id).snapshot()
-        record(command.actorId, command.idempotencyKey, REPLACE, hash, command.storeId, menu.id, content, command.now)
-        return MenuCatalogMutation(content, previous, changed = true, replayed = false)
+        val commandId = record(command.actorId, command.idempotencyKey, REPLACE, hash, command.storeId, menu.id, content, command.now)
+        return MenuCatalogMutation(commandId, content, previous, changed = true, replayed = false)
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -200,7 +197,7 @@ internal class MenuCatalogService(
         val hash = payloadHash(ARCHIVE, command.storeId, command.menuId, command.expectedVersion)
         commands.lockCommandKey(command.actorId, ARCHIVE, command.idempotencyKey)
         replay(command.actorId, ARCHIVE, command.idempotencyKey, hash)?.let {
-            return MenuCatalogMutation(it, it, changed = false, replayed = true)
+            return it
         }
         requireStoreForWrite(command.storeId)
         val aggregate = loadMenu(command.storeId, command.menuId)
@@ -225,8 +222,9 @@ internal class MenuCatalogService(
                 version = aggregate.menu.tradeVersion,
                 updatedAt = aggregate.menu.tradeUpdatedAt,
             )
-        record(command.actorId, command.idempotencyKey, ARCHIVE, hash, command.storeId, command.menuId, content, command.now)
-        return MenuCatalogMutation(content, previous, changed = true, replayed = false)
+        val commandId =
+            record(command.actorId, command.idempotencyKey, ARCHIVE, hash, command.storeId, command.menuId, content, command.now)
+        return MenuCatalogMutation(commandId, content, previous, changed = true, replayed = false)
     }
 
     private fun requireStoreForRead(storeId: UUID) {
@@ -242,8 +240,8 @@ internal class MenuCatalogService(
         menuId: UUID,
     ): LoadedMenuCatalog {
         val menu = menus.findByIdAndStoreId(menuId, storeId) ?: notFound()
-        val menuOptions = options.findAllByMenuId(menuId)
-        val menuConfigurations = configurations.findAllByMenuId(menuId)
+        val menuOptions = options.findAllByMenuIdAndLifecycle(menuId, MenuLifecycle.ACTIVE)
+        val menuConfigurations = configurations.findAllByMenuIdAndLifecycle(menuId, MenuLifecycle.ACTIVE)
         return LoadedMenuCatalog(menu, menuOptions, menuConfigurations)
     }
 
@@ -295,8 +293,10 @@ internal class MenuCatalogService(
     ) {
         val desiredById = desired.associateBy(MenuConfigurationTradeContent::configurationId)
         // Temporarily leaving the active partial index lets two existing configuration IDs swap
-        // their Option sets. This transition is transaction-local and is never externally visible.
-        current.filter { it.id in desiredById }.forEach {
+        // their Option sets, or a new ID can reuse an omitted configuration's set. Archive all
+        // current keys before INSERTs, which Hibernate flushes ahead of pending UPDATEs.
+        // This transition is transaction-local and is never externally visible.
+        current.forEach {
             it.lifecycle = MenuLifecycle.ARCHIVED
             it.archivedAt = now
         }
@@ -328,13 +328,16 @@ internal class MenuCatalogService(
         allowedOptionIds: Set<UUID>,
         allowedConfigurationIds: Set<UUID>,
     ) {
-        if (definition.options.any { it.optionId !in allowedOptionIds && options.existsById(it.optionId) }) {
+        val newOptionIds = definition.options.map(MenuOptionTradeContent::optionId).filterNot(allowedOptionIds::contains)
+        val newConfigurationIds =
+            definition.configurations
+                .map(
+                    MenuConfigurationTradeContent::configurationId,
+                ).filterNot(allowedConfigurationIds::contains)
+        if (newOptionIds.isNotEmpty() && options.countByIdIn(newOptionIds) > 0) {
             conflict("Menu option id is already in use")
         }
-        if (definition.configurations.any {
-                it.configurationId !in allowedConfigurationIds && configurations.existsById(it.configurationId)
-            }
-        ) {
+        if (newConfigurationIds.isNotEmpty() && configurations.countByIdIn(newConfigurationIds) > 0) {
             conflict("Menu configuration id is already in use")
         }
     }
@@ -345,12 +348,10 @@ internal class MenuCatalogService(
         replacingMenuId: UUID?,
         desiredOptions: Int,
     ) {
-        val activeMenus = menus.findAllByStoreIdAndLifecycleOrderByNameAscIdAsc(storeId, MenuLifecycle.ACTIVE)
-        if (addingMenu && activeMenus.size >= MAX_STORE_MENUS) invalid("A Store may have at most $MAX_STORE_MENUS active Menus")
-        val activeOptionCount =
-            options.findAllByMenuIdIn(activeMenus.map(MenuEntity::id)).count {
-                it.lifecycle == MenuLifecycle.ACTIVE && it.menuId != replacingMenuId
-            }
+        if (addingMenu && menus.countByStoreIdAndLifecycle(storeId, MenuLifecycle.ACTIVE) >= MAX_STORE_MENUS) {
+            invalid("A Store may have at most $MAX_STORE_MENUS active Menus")
+        }
+        val activeOptionCount = options.countForStore(storeId, MenuLifecycle.ACTIVE, replacingMenuId)
         if (activeOptionCount + desiredOptions > MAX_STORE_MENU_OPTIONS) {
             invalid("A Store may have at most $MAX_STORE_MENU_OPTIONS active Menu options")
         }
@@ -372,12 +373,13 @@ internal class MenuCatalogService(
         operation: String,
         key: String,
         hash: String,
-    ): MenuTradeContent? =
+    ): MenuCatalogMutation? =
         commands.find(actorId, operation, key)?.let {
             if (it.payloadHash != hash) {
                 throw DomainFailure(FailureCode.IDEMPOTENCY_KEY_REUSED, "Idempotency-Key was reused with another Menu command")
             }
-            objectMapper.readValue(it.responseJson, MenuTradeContent::class.java)
+            val content = objectMapper.readValue(it.responseJson, MenuTradeContent::class.java)
+            MenuCatalogMutation(it.id, content, content, changed = false, replayed = true)
         }
 
     private fun record(
@@ -389,9 +391,10 @@ internal class MenuCatalogService(
         menuId: UUID,
         content: MenuTradeContent,
         now: java.time.Instant,
-    ) {
+    ): UUID {
+        val commandId = identifiers.next()
         commands.insert(
-            identifiers.next(),
+            commandId,
             actorId,
             operation,
             key,
@@ -401,6 +404,7 @@ internal class MenuCatalogService(
             objectMapper.writeValueAsString(content),
             now,
         )
+        return commandId
     }
 
     private fun normalize(raw: MenuTradeDefinition): MenuTradeDefinition {
@@ -438,7 +442,7 @@ internal class MenuCatalogService(
                         invalid("Selected Menu option IDs must be unique")
                     }
                     if (!optionIds.containsAll(configuration.selectedOptionIds)) {
-                        conflict("An active configuration must reference active options of the same Menu")
+                        invalid("An active configuration must reference active options of the same Menu")
                     }
                     configuration.copy(
                         selectedOptionIds = configuration.selectedOptionIds.distinct().sortedBy(UUID::toString),
@@ -552,8 +556,6 @@ private fun MenuTradeContent.sameTradeMeaning(definition: MenuTradeDefinition): 
 private fun MenuLifecycle.api(): MenuCatalogLifecycle = MenuCatalogLifecycle.valueOf(name)
 
 private fun MenuCatalogLifecycle.internal(): MenuLifecycle = MenuLifecycle.valueOf(name)
-
-private fun MenuOptionEntity.menuLifecycle(menus: List<MenuEntity>): MenuLifecycle? = menus.firstOrNull { it.id == menuId }?.lifecycle
 
 @Component
 internal class MenuCatalogCommandRetentionWorker(

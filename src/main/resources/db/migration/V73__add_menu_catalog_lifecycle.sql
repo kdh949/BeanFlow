@@ -37,8 +37,12 @@ ALTER TABLE merchant_menu_configuration
 ALTER TABLE merchant_menu_configuration
     DROP CONSTRAINT merchant_menu_configuration_menu_id_normalized_option_key_key;
 
+ALTER TABLE merchant_menu_configuration
+    ALTER COLUMN normalized_option_key TYPE varchar(4000);
+
+-- Keep the canonical text for reads; index UUID values so 100 selected options fit a B-tree entry.
 CREATE UNIQUE INDEX uq_merchant_menu_configuration_active_option_key
-    ON merchant_menu_configuration (menu_id, normalized_option_key)
+    ON merchant_menu_configuration (menu_id, (string_to_array(normalized_option_key, ',')::uuid[]))
     WHERE lifecycle = 'ACTIVE';
 
 CREATE INDEX ix_merchant_menu_active_store_name_id
@@ -52,6 +56,13 @@ CREATE INDEX ix_merchant_menu_option_active_menu_name_id
 CREATE INDEX ix_merchant_menu_configuration_active_menu_id
     ON merchant_menu_configuration (menu_id, id)
     WHERE lifecycle = 'ACTIVE';
+
+-- 보관 목록도 child row를 로드하지 않고 menu별 lifecycle count를 조회한다.
+CREATE INDEX ix_merchant_menu_option_menu_lifecycle
+    ON merchant_menu_option (menu_id, lifecycle);
+
+CREATE INDEX ix_merchant_menu_configuration_menu_lifecycle
+    ON merchant_menu_configuration (menu_id, lifecycle);
 
 -- create/replace/archive가 최초 terminal response를 90일 보존하는 공용 Menu command 원장이다.
 CREATE TABLE merchant_menu_catalog_command (
