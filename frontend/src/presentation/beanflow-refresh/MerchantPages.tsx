@@ -3,9 +3,10 @@ import { useCallback, useId, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
+import { operationsApi } from "../../api/consoleClient";
 import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
 import { useResource } from "../../features/shared/useResource";
-import { shortDateTime, shortTime, won } from "../../lib/format";
+import { fullDateTime, shortDateTime, shortTime, won } from "../../lib/format";
 import { storeOrderActionLabels, storeOrderBoardColumns, storeOrderElapsedLabel, storeOrderBoardLaneLabels } from "../../pages/console/storeOrderBoardModel";
 import type { StoreOrderAction, StoreOrderBoardItem, StoreOrderBoardOverflow } from "../../pages/console/storeOrderBoardModel";
 import { useStoreOrderBoard } from "../../pages/console/useStoreOrderBoard";
@@ -79,8 +80,9 @@ type PreviewLine = components["schemas"]["MerchantRefundPreviewLine"];
 type RefundResult = components["schemas"]["MerchantRefundResult"];
 type Selection = Record<number, number>;
 
-async function requestPreview(storeId: string, orderReference: string, selection: Selection): Promise<Preview> {
+async function requestPreview(storeId: string, orderReference: string, selection: Selection, surface: "store" | "operations"): Promise<Preview> {
   const lines = Object.entries(selection).filter(([, quantity]) => quantity > 0).map(([lineSequence, quantity]) => ({ lineSequence: Number(lineSequence), quantity }));
+  if (surface === "operations") return unwrap(await operationsApi.POST("/operations/stores/{storeId}/orders/{orderReference}/refund-previews", { params: { path: { storeId, orderReference } }, body: lines.length ? { lines } : {} }));
   return unwrap(await merchantApi.POST("/stores/{storeId}/orders/{orderReference}/refund-previews", { params: { path: { storeId, orderReference }, header: await merchantCsrfHeader() }, body: lines.length ? { lines } : {} }));
 }
 
@@ -89,7 +91,8 @@ export function RefreshStoreRefundPage() {
   return <RefundWorkspace key={`${storeId}/${orderReference}`} storeId={storeId} orderReference={orderReference} />;
 }
 
-function RefundWorkspace({ storeId, orderReference }: { storeId: string; orderReference: string }) {
+/** Shared preview, selection and result flow; authentication follows the selected surface. */
+export function RefundWorkspace({ storeId, orderReference, surface = "store" }: { storeId: string; orderReference: string; surface?: "store" | "operations" }) {
   const [selection, setSelection] = useState<Selection>({});
   const [preview, setPreview] = useState<Preview | null>(null);
   const [reason, setReason] = useState("");
@@ -107,14 +110,14 @@ function RefundWorkspace({ storeId, orderReference }: { storeId: string; orderRe
   const submitted = useRef<{ body: { lines: { lineSequence: number; quantity: number }[]; previewVersion: string; reason: string }; key: string } | null>(null);
   const intent = useRef(new SubmissionIntent());
   const generation = useRef(0);
-  const resource = useResource<Preview>(useCallback(() => requestPreview(storeId, orderReference, {}), [storeId, orderReference]));
+  const resource = useResource<Preview>(useCallback(() => requestPreview(storeId, orderReference, {}, surface), [storeId, orderReference, surface]));
   const current = preview ?? (resource.state.status === "ready" ? resource.state.value : null);
 
   async function reprice(next: Selection, prepareNext = false) {
     setSelection(next); setFailure(null); setPricing(true); setPreviewValid(false);
     const currentGeneration = ++generation.current;
     try {
-      const updated = await requestPreview(storeId, orderReference, next);
+      const updated = await requestPreview(storeId, orderReference, next, surface);
       if (currentGeneration !== generation.current) return;
       setPreview(updated); setPreviewValid(true);
       if (prepareNext) { setResult(null); setReason(""); submitted.current = null; intent.current.complete(); }
@@ -142,9 +145,15 @@ function RefundWorkspace({ storeId, orderReference }: { storeId: string; orderRe
     inFlight.current = true; setSubmitting(true); setFailure(null); setStale(false); setQuantityChanged(false);
     let commandSent = false;
     try {
-      const csrfHeader = await merchantCsrfHeader();
-      commandSent = true;
-      const response = unwrap(await merchantApi.POST("/stores/{storeId}/orders/{orderReference}/refunds", { params: { path: { storeId, orderReference }, header: { "Idempotency-Key": attempt.key, ...csrfHeader } }, body: attempt.body }));
+      let response: RefundResult;
+      if (surface === "operations") {
+        commandSent = true;
+        response = unwrap(await operationsApi.POST("/operations/stores/{storeId}/orders/{orderReference}/refunds", { params: { path: { storeId, orderReference }, header: { "Idempotency-Key": attempt.key } }, body: attempt.body }));
+      } else {
+        const csrfHeader = await merchantCsrfHeader();
+        commandSent = true;
+        response = unwrap(await merchantApi.POST("/stores/{storeId}/orders/{orderReference}/refunds", { params: { path: { storeId, orderReference }, header: { "Idempotency-Key": attempt.key, ...csrfHeader } }, body: attempt.body }));
+      }
       setResult(response); setRetryingResult(false); setProcessingRequest(false); setPreviewValid(false);
     } catch (error) {
       if (!commandSent && requestLocked) {
@@ -175,10 +184,10 @@ function RefundWorkspace({ storeId, orderReference }: { storeId: string; orderRe
   const editingLocked = submitting || Boolean(result) || requestLocked;
   const selectedTotal = current.totals.cashRefundKrw + current.totals.pointsRestorationKrw;
   return <div className="bfr-merchant-page bfr-refund-page">
-    <Link className="bfr-back-link" to="/store"><ArrowLeft size={16} />주문 관리로</Link>
+    {surface === "store" ? <Link className="bfr-back-link" to="/store"><ArrowLeft size={16} />주문 관리로</Link> : null}
     <PageHeading title="부분 환불" />
     {result ? <RefundOutcome result={result} /> : null}
-    <section className="bfr-refund-context"><header><h2>환불 대상 주문</h2><StatusText state={current.orderContext.status} /></header><dl><div><dt>주문 번호</dt><dd>{current.orderReference}</dd></div><div><dt>주문 시각</dt><dd>{shortDateTime.format(new Date(current.orderContext.orderedAt))}</dd></div><div><dt>픽업 시간</dt><dd>{shortDateTime.format(new Date(current.orderContext.pickupWindow.startsAt))}–{shortTime.format(new Date(current.orderContext.pickupWindow.endsAt))}</dd></div><div><dt>결제 방식</dt><dd>{current.orderContext.paymentKind === "ONE_TIME_EXTERNAL" ? "일회성 결제" : "혜택 전액 사용"}</dd></div><div><dt>결제 금액</dt><dd>{won.format(current.orderContext.pricing.payableKrw)}</dd></div></dl></section>
+    <section className="bfr-refund-context"><header><h2>환불 대상 주문</h2><StatusText state={current.orderContext.status} /></header><dl><div><dt>주문 번호</dt><dd>{current.orderReference}</dd></div><div><dt>주문 시각</dt><dd>{fullDateTime.format(new Date(current.orderContext.orderedAt))}</dd></div><div><dt>픽업 시간</dt><dd>{fullDateTime.format(new Date(current.orderContext.pickupWindow.startsAt))}–{shortTime.format(new Date(current.orderContext.pickupWindow.endsAt))}</dd></div><div><dt>결제 방식</dt><dd>{current.orderContext.paymentKind === "ONE_TIME_EXTERNAL" ? "일회성 결제" : "혜택 전액 사용"}</dd></div><div><dt>결제 금액</dt><dd>{won.format(current.orderContext.pricing.payableKrw)}</dd></div></dl></section>
     <div className="bfr-refund-workspace">
       <section className="bfr-refund-lines"><header><h2>{result || requestLocked ? "환불 요청 품목" : "환불 품목"}</h2><span>{result || requestLocked ? "요청 시점 기준 금액" : "현재 환불 가능 금액"}</span></header>{current.lines.map((line) => <article key={line.lineSequence}><div><strong>{line.menuName}</strong><small>{result || requestLocked ? "요청 전 환불 가능" : "남은 환불 가능"} {line.remainingQuantity}개</small></div><QuantityStepper disabled={editingLocked} value={selection[line.lineSequence] ?? line.selectedQuantity} min={0} max={line.remainingQuantity} label={`${line.menuName} 환불 수량`} onChange={(value) => change(line, value)} /><dl><div><dt>현금</dt><dd>{won.format(line.cashRefundKrw)}</dd></div><div><dt>포인트</dt><dd>{won.format(line.pointsRestorationKrw)}</dd></div><div><dt>쿠폰 귀속</dt><dd>{won.format(line.couponAttributionKrw)}</dd></div></dl></article>)}</section>
       <aside className="bfr-refund-side">

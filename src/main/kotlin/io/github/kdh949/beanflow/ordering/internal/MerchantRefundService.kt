@@ -135,6 +135,13 @@ internal class MerchantRefundService(
     @Transactional(readOnly = true)
     fun preview(query: MerchantRefundPreviewQuery): MerchantRefundPreviewResponse {
         storeAccess.requireOrderManagementAccess(query.actorId, query.storeId, REFUND_ROLES)
+        return previewOrder(query)
+    }
+
+    @Transactional(readOnly = true)
+    fun previewOperations(query: MerchantRefundPreviewQuery): MerchantRefundPreviewResponse = previewOrder(query)
+
+    private fun previewOrder(query: MerchantRefundPreviewQuery): MerchantRefundPreviewResponse {
         val resolved = orderReferences.resolveStore(query.storeId, query.orderReference)
         val order = orderSnapshots.readRefundableSnapshot(resolved.orderId)
         val payment = paymentOperations.previewSnapshot(order.orderId)
@@ -197,15 +204,30 @@ internal class MerchantRefundService(
 
     fun execute(command: MerchantRefundCommand): PartialRefundHttpResult {
         val resolved = resolvedOrder(command)
+        return executeResolved(command, resolved.paymentId, resolved.orderReference, resolved.actorRole.toPartialRefundActorType())
+    }
+
+    fun executeOperations(command: MerchantRefundCommand): PartialRefundHttpResult {
+        val resolved = orderReferences.resolveStore(command.storeId, command.orderReference)
+        val paymentId = paymentOperations.previewSnapshot(resolved.orderId).paymentId
+        return executeResolved(command, paymentId, resolved.reference.value, PartialRefundActorType.PLATFORM_OPERATOR)
+    }
+
+    private fun executeResolved(
+        command: MerchantRefundCommand,
+        paymentId: UUID,
+        orderReference: String,
+        actorType: PartialRefundActorType,
+    ): PartialRefundHttpResult {
         val result =
             try {
                 partialRefunds.create(
                     PartialRefundCommand(
-                        paymentId = resolved.paymentId,
+                        paymentId = paymentId,
                         actor =
                             PartialRefundActor(
                                 command.actorId,
-                                setOf(resolved.actorRole.toPartialRefundActorType()),
+                                setOf(actorType),
                             ),
                         idempotencyKey = command.idempotencyKey,
                         lines = null,
@@ -223,7 +245,7 @@ internal class MerchantRefundService(
         // The merchant contract exposes no created Refund resource, so a definitive
         // outcome is 200 while an unresolved Provider outcome stays 202.
         val status = if (result.status == HttpStatus.CREATED.value()) HttpStatus.OK.value() else result.status
-        return PartialRefundHttpResult(status, merchantBody(stored, resolved.orderReference))
+        return PartialRefundHttpResult(status, merchantBody(stored, orderReference))
     }
 
     /**

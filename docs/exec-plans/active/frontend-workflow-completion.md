@@ -151,7 +151,7 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] R2: 알림/이벤트 수동 복구 목록·커서·원본 상세·1회 재시도·결과 확인 구현. 202 접수와 완료를 분리하고 UNKNOWN 재실행은 recoverable/차단 사유를 따른다. 관련 Storybook 13개, PostgreSQL 복구/동시성/부분 실패 19개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 결과 불명 화면 넘침 없음 확인.
 - [x] R3a: 주문 후속 처리 5단계·고객 취소 환불 LOOKUP 예약 및 복구 제안 생성/현재 조회/2인 판정 구현. 제안 조회 GET은 기존 grant와 DTO를 재사용하며 만료·자기 판정을 차단한다. 관련 Storybook 14개, PostgreSQL 복구 계약 14개와 Runtime parity 1개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. PaymentSetupIssue JSON Schema 6개 사례 및 390px 제안 화면 넘침 없음 확인.
 - [x] R3b: 감사 사유가 있는 포인트 계정/거래 커서 조회와 부호 있는 조정 구현. 양수 비용 주체·미래 만료를 추정하지 않고 직접 선택하며 음수 요청에서는 제거한다. 관련 Storybook 10개, PostgreSQL 조정/투영 18개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 조정 폼과 만료 오류 화면 넘침 없음 확인.
-- [ ] R3c 운영 환불 구현·검증·커밋·PR.
+- [x] R3c: 운영 공개 주문 환불 미리보기/실행과 공통 품목 환불 화면 구현. 관련 Storybook 24개, PostgreSQL 환불 계약 17개와 Runtime parity 1개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. 390px 결과 불명 화면 넘침 없음 확인. 전체 Storybook MCP 434개, build/sites(4개) Passed. build-storybook 및 문서 화면 검사(85 docs/47 states) Passed. 기능별 커밋 완료. 이의·복구 PR 생성은 아래 이력에 기록한다.
 - [ ] H1–H2 상담 관리 구현·검증·커밋·PR.
 - [ ] H3–H4 상담 후속 처리 구현·검증·커밋·PR.
 - [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.
@@ -179,6 +179,10 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - 포인트 정책 OpenAPI의 discriminator mapping 누락과 global request의 required-only allOf 때문에 생성 타입이 실제 상태 값을 허용하지 않았다. 기존 서버 상태와 필드 제약을 명시하도록 계약을 보정하고 생성 타입 및 runtime parity를 검증했다. 제품 정책/서버 동작은 변경하지 않는다.
 
 - 실제 주문 후속 처리 DTO와 target에는 존재하는 paymentSetupIssue/setupReprocessingCaseId가 runtime 계약에서 누락되어 복구 진입을 생성 타입으로 사용할 수 없었다. runtime을 실제 응답과 맞추고, PaymentSetupIssue의 required-only anyOf를 명시적 allOf/anyOf로 정리했다. 두 오류 목록 중 적어도 하나는 비어 있지 않아야 하며 다른 목록은 실제 DTO처럼 빈 배열을 허용한다. 최초 경로 대조 실패는 저장소 검사기의 인용된 참조 표기로 보정한 후 통과했다.
+
+- R3c 초기 backend 검증은 Kotlin 증분 캐시 손상 경고와 Gradle heap 부족으로 컴파일 중단됐다. `-Pkotlin.incremental=false -Pkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" --max-workers=1`로 동일 테스트를 재실행해 통과했다. 로컬 진단 heap dump는 Git에 포함하지 않고 보존한다. 저장소 JVM 설정은 변경하지 않았다.
+
+- R3c 전체 Storybook은 실행 로그에서 434개 Passed였으나 MCP 완료 응답이 반환되지 않았다. 작업용 서버/보조 테스트 프로세스만 재시작하고 telemetry를 비활성화한 재실행에서 전체 434개 Passed 응답을 확인했다.
 
 ## Decision Log
 

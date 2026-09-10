@@ -91,19 +91,24 @@ internal class PaymentSetupRepairIntegrationTest
             val created = propose(damaged.caseId, proposer, "repair-query-propose", "Review missing refund")
             val path = "/api/v1/operations/reprocessing-repair-proposals/{proposalId}"
             val response =
-                mockMvc.perform(get(path, damaged.proposalId()).with(operatorJwt(approver)))
+                mockMvc
+                    .perform(get(path, damaged.proposalId()).with(operatorJwt(approver)))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.state").value("PENDING_APPROVAL"))
                     .andExpect(jsonPath("$.proposedBy").value(proposer.toString()))
-                    .andReturn().response
+                    .andReturn()
+                    .response
             assertThat(response.contentAsString).isEqualTo(created.contentAsString)
             assertThat(response.contentAsString).doesNotContain(damaged.providerKey, damaged.orderId.toString())
-            mockMvc.perform(get(path, UUID.randomUUID()).with(operatorJwt(approver)))
+            mockMvc
+                .perform(get(path, UUID.randomUUID()).with(operatorJwt(approver)))
                 .andExpect(status().isNotFound)
-            mockMvc.perform(get(path, damaged.proposalId()).with(customerJwt(approver)))
+            mockMvc
+                .perform(get(path, damaged.proposalId()).with(customerJwt(approver)))
                 .andExpect(status().isForbidden)
             jdbcTemplate.update("DELETE FROM operations_operator_permission_grant WHERE actor_id = ?", approver)
-            mockMvc.perform(get(path, damaged.proposalId()).with(operatorJwt(approver)))
+            mockMvc
+                .perform(get(path, damaged.proposalId()).with(operatorJwt(approver)))
                 .andExpect(status().isForbidden)
             assertThat(paymentGateway.rejectionRefundCalls.get()).isZero()
             assertThat(paymentGateway.rejectionRefundLookupCalls.get()).isZero()

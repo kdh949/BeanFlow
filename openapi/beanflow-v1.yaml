@@ -3772,6 +3772,67 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /operations/stores/{storeId}/orders/{orderReference}/refund-previews:
+    post:
+      tags: [Payment]
+      operationId: previewOperationsStoreOrderRefund
+      summary: Preview a server-calculated line and quantity refund without side effects
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/OrderReference"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MerchantRefundPreviewRequest" }
+      responses:
+        "200":
+          description: Current preview; no Refund, Audit, Provider, or Loyalty write was made
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRefundPreview" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/stores/{storeId}/orders/{orderReference}/refunds:
+    post:
+      tags: [Payment]
+      operationId: refundOperationsStoreOrderByReference
+      summary: Execute a refund from an exact fresh preview
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/OrderReference"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MerchantRefundRequest" }
+      responses:
+        "200":
+          description: Refund reached a definitive successful state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRefundResult" }
+        "202":
+          description: Provider outcome is still processing, unknown, or reconciling
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRefundResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/orders/{orderReference}/refund-previews:
     post:
       tags: [Payment]

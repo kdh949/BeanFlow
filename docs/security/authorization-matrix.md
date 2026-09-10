@@ -230,15 +230,19 @@ membership을 다시 확인한다. 따라서 membership이 없거나 revoke된 a
 기존 UUID 기반 `POST /payments/{paymentId}/refunds`는 Merchant Session 전용이고, 기존 Platform
 Operator branch는 `POST /operations/payments/{paymentId}/refunds`로 분리한다. 두 경로는 같은
 idempotency·Refund·Provider 불변식을 공유하며 상대 actor 인증을 fallback으로 받아들이지 않는다.
+운영 화면의 공개 번호 기반 `POST /operations/stores/{storeId}/orders/{orderReference}/refund-previews`와
+`.../refunds`도 동일한 Operator JWT `PLATFORM_OPERATOR` 역할을 요구한다. 매장과 주문 번호의
+일치를 확인하며, 실행은 기존 잠금·미리보기 버전·멱등성 검증과 운영 actor Audit을 재사용한다.
 
 정산 Batch/Item 조회와 이의제기 접수·store 목록은 MerchantActor와 Identity의 현재 `ACTIVE OWNER`
 membership을 요구한다. `STAFF`, revoked owner와 다른 매장 owner는 조회·접수할 수
 없다. 정산 명세는 수수료·혜택 원가·실지급액을 담으므로 `STAFF`에게 목록 조회도 열지 않는다.
 `GET /stores/{storeId}/disputes`는 `store_id`를 SQL predicate에 포함하고 cursor에 store와 state
 filter를 함께 서명한다. 응답에는 내부 재처리 case, worker 오류와 접수자 자격증명을 넣지 않으며,
-query 장애는 빈 목록이 아니라 `503`이다. 이의제기 판정은 현재 내부 Application Service/worker만 존재하고 공개 운영 endpoint나
-JWT permission surface가 없다. 향후 운영 판정 API를 만들 때는 전용 permission, actor Audit와
-결정 사유 계약을 먼저 확정한다.
+query 장애는 빈 목록이 아니라 `503`이다. 운영 목록/상세는 `SETTLEMENT_DISPUTE_READ`,
+검토 시작/판정은 `SETTLEMENT_DISPUTE_DECIDE` active grant를 요구한다.
+`/operations/settlement-disputes`의 Operator JWT 전용 경로는 현재 상태·버전, 결정 사유와
+멱등성을 검증하고 actor Audit을 남긴다. 결정 진행 중에는 같은 판정만 이어갈 수 있다.
 
 고객 주문 리소스는 존재하지 않으면 `404`, 다른 고객 소유이면 `403`을 반환한다. 조회와
 취소가 같은 코드를 사용하며 operation에 따라 갈리지 않는다(ADR-030). 고객 취소
