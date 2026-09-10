@@ -57,6 +57,13 @@ CREATE INDEX ix_merchant_menu_configuration_active_menu_id
     ON merchant_menu_configuration (menu_id, id)
     WHERE lifecycle = 'ACTIVE';
 
+-- 보관 목록도 child row를 로드하지 않고 menu별 lifecycle count를 조회한다.
+CREATE INDEX ix_merchant_menu_option_menu_lifecycle
+    ON merchant_menu_option (menu_id, lifecycle);
+
+CREATE INDEX ix_merchant_menu_configuration_menu_lifecycle
+    ON merchant_menu_configuration (menu_id, lifecycle);
+
 -- create/replace/archive가 최초 terminal response를 90일 보존하는 공용 Menu command 원장이다.
 CREATE TABLE merchant_menu_catalog_command (
     id uuid PRIMARY KEY,

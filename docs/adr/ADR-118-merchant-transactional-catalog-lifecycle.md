@@ -176,6 +176,10 @@ cross-row 의미는 Store exclusive lock 아래 Application Service가 보호한
 옵션은 UUID 문자열 오름차순으로 정규화한 뒤 저장하며 empty string은 빈 UUID 배열과 대응한다.
 해시 충돌 처리나 별도 mapping table은 추가하지 않는다.
 
+### 10. 카탈로그 조회는 활성 child와 DB 집계로 범위를 제한한다
+
+거래 내용 조회·교체는 ACTIVE 옵션·구성만 읽는다. 관리 목록은 페이지에 포함된 메뉴 ID와 lifecycle로 DB에서 count를 집계하며, 보관 목록도 과거 child 엔티티를 메모리에 적재하지 않는다. 매장 옵션 상한은 ACTIVE 메뉴·옵션의 DB count로 확인하고, 새 옵션·구성 ID의 충돌 검사는 두 번의 집합 조회로 제한한다. `(menu_id, lifecycle)` 인덱스는 활성·보관 목록의 집계를 지원한다. 이 변경은 쿼리 수와 엔티티 적재량을 제한하며 응답 지연 개선의 실측 주장은 포함하지 않는다.
+
 ## Alternatives Considered
 
 ### 기존 row 수정 command만 추가

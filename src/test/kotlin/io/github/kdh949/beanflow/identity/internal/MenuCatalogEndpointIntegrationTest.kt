@@ -4,8 +4,10 @@ import com.jayway.jsonpath.JsonPath
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.merchant.internal.MenuCatalogCommandRetentionCleanup
+import jakarta.persistence.EntityManagerFactory
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
+import org.hibernate.SessionFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -33,10 +35,11 @@ import java.util.concurrent.TimeUnit
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
 @BeanflowIsolatedSpringContext("verifies transactional Menu catalogue authoring")
-@SpringBootTest
+@SpringBootTest(properties = ["spring.jpa.properties.hibernate.generate_statistics=true"])
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 internal class MenuCatalogEndpointIntegrationTest(
     @Autowired private val mockMvc: MockMvc,
+    @Autowired private val entityManagerFactory: EntityManagerFactory,
     @Autowired private val jdbc: JdbcTemplate,
     @Autowired private val passwords: CustomerPasswordSecurity,
     @Autowired private val commandCleanup: MenuCatalogCommandRetentionCleanup,
@@ -53,6 +56,89 @@ internal class MenuCatalogEndpointIntegrationTest(
                 merchant_store CASCADE
             """.trimIndent(),
         )
+    }
+
+    @Test
+    fun `maximum create and replace use bounded queries for all 600 child identifiers`() {
+        val storeId = seedStore()
+        val actor = signIn("catalog.bulk-ids", storeId, "OWNER")
+        val menuId = UUID.randomUUID()
+        val statistics = entityManagerFactory.unwrap(SessionFactory::class.java).statistics
+        statistics.clear()
+        mutate(
+            post("/api/v1/stores/$storeId/menus"),
+            actor,
+            "bulk-create-0001",
+            boundaryContent(storeId, menuId, optionCount = 100, configurationCount = 500),
+        ).andExpect(status().isCreated)
+        // HQL/criteria query executions include exists/count checks, but not entity INSERTs
+        // or merge's primary-key loads. A per-ID exists loop would exceed 600 here.
+        assertThat(statistics.queryExecutionCount).isLessThanOrEqualTo(20)
+        statistics.clear()
+        val replacement =
+            boundaryContent(storeId, menuId, optionCount = 100, configurationCount = 500)
+                .replaceFirst("{", "{\"expectedVersion\":0,")
+        mutate(put("/api/v1/stores/$storeId/menus/$menuId/trade-content"), actor, "bulk-replace-0001", replacement)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.version").value(1))
+            .andExpect(jsonPath("$.options.length()").value(100))
+            .andExpect(jsonPath("$.configurations.length()").value(500))
+        assertThat(statistics.queryExecutionCount).isLessThanOrEqualTo(20)
+    }
+
+    @Test
+    fun `archived child history does not load into lists details or Store bounds validation`() {
+        val storeId = seedStore()
+        val actor = signIn("catalog.history", storeId, "OWNER")
+        val menuId = UUID.randomUUID()
+        val optionId = UUID.randomUUID()
+        val configurationId = UUID.randomUUID()
+        mutate(
+            post("/api/v1/stores/$storeId/menus"),
+            actor,
+            "history-create-0001",
+            content(menuId, optionId, configurationId, "라테", 4_500),
+        ).andExpect(status().isCreated)
+        jdbc.update(
+            "INSERT INTO merchant_menu_option (id, menu_id, name, additional_price_krw, available, lifecycle, archived_at) SELECT gen_random_uuid(), ?, '이전 옵션', 0, false, 'ARCHIVED', now() FROM generate_series(1, 1000)",
+            menuId,
+        )
+        jdbc.update(
+            "INSERT INTO merchant_menu_configuration (id, menu_id, normalized_option_key, available, lifecycle, archived_at) SELECT gen_random_uuid(), ?, '', false, 'ARCHIVED', now() FROM generate_series(1, 1000)",
+            menuId,
+        )
+        val statistics = entityManagerFactory.unwrap(SessionFactory::class.java).statistics
+        statistics.clear()
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/menu-catalog").cookie(actor.session, actor.csrf))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items[0].optionCount").value(1))
+            .andExpect(jsonPath("$.items[0].configurationCount").value(1))
+        assertThat(statistics.entityLoadCount).isLessThan(20)
+        statistics.clear()
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/menus/$menuId/trade-content").cookie(actor.session, actor.csrf))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.options.length()").value(1))
+            .andExpect(jsonPath("$.configurations.length()").value(1))
+        assertThat(statistics.entityLoadCount).isLessThan(20)
+        statistics.clear()
+        mutate(
+            put("/api/v1/stores/$storeId/menus/$menuId/trade-content"),
+            actor,
+            "history-replace-0001",
+            content(menuId, optionId, configurationId, "라테", 5_000, expectedVersion = 0),
+        ).andExpect(status().isOk)
+        assertThat(statistics.entityLoadCount).isLessThan(20)
+        mutate(post("/api/v1/stores/$storeId/menus/$menuId/archive"), actor, "history-archive-0001", """{"expectedVersion":1}""")
+            .andExpect(status().isOk)
+        statistics.clear()
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/menu-catalog").queryParam("lifecycle", "ARCHIVED").cookie(actor.session, actor.csrf))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items[0].optionCount").value(1001))
+            .andExpect(jsonPath("$.items[0].configurationCount").value(1001))
+        assertThat(statistics.entityLoadCount).isLessThan(20)
     }
 
     @Test
