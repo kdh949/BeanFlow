@@ -175,6 +175,7 @@ body:has(.bfr-customer-stage) { min-width: 0; }
 .bfr-lease > span { display: grid; gap: var(--sp-2); font-size: var(--fs-caption); }
 .bfr-lease > span strong { font-size: var(--fs-body); }
 .bfr-decision p, .bfr-recovery p { margin-top: var(--sp-4); font-size: var(--fs-body-sm); }
+.bfr-recovery small { font-size: var(--fs-caption); }
 .bfr-decision > div, .bf-action-panel > div:last-child { margin-top: var(--sp-5); display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-4); }
 .bfr-order-status-head > div { display: grid; gap: var(--sp-4); }
 .bfr-order-status-head h2 { font-size: var(--fs-title-2); }
