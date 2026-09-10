@@ -1,11 +1,11 @@
 # 관리 API 리뷰의 복구와 동시성 결함 수정
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-09-10`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -128,7 +128,8 @@ BR-54, ADR-124를 대체/보완하는 결과 불명 복구 결정, ADR-010, 운�
 - Passed: 최종 통합 73 tests, 실패/오류/skip 0. 이의 16, 슬롯 7, 계약 6, publication 관리 14/기존 복구 9, 알림 복구 5/알림함 6, 계약·구조·Flyway 10.
 - Passed: spotlessCheck, bootJar, verifyCiTestShards (CI와 같은 6개 shard, 313 test classes 중복/누락 없음).
 - Passed: docs verifier 18 tests, 54 policies, 125 ADRs, target 234/runtime 224 operations, 416 schemas.
-- #151~#154 최신 HEAD는 전체 backend CI가 통과했다. #155~#157 최신 원격 CI와 여섯 thread 해결은 Pending이다.
+- Passed: 일곱 PR의 아래 HEAD 모두 preflight/backend-build/6개 test shard/집계 build 성공.
+- 여섯 원격 reviewThreads에 수정·테스트·CI 근거를 답변하고 resolve했으며 미해결 0건을 다시 확인했다.
 
 ## Surprises & Discoveries
 
@@ -143,8 +144,23 @@ Modulith 2.1의 기본 claim은 NULL/baseline 예산을 보장하지 않는다. 
 
 ## Outcomes & Retrospective
 
-Pending. 코드, 로컬 검증, 원격 CI, thread 해결을 각각 확인한 뒤 기록한다.
+여섯 리뷰의 수정, 기능별 commit과 순차 merge/push, 로컬 통합 73 tests 및 일곱 PR의 전체 backend CI,
+리뷰 6건 해결을 확인했다. 원본 dirty checkout은 그대로 보존했고 재고·UI·merge·배포는 수행하지 않았다.
+아래는 기능 변경의 원격 검증 시점이다. 마지막 완료 기록 이동은 문서만 변경하며 그 이후 HEAD의
+CI도 PR에서 별도로 확인한다.
+
+| PR | 검증 HEAD | 전체 backend CI |
+|---|---|---|
+| #151 | `dbf5aacd587284deffa42f3956147fd40934d337` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34464108383) |
+| #152 | `50604cc1ac3bb4b114137ef529f2a7afaa6418d3` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34464130964) |
+| #153 | `9c2f6d2d12d4ad79248d465e8a733ec1ea0f1136` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34464374521) |
+| #154 | `390392770b68e6fb9db7726638914e9301b99eb3` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34464656842) |
+| #155 | `820106795765d76d5eb3c0d651abb70e777040fb` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34464659970) |
+| #156 | `e503c293afb8c564f34cb12b35a9f090309c01a3` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34464665790) |
+| #157 | `b7d4d693d6952734fba2cc9ac7e12f966d816ca7` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34467653322) |
+
 
 ## Revision Notes
 
 - 2026-09-10: 리뷰 수정 실행 계획 작성.
+- 2026-09-10: 기능 수정·로컬/원격 검증·리뷰 해결 완료와 배포 제약 기록.

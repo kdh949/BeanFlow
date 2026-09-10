@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-10
-- **Implementation owner:** [관리 API 리뷰 수정](../exec-plans/active/management-api-review-remediation.md)
+- **Implementation owner:** [관리 API 리뷰 수정](../exec-plans/completed/management-api-review-remediation.md)
 
 ## Context
 
