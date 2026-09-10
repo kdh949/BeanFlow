@@ -1155,6 +1155,36 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/menus/{menuId}/configurations:
+    get:
+      tags: [Discovery]
+      operationId: listStoreMenuConfigurations
+      summary: 메뉴의 현재 판매 구성 조회
+      security: [{ customerSession: [] }]
+      description: |
+        ACTIVE same-store 메뉴의 ACTIVE 구성을 configurationId 순으로 반환합니다.
+        available은 구성 소유 상태이며 메뉴와 모든 선택 옵션도 판매 가능해야 합니다.
+        메뉴별 기존 authoring 상한 500개를 넘으면 503이며 목록을 잘라 반환하지 않습니다.
+        다른 매장 메뉴와 보관 메뉴는 404입니다. 조회는 가격 또는 예약 보장이 아닙니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MenuId"
+      responses:
+        "200":
+          description: 현재 판매 구성
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    maxItems: 500
+                    items: { $ref: "#/components/schemas/CustomerMenuConfiguration" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/menus/{menuId}/trade-content:
     get:
       tags: [Merchant]
@@ -12002,6 +12032,17 @@ components:
           $ref: "#/components/schemas/CustomerStoreDisplay"
         image:
           $ref: "#/components/schemas/StorefrontImage"
+    CustomerMenuConfiguration:
+      type: object
+      required: [configurationId, optionIds, available]
+      properties:
+        configurationId: { type: string, format: uuid }
+        optionIds:
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          items: { type: string, format: uuid }
+        available: { type: boolean }
     MenuList:
       type: object
       additionalProperties: false

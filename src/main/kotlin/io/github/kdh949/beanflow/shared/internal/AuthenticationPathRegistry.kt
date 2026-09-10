@@ -62,6 +62,7 @@ internal class AuthenticationPathRegistry {
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/search"),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}"),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}/menus", setOf("GET", "HEAD")),
+            registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}/menus/{menuId}/configurations", setOf("GET", "HEAD")),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}/pickup-slots"),
         )
 

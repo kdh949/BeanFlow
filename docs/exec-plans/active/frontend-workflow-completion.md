@@ -2,13 +2,12 @@
 
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
-> **Implementation-Ready:** `false`
+> **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
-> **Depends-On:** `—`
+> **Depends-On:** —
 > **Completed-At:** `—`
 
-이 ExecPlan은 `.agent/PLANS.md`를 따른다. 문의 채널 결정이 남아 있어 자동 실행 후보는 아니지만,
-독립적인 거래·관리 화면 구현은 진행한다.
+이 ExecPlan은 `.agent/PLANS.md`를 따른다. 고객 문의 채널은 내장 Support 시스템으로 결정되었으며, 독립적인 거래·관리 화면부터 진행한다.
 
 ## Purpose / Big Picture
 
@@ -39,7 +38,7 @@ Storybook HTTP MCP는 `frontend/`에서 실행하는 `http://localhost:6006/mcp`
 | C2 | 날짜/요일/운영시간, 서버 견적 이름, 장바구니 이미지 수명(F01,F08,F11,F12) | 고객 거래 정합성 |
 | C3 | 공개 판매 구성 조회/선택(F02) | 고객 거래 정합성 |
 | C4 | 공개 주문번호 결제 재개, 만료·조회 실패·종료 타임라인·활성 주문 갱신(F03,F04,F09,F10,F13) | 고객 거래 정합성 |
-| C5 | 쿠폰 진입 통합, 실제 문의 연결, 생성 타입 정합성, 역할별 코드 분할(F14,F15,F17,F18) | 고객 거래 정합성 |
+| C5 | 쿠폰 진입 통합, 문의 진입 정리, 생성 타입 정합성, 역할별 코드 분할(F14,F15,F17,F18) | 고객 거래 정합성 |
 | S1 | 점주 공개 정보·주간 영업시간, 픽업 슬롯(M01,M02) | 점주 매장 관리 |
 | S2 | 메뉴 표시 내용·매장/메뉴 이미지(M03) | 점주 매장 관리 |
 | O1 | 운영 매장 목록/생성/식별정보/지역과 브랜드 지정(M04,M05) | 운영 매장·정책 관리 |
@@ -51,6 +50,7 @@ Storybook HTTP MCP는 `frontend/`에서 실행하는 `http://localhost:6006/mcp`
 | H1 | 상담 목록/배정/기록/대상 해제/검증 철회(M13) | 상담 업무 관리 |
 | H2 | 주문 조치 평가/요청/수정/승인/배정/실행 및 점주 동의(M14) | 상담 업무 관리 |
 | H3 | 수락 후 해결·보상 실행/결과/알림 재시도(M15) | 상담 후속 처리 |
+| H5 | 고객의 앱 내 문의 접수·목록/상세·고객 공개 답변과 상담 Case 연결(F15) | 고객 문의 연결 |
 | H4 | 고객/매장/배송 정보 정정·운영 결정·실행/알림과 긴급 열람(M16,M17) | 상담 후속 처리 |
 
 ### Non-goals
@@ -138,7 +138,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] 2026-09-11: clean main과 origin/main 일치, Storybook catalog와 컴포넌트 문서 확인.
 - [x] C1: 검색 버튼 겹침·즐겨찾기 긴 내용·중요 글자 토큰 수정. Storybook MCP 전체 324개 interaction/a11y Passed, tsc/check:design Passed. 320/390px 렌더링 확인.
 - [x] C2: 픽업 날짜/요일·주간 운영시간·현재 견적 이름·이미지 lease 재조회 구현. 관련 Storybook 11개 interaction/a11y와 날짜 단위 3개 Passed. 만료 응답은 명시적 실패.
-- [ ] C3–C5 고객 거래 정합성 구현·검증·커밋·PR.
+- [x] C3: 메뉴별 공개 구성 조회, 인증 경로, bounded owner projection, 구성 선택/품절/조회 실패 구현. PostgreSQL·쿼리 수·인증·Runtime parity 36개 Passed; 관련 Storybook 6개 Passed; frontend 단위 217개 및 boundary/copy 21개 Passed, typecheck/check:design Passed. 생성 타입 21개 누락 경로도 동기화(F17).
+- [ ] C4–C5 고객 거래 정합성 구현·검증·커밋·PR.
 - [ ] S1–S2 점주 매장 관리 구현·검증·커밋·PR.
 - [ ] O1–O3 운영 매장/정책 구현·검증·커밋·PR.
 - [ ] R1–R3 이의/복구 구현·검증·커밋·PR.
@@ -151,13 +152,15 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - 기존 active plan의 일부 Current State는 이미 구현된 OIDC·카탈로그·쿠폰 selector보다 오래됐다.
   해당 계획을 근거 없이 완료로 바꾸지 않고 실제 코드/계약을 기준으로 이번 범위를 추적한다.
 - git metadata 쓰기는 sandbox 바깥 권한이 필요하며 요청한 branch/commit/push/PR 목적에만 사용한다.
+- Kotlin 증분 캐시가 기존 타입을 찾지 못했으나 `-Pkotlin.incremental=false` 전체 컴파일 후 관련 테스트가 통과했다. 저장소 설정은 변경하지 않았다.
 - Storybook watcher에 EMFILE 경고가 있다. catalog/read가 동작해도 HMR/변경 감지는 별도 재확인한다.
 
 ## Decision Log
 
 - 2026-09-11: 보고된 결함과 현재 API의 미연결 업무를 구현하고 수직 슬라이스 커밋/업무 단위 PR로 분할한다.
 - 2026-09-11: 토큰·기존 컴포넌트 재사용을 우선하며 단순 시각 개선은 기존 정책 범위 안에서 진행한다.
-- Pending: 도움말의 실제 문의 채널. 다른 슬라이스의 진행을 막지 않는다.
+- 2026-09-11: C3 구성 조회는 메뉴 펼침 시 단일 메뉴 endpoint로 연결한다. 기존 메뉴별 500개 상한을 재사용하며 매장 전체 구성 전송과 N+1 초기 조회를 피한다.
+- 2026-09-11: 고객 도움말은 내장 Support 시스템에 연결한다. 고객 소유 문의 접수/진행 조회와 상담 Case 연결을 별도 H5/일곱 번째 PR로 구현한다. 내부 노트/본인 확인 자료는 공개하지 않는다. 관련 persistence 변경 필요성은 H5 계약 검토에서 결정한다.
 
 ## Outcomes & Retrospective
 

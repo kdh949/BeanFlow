@@ -2472,6 +2472,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stores/{storeId}/menus/{menuId}/configurations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 메뉴의 현재 판매 구성 조회
+         * @description ACTIVE same-store 메뉴의 ACTIVE 구성을 configurationId 순으로 반환합니다.
+         *     available은 구성 소유 상태이며 메뉴와 모든 선택 옵션도 판매 가능해야 합니다.
+         *     메뉴별 기존 authoring 상한 500개를 넘으면 503이며 목록을 잘라 반환하지 않습니다.
+         *     다른 매장 메뉴와 보관 메뉴는 404입니다. 조회는 가격 또는 예약 보장이 아닙니다.
+         */
+        get: operations["listStoreMenuConfigurations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stores/{storeId}/menus/{menuId}/trade-content": {
         parameters: {
             query?: never;
@@ -4587,6 +4610,454 @@ export interface paths {
          *     않았거나 이미 검토된 요청이면 409를 반환합니다.
          */
         post: operations["reviewSupportBreakGlass"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/settlement-disputes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 매장별 정산 이의 목록 조회
+         * @description SETTLEMENT_DISPUTE_READ grant가 필요하다. 매장·상태 필터에 묶인 signed cursor를 사용한다.
+         */
+        get: operations["listOperationsSettlementDisputes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/settlement-disputes/{disputeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 정산 이의 상세와 pending 판정 조회
+         * @description SETTLEMENT_DISPUTE_READ grant가 필요하다. pendingDecision이 있으면 같은 판정만 재개할 수 있다.
+         */
+        get: operations["getOperationsSettlementDispute"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/settlement-disputes/{disputeId}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 정산 이의 검토 시작
+         * @description SETTLEMENT_DISPUTE_DECIDE grant, expectedVersion 및 사유가 필요하다. FILED에서 UNDER_REVIEW로 전환한다. 동일 키는 최초 응답을 재생한다.
+         */
+        post: operations["startSettlementDisputeReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/settlement-disputes/{disputeId}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 정산 이의 승인 또는 기각
+         * @description SETTLEMENT_DISPUTE_DECIDE grant가 필요하다. UNDER_REVIEW에서 판정 의도를 먼저 저장한다. 실패 시 같은 키로 재개하며 반대 판정은 409다. 새 키로 같은 pending 판정을 재개할 때는 최신 version을 요구하고 최초 판정 actor와 사유를 보존한다. 승인 조정액은 동일 source로 한 번만 저장된다.
+         */
+        post: operations["decideSettlementDispute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/disputes/{disputeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 점주 정산 이의 상세 조회
+         * @description ACTIVE same-store OWNER membership이 필요하다.
+         */
+        get: operations["getOwnerSettlementDispute"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/disputes/{disputeId}/withdrawals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 점주 정산 이의 철회
+         * @description ACTIVE same-store OWNER와 Session CSRF가 필요하다. UNDER_REVIEW에서 철회하며 다른 pending 판정이 있으면 409다.
+         */
+        post: operations["withdrawSettlementDispute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/stores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 운영자 매장 목록 조회
+         * @description STORE_IDENTITY_READ grant가 필요하다. 매장명의 대소문자 무관 부분 검색과 actor/filter에 묶인 signed cursor를 사용한다.
+         */
+        get: operations["listManagedStores"];
+        put?: never;
+        /**
+         * 매장 개설
+         * @description STORE_IDENTITY_WRITE grant가 필요하다. 확인된 지역 코드와 이름·좌표를 저장하고 검색어를 같은 transaction에서 생성한다. 초기 acceptingOrders와 pickupEnabled는 false다. Idempotency-Key는 최초 응답을 재생하며 다른 payload는 409다.
+         */
+        post: operations["createManagedStore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/stores/{storeId}/identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 매장 검색 식별 정보 조회
+         * @description STORE_IDENTITY_READ grant가 필요하다. 변경에 사용할 identity version을 반환한다.
+         */
+        get: operations["getManagedStoreIdentity"];
+        /**
+         * 매장명과 좌표 교체
+         * @description STORE_IDENTITY_WRITE grant가 필요하다. expectedVersion을 확인하고 이름·좌표·검색어를 원자적으로 교체한다. 지역은 기존 지역 지정 API가 관리하며 이 요청으로 변경하지 않는다. 재시도는 최초 응답을 재생한다.
+         */
+        put: operations["replaceManagedStoreIdentity"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/store-regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 매장 개설용 지역 코드 조회
+         * @description STORE_IDENTITY_READ grant가 필요하다. 법정동 어휘를 검색하며 actor/filter에 묶인 signed cursor를 사용한다. 빈 검색은 전체 어휘를 순회한다.
+         */
+        get: operations["listManagedStoreRegions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/pickup-slot-management": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 픽업 슬롯 관리 목록 조회
+         * @description ACTIVE same-store OWNER/STAFF가 from 이상 to 미만에 시작하는 슬롯을 조회한다. actor/store/time-filter에 묶인 signed cursor와 limit 1~100을 사용한다.
+         */
+        get: operations["listManagedPickupSlots"];
+        put?: never;
+        /**
+         * 픽업 슬롯 생성
+         * @description ACTIVE OWNER/STAFF, Merchant Session/CSRF가 필요하다. 미래 구간과 0 이상 정원을 입력한다. 시각은 DB microsecond 정밀도로 정규화한다. 같은 키는 최초 응답을 재생한다. 다른 키로 생성한 슬롯은 독립된 정원을 가진다.
+         */
+        post: operations["createPickupSlot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/pickup-slot-management/{slotId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 픽업 슬롯 관리 상세 조회
+         * @description ACTIVE same-store OWNER/STAFF만 조회한다. 예약/확정 수량과 관리에 사용할 version을 포함한다.
+         */
+        get: operations["getManagedPickupSlot"];
+        /**
+         * 픽업 슬롯 시간과 정원 교체
+         * @description ACTIVE OWNER/STAFF, Session/CSRF, expectedVersion이 필요하다. 시작한 슬롯은 변경할 수 없고, 예약 또는 확정 수량이 있으면 시간 변경을 거절한다. 정원은 예약+확정 수량 이상이어야 한다. 같은 row lock으로 예약과 직렬화하며 stale version은 409다. 예약/확정 수량을 요청 body로 변경할 수 없다.
+         */
+        put: operations["replacePickupSlot"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/stores/{storeId}/settlement-terms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 매장 수수료 계약 버전 목록 조회
+         * @description STORE_SETTLEMENT_TERMS_READ grant. revision은 기존 데이터를 포함한 불변 계약 수다. actor와 store에 묶인 signed cursor로 조회한다.
+         */
+        get: operations["listStoreSettlementTerms"];
+        put?: never;
+        /**
+         * 미래 적용 수수료 계약 버전 등록
+         * @description STORE_SETTLEMENT_TERMS_WRITE grant. 미래의 반개구간만 추가한다. 기존 계약은 수정하지 않으며 중첩 구간, 중복 sourceReference, stale revision은 409다. 종료일 없는 계약과 겹치는 등록도 409다. 최초 응답은 90일 보관하며 현재 권한 검증 후 동일 키로 재생한다.
+         */
+        post: operations["registerStoreSettlementTerms"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/stores/{storeId}/settlement-terms/{termsVersionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 매장 수수료 계약 상세 조회
+         * @description STORE_SETTLEMENT_TERMS_READ grant. 다른 매장의 계약은 404다.
+         */
+        get: operations["getStoreSettlementTerms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/stores/{storeId}/memberships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 매장 소속 목록 조회
+         * @description STORE_MEMBERSHIP_READ grant. ACTIVE와 REVOKED를 함께 반환한다. cursor는 운영 actor/store에 묶인다.
+         */
+        get: operations["listStoreMemberships"];
+        put?: never;
+        /**
+         * 기존 계정에 매장 소속 추가
+         * @description STORE_MEMBERSHIP_WRITE grant. 기존 MerchantAccount UUID가 필요하며 credential 상태는 변경하지 않는다. 기존 소속이 있으면 REVOKED라도 409다. 동일 key/payload는 현재 권한을 확인하고 최초 응답을 재생한다.
+         */
+        post: operations["addStoreMembership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/stores/{storeId}/memberships/{accountId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 기존 계정의 매장 소속 상세 조회
+         * @description STORE_MEMBERSHIP_READ grant. 해당 계정의 지정 매장 소속만 조회한다.
+         */
+        get: operations["getStoreMembership"];
+        /**
+         * 매장 역할 변경 소속 철회 또는 재활성화
+         * @description STORE_MEMBERSHIP_WRITE grant. expectedVersion 필수. REVOKED 전환은 기존 role을 유지하며 ACTIVE 재활성화 때 role을 지정할 수 있다. 같은 상태/역할로 변화 없는 새 요청과 stale version은 409다. 비밀번호 활성화나 마지막 OWNER 자동 승계는 하지 않는다.
+         */
+        put: operations["replaceStoreMembership"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/notification-delivery-recoveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 알림 수동 복구 Case 목록 조회
+         * @description NOTIFICATION_RECOVERY_READ grant. MANUAL_REVIEW/RUNNING/RESOLVED 이력을 actor/kind-bound signed cursor로 조회한다. targetId는 상세 경로의 원본 식별자다.
+         */
+        get: operations["listNotificationDeliveryRecoveryCases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/notification-delivery-recoveries/{deliveryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 알림 원본 실행 상태와 복구 Case 조회
+         * @description NOTIFICATION_RECOVERY_READ grant. 원본 상태와 Case version을 반환하며 payload, 수신자, Provider 비밀 정보를 노출하지 않는다.
+         */
+        get: operations["getNotificationDeliveryRecovery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/notification-delivery-recoveries/{deliveryId}/retries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 알림 원본의 추가 시도 한 번 예약
+         * @description NOTIFICATION_RECOVERY_RETRY grant. MANUAL_REVIEW와 현재 version을 검증하고 같은 원본/key의 한 번 실행을 예약한다. 누적 횟수와 payload를 보존한다. HTTP는 실행하지 않으며 Case RUNNING은 완료를 뜻하지 않는다. 최초 응답은 현재 권한 확인 후 동일 키로 replay한다. 실제 성공은 RESOLVED, 재실패는 MANUAL_REVIEW이며 결과 불명은 RUNNING이다. 이벤트의 unsupported/reserved listener는 409다.
+         */
+        post: operations["retryNotificationDeliveryManualRecovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/event-publication-recoveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 이벤트 수동 복구 Case 목록 조회
+         * @description EVENT_PUBLICATION_RECOVERY_READ grant. MANUAL_REVIEW/RUNNING/RESOLVED 이력을 actor/kind-bound signed cursor로 조회한다. targetId는 상세 경로의 원본 식별자다.
+         */
+        get: operations["listEventPublicationRecoveryCases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/event-publication-recoveries/{publicationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 이벤트 원본 실행 상태와 복구 Case 조회
+         * @description EVENT_PUBLICATION_RECOVERY_READ grant. 원본 상태와 Case version을 반환하며 payload, 수신자, Provider 비밀 정보를 노출하지 않는다.
+         */
+        get: operations["getEventPublicationRecovery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/event-publication-recoveries/{publicationId}/retries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 이벤트 원본의 추가 시도 한 번 예약
+         * @description EVENT_PUBLICATION_RECOVERY_RETRY grant. MANUAL_REVIEW와 현재 version을 검증하고 같은 원본/key의 한 번 실행을 예약한다. 누적 횟수와 payload를 보존한다. HTTP는 실행하지 않으며 Case RUNNING은 완료를 뜻하지 않는다. 최초 응답은 현재 권한 확인 후 동일 키로 replay한다. 실제 성공은 RESOLVED, 재실패는 MANUAL_REVIEW이며 결과 불명은 RUNNING이다. 이벤트의 unsupported/reserved listener는 409다.
+         */
+        post: operations["retryEventPublicationManualRecovery"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7970,6 +8441,12 @@ export interface components {
             version: number;
             updatedAt: components["schemas"]["DateTime"];
         };
+        CustomerMenuConfiguration: {
+            /** Format: uuid */
+            configurationId: string;
+            optionIds: string[];
+            available: boolean;
+        };
         ReplaceMenuTradeContentRequest: {
             /** Format: int64 */
             expectedVersion: number;
@@ -10926,6 +11403,263 @@ export interface components {
             /** Format: int64 */
             expectedVersion: number;
             reasonCode: string;
+        };
+        DisputeManagementResponse: {
+            /** Format: uuid */
+            disputeId: string;
+            /** Format: uuid */
+            storeId: string;
+            /** Format: uuid */
+            settlementItemId: string;
+            /** @enum {string} */
+            state: "FILED" | "UNDER_REVIEW" | "ACCEPTED" | "REJECTED" | "WITHDRAWN";
+            /** Format: int64 */
+            version: number;
+            /** Format: int64 */
+            expectedAdjustmentKrw: number;
+            /** Format: int64 */
+            heldAmountKrw: number;
+            reason: string;
+            evidenceReferences: string[];
+            /** Format: date-time */
+            filedAt: string;
+            decidedAt: string | null;
+            settlementAdjustmentId: string | null;
+            pendingDecision: ("FILED" | "UNDER_REVIEW" | "ACCEPTED" | "REJECTED" | "WITHDRAWN") | null;
+        };
+        DisputeManagementRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            reason: string;
+        };
+        DisputeDecisionRequest: {
+            /** @enum {string} */
+            outcome: "ACCEPTED" | "REJECTED";
+            /** Format: int64 */
+            expectedVersion: number;
+            reason: string;
+        };
+        StoreIdentitySnapshot: {
+            /** Format: uuid */
+            storeId: string;
+            name: string;
+            latitude: number;
+            longitude: number;
+            regionCode: string;
+            /** Format: int64 */
+            version: number;
+            acceptingOrders: boolean;
+            pickupEnabled: boolean;
+        };
+        OperatorStoreIdentityPage: {
+            items: components["schemas"]["StoreIdentitySnapshot"][];
+            nextCursor: string | null;
+        };
+        CreateStoreIdentityRequest: {
+            name: string;
+            latitude: number;
+            longitude: number;
+            regionCode: string;
+            reason: string;
+        };
+        ReplaceStoreIdentityRequest: {
+            name: string;
+            latitude: number;
+            longitude: number;
+            /** Format: int64 */
+            expectedVersion: number;
+            reason: string;
+        };
+        OperatorStoreRegion: {
+            code: string;
+            sido: string;
+            sigungu: string;
+            eupmyeondong: string;
+            ri: string;
+            fullName: string;
+        };
+        OperatorStoreRegionPage: {
+            items: components["schemas"]["OperatorStoreRegion"][];
+            nextCursor: string | null;
+        };
+        ManagedPickupSlot: {
+            /** Format: uuid */
+            slotId: string;
+            /** Format: uuid */
+            storeId: string;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            /** Format: int64 */
+            capacity: number;
+            /** Format: int64 */
+            reservedCount: number;
+            /** Format: int64 */
+            confirmedCount: number;
+            /** Format: int64 */
+            version: number;
+        };
+        ManagedPickupSlotPage: {
+            items: components["schemas"]["ManagedPickupSlot"][];
+            nextCursor: string | null;
+        };
+        CreatePickupSlotRequest: {
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            /** Format: int64 */
+            capacity: number;
+            reason: string;
+        };
+        ReplacePickupSlotRequest: {
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            /** Format: int64 */
+            capacity: number;
+            /** Format: int64 */
+            expectedVersion: number;
+            reason: string;
+        };
+        ManagedSettlementTermsSnapshot: {
+            /** Format: uuid */
+            termsVersionId: string;
+            /** Format: uuid */
+            storeId: string;
+            sourceReference: string;
+            feeRateBps: number;
+            /** Format: date-time */
+            effectiveFrom: string;
+            effectiveTo: string | null;
+        };
+        ManagedStoreSettlementTermsPage: {
+            items: components["schemas"]["ManagedSettlementTermsSnapshot"][];
+            /** Format: int64 */
+            revision: number;
+            nextCursor: string | null;
+        };
+        RegisterStoreSettlementTermsRequest: {
+            sourceReference: string;
+            feeRateBps: number;
+            /** Format: date-time */
+            effectiveFrom: string;
+            effectiveTo: string | null;
+            /** Format: int64 */
+            expectedRevision: number;
+            reason: string;
+        };
+        ManagedStoreSettlementTerms: {
+            terms: components["schemas"]["ManagedSettlementTermsSnapshot"];
+            /** Format: int64 */
+            revision: number;
+        };
+        ManagedStoreMembership: {
+            /** Format: uuid */
+            membershipId: string;
+            /** Format: uuid */
+            accountId: string;
+            /** Format: uuid */
+            storeId: string;
+            /** @enum {string} */
+            role: "OWNER" | "STAFF";
+            /** @enum {string} */
+            status: "ACTIVE" | "REVOKED";
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ManagedStoreMembershipPage: {
+            items: components["schemas"]["ManagedStoreMembership"][];
+            nextCursor: string | null;
+        };
+        AddStoreMembershipRequest: {
+            /** Format: uuid */
+            accountId: string;
+            /** @enum {string} */
+            role: "OWNER" | "STAFF";
+            reason: string;
+        };
+        ReplaceStoreMembershipRequest: {
+            /** @enum {string} */
+            role: "OWNER" | "STAFF";
+            /** @enum {string} */
+            status: "ACTIVE" | "REVOKED";
+            /** Format: int64 */
+            expectedVersion: number;
+            reason: string;
+        };
+        ManualRecoveryCaseView: {
+            /** Format: uuid */
+            caseId: string;
+            /** @enum {string} */
+            kind: "NOTIFICATION_DELIVERY" | "EVENT_PUBLICATION";
+            /** Format: uuid */
+            targetId: string;
+            /** @enum {string} */
+            status: "OPEN" | "MANUAL_REVIEW" | "RUNNING" | "RESOLVED";
+            /** Format: int64 */
+            version: number;
+            reason: string;
+            /** Format: date-time */
+            updatedAt: string;
+            resolution: string | null;
+        };
+        ManualRecoveryCasePage: {
+            items: components["schemas"]["ManualRecoveryCaseView"][];
+            nextCursor: string | null;
+        };
+        NotificationRecoveryView: {
+            /** Format: uuid */
+            deliveryId: string;
+            /** @enum {string} */
+            state: "PENDING" | "PROCESSING" | "SUCCEEDED" | "SKIPPED" | "RETRY_SCHEDULED" | "MANUAL_REVIEW";
+            /** Format: int64 */
+            version: number;
+            attemptCount: number;
+            attemptLimit: number;
+            nextAttemptAt: string | null;
+            lastFailureCode: string | null;
+            recoveryCase: components["schemas"]["ManualRecoveryCaseView"] | null;
+        };
+        RetryNotificationDeliveryRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            /** Format: int64 */
+            expectedCaseVersion: number;
+            reason: string;
+        };
+        ManualRecoveryAcceptance: {
+            /** Format: uuid */
+            commandId: string;
+            recoveryCase: components["schemas"]["ManualRecoveryCaseView"];
+            /** Format: date-time */
+            acceptedAt: string;
+        };
+        PublicationRecoveryView: {
+            /** Format: uuid */
+            publicationId: string;
+            eventType: string;
+            listenerId: string;
+            status: string;
+            attemptCount: number;
+            completedAt: string | null;
+            recoverable: boolean;
+            recoveryCase: components["schemas"]["ManualRecoveryCaseView"] | null;
+            /** @description 마지막 수동 시도의 확인된 결과. UNKNOWN은 업무 실패를 뜻하지 않는다. */
+            executionOutcome: ("SUCCEEDED" | "FAILED" | "UNKNOWN") | null;
+            /** @description 결과 불명 대상의 재실행을 차단한 사유. 원본 상태를 강제 실패 처리하지 않는다. */
+            retryBlockedReason: string | null;
+        };
+        RetryPublicationRequest: {
+            /** Format: int64 */
+            expectedCaseVersion: number;
+            reason: string;
         };
     };
     responses: {
@@ -15044,6 +15778,34 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    listStoreMenuConfigurations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 판매 구성 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["CustomerMenuConfiguration"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     getMerchantMenuTradeContent: {
         parameters: {
             query?: never;
@@ -17771,6 +18533,941 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BreakGlassResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listOperationsSettlementDisputes: {
+        parameters: {
+            query: {
+                storeId: string;
+                state?: "FILED" | "UNDER_REVIEW" | "ACCEPTED" | "REJECTED" | "WITHDRAWN";
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 매장별 정산 이의 목록 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantDisputePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getOperationsSettlementDispute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                disputeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 정산 이의 상세와 pending 판정 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisputeManagementResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    startSettlementDisputeReview: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                disputeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisputeManagementRequest"];
+            };
+        };
+        responses: {
+            /** @description 정산 이의 검토 시작 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisputeManagementResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    decideSettlementDispute: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                disputeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisputeDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description 정산 이의 승인 또는 기각 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisputeManagementResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getOwnerSettlementDispute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: string;
+                disputeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 점주 정산 이의 상세 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisputeManagementResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    withdrawSettlementDispute: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: string;
+                disputeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisputeManagementRequest"];
+            };
+        };
+        responses: {
+            /** @description 점주 정산 이의 철회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisputeManagementResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listManagedStores: {
+        parameters: {
+            query?: {
+                query?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 운영자 매장 목록 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorStoreIdentityPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createManagedStore: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStoreIdentityRequest"];
+            };
+        };
+        responses: {
+            /** @description 매장 개설 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreIdentitySnapshot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getManagedStoreIdentity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 매장 검색 식별 정보 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreIdentitySnapshot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceManagedStoreIdentity: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                storeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceStoreIdentityRequest"];
+            };
+        };
+        responses: {
+            /** @description 매장명과 좌표 교체 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreIdentitySnapshot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listManagedStoreRegions: {
+        parameters: {
+            query?: {
+                query?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 매장 개설용 지역 코드 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorStoreRegionPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listManagedPickupSlots: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                storeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 픽업 슬롯 관리 목록 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedPickupSlotPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createPickupSlot: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePickupSlotRequest"];
+            };
+        };
+        responses: {
+            /** @description 픽업 슬롯 생성 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedPickupSlot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getManagedPickupSlot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: string;
+                slotId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 픽업 슬롯 관리 상세 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedPickupSlot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replacePickupSlot: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
+            };
+            path: {
+                storeId: string;
+                slotId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplacePickupSlotRequest"];
+            };
+        };
+        responses: {
+            /** @description 픽업 슬롯 시간과 정원 교체 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedPickupSlot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listStoreSettlementTerms: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                storeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 매장 수수료 계약 버전 목록 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedStoreSettlementTermsPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    registerStoreSettlementTerms: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                storeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterStoreSettlementTermsRequest"];
+            };
+        };
+        responses: {
+            /** @description 미래 적용 수수료 계약 버전 등록 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedStoreSettlementTerms"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getStoreSettlementTerms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: string;
+                termsVersionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 매장 수수료 계약 상세 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedStoreSettlementTerms"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listStoreMemberships: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                storeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 매장 소속 목록 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedStoreMembershipPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    addStoreMembership: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                storeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddStoreMembershipRequest"];
+            };
+        };
+        responses: {
+            /** @description 기존 계정에 매장 소속 추가 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedStoreMembership"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getStoreMembership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: string;
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 기존 계정의 매장 소속 상세 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedStoreMembership"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    replaceStoreMembership: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                storeId: string;
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceStoreMembershipRequest"];
+            };
+        };
+        responses: {
+            /** @description 매장 역할 변경 소속 철회 또는 재활성화 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedStoreMembership"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listNotificationDeliveryRecoveryCases: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 알림 수동 복구 Case 목록 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualRecoveryCasePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getNotificationDeliveryRecovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deliveryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 알림 원본 실행 상태와 복구 Case 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecoveryView"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    retryNotificationDeliveryManualRecovery: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                deliveryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryNotificationDeliveryRequest"];
+            };
+        };
+        responses: {
+            /** @description 알림 원본의 추가 시도 한 번 예약 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualRecoveryAcceptance"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listEventPublicationRecoveryCases: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 이벤트 수동 복구 Case 목록 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualRecoveryCasePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getEventPublicationRecovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 이벤트 원본 실행 상태와 복구 Case 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationRecoveryView"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    retryEventPublicationManualRecovery: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                publicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryPublicationRequest"];
+            };
+        };
+        responses: {
+            /** @description 이벤트 원본의 추가 시도 한 번 예약 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualRecoveryAcceptance"];
                 };
             };
             400: components["responses"]["BadRequest"];

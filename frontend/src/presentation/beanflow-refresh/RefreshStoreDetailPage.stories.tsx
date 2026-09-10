@@ -43,6 +43,31 @@ export const WeeklyHours: Story = {
   },
 };
 
+/** The customer chooses one registered set, rather than creating an invalid combination. */
+export const RegisteredConfigurations: Story = {
+  parameters: { msw: { handlers: [
+    http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [{ menuId: ids.menu, name: "오트 라떼", basePriceKrw: 6400, available: true, options: [{ optionId: "shot", name: "샷 추가", additionalPriceKrw: 500, available: true }, { optionId: "oat", name: "오트 밀크", additionalPriceKrw: 800, available: true }] }] })),
+    http.get("/api/v1/stores/:storeId/menus/:menuId/configurations", () => HttpResponse.json({ items: [{ configurationId: "with-shot", optionIds: ["shot"], available: true }, { configurationId: "with-oat", optionIds: ["oat"], available: false }] })),
+    ...meta.parameters.msw.handlers,
+  ] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: /오트 라떼/ }));
+    await expect(await canvas.findByRole("radio", { name: /오트 밀크/ })).toBeDisabled();
+    await userEvent.click(canvas.getByRole("radio", { name: /샷 추가/ }));
+    await userEvent.click(canvas.getByRole("button", { name: /6,900.*담기/ }));
+    await expect(cart.read()).toMatchObject({ status: "ready", cart: { lines: [{ optionIds: ["shot"], display: { unitPriceKrw: 6900 } }] } });
+  },
+};
+
+export const ConfigurationUnavailable: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/stores/:storeId/menus/:menuId/configurations", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE", message: "구성을 확인하지 못했습니다." }, { status: 503 })), ...meta.parameters.msw.handlers] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: /오트 라떼/ }));
+    await expect(await canvas.findByRole("alert")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: /담기$/ })).toBeDisabled();
+  },
+};
+
 export const PickupUnavailable: Story = {
   parameters: {
     msw: { handlers: [...signedInHandlers, ...favoriteHandlers, ...storeIdentityHandlers, http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [] })), http.get("/api/v1/stores/:storeId/pickup-slots", () => HttpResponse.json({ items: [] }))] },

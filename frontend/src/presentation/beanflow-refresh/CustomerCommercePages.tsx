@@ -12,6 +12,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
+import { MenuConfigurationChoice } from "../../features/discovery/MenuConfigurationChoice";
 import { useCurrentMenuCatalog } from "../../features/discovery/useCurrentMenuCatalog";
 import { useStore } from "../../features/discovery/useStore";
 import { nextPickupLabel, operatingStatusLabel, operatingDayLabel, pickupDateTimeLabel } from "../../features/discovery/storeDisplay";
@@ -23,7 +24,7 @@ import { PointUseField, usePointUse } from "../../features/loyalty/PointUseField
 import { FavoriteStoreButton } from "../../features/customer/FavoriteStoresPage";
 import { won } from "../../lib/format";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar } from "./RefreshShared";
-import { Button, ButtonLink, Checkbox, PageHeading, QuantityStepper, RadioCard, RadioGroup } from "../../design-system";
+import { Button, ButtonLink, PageHeading, QuantityStepper, RadioCard, RadioGroup } from "../../design-system";
 
 type CustomerStore = components["schemas"]["CustomerStore"];
 type Menu = components["schemas"]["Menu"];
@@ -92,6 +93,7 @@ function RefreshMenuRow({ menu, storeId, storeName, orderable }: { menu: Menu; s
   const [open, setOpen] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [optionIds, setOptionIds] = useState<string[]>([]);
+  const [configurationReady, setConfigurationReady] = useState(false);
   const [conflict, setConflict] = useState<{ currentStoreName: string; line: CartLine } | null>(null);
   const [added, setAdded] = useState(false);
   const options = menu.options ?? [];
@@ -102,6 +104,7 @@ function RefreshMenuRow({ menu, storeId, storeName, orderable }: { menu: Menu; s
     return { menuId: menu.menuId, optionIds, quantity, display: { menuName: menu.name, optionNames: options.filter((option) => optionIds.includes(option.optionId)).map((option) => option.name), unitPriceKrw: unitPrice,  } };
   }
   function add() {
+    if (!configurationReady) return;
     const next = line();
     const result = cart.add({ storeId, storeName }, next);
     if (result.outcome === "other-store") { setConflict({ currentStoreName: result.currentStoreName, line: next }); return; }
@@ -115,8 +118,8 @@ function RefreshMenuRow({ menu, storeId, storeName, orderable }: { menu: Menu; s
         <span className="bfr-menu-row__add">{open ? <Check size={17} /> : "+"}</span>
       </Button>
       {open ? <div className="bfr-menu-config">
-        {options.length ? <fieldset><legend>추가 옵션 (선택)</legend>{options.map((option) => <Checkbox key={option.optionId} variant="card" label={`${option.name}${option.available ? "" : " · 품절"}`} trailing={`+${won.format(option.additionalPriceKrw)}`} checked={optionIds.includes(option.optionId)} disabled={!option.available} onCheckedChange={() => setOptionIds((current) => current.includes(option.optionId) ? current.filter((id) => id !== option.optionId) : [...current, option.optionId])} />)}</fieldset> : null}
-        <div className="bfr-config-actions"><QuantityStepper value={quantity} label={`${menu.name} 수량`} onChange={setQuantity} /><Button variant="brand" onClick={add}>{won.format(unitPrice * quantity)} 담기</Button></div>
+        <MenuConfigurationChoice storeId={storeId} menu={menu} optionIds={optionIds} onChange={setOptionIds} onValidityChange={setConfigurationReady} />
+        <div className="bfr-config-actions"><QuantityStepper value={quantity} label={`${menu.name} 수량`} onChange={setQuantity} /><Button variant="brand" disabled={!configurationReady} onClick={add}>{won.format(unitPrice * quantity)} 담기</Button></div>
       </div> : null}
       {added ? <p className="bfr-success-note" role="status">장바구니에 담았어요.</p> : null}
       {conflict ? <div className="bfr-decision" role="region" aria-label="다른 매장 장바구니"><strong>{conflict.currentStoreName} 주문이 이미 담겨 있어요</strong><p>한 번에 한 매장만 주문할 수 있습니다.</p><div><Button variant="ghost" onClick={() => setConflict(null)}>그대로 두기</Button><Button variant="brand" onClick={() => { cart.replaceWith({ storeId, storeName }, conflict.line); setConflict(null); setAdded(true); setOpen(false); }}>비우고 담기</Button></div></div> : null}
@@ -245,12 +248,12 @@ function CartLineEditor({ storeId, line, onClose, onSave }: { storeId: string; l
   const [optionIds, setOptionIds] = useState(line.optionIds);
   const menu = catalog.state.status === "ready" ? catalog.state.value.find((item) => item.menuId === line.menuId) : undefined;
   const options = menu?.options ?? [];
-  const unavailable = optionIds.some((id) => !options.some((option) => option.optionId === id && option.available));
+  const [configurationReady, setConfigurationReady] = useState(false);
   return <section className="bfr-menu-config" aria-label={`${line.display.menuName} 옵션 수정`}>
     {catalog.state.status === "loading" ? <RefreshLoading label="현재 옵션을 확인하는 중" /> : null}
     {catalog.state.status === "failed" ? <RefreshError error={catalog.state.error} retry={catalog.reload} /> : null}
     {catalog.state.status === "ready" && (!menu || !menu.available) ? <p role="alert">현재 판매하지 않는 메뉴예요. 다른 메뉴를 담아 주세요.</p> : null}
-    {menu?.available ? <><h3>추가 옵션 (선택)</h3>{options.length ? options.map((option) => <Checkbox key={option.optionId} label={`${option.name}${option.available ? "" : " · 품절"}`} trailing={`+${won.format(option.additionalPriceKrw)}`} checked={optionIds.includes(option.optionId)} disabled={!option.available && !optionIds.includes(option.optionId)} onCheckedChange={(checked) => setOptionIds((current) => checked ? [...current, option.optionId] : current.filter((id) => id !== option.optionId))} />) : <p>이 메뉴는 추가 옵션이 없어요.</p>}{unavailable ? <div role="alert"><p>판매가 끝난 옵션이 있어요. 옵션을 다시 골라 주세요.</p><Button variant="secondary" onClick={() => setOptionIds((current) => current.filter((id) => options.some((option) => option.optionId === id && option.available)))}>판매가 끝난 옵션 해제</Button></div> : null}</> : null}
-    <div className="bfr-config-actions"><Button variant="ghost" onClick={onClose}>닫기</Button><Button variant="brand" disabled={!menu?.available || unavailable} onClick={() => { if (!menu) return; const selected = options.filter((option) => optionIds.includes(option.optionId)); onSave({ ...line, optionIds, display: { menuName: menu.name, optionNames: selected.map((option) => option.name), unitPriceKrw: menu.basePriceKrw + selected.reduce((sum, option) => sum + option.additionalPriceKrw, 0),  } }); }}>옵션 적용</Button></div>
+    {menu?.available ? <MenuConfigurationChoice storeId={storeId} menu={menu} optionIds={optionIds} onChange={setOptionIds} onValidityChange={setConfigurationReady} /> : null}
+    <div className="bfr-config-actions"><Button variant="ghost" onClick={onClose}>닫기</Button><Button variant="brand" disabled={!menu?.available || !configurationReady} onClick={() => { if (!menu) return; const selected = options.filter((option) => optionIds.includes(option.optionId)); onSave({ ...line, optionIds, display: { menuName: menu.name, optionNames: selected.map((option) => option.name), unitPriceKrw: menu.basePriceKrw + selected.reduce((sum, option) => sum + option.additionalPriceKrw, 0),  } }); }}>옵션 적용</Button></div>
   </section>;
 }

@@ -20,6 +20,15 @@
 - 점주 변경은 같은 Store의 exclusive lock을 사용한다. 먼저 확정된 변경이 다음 주문에 반영된다.
 - 주문에는 메뉴·옵션 이름, 가격과 선택 옵션의 불변 스냅샷을 저장한다.
 
+### 고객 구성 선택 조회 (2026-09-11)
+
+고객은 `GET /stores/{storeId}/menus/{menuId}/configurations`로 ACTIVE 메뉴의 현재 ACTIVE 구성을
+조회한다. 응답은 configurationId, 정규화된 optionIds와 owner available flag다. 고객 화면은 메뉴·옵션·
+구성의 판매 상태를 모두 확인하고 서버가 반환한 한 구성을 선택한다. 누락된 구성은 기본 구성으로 추측하지 않는다.
+메뉴를 펼칠 때 조회하므로 매장 전체 목록에 구성마다 쿼리를 추가하지 않는다. 메뉴별 500개 상한은 ADR-118의
+기존 authoring 상한이며, 501개인 손상 데이터는 partial success가 아닌 503이다. 다른 매장·보관 메뉴는 404다.
+이 조회는 가격·예약 보장이 아니며 최종 주문의 기존 lock/quote 검증과 주문 snapshot은 유지한다.
+
 ## Alternatives Considered
 
 옵션마다 독립적인 판매 여부만 확인하면 허용하지 않은 조합까지 주문할 수 있다.

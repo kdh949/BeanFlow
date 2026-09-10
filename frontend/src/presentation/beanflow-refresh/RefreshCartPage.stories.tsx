@@ -140,12 +140,12 @@ export const PointsUnavailable: Story = {
 
 export const EditOptions: Story = {
   tags: ["!autodocs"],
-  parameters: { msw: { handlers: [http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [{ menuId: ids.menu, name: "오트 라떼", basePriceKrw: 6400, available: true, options: [{ optionId: "extra-shot", name: "샷 추가", additionalPriceKrw: 500, available: true }] }] })), ...meta.parameters.msw.handlers] } },
+  parameters: { msw: { handlers: [http.get("/api/v1/stores/:storeId/menus/:menuId/configurations", () => HttpResponse.json({ items: [{ configurationId: "basic", optionIds: [], available: true }, { configurationId: "shot", optionIds: ["extra-shot"], available: true }] })), http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [{ menuId: ids.menu, name: "오트 라떼", basePriceKrw: 6400, available: true, options: [{ optionId: "extra-shot", name: "샷 추가", additionalPriceKrw: 500, available: true }] }] })), ...meta.parameters.msw.handlers] } },
   play: async ({ canvas }) => {
     await userEvent.click(await canvas.findByRole("radio", { name: /7잔 가능/ }));
     await expect(await canvas.findByRole("button", { name: /17,800.*주문하기/ })).toBeEnabled();
     await userEvent.click(await canvas.findByRole("button", { name: "오트 라떼 옵션 변경" }));
-    await userEvent.click(await canvas.findByRole("checkbox", { name: /샷 추가/ }));
+    await userEvent.click(await canvas.findByRole("radio", { name: /샷 추가/ }));
     await userEvent.click(canvas.getByRole("button", { name: "옵션 적용" }));
     await expect(await canvas.findByText("샷 추가")).toBeVisible();
     await expect(await canvas.findByRole("button", { name: /18,800.*주문하기/ })).toBeEnabled();

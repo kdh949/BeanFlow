@@ -20,6 +20,12 @@ interface StoreCatalogQueryOperations : DiscoveryApi {
      */
     fun listMenus(storeId: UUID): List<StoreMenuItemView>
 
+    /** Complete active configuration list of one menu, bounded by the authoring limit of 500. */
+    fun listConfigurations(
+        storeId: UUID,
+        menuId: UUID,
+    ): List<StoreMenuItemConfigurationView>
+
     /**
      * Slots the store can actually be ordered from right now (ADR-076): those with `startsAt > now`
      * when the store is accepting orders and has pickup enabled. The list extends at most seven
@@ -51,6 +57,12 @@ data class StoreMenuItemOptionView(
     val optionId: UUID,
     val name: String,
     val additionalPriceKrw: Long,
+    val available: Boolean,
+)
+
+data class StoreMenuItemConfigurationView(
+    val configurationId: UUID,
+    val optionIds: List<UUID>,
     val available: Boolean,
 )
 

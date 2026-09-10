@@ -196,6 +196,7 @@ export const nearbyHandlers = [
 ];
 
 export const catalogHandlers = [
+  http.get("/api/v1/stores/:storeId/menus/:menuId/configurations", () => HttpResponse.json({ items: [{ configurationId: "60000000-0000-4000-8000-000000000001", optionIds: [], available: true }] })),
   http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [
     {
       menuId: ids.menu,

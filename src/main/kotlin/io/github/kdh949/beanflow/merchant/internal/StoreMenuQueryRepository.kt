@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.merchant.internal
 
+import io.github.kdh949.beanflow.merchant.api.StoreMenuConfigurationView
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import java.util.UUID
@@ -28,6 +29,8 @@ internal data class StoreMenuOptionProjection(
  * query asks for one row past its bound: [StoreMenuQueryService] sees the overflow and fails
  * explicitly rather than returning a silently truncated catalogue.
  */
+internal const val MAX_MENU_CONFIGURATIONS = 500
+
 internal const val MAX_STORE_MENUS = 1_000
 
 internal const val MAX_STORE_MENU_OPTIONS = 5_000
@@ -42,6 +45,42 @@ internal const val MAX_STORE_MENU_OPTIONS = 5_000
 internal class StoreMenuQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
+    fun activeMenuExists(
+        storeId: UUID,
+        menuId: UUID,
+    ): Boolean =
+        jdbcTemplate.queryForObject(
+            "SELECT EXISTS (SELECT 1 FROM merchant_menu WHERE store_id = ? AND id = ? AND lifecycle = 'ACTIVE')",
+            Boolean::class.java,
+            storeId,
+            menuId,
+        ) == true
+
+    fun findConfigurations(menuId: UUID): List<StoreMenuConfigurationView> =
+        jdbcTemplate.query(
+            """
+            SELECT id, normalized_option_key, available
+              FROM merchant_menu_configuration
+             WHERE menu_id = ? AND lifecycle = 'ACTIVE'
+             ORDER BY id
+             LIMIT ${MAX_MENU_CONFIGURATIONS + 1}
+            """.trimIndent(),
+            { row, _ ->
+                StoreMenuConfigurationView(
+                    configurationId = row.getObject("id", UUID::class.java),
+                    optionIds =
+                        row
+                            .getString("normalized_option_key")
+                            .takeIf { it.isNotEmpty() }
+                            ?.split(',')
+                            ?.map(UUID::fromString)
+                            .orEmpty(),
+                    available = row.getBoolean("available"),
+                )
+            },
+            menuId,
+        )
+
     fun findMenus(storeId: UUID): List<StoreMenuProjection> =
         jdbcTemplate.query(
             """
