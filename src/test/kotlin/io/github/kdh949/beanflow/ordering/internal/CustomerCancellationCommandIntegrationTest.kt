@@ -16,6 +16,7 @@ import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
 import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -91,12 +92,15 @@ internal class CustomerCancellationCommandIntegrationTest
                 "UPDATE merchant_store_discovery_profile SET name = 'Renamed Store' WHERE store_id = ?",
                 fixture.storeId,
             )
-            jdbcTemplate.update(
-                "UPDATE fulfillment_pickup_slot SET starts_at = ?, ends_at = ? WHERE id = ?",
-                Timestamp.from(Instant.parse("2030-01-02T00:10:00Z")),
-                Timestamp.from(Instant.parse("2030-01-02T00:20:00Z")),
-                fixture.pickupSlotId,
-            )
+            assertThatThrownBy {
+                jdbcTemplate.update(
+                    "UPDATE fulfillment_pickup_slot SET starts_at = ?, ends_at = ? WHERE id = ?",
+                    Timestamp.from(Instant.parse("2030-01-02T00:10:00Z")),
+                    Timestamp.from(Instant.parse("2030-01-02T00:20:00Z")),
+                    fixture.pickupSlotId,
+                )
+            }.isInstanceOf(org.springframework.dao.DataIntegrityViolationException::class.java)
+                .hasMessageContaining("Consumed pickup slot window is immutable")
 
             mockMvc
                 .perform(
