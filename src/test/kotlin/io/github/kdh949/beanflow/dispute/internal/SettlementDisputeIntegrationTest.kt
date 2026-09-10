@@ -425,6 +425,47 @@ internal class SettlementDisputeIntegrationTest
         }
 
         @Test
+        fun `stored decision replay repairs a Case completion failure without repeating the decision`() {
+            val fixture = fixture()
+            val filed = file(fixture, "management-case-recovery")
+            val operator = grantOperator()
+            val review = management.execute(managementCommand(operator, filed.disputeId, "REVIEW", 0))
+            val command = managementCommand(operator, filed.disputeId, "ACCEPTED", review.version)
+            jdbcTemplate.execute(
+                "ALTER TABLE event_publication ADD CONSTRAINT test_case_setup_failure CHECK (event_type <> 'io.github.kdh949.beanflow.eventing.api.SettlementDisputeDecidedV1')",
+            )
+            try {
+                assertThatThrownBy { management.execute(command) }.isInstanceOf(DomainFailure::class.java)
+            } finally {
+                jdbcTemplate.execute("ALTER TABLE event_publication DROP CONSTRAINT test_case_setup_failure")
+            }
+            jdbcTemplate.execute(
+                "ALTER TABLE operations_reprocessing_case ADD CONSTRAINT test_case_completion_failure CHECK (case_type <> 'SETTLEMENT_DISPUTE' OR status <> 'RESOLVED')",
+            )
+            try {
+                assertThatThrownBy { management.execute(command) }.isInstanceOf(RuntimeException::class.java)
+                assertThat(management.get(operator, null, filed.disputeId).state).isEqualTo(SettlementDisputeState.ACCEPTED)
+            } finally {
+                jdbcTemplate.execute("ALTER TABLE operations_reprocessing_case DROP CONSTRAINT test_case_completion_failure")
+            }
+            val committed = management.get(operator, null, filed.disputeId)
+            assertThat(value<String>("SELECT status FROM operations_reprocessing_case WHERE case_type = 'SETTLEMENT_DISPUTE'"))
+                .isEqualTo("MANUAL_REVIEW")
+            assertThat(management.execute(command)).isEqualTo(committed)
+            assertThat(management.execute(command)).isEqualTo(committed)
+            assertThat(value<String>("SELECT status FROM operations_reprocessing_case WHERE case_type = 'SETTLEMENT_DISPUTE'"))
+                .isEqualTo("RESOLVED")
+            assertThat(count("SELECT count(*) FROM settlement_adjustment")).isOne()
+            assertThat(count("SELECT count(*) FROM operations_audit_record WHERE action = 'SETTLEMENT_DISPUTE_DECIDED'"))
+                .isOne()
+            assertThat(
+                count(
+                    "SELECT count(*) FROM event_publication WHERE event_type = 'io.github.kdh949.beanflow.eventing.api.SettlementDisputeDecidedV1'",
+                ),
+            ).isOne()
+        }
+
+        @Test
         fun `management request Audit failure leaves no decision intent or command`() {
             val fixture = fixture()
             val dispute = file(fixture, "management-audit-key")
