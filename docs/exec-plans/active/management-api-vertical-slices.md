@@ -320,3 +320,14 @@ publication 후보 선택·결과 대사를 추가한다. 각 PR은 자체 Runti
 - 실제 Notification worker에서 동일 Provider key/payload, 추가 시도 한 번, 재실패/lease 소진 후 수동 검토,
   실제 성공 후 Case 해결, Audit rollback과 동시 접수 및 권한/cursor를 확인했다.
 - publication 복구 구현은 다음 V80 PR에서 제공한다. 전체 backend suite와 원격 CI는 별도 gate다.
+
+### 이벤트 publication 수동 복구 슬라이스 검증 (2026-09-10)
+
+- 알림 PR #156 head `e4eaeb7` 위에 V80과 exact publication의 한 번 재시도, 실제 listener metadata 검증,
+  원장 기반 후보 선택, 결과 대사와 보존을 추가했다.
+- Passed: 새 publication 관리 7, 기존 publication 복구 9, 기존 복구 worker 3, 알림 관리 5,
+  Runtime API parity 1, Modulith 1, Flyway smoke 1 = 27 tests. SpotlessCheck, bootJar, 문서 검증 통과.
+- 문서 검증: target 207 paths/234 operations, runtime 197 paths/224 operations, 416 schemas.
+- 실제 Modulith 재실행에서 동일 원본/누적 횟수 유지, 재실패 후 추가 자동 재시도 차단, 결과 불명 유지,
+  unsupported target 거절, corrupt payload 503, Audit rollback, concurrent 접수, 결과 저장 건별 실패 격리를 확인했다.
+- 전체 backend regression과 최종 원격 head/base 및 ancestry 확인을 이어서 수행한다.

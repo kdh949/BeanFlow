@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.shared.api.DomainFailure
+import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.modulith.events.EventPublication
 import org.springframework.modulith.events.core.EventPublicationRepository
@@ -33,11 +35,16 @@ internal class EventPublicationRecoveryQueries(
         return jdbcTemplate.query(
             """
             SELECT p.* FROM event_publication p
-            WHERE $AUTOMATIC_CANDIDATE
+            WHERE ($AUTOMATIC_CANDIDATE
               AND p.completion_attempts BETWEEN 0 AND ?
               AND p.publication_date < ?
               AND COALESCE(p.last_resubmission_date, p.publication_date)
-                    + (CASE p.completion_attempts $delays END) * interval '1 second' <= ?
+                    + (CASE p.completion_attempts $delays END) * interval '1 second' <= ?)
+              OR (p.completion_date IS NULL AND (p.status = 'FAILED' OR p.status IS NULL)
+                  AND EXISTS (SELECT 1 FROM ordering_manual_publication_recovery request
+                      JOIN operations_reprocessing_case c ON c.id = request.case_id
+                      WHERE request.publication_id = p.id AND request.status = 'RUNNING'
+                        AND c.status = 'RUNNING' AND request.baseline_attempts = p.completion_attempts))
             ORDER BY p.publication_date, p.id LIMIT ?
             """.trimIndent(),
             { rs, _ -> publication(rs) },
@@ -46,6 +53,18 @@ internal class EventPublicationRecoveryQueries(
             Timestamp.from(now),
             limit,
         )
+    }
+
+    fun validateManualPayload(id: UUID) {
+        try {
+            jdbcTemplate.query("SELECT * FROM event_publication WHERE id = ?", { rs, _ -> publication(rs) }, id).single()
+        } catch (failure: RuntimeException) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Persisted publication payload cannot be read",
+                targetReference = id.toString(),
+            )
+        }
     }
 
     fun findExhaustedIds(batchSize: Int): List<UUID> =

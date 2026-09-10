@@ -13,6 +13,8 @@
 | 기존 계정 매장 소속 추가·역할 변경·철회·재활성화 | No | No | No | Active `STORE_MEMBERSHIP_WRITE` grant + reason + idempotency + expectedVersion(변경) + Audit | No |
 | 일반 알림 복구 Case·실행 상태 조회 | No | No | No | Active `NOTIFICATION_RECOVERY_READ` grant | No |
 | MANUAL_REVIEW 알림 추가 시도 예약 | No | No | No | Active `NOTIFICATION_RECOVERY_RETRY` grant + reason + idempotency + owner/Case version + Audit | No |
+| 이벤트 publication 복구 Case·실행 상태 조회 | No | No | No | Active `EVENT_PUBLICATION_RECOVERY_READ` grant | No |
+| MANUAL_REVIEW publication 원본 추가 시도 예약 | No | No | No | Active `EVENT_PUBLICATION_RECOVERY_RETRY` grant + reason + idempotency + Case version + Audit | No |
 | 픽업 슬롯 관리 (`/stores/{storeId}/pickup-slot-management/**`) | No | ACTIVE same-store OWNER + CSRF(변경) + idempotency + version(교체) + Audit | ACTIVE same-store STAFF + 동일 조건 | No | No |
 | 고객 가입·로그인 | Self | No | No | No | No |
 | 점주 로그인·비밀번호 변경 | No | Self | Self | No | No |

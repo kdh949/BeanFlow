@@ -131,3 +131,10 @@
 - [Event Catalog](../architecture/event-catalog.md)
 - [ADR-019](ADR-019-notification-retry-and-manual-recovery.md)
 - [ADR-023](ADR-023-analytics-refund-and-late-events.md)
+
+## 2026-09-10 명시적 운영 복구 API
+
+ADR-124에 따라 전용 권한·사유·멱등 키와 현재 Case version으로 원본 publication 한 건의 추가 시도를 예약한다.
+기존 자동 후보 제외는 유지하며 명시적 RUNNING 요청 원장과 baseline attempts가 일치하는 경우만 별도 후보로
+선택한다. 기존 registry가 실제 claim/resubmit/completion을 처리하며 payload·listener·누적 attempts를 초기화하지
+않는다. 완료와 재실패를 Case에 반영하고 실행 결과가 불명확한 경우 RUNNING을 유지한다.

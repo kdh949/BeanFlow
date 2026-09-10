@@ -1,0 +1,89 @@
+SET LOCAL lock_timeout = '5s';
+
+ALTER TABLE operations_operator_permission_grant DROP CONSTRAINT chk_operator_permission_vocabulary,
+ ADD CONSTRAINT chk_operator_permission_vocabulary CHECK (permission IN (
+    'EXPIRED_BENEFIT_POLICY_READ',
+    'EXPIRED_BENEFIT_POLICY_WRITE',
+    'POINT_ACCOUNT_READ',
+    'POINT_ADJUSTMENT',
+    'POINT_ACCRUAL_POLICY_READ',
+    'POINT_ACCRUAL_POLICY_WRITE',
+    'ORDER_COMPENSATION_READ',
+    'PAYMENT_CANCELLATION_SETUP_REPAIR',
+    'CUSTOMER_CANCELLATION_REFUND_RECONCILE',
+    'SUPPORT_CASE_READ',
+    'SUPPORT_CASE_WRITE',
+    'SUPPORT_CASE_ASSIGN',
+    'SUPPORT_SUBJECT_SEARCH',
+    'SUPPORT_VERIFICATION_MANAGE',
+    'SUPPORT_PII_REVEAL_REQUEST',
+    'SUPPORT_PII_REVEAL_APPROVE',
+    'SUPPORT_PII_REVEAL_BASIC',
+    'SUPPORT_PII_REVEAL_SENSITIVE',
+    'SUPPORT_BREAK_GLASS_REQUEST',
+    'SUPPORT_ACTION_REQUEST',
+    'SUPPORT_ACTION_APPROVE',
+    'SUPPORT_ACTION_EXECUTE',
+    'SUPPORT_ORDER_READ',
+    'SUPPORT_ORDER_CANCEL',
+    'SUPPORT_PICKUP_RESCHEDULE',
+    'SUPPORT_RESOLUTION_REQUEST',
+    'SUPPORT_RESOLUTION_APPROVE',
+    'SUPPORT_RESOLUTION_EXECUTE',
+    'SUPPORT_COMPENSATION_REQUEST',
+    'SUPPORT_COMPENSATION_APPROVE',
+    'SUPPORT_COMPENSATION_EXECUTE',
+    'SUPPORT_PROFILE_R1_CHANGE',
+    'SUPPORT_PROFILE_R2_CHANGE',
+    'SUPPORT_PROFILE_R3_REQUEST',
+    'SUPPORT_PROFILE_R3_APPROVE',
+    'SUPPORT_DELIVERY_READ',
+    'SUPPORT_DELIVERY_INCIDENT_WRITE',
+    'SUPPORT_DELIVERY_CHANGE',
+    'OPERATIONS_SUPPORT_INVESTIGATION',
+    'OPERATIONS_LEGAL_HOLD_MANAGE',
+    'OPERATIONS_RETENTION_MANAGE',
+    'PRIVACY_AUDIT_READ',
+    'PRIVACY_BREAK_GLASS_REVIEW',
+    'MERCHANT_CREDENTIAL_MANAGE',
+    'STORE_BRAND_MANAGE',
+    'STORE_MEDIA_MANAGE',
+    'PROMOTION_CAMPAIGN_READ',
+    'PROMOTION_CAMPAIGN_WRITE',
+    'SETTLEMENT_DISPUTE_READ',
+    'SETTLEMENT_DISPUTE_DECIDE',
+    'STORE_IDENTITY_READ',
+    'STORE_IDENTITY_WRITE',
+    'STORE_SETTLEMENT_TERMS_READ',
+    'STORE_SETTLEMENT_TERMS_WRITE',
+    'STORE_MEMBERSHIP_READ',
+    'STORE_MEMBERSHIP_WRITE',
+    'NOTIFICATION_RECOVERY_READ',
+    'NOTIFICATION_RECOVERY_RETRY',
+    'EVENT_PUBLICATION_RECOVERY_READ',
+    'EVENT_PUBLICATION_RECOVERY_RETRY'
+));
+
+INSERT INTO operations_audit_action_category(action, audit_category) VALUES
+ ('PUBLICATION_RETRY_REQUESTED', 'OPERATIONS_POLICY');
+CREATE TABLE ordering_manual_publication_recovery (
+ id uuid PRIMARY KEY,
+ actor_id uuid NOT NULL,
+ publication_id uuid NOT NULL,
+ case_id uuid NOT NULL REFERENCES operations_reprocessing_case(id),
+ idempotency_key varchar(128) NOT NULL CHECK (length(btrim(idempotency_key)) BETWEEN 8 AND 128),
+ payload_hash varchar(64) NOT NULL CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
+ response_json text NOT NULL,
+ baseline_attempts integer NOT NULL CHECK (baseline_attempts >= 0),
+ status varchar(24) NOT NULL CHECK (status IN ('RUNNING', 'RESOLVED', 'MANUAL_REVIEW')),
+ created_at timestamptz NOT NULL,
+ completed_at timestamptz,
+ UNIQUE(actor_id, idempotency_key),
+ CHECK ((status = 'RUNNING' AND completed_at IS NULL) OR (status <> 'RUNNING' AND completed_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX uq_manual_publication_running ON ordering_manual_publication_recovery(publication_id)
+ WHERE status = 'RUNNING';
+CREATE INDEX idx_manual_publication_pending ON ordering_manual_publication_recovery(created_at, id)
+ WHERE status = 'RUNNING';
+CREATE INDEX idx_manual_publication_retention ON ordering_manual_publication_recovery(completed_at, id)
+ WHERE status <> 'RUNNING';

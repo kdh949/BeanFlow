@@ -18,7 +18,12 @@ internal class CompensationPublicationTargetRegistry {
     fun find(
         event: Any,
         listenerId: String,
-    ): OrderCompensationStepType? = targets[event.javaClass.name to listenerId]
+    ): OrderCompensationStepType? = find(event.javaClass.name, listenerId)
+
+    fun find(
+        eventType: String,
+        listenerId: String,
+    ): OrderCompensationStepType? = targets[eventType to listenerId]
 
     internal fun requireUnique(targets: List<CompensationPublicationTarget>): Map<Pair<String, String>, OrderCompensationStepType> {
         val grouped = targets.groupBy { it.eventType to it.listenerId }

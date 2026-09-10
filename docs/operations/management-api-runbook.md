@@ -114,3 +114,29 @@ Audit에는 revision, feeRateBps, 근거 reference digest를 기록하며 원문
 HTTP 트랜잭션은 Provider를 호출하지 않는다. 예산 변경·Case RUNNING·Audit·응답 원장을 함께 commit하며
 어느 저장이든 실패하면 전부 rollback한다. 완료 접수 응답은 90일 후 최대 100행씩 정리한다. 실제 실행 상태는
 원본 Delivery와 Case에 남는다. UNKNOWN/claim 진행 상태를 운영 API로 강제 성공 처리하지 않는다.
+
+## 이벤트 publication 수동 복구
+
+1. `EVENT_PUBLICATION_RECOVERY_READ`로 `GET /api/v1/operations/event-publication-recoveries`를 조회한다.
+   targetId가 원본 publication ID이며 actor/kind-bound signed cursor와 limit 1~100을 사용한다.
+2. `GET .../{publicationId}`에서 원본 eventType/listenerId, 실제 status/attemptCount/completedAt와 Case를 확인한다.
+   원본 serialized payload는 HTTP로 제공하지 않는다. recoverable은 현재 실패·Case·listener 조건의 판정이다.
+3. 장애 원인을 해결한 뒤 `EVENT_PUBLICATION_RECOVERY_RETRY`로 `POST .../{publicationId}/retries`에
+   Idempotency-Key와 `{expectedCaseVersion, reason}`을 보낸다. 202와 RUNNING은 접수 상태다.
+4. 등록된 AFTER_COMMIT listener의 원본 event type/ID만 허용한다. 예약 Analytics 및 미등록/미매핑 target,
+   완료·실행 중인 원본과 stale Case version은 409다. 기존 보상 target-to-step mapping을 우회하지 않는다.
+5. 원본 payload/listener와 누적 completion attempts를 초기화하지 않는다. 원장의 baseline attempts와
+   일치하는 한 건만 기존 registry에 전달한다. registry의 원자적 claim이 누적 횟수를 늘리면 같은 요청은
+   추가 후보가 되지 않는다. 원장 없는 수동 검토 건은 자동 복구에서 계속 제외한다.
+6. 기존 worker가 실제 listener를 실행하고 결과 대사 worker가 Case를 갱신한다. 완료일 확인은 RESOLVED,
+   한 번 시도 후 명시적 FAILED는 MANUAL_REVIEW다. PROCESSING/RESUBMITTED 등 결과 불명은 RUNNING으로 남긴다.
+   불명 결과를 임의로 FAILED/COMPLETED로 SQL 변경하지 않는다. 원본 상태를 확인하고 해당 owner 장애를 조치한다.
+7. 같은 키/payload replay는 최초 RUNNING 응답을 반환한다. 현재 결과는 상세에서 읽는다. 재실패 후에는
+   최신 Case version과 새 키로 다시 요청한다. 하나의 실패 결과 대사 오류는 다른 결과 대사를 막지 않고,
+   batch 처리 후 실패를 다시 보고해 다음 tick에서 재시도한다.
+
+publication 완료는 해당 listener 처리 완료일 뿐 알림 발송·환불·지급 전체 성공을 뜻하지 않는다. 별도 Delivery,
+Refund 또는 보상 step이 MANUAL_REVIEW이면 해당 owner의 관리 경로와 실제 상태를 함께 확인한다. 원본 거래의
+성공한 외부 작업을 다시 생성하지 않는다. 접수는 원장·Case·Audit가 원자적으로 저장되며 HTTP에서 listener를
+실행하지 않는다. 결과 대사는 실행 중인 건을 batch limit 전에 제외하므로 불명 건이 알려진 결과를 막지 않는다.
+완료 원장은 completedAt 기준 90일 후 최대 100행씩 정리하며 RUNNING 원장은 삭제하지 않는다.
