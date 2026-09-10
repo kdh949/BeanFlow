@@ -57,6 +57,7 @@ export const Operations: Story = { args: { kind: "ops", actorLabel: "operations@
   const menu = canvas.queryByRole("button", { name: /업무 메뉴/ });
   if (menu && menu.getClientRects().length > 0) await userEvent.click(menu);
   await expect(canvas.getByRole("link", { name: "매장 관리" })).toHaveAttribute("href", "/ops/stores");
+  await expect(canvas.getByRole("link", { name: "운영 업무" })).toHaveAttribute("href", "/ops/control");
 } };
 export const Support: Story = { args: { kind: "support", actorLabel: "support@example.test", children: <PageHeading title="고객지원" /> } };
 

@@ -50,7 +50,7 @@ export function ConsoleFrame({ kind, access, actorLabel, ownsAnyStore = false, m
   const supportItems = [
     { to: "/support", label: "고객지원", icon: Headset, end: true },
   ];
-  const unavailablePaths = new Set(["/ops/recovery", "/ops/control"]);
+  const unavailablePaths = new Set(["/ops/recovery"]);
   const items = kind === "store" ? storeItems : kind === "ops" ? opsItems : supportItems;
 
   async function logOut() {

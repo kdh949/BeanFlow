@@ -1,94 +1,36 @@
-import { BadgeCheck, FileClock, GitBranch, Megaphone, Network, ReceiptText } from "lucide-react";
-import { useState } from "react";
-import { Button, EmptyState, InlineNotice, PageHeading, Tab, TabList, TabPanel, Tabs, TextField } from "../../design-system";
-import { StatusText } from "../../presentation/shared";
+import { useCallback, useState } from "react";
+import type { components } from "../../api/schema";
+import { unwrap } from "../../api/client";
+import { operationsApi } from "../../api/consoleClient";
+import { Button, EmptyState, LoadingState, PageHeading, SelectField, TextField } from "../../design-system";
+import { ErrorState, StatusText } from "../../presentation/shared";
+import { fullDateTime, won } from "../../lib/format";
+import { useResource } from "../shared/useResource";
+import { DisputeManagementPanel } from "../shared/DisputeManagementPanel";
 
-type Workspace = "refunds" | "disputes" | "trace" | "coupons" | "campaigns" | "payouts";
-type SimpleRecord = { reference: string; state: string };
-type RefundApproval = SimpleRecord & { storeName: string; amount: string; reason: string };
-type DisputeRoute = SimpleRecord & { storeName: string; age: string; summary: string };
-type TraceRecord = { correlationId: string; state: string; steps: readonly string[] };
-type CouponJob = SimpleRecord & { campaign: string; attempts: number };
-type Campaign = SimpleRecord & { title: string; window: string };
-type PayoutFile = SimpleRecord & { settlementDate: string; stores: number; amount: string };
-
-export type OperationsControlPageProps = {
-  initialWorkspace?: Workspace;
-  scenario?: "contract-pending" | "ready";
-  refundApprovals?: readonly RefundApproval[];
-  disputes?: readonly DisputeRoute[];
-  traces?: readonly TraceRecord[];
-  couponJobs?: readonly CouponJob[];
-  campaigns?: readonly Campaign[];
-  payoutFiles?: readonly PayoutFile[];
-  onOpenRecord?: (reference: string) => void;
-  onCreateCampaign?: (name: string) => Promise<void>;
-};
-
-const tabs: Array<{ value: Workspace; label: string; icon: typeof ReceiptText }> = [
-  { value: "refunds", label: "환불 승인", icon: BadgeCheck },
-  { value: "disputes", label: "이의제기", icon: GitBranch },
-  { value: "trace", label: "거래 추적", icon: Network },
-  { value: "coupons", label: "쿠폰 발급", icon: Megaphone },
-  { value: "campaigns", label: "캠페인", icon: FileClock },
-  { value: "payouts", label: "지급 파일", icon: ReceiptText },
-];
-
-export function OperationsControlPage({
-  initialWorkspace = "refunds",
-  scenario = "contract-pending",
-  refundApprovals = [],
-  disputes = [],
-  traces = [],
-  couponJobs = [],
-  campaigns = [],
-  payoutFiles = [],
-  onOpenRecord,
-  onCreateCampaign,
-}: OperationsControlPageProps) {
-  const [workspace, setWorkspace] = useState<Workspace>(initialWorkspace);
-  const [campaignName, setCampaignName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [created, setCreated] = useState(false);
-
-  async function createCampaign() {
-    if (!onCreateCampaign || campaignName.trim().length < 2) return;
-    setCreating(true);
-    try {
-      await onCreateCampaign(campaignName.trim());
-      setCreated(true);
-      setCampaignName("");
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  const pending = scenario === "contract-pending";
-  return (
-    <div className="console-page operations-control-page">
-      <PageHeading title="운영 업무" />
-      <Tabs value={workspace} onValueChange={(value) => setWorkspace(value as Workspace)}>
-        <TabList label="운영 업무 선택">{tabs.map(({ value, label, icon: Icon }) => <Tab key={value} value={value}><Icon size={17} aria-hidden="true" /> {label}</Tab>)}</TabList>
-        <TabPanel value="refunds"><ControlSection title="환불 승인" eyebrow="승인 한도와 권한 확인">{pending ? <PendingControl /> : <RecordCards records={refundApprovals} empty="승인할 환불이 없습니다" onOpenRecord={onOpenRecord} render={(item) => <><strong>{item.storeName} · {item.amount}</strong><p>{item.reason}</p></>} />}</ControlSection></TabPanel>
-        <TabPanel value="disputes"><ControlSection title="이의제기 배정" eyebrow="담당자와 대기 시간">{pending ? <PendingControl /> : <RecordCards records={disputes} empty="배정할 이의제기가 없습니다" onOpenRecord={onOpenRecord} render={(item) => <><strong>{item.storeName} · 대기 {item.age}</strong><p>{item.summary}</p></>} />}</ControlSection></TabPanel>
-        <TabPanel value="trace"><ControlSection title="거래 처리 내역" eyebrow="추적 ID (Correlation ID)">{pending ? <PendingControl /> : traces.length === 0 ? <EmptyState title="거래 처리 내역이 없습니다" description="입력한 추적 ID와 일치하는 결과가 없습니다." /> : <div className="control-card-grid">{traces.map((trace) => <article className="surface-card control-card" key={trace.correlationId}><div className="panel-heading"><div><span className="context-label">추적 ID</span><h3>{trace.correlationId}</h3></div><StatusText state={trace.state} /></div><ol className="trace-steps">{trace.steps.map((step) => <li key={step}>{step}</li>)}</ol></article>)}</div>}</ControlSection></TabPanel>
-        <TabPanel value="coupons"><ControlSection title="쿠폰 발급 현황" eyebrow="쿠폰 발급과 알림 상태">{pending ? <PendingControl /> : <RecordCards records={couponJobs} empty="확인할 쿠폰 발급 작업이 없습니다" onOpenRecord={onOpenRecord} render={(item) => <><strong>{item.campaign}</strong><p>처리 시도 {item.attempts}회 · 쿠폰 발급과 알림 상태를 따로 확인합니다.</p></>} />}</ControlSection></TabPanel>
-        <TabPanel value="campaigns"><ControlSection title="캠페인 만들기" eyebrow="기간, 수량과 비용 부담 확인">{pending ? <PendingControl /> : <div className="console-detail-grid"><section className="control-card-grid">{campaigns.map((item) => <article className="surface-card control-card" key={item.reference}><div className="panel-heading"><div><span className="context-label">{item.window}</span><h3>{item.title}</h3></div><StatusText state={item.state} /></div></article>)}</section><form className="surface-card operation-form" onSubmit={(event) => { event.preventDefault(); void createCampaign(); }}><h3>새 캠페인</h3><TextField label="캠페인 이름" value={campaignName} onValueChange={(value) => { setCampaignName(value); setCreated(false); }} /><Button type="submit" loading={creating} disabled={!onCreateCampaign || campaignName.trim().length < 2}>초안 저장</Button>{created ? <p className="operation-success" role="status">캠페인 초안을 저장했습니다</p> : null}</form></div>}</ControlSection></TabPanel>
-        <TabPanel value="payouts"><ControlSection title="정산 지급 파일" eyebrow="은행 지급 전 준비 파일">{pending ? <PendingControl /> : <RecordCards records={payoutFiles} empty="생성 가능한 지급 파일이 없습니다" onOpenRecord={onOpenRecord} render={(item) => <><strong>{item.settlementDate} · {item.amount}</strong><p>{item.stores}개 매장 · 이 파일을 만들어도 실제 지급이 완료된 것은 아닙니다.</p></>} />}</ControlSection></TabPanel>
-      </Tabs>
-    </div>
-  );
-}
-
-function ControlSection({ title, eyebrow, children }: { title: string; eyebrow: string; children: React.ReactNode }) {
-  return <section className="control-workspace"><div className="panel-heading"><div><span className="context-label">{eyebrow}</span><h2>{title}</h2></div></div>{children}</section>;
-}
-
-function PendingControl() {
-  return <InlineNotice tone="info" title="이 화면을 준비하고 있습니다" description="지금은 이 업무를 조회하거나 실행할 수 없습니다." />;
-}
-
-function RecordCards<T extends SimpleRecord>({ records, empty, onOpenRecord, render }: { records: readonly T[]; empty: string; onOpenRecord?: (reference: string) => void; render: (item: T) => React.ReactNode }) {
-  if (records.length === 0) return <EmptyState title={empty} description="현재 처리할 항목이 없습니다." />;
-  return <div className="control-card-grid">{records.map((item) => <article className="surface-card control-card" key={item.reference}><div className="panel-heading"><span className="context-label">{item.reference}</span><StatusText state={item.state} /></div><div className="control-card-copy">{render(item)}</div><Button variant="secondary" disabled={!onOpenRecord} onClick={() => onOpenRecord?.(item.reference)}>자세히 보기</Button></article>)}</div>;
+type State = components["schemas"]["DisputeManagementResponse"]["state"];
+const states: Array<{ value: State | ""; label: string }> = [{ value: "", label: "전체" }, { value: "FILED", label: "접수" }, { value: "UNDER_REVIEW", label: "검토 중" }, { value: "ACCEPTED", label: "인정" }, { value: "REJECTED", label: "기각" }, { value: "WITHDRAWN", label: "철회" }];
+/** Store-scoped list and decision workflow; no cross-store queue is invented. */
+export function OperationsControlPage() {
+  const [storeId, setStoreId] = useState("");
+  const [filter, setFilter] = useState<State | "">("");
+  const [query, setQuery] = useState<{ storeId: string; state?: State; cursor?: string } | null>(null);
+  const [cursors, setCursors] = useState<Array<string | undefined>>([undefined]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const list = useResource(useCallback(async () => query ? unwrap(await operationsApi.GET("/operations/settlement-disputes", { params: { query: { ...query, limit: 20 } } })) : null, [query]));
+  const loadDetail = useCallback(async () => unwrap(await operationsApi.GET("/operations/settlement-disputes/{disputeId}", { params: { path: { disputeId: selected! } } })), [selected]);
+  return <div className="console-page"><PageHeading title="정산 이의제기 운영" />
+    {selected ? <><Button variant="ghost" onClick={() => { setSelected(null); list.reload(); }}>이의제기 검색 결과로</Button><DisputeManagementPanel key={selected} audience="operations" load={loadDetail} command={async (operation, body, key) => {
+      const params = { path: { disputeId: selected }, header: { "Idempotency-Key": key } };
+      if (operation === "REVIEW") return unwrap(await operationsApi.POST("/operations/settlement-disputes/{disputeId}/reviews", { params, body }));
+      if (operation !== "ACCEPTED" && operation !== "REJECTED") throw new Error("Unsupported operator decision");
+      return unwrap(await operationsApi.POST("/operations/settlement-disputes/{disputeId}/decisions", { params, body: { ...body, outcome: operation } }));
+    }} /></> : <>
+      <form className="surface-card management-card" onSubmit={event => { event.preventDefault(); setCursors([undefined]); setQuery({ storeId: storeId.trim(), state: filter || undefined }); }}><div className="management-card-grid"><TextField label="이의제기 매장 ID" value={storeId} onValueChange={setStoreId} required /><SelectField label="이의제기 상태" value={filter} onValueChange={value => setFilter(value as typeof filter)}>{states.map(state => <option key={state.value} value={state.value}>{state.label}</option>)}</SelectField></div><Button type="submit" disabled={!storeId.trim()}>이의제기 조회</Button></form>
+      {list.state.status === "loading" ? <LoadingState label="이의제기를 불러오는 중" /> : list.state.status === "failed" ? <ErrorState error={list.state.error} retry={list.reload} /> : list.state.value ? <>
+        {list.state.value.items.length ? <div className="management-card-grid">{list.state.value.items.map(dispute => <article className="surface-card management-card" key={dispute.disputeId}><h2>{won.format(dispute.expectedAdjustmentKrw)}</h2><StatusText domain="dispute" state={dispute.state} /><p className="support-case-reference">{dispute.disputeId}</p><p>접수 {fullDateTime.format(new Date(dispute.filedAt))}</p><Button variant="secondary" onClick={() => setSelected(dispute.disputeId)}>이의제기 상세</Button></article>)}</div> : <EmptyState title="조건에 맞는 이의제기가 없습니다" description="선택한 매장과 상태의 접수 내역이 없습니다." />}
+        <div className="button-row"><Button variant="ghost" disabled={cursors.length < 2} onClick={() => { const next = cursors.slice(0, -1); setCursors(next); setQuery({ ...query!, cursor: next.at(-1) }); }}>이전 이의제기</Button><Button variant="secondary" disabled={!list.state.value.page.nextCursor} onClick={() => { if (list.state.status === "ready" && list.state.value?.page.nextCursor) { const cursor = list.state.value.page.nextCursor; setCursors(value => [...value, cursor]); setQuery({ ...query!, cursor }); } }}>다음 이의제기</Button></div>
+      </> : null}
+    </>}
+  </div>;
 }

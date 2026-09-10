@@ -9,7 +9,7 @@ import { won } from "../../lib/format";
 type SettlementDispute = components["schemas"]["SettlementDispute"];
 
 const REASONS: Record<string, string> = {
-  DISPUTE_WINDOW_CLOSED: "이의제기 기간이 지났습니다. 확정 다음 날부터 15일 안에만 접수할 수 있습니다.",
+  DISPUTE_WINDOW_CLOSED: "이의제기 기간이 지났습니다. 확정 다음 날부터 14개 달력 날짜 동안 접수할 수 있습니다.",
   DISPUTE_ALREADY_ACTIVE: "이 명세에는 이미 진행 중인 이의제기가 있습니다. 판정 결과를 기다려 주세요.",
   DISPUTE_REFILE_NOT_ALLOWED: "재접수는 한 번만, 새 증빙과 함께 가능합니다.",
 };
@@ -21,12 +21,15 @@ const REASONS: Record<string, string> = {
  */
 export function DisputeFilingPanel({
   settlementItemId,
+  previousDisputeId,
   onFiled,
   onClose,
 }: {
   settlementItemId: string;
+  /** Terminal dispute referenced by a one-time filing with new evidence. */
+  previousDisputeId?: string;
   /** Fired once, right after a successful submit, so the caller can refresh its own data. */
-  onFiled: () => void;
+  onFiled: (dispute: SettlementDispute) => void;
   /** The operator dismisses the confirmation explicitly; this panel never unmounts itself. */
   onClose: () => void;
 }) {
@@ -44,7 +47,8 @@ export function DisputeFilingPanel({
     .filter((line) => line.length > 0);
 
   async function submit() {
-    const fingerprint = JSON.stringify({ settlementItemId, expectedAdjustmentKrw, reason: reason.trim(), evidenceReferences });
+    if (submitting) return;
+    const fingerprint = JSON.stringify({ settlementItemId, previousDisputeId, expectedAdjustmentKrw, reason: reason.trim(), evidenceReferences });
     setSubmitting(true);
     setFailure(null);
     try {
@@ -53,11 +57,12 @@ export function DisputeFilingPanel({
           path: { itemId: settlementItemId },
           header: { "Idempotency-Key": intent.current.keyFor(fingerprint), ...(await merchantCsrfHeader()) },
         },
-        body: { expectedAdjustmentKrw, reason: reason.trim(), evidenceReferences },
+        body: { expectedAdjustmentKrw, reason: reason.trim(), evidenceReferences, ...(previousDisputeId ? { previousDisputeId } : {}) },
       });
-      setFiled(unwrap(response));
+      const result = unwrap(response);
+      setFiled(result);
       intent.current.complete();
-      onFiled();
+      onFiled(result);
     } catch (error) {
       if (error instanceof ApiRequestError && error.code === "IDEMPOTENCY_KEY_REUSED") intent.current.rotate();
       setFailure(error);
@@ -126,7 +131,7 @@ export function DisputeFilingPanel({
         <ErrorState error={failure} />
       ) : null}
       <Button type="submit" loading={submitting} disabled={!reason.trim() || evidenceReferences.length === 0}>
-        {submitting ? "접수 중" : "이의제기 접수"}
+        {submitting ? "접수 중" : previousDisputeId ? "이의제기 재접수" : "이의제기 접수"}
       </Button>
     </form>
   );

@@ -38,6 +38,7 @@ const meta = {
   component: StoreDisputesPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: {
         component:
@@ -57,6 +58,7 @@ export const FiledAndDecided: Story = {
   play: async ({ canvas }) => {
     await expect(await canvas.findAllByText("₩3,500")).toHaveLength(2);
     await expect(canvas.getByText("진행 중")).toBeVisible();
+    await expect(canvas.getAllByRole("link", { name: "이의제기 상세" })[0]).toHaveAttribute("href", `/store/disputes/${filed.disputeId}?storeId=${ids.store}`);
   },
 };
 
