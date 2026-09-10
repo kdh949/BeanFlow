@@ -114,6 +114,7 @@ export const router = createBrowserRouter([
         { index: true, lazy: async () => { const { SupportWorkspacePage: Component } = await import("./features/support/SupportWorkspacePage"); return { Component }; } },
         { path: "cases", lazy: async () => { const { SupportCaseDirectoryPage: Component } = await import("./features/support/SupportCaseDirectoryPage"); return { Component }; } },
         { path: "action-requests/:requestId", lazy: async () => { const { SupportOrderActionPage: Component } = await import("./features/support/SupportOrderActionWorkspace"); return { Component }; } },
+        { path: "break-glass/:requestId", lazy: async () => { const { SupportBreakGlassPage: Component } = await import("./features/support/SupportBreakGlassWorkspace"); return { Component }; } },
         { path: "profile-changes/:profileChangeId", lazy: async () => { const { SupportProfileChangePage: Component } = await import("./features/support/SupportProfileChangeWorkspace"); return { Component }; } },
         { path: "compensations/:compensationRequestId", lazy: async () => { const { SupportCompensationPage: Component } = await import("./features/support/SupportCompensationWorkspace"); return { Component }; } },
         { path: "resolutions/:resolutionId", lazy: async () => { const { SupportResolutionPage: Component } = await import("./features/support/SupportResolutionWorkspace"); return { Component }; } },

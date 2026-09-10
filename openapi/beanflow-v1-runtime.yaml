@@ -1120,6 +1120,9 @@ paths:
   /operations/investigations:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1investigations"
 
+  /support/break-glass-requests/{requestId}/workflow:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1break-glass-requests~1{requestId}~1workflow"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1135,6 +1138,10 @@ components:
       in: cookie
       name: BEANFLOW_MERCHANT_SESSION
   schemas:
+    BreakGlassWorkflowAction:
+      $ref: "./beanflow-v1.yaml#/components/schemas/BreakGlassWorkflowAction"
+    BreakGlassWorkflowResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/BreakGlassWorkflowResource"
     SupportProfileContextResource:
       $ref: "./beanflow-v1.yaml#/components/schemas/SupportProfileContextResource"
     SupportProfileWorkflowAction:

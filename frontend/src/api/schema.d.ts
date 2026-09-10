@@ -5354,10 +5354,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/break-glass-requests/{requestId}/workflow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * (고객센터) 긴급 열람 요청의 현재 업무 조회
+         * @description 현재 요청자·별도 승인자·독립 사후 검토자가 자신의 지속 권한으로 원문 없는 요청과 가능한 명령을 조회합니다. 만료·종료·권한 회수는 원문 표시와 새 열람을 제한합니다.
+         */
+        get: operations["getBreakGlassWorkflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description 현재 계정에서 가능한 긴급 열람 명령입니다. 모든 쓰기에서 재검증합니다.
+         * @example DECIDE
+         * @enum {string}
+         */
+        BreakGlassWorkflowAction: "DECIDE" | "REVEAL" | "REVIEW";
+        /**
+         * @description 원문 없이 현재 긴급 열람 요청·권한·기간과 가능한 업무를 제공합니다. 저장된 ACTIVE 요청도 만료 시 새 열람을 허용하지 않습니다.
+         * @example {
+         *       "request": {
+         *         "requestId": "a1b2c3d4-e5f6-4708-8a9b-0c1d2e3f4a5b",
+         *         "caseId": "b6f2a1d0-4c3e-4a1b-9f7d-2e8a1c9b0d3f",
+         *         "subjectLinkId": "9d8c7b6a-5f4e-4d3c-8b2a-1e0f9d8c7b6a",
+         *         "subjectType": "CUSTOMER",
+         *         "subjectId": "5c4b3a29-1807-46f5-9e4d-3c2b1a0f9e8d",
+         *         "field": "CUSTOMER_PRIMARY_PHONE",
+         *         "purpose": "SAFETY_RESPONSE",
+         *         "reasonCode": "IMMEDIATE_SAFETY",
+         *         "state": "APPROVAL_PENDING",
+         *         "requestedAt": "2026-08-15T09:30:00Z",
+         *         "expiresAt": null,
+         *         "version": 0
+         *       },
+         *       "allowedActions": [
+         *         "DECIDE"
+         *       ],
+         *       "canViewRevealedValue": false,
+         *       "postReview": null
+         *     }
+         */
+        BreakGlassWorkflowResource: {
+            request: components["schemas"]["BreakGlassResource"];
+            /** @description 현재 가능한 승인·열람·독립 사후 검토입니다. */
+            allowedActions: components["schemas"]["BreakGlassWorkflowAction"][];
+            /** @description 요청자가 이미 응답받은 원문을 현재 권한·배정·기간 안에서 계속 표시할 수 있는지입니다. 이 조회는 원문을 반환하지 않습니다. */
+            canViewRevealedValue: boolean;
+            /** @description 원문 없이 반환하는 실제 사후 검토 결과입니다. 추가 검토 필요와 정책 준수 확인을 구분합니다. */
+            postReview: {
+                /** @enum {string} */
+                decision: "CONFIRMED" | "ESCALATED";
+                reasonCode: string;
+                decidedAt: components["schemas"]["DateTime"];
+            } | null;
+        };
         /**
          * @description 현재 상담 담당자가 정정 목적에 필요한 권한으로 조회하는 비개인정보 프로필 조건입니다. 원문은 반환하지 않습니다.
          * @example {
@@ -20738,7 +20802,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 고객 보상 요청 조회 결과 */
+            /** @description 정보 정정 목적에 필요한 현재 프로필 조건 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -20766,7 +20830,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 고객 보상 요청 조회 결과 */
+            /** @description 정보 정정의 현재 승인 및 실행 조건 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -20776,9 +20840,11 @@ export interface operations {
                     "application/json": components["schemas"]["SupportProfileWorkflowResource"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };
@@ -20796,7 +20862,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 고객 보상 요청 조회 결과 */
+            /** @description 현재 승인안에 연결된 운영 조사 */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
@@ -20810,6 +20876,35 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getBreakGlassWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["BreakGlassRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 긴급 열람 요청과 현재 권한·기간 조건 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BreakGlassWorkflowResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

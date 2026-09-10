@@ -26,6 +26,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -215,6 +216,75 @@ internal class BreakGlassIntegrationTest
                     requestId,
                 ),
             ).isEqualTo(2)
+        }
+
+        @Test
+        fun `workflow separates metadata approval reveal and post review without returning raw values`() {
+            val binding = seedBinding()
+            val requestId = request(binding)
+            val path = "/api/v1/support/break-glass-requests/$requestId/workflow"
+            grant(requesterId, "SUPPORT_PII_REVEAL_APPROVE")
+            mockMvc.perform(get(path).with(operatorJwt(requesterId)))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+                .andExpect(jsonPath("$.request.value").doesNotExist())
+            mockMvc.perform(get(path).with(operatorJwt(approverId)))
+                .andExpect(status().isOk).andExpect(jsonPath("$.allowedActions[0]").value("DECIDE"))
+            mockMvc.perform(get(path).with(operatorJwt(reviewerId))).andExpect(status().isForbidden)
+            mockMvc.perform(post("/api/v1/support/break-glass-requests/$requestId/approvals")
+                .with(operatorJwt(approverId)).header("Idempotency-Key", "workflow-approve")
+                .json("""{"decision":"APPROVE","expectedVersion":0}"""))
+                .andExpect(status().isOk)
+            mockMvc.perform(get(path).with(operatorJwt(requesterId)))
+                .andExpect(status().isOk).andExpect(jsonPath("$.allowedActions[0]").value("REVEAL"))
+            mockMvc.perform(post("/api/v1/support/break-glass-requests/$requestId/reveals")
+                .with(operatorJwt(requesterId)).header("Idempotency-Key", "workflow-reveal")
+                .json("""{"field":"CUSTOMER_PRIMARY_EMAIL"}"""))
+                .andExpect(status().isOk)
+            mockMvc.perform(get(path).with(operatorJwt(requesterId)))
+                .andExpect(status().isOk).andExpect(jsonPath("$.canViewRevealedValue").value(true))
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+                .andExpect(jsonPath("$.value").doesNotExist())
+            grant(approverId, "PRIVACY_BREAK_GLASS_REVIEW")
+            mockMvc.perform(get(path).with(operatorJwt(approverId)))
+                .andExpect(status().isOk).andExpect(jsonPath("$.allowedActions").isEmpty)
+                .andExpect(jsonPath("$.canViewRevealedValue").value(false))
+            jdbcTemplate.update("UPDATE support_case SET state = 'CLOSED', closed_at = now(), last_changed_at = now() WHERE id = ?", binding.caseId)
+            mockMvc.perform(get(path).with(operatorJwt(requesterId)))
+                .andExpect(status().isOk).andExpect(jsonPath("$.canViewRevealedValue").value(false))
+            mockMvc.perform(get(path).with(operatorJwt(reviewerId)))
+                .andExpect(status().isOk).andExpect(jsonPath("$.allowedActions[0]").value("REVIEW"))
+            mockMvc.perform(post("/api/v1/support/break-glass-requests/$requestId/reviews")
+                .with(operatorJwt(reviewerId)).header("Idempotency-Key", "workflow-review")
+                .json("""{"decision":"CONFIRMED","expectedVersion":2,"reasonCode":"POLICY_CONFIRMED"}"""))
+                .andExpect(status().isOk)
+            mockMvc.perform(get(path).with(operatorJwt(reviewerId)))
+                .andExpect(status().isOk).andExpect(jsonPath("$.allowedActions").isEmpty)
+                .andExpect(jsonPath("$.request.state").value("REVIEWED"))
+                .andExpect(jsonPath("$.postReview.decision").value("CONFIRMED"))
+        }
+
+        @Test
+        fun `workflow rejects unrelated revoked requesters and expired reveal capabilities`() {
+            val binding = seedBinding()
+            val requestId = request(binding)
+            val path = "/api/v1/support/break-glass-requests/$requestId/workflow"
+            val unrelated = UUID.randomUUID()
+            grant(unrelated, "SUPPORT_BREAK_GLASS_REQUEST")
+            mockMvc.perform(get(path).with(operatorJwt(unrelated))).andExpect(status().isForbidden)
+            mockMvc.perform(post("/api/v1/support/break-glass-requests/$requestId/approvals")
+                .with(operatorJwt(approverId)).header("Idempotency-Key", "workflow-expiry-approve")
+                .json("""{"decision":"APPROVE","expectedVersion":0}"""))
+                .andExpect(status().isOk)
+            jdbcTemplate.update(
+                "UPDATE support_break_glass_request SET requested_at = now() - interval '5 minutes', approved_at = now() - interval '4 minutes', expires_at = now() - interval '2 minutes' WHERE id = ?", requestId,
+            )
+            mockMvc.perform(get(path).with(operatorJwt(requesterId)))
+                .andExpect(status().isOk).andExpect(jsonPath("$.allowedActions").isEmpty)
+                .andExpect(jsonPath("$.canViewRevealedValue").value(false))
+            jdbcTemplate.update("UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ?", requesterId)
+            mockMvc.perform(get(path).with(operatorJwt(requesterId))).andExpect(status().isForbidden)
         }
 
         private fun request(binding: Binding): UUID {

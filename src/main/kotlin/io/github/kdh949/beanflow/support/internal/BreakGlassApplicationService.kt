@@ -90,6 +90,21 @@ internal data class BreakGlassResource(
     val version: Long,
 )
 
+internal enum class BreakGlassWorkflowAction { DECIDE, REVEAL, REVIEW }
+
+internal data class BreakGlassPostReviewResource(
+    val decision: BreakGlassReviewDecision,
+    val reasonCode: String,
+    val decidedAt: Instant,
+)
+
+internal data class BreakGlassWorkflowResource(
+    val request: BreakGlassResource,
+    val allowedActions: List<BreakGlassWorkflowAction>,
+    val canViewRevealedValue: Boolean,
+    val postReview: BreakGlassPostReviewResource?,
+)
+
 internal class BreakGlassRevealResource(
     val revealAttemptId: UUID,
     val requestId: UUID,
@@ -123,6 +138,8 @@ internal class BreakGlassApplicationService(
     private val stores: StoreSupportProfileRevealOperations,
     private val couriers: ExternalCourierSupportProfileRevealOperations,
 ) {
+    fun workflow(actorId: UUID, requestId: UUID): BreakGlassWorkflowResource = transactions.workflow(actorId, requestId)
+
     fun request(command: RequestBreakGlassCommand): BreakGlassResource = transactions.request(command)
 
     fun decide(command: DecideBreakGlassCommand): BreakGlassResource = transactions.decide(command)
@@ -196,6 +213,40 @@ internal class BreakGlassTransactions(
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
 ) {
+    @Transactional
+    fun workflow(actorId: UUID, requestId: UUID): BreakGlassWorkflowResource {
+        val requesterPermission = permissions.hasActive(actorId, OperatorPermission.SUPPORT_BREAK_GLASS_REQUEST)
+        val approverPermission = permissions.hasActive(actorId, OperatorPermission.SUPPORT_PII_REVEAL_APPROVE)
+        val reviewerPermission = permissions.hasActive(actorId, OperatorPermission.PRIVACY_BREAK_GLASS_REVIEW)
+        fun denied(): Nothing = throw DomainFailure(FailureCode.ACCESS_DENIED, "Current break-glass workflow scope is required")
+        if (!requesterPermission && !approverPermission && !reviewerPermission) denied()
+        val entity = requests.findById(requestId).orElse(null) ?: notFound()
+        val requester = requesterPermission && actorId == entity.requesterId
+        val approver = approverPermission && actorId != entity.requesterId
+        val reviewer = reviewerPermission && actorId != entity.requesterId && actorId != entity.approverId &&
+            entity.state in setOf(BreakGlassState.REVIEW_PENDING, BreakGlassState.REVIEWED)
+        if (!requester && !approver && !reviewer) denied()
+        val supportCase = cases.findById(entity.supportCaseId).orElse(null) ?: notFound()
+        val link = subjectLinks.findByIdAndSupportCaseId(entity.subjectLinkId, entity.supportCaseId) ?: notFound()
+        val active = supportCase.state in ACTIVE_CASE_STATES
+        val bound = link.unlinkedAt == null && link.subjectId == entity.subjectId &&
+            link.subjectType.toBreakGlassSubjectType() == entity.subjectType
+        val assigned = requester && active && bound && supportCase.currentAssigneeId == actorId
+        val withinExpiry = entity.expiresAt?.let { clock.instant().isBefore(it) } == true
+        val allowed = mutableListOf<BreakGlassWorkflowAction>()
+        if (active && bound && approver && entity.state == BreakGlassState.APPROVAL_PENDING) allowed += BreakGlassWorkflowAction.DECIDE
+        if (assigned && withinExpiry && entity.state == BreakGlassState.ACTIVE) allowed += BreakGlassWorkflowAction.REVEAL
+        if (reviewer && entity.state == BreakGlassState.REVIEW_PENDING) allowed += BreakGlassWorkflowAction.REVIEW
+        val review = if (entity.state == BreakGlassState.REVIEWED) {
+            val decision = decisions.findByRequestIdAndDecisionType(entity.id, "POST_REVIEW")
+                ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Break-glass review record is missing")
+            BreakGlassPostReviewResource(BreakGlassReviewDecision.valueOf(decision.decision), decision.reasonCode, decision.decidedAt)
+        } else null
+        return BreakGlassWorkflowResource(
+            entity.toResource(), allowed, assigned && withinExpiry && entity.state == BreakGlassState.REVIEW_PENDING, review,
+        )
+    }
+
     @Transactional
     fun request(command: RequestBreakGlassCommand): BreakGlassResource =
         boundary {

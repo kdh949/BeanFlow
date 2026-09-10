@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.validation.annotation.Validated
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -65,6 +66,13 @@ internal class BreakGlassController(
     private val service: BreakGlassApplicationService,
     private val correlationIds: CorrelationIdSource,
 ) {
+    @GetMapping("/break-glass-requests/{requestId}/workflow")
+    @PreAuthorize("isAuthenticated()")
+    fun workflow(
+        actor: OperatorActor,
+        @PathVariable requestId: UUID,
+    ): ResponseEntity<BreakGlassWorkflowResource> = noStore(HttpStatus.OK, service.workflow(actor.actorId(), requestId))
+
     @PostMapping("/cases/{caseId}/break-glass-requests")
     @PreAuthorize("isAuthenticated()")
     fun request(

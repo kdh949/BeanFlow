@@ -309,6 +309,7 @@ OPERATION_CONTRACTS = (
     support_command("/support/cases/{caseId}/compensation-evaluations", "evaluateSupportCompensation", 200, "SupportCaseId", idempotent=False),
     support_command("/support/cases/{caseId}/compensations", "createSupportCompensation", 201, "SupportCaseId"),
     support_query("/support/cases/{caseId}/profile-contexts/{linkId}", "getSupportProfileContext", "SupportCaseId", "SupportSubjectLinkId"),
+    support_query("/support/break-glass-requests/{requestId}/workflow", "getBreakGlassWorkflow", "BreakGlassRequestId", response_schema="BreakGlassWorkflowResource"),
     support_query("/support/profile-changes/{profileChangeId}/workflow", "getSupportProfileWorkflow", "SupportProfileChangeId"),
     support_query("/operations/investigations", "getOperationsSupportInvestigationWorkflow"),
     support_query("/support/compensations/{compensationRequestId}/workflow", "getSupportCompensationWorkflow", "SupportCompensationRequestId"),
