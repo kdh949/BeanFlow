@@ -1,7 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
-import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
@@ -32,7 +31,6 @@ internal class PaymentResultTransaction(
     private val orderRepository: OrderJpaRepository,
     private val expiryUseCase: ReservationExpiryUseCase,
     private val pickupOperations: PickupReservationOperations,
-    private val stockOperations: StockReservationOperations,
     private val couponOperations: CouponReservationOperations,
     private val pointOperations: PointReservationOperations,
     private val paymentOperations: ExternalPaymentOperations,
@@ -296,11 +294,6 @@ internal class PaymentResultTransaction(
                 "PICKUP",
                 pickupOperations.confirm(order.id, now, OrderCreationTransaction.pickupSource(order.id)),
             )
-        reports += "STOCK" to
-            requireApplied(
-                "STOCK",
-                stockOperations.confirm(order.id, OrderCreationTransaction.stockSource(order.id)),
-            )
         if (order.couponDiscountKrw > 0) {
             reports += "COUPON" to
                 requireApplied(
@@ -327,11 +320,6 @@ internal class PaymentResultTransaction(
             requireApplied(
                 "PICKUP",
                 pickupOperations.release(order.id, now, OrderCreationTransaction.pickupSource(order.id)),
-            )
-        reports += "STOCK" to
-            requireApplied(
-                "STOCK",
-                stockOperations.release(order.id, now, OrderCreationTransaction.stockSource(order.id)),
             )
         if (order.couponDiscountKrw > 0) {
             reports += "COUPON" to

@@ -18,12 +18,12 @@ semantics가 약화된다.
 - `PENDING_PAYMENT`와 acceptance deadline 전 `PAID`의 고객 소유 주문 전체 취소
 - Order cancellation 원인·사유 모델과 DB 제약
 - Tx C0/C1, target별 Audit와 취소 명령 멱등성
-- OrderCompensation clean cutover, 여섯 step과 네 owner event consumer
+- OrderCompensation clean cutover, 다섯 step과 세 owner event consumer
 - 선행 부분 환불 allocation 원장과 남은 현금 환불
 - 기존 Payment/Notification adapter contract 위의 request·lookup·retry·manual
   review 구현
 - BENEFIT_ONLY의 PAYMENT `NOT_REQUIRED`
-- 픽업·재고·쿠폰·포인트 source-aware 복원과 trigger별 policy snapshot
+- 픽업·쿠폰·포인트 source-aware 복원과 trigger별 policy snapshot
 - 보상 쿠폰 terms·비용 snapshot
 - 접수 및 환불 성공·지연 알림
 - 미완료 고객 취소 환불의 정산 제외 Audit

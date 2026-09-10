@@ -2,10 +2,13 @@ package io.github.kdh949.beanflow.merchant.internal
 
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import jakarta.persistence.Version
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
@@ -18,9 +21,13 @@ internal class StoreEntity(
     @Id
     val id: UUID,
     @Column(name = "accepting_orders", nullable = false)
-    val acceptingOrders: Boolean,
+    var acceptingOrders: Boolean,
     @Column(name = "pickup_enabled", nullable = false)
-    val pickupEnabled: Boolean,
+    var pickupEnabled: Boolean,
+    @Column(name = "ordering_policy_version", nullable = false)
+    var orderingPolicyVersion: Long = 0,
+    @Column(name = "ordering_policy_updated_at", nullable = false)
+    var orderingPolicyUpdatedAt: Instant = Instant.EPOCH,
     @Column(name = "image_original_key")
     var imageOriginalKey: String? = null,
     @Column(name = "image_thumbnail_key")
@@ -32,6 +39,17 @@ internal class StoreEntity(
     @Version
     var version: Long = 0,
 ) {
+    fun replaceOrderingPolicy(
+        acceptingOrders: Boolean,
+        pickupEnabled: Boolean,
+        updatedAt: Instant,
+    ) {
+        this.acceptingOrders = acceptingOrders
+        this.pickupEnabled = pickupEnabled
+        orderingPolicyVersion = Math.addExact(orderingPolicyVersion, 1)
+        orderingPolicyUpdatedAt = updatedAt
+    }
+
     fun replaceImage(
         originalKey: String,
         thumbnailKey: String,
@@ -60,11 +78,11 @@ internal class MenuEntity(
     @Column(name = "store_id", nullable = false)
     val storeId: UUID,
     @Column(nullable = false)
-    val name: String,
+    var name: String,
     @Column(name = "base_price_krw", nullable = false)
-    val basePriceKrw: Long,
+    var basePriceKrw: Long,
     @Column(nullable = false)
-    val available: Boolean,
+    var available: Boolean,
     @Column(name = "image_original_key")
     var imageOriginalKey: String? = null,
     @Column(name = "image_thumbnail_key")
@@ -79,6 +97,15 @@ internal class MenuEntity(
     var publicDescription: String? = null,
     @Version
     var version: Long = 0,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var lifecycle: MenuLifecycle = MenuLifecycle.ACTIVE,
+    @Column(name = "trade_version", nullable = false)
+    var tradeVersion: Long = 0,
+    @Column(name = "trade_updated_at", nullable = false)
+    var tradeUpdatedAt: Instant = Instant.EPOCH,
+    @Column(name = "archived_at")
+    var archivedAt: Instant? = null,
 ) {
     fun replaceImage(
         originalKey: String,
@@ -106,6 +133,32 @@ internal class MenuEntity(
         this.displayCategory = displayCategory
         this.publicDescription = publicDescription
     }
+
+    fun replaceTradeContent(
+        name: String,
+        basePriceKrw: Long,
+        available: Boolean,
+        updatedAt: Instant,
+    ) {
+        this.name = name
+        this.basePriceKrw = basePriceKrw
+        this.available = available
+        tradeVersion = Math.addExact(tradeVersion, 1)
+        tradeUpdatedAt = updatedAt
+    }
+
+    fun archive(updatedAt: Instant) {
+        check(lifecycle == MenuLifecycle.ACTIVE) { "Only an active Menu can be archived" }
+        lifecycle = MenuLifecycle.ARCHIVED
+        archivedAt = updatedAt
+        tradeVersion = Math.addExact(tradeVersion, 1)
+        tradeUpdatedAt = updatedAt
+    }
+}
+
+internal enum class MenuLifecycle {
+    ACTIVE,
+    ARCHIVED,
 }
 
 @Entity
@@ -116,11 +169,16 @@ internal class MenuOptionEntity(
     @Column(name = "menu_id", nullable = false)
     val menuId: UUID,
     @Column(nullable = false)
-    val name: String,
+    var name: String,
     @Column(name = "additional_price_krw", nullable = false)
-    val additionalPriceKrw: Long,
+    var additionalPriceKrw: Long,
     @Column(nullable = false)
-    val available: Boolean,
+    var available: Boolean,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var lifecycle: MenuLifecycle = MenuLifecycle.ACTIVE,
+    @Column(name = "archived_at")
+    var archivedAt: Instant? = null,
 )
 
 @Entity
@@ -131,24 +189,16 @@ internal class MenuConfigurationEntity(
     @Column(name = "menu_id", nullable = false)
     val menuId: UUID,
     @Column(name = "normalized_option_key", nullable = false)
-    val normalizedOptionKey: String,
+    var normalizedOptionKey: String,
     @Column(nullable = false)
-    val available: Boolean,
+    var available: Boolean,
     @Version
     var version: Long = 0,
-)
-
-@Entity
-@Table(name = "merchant_menu_configuration_requirement")
-internal class MenuConfigurationRequirementEntity(
-    @Id
-    val id: UUID,
-    @Column(name = "menu_configuration_id", nullable = false)
-    val menuConfigurationId: UUID,
-    @Column(name = "sellable_unit_id", nullable = false)
-    val sellableUnitId: UUID,
-    @Column(name = "quantity_per_line_unit", nullable = false)
-    val quantityPerLineUnit: Long,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var lifecycle: MenuLifecycle = MenuLifecycle.ACTIVE,
+    @Column(name = "archived_at")
+    var archivedAt: Instant? = null,
 )
 
 internal interface StoreJpaRepository : JpaRepository<StoreEntity, UUID> {
@@ -162,6 +212,11 @@ internal interface StoreJpaRepository : JpaRepository<StoreEntity, UUID> {
 }
 
 internal interface MenuJpaRepository : JpaRepository<MenuEntity, UUID> {
+    fun countByStoreIdAndLifecycle(
+        storeId: UUID,
+        lifecycle: MenuLifecycle,
+    ): Long
+
     fun findByIdAndStoreId(
         menuId: UUID,
         storeId: UUID,
@@ -173,16 +228,86 @@ internal interface MenuJpaRepository : JpaRepository<MenuEntity, UUID> {
         menuId: UUID,
         storeId: UUID,
     ): MenuEntity?
+
+    @Query(
+        """
+        SELECT menu FROM MenuEntity menu
+         WHERE menu.storeId = :storeId
+           AND menu.lifecycle = :lifecycle
+           AND (:afterName IS NULL OR menu.name > :afterName OR (menu.name = :afterName AND menu.id > :afterMenuId))
+         ORDER BY menu.name ASC, menu.id ASC
+        """,
+    )
+    fun findCatalogPage(
+        storeId: UUID,
+        lifecycle: MenuLifecycle,
+        afterName: String?,
+        afterMenuId: UUID?,
+        pageable: Pageable,
+    ): List<MenuEntity>
+
+    fun findAllByStoreIdAndLifecycleOrderByNameAscIdAsc(
+        storeId: UUID,
+        lifecycle: MenuLifecycle,
+    ): List<MenuEntity>
+}
+
+internal interface MenuChildCount {
+    val menuId: UUID
+    val total: Long
 }
 
 internal interface MenuOptionJpaRepository : JpaRepository<MenuOptionEntity, UUID> {
+    fun countByIdIn(ids: Collection<UUID>): Long
+
+    fun findAllByMenuIdAndLifecycle(
+        menuId: UUID,
+        lifecycle: MenuLifecycle,
+    ): List<MenuOptionEntity>
+
+    @Query(
+        "SELECT child.menuId AS menuId, count(child) AS total FROM MenuOptionEntity child WHERE child.menuId IN :menuIds AND child.lifecycle = :lifecycle GROUP BY child.menuId",
+    )
+    fun countByMenuIdsAndLifecycle(
+        menuIds: Collection<UUID>,
+        lifecycle: MenuLifecycle,
+    ): List<MenuChildCount>
+
+    @Query(
+        """
+        SELECT count(child) FROM MenuOptionEntity child JOIN MenuEntity menu ON child.menuId = menu.id
+         WHERE menu.storeId = :storeId AND menu.lifecycle = :lifecycle AND child.lifecycle = :lifecycle
+           AND (:excludedMenuId IS NULL OR menu.id <> :excludedMenuId)
+    """,
+    )
+    fun countForStore(
+        storeId: UUID,
+        lifecycle: MenuLifecycle,
+        excludedMenuId: UUID?,
+    ): Long
+
     fun findAllByMenuIdIn(menuIds: Collection<UUID>): List<MenuOptionEntity>
+
+    fun findAllByMenuId(menuId: UUID): List<MenuOptionEntity>
 }
 
 internal interface MenuConfigurationJpaRepository : JpaRepository<MenuConfigurationEntity, UUID> {
-    fun findAllByMenuIdIn(menuIds: Collection<UUID>): List<MenuConfigurationEntity>
-}
+    fun countByIdIn(ids: Collection<UUID>): Long
 
-internal interface MenuConfigurationRequirementJpaRepository : JpaRepository<MenuConfigurationRequirementEntity, UUID> {
-    fun findAllByMenuConfigurationIdIn(menuConfigurationIds: Collection<UUID>): List<MenuConfigurationRequirementEntity>
+    fun findAllByMenuIdAndLifecycle(
+        menuId: UUID,
+        lifecycle: MenuLifecycle,
+    ): List<MenuConfigurationEntity>
+
+    @Query(
+        "SELECT child.menuId AS menuId, count(child) AS total FROM MenuConfigurationEntity child WHERE child.menuId IN :menuIds AND child.lifecycle = :lifecycle GROUP BY child.menuId",
+    )
+    fun countByMenuIdsAndLifecycle(
+        menuIds: Collection<UUID>,
+        lifecycle: MenuLifecycle,
+    ): List<MenuChildCount>
+
+    fun findAllByMenuIdIn(menuIds: Collection<UUID>): List<MenuConfigurationEntity>
+
+    fun findAllByMenuId(menuId: UUID): List<MenuConfigurationEntity>
 }

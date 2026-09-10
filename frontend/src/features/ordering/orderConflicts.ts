@@ -24,12 +24,6 @@ export function orderConflictGuidance(failure: unknown): ConflictGuidance | null
         description: "다른 픽업 시간을 골라 주세요. 담아둔 메뉴는 그대로 있어요.",
         recovery: "recheck-slots",
       };
-    case "STOCK_NOT_AVAILABLE":
-      return {
-        title: "재고가 부족한 메뉴가 있어요",
-        description: "현재 재고를 확인한 뒤 메뉴 수량이나 구성을 다시 선택해 주세요.",
-        recovery: "recheck-menu",
-      };
     case "MENU_CONFIGURATION_NOT_AVAILABLE":
       return {
         title: "지금 주문할 수 없는 메뉴 구성이에요",

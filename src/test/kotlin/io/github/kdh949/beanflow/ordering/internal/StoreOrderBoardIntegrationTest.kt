@@ -89,7 +89,7 @@ internal class StoreOrderBoardIntegrationTest
         @Test
         fun `board scopes in SQL and groups every active state including a future paid order without private data`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 10, stockAvailable = 10)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 10)
             val actorId = UUID.randomUUID()
             insertMembership(actorId, fixture.storeId, "ACTIVE")
             val nextDayFixture = addPickupSlot(fixture, "2030-01-02T00:10:00Z", "2030-01-02T00:20:00Z")
@@ -158,7 +158,7 @@ internal class StoreOrderBoardIntegrationTest
         @Test
         fun `board query keeps two projection statements for one and fifty active orders`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 60, stockAvailable = 60)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 60)
             val actorId = UUID.randomUUID()
             insertMembership(actorId, fixture.storeId, "ACTIVE")
             activate(create(fixture, "board-count-00").orderId, "ACCEPTED")
@@ -184,7 +184,7 @@ internal class StoreOrderBoardIntegrationTest
         @Test
         fun `board bounds every lane and exposes exact older work through a signed queue`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 240, stockAvailable = 240)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 240)
             val actorId = UUID.randomUUID()
             insertMembership(actorId, fixture.storeId, "ACTIVE")
             val referencesByState = linkedMapOf<String, MutableSet<String>>()
@@ -364,10 +364,10 @@ internal class StoreOrderBoardIntegrationTest
                 INSERT INTO ordering_order_line (
                     id, order_id, line_sequence, menu_id, menu_name, option_names_json, unit_price_krw,
                     quantity, gross_krw, coupon_discount_krw, points_applied_krw, cash_payable_krw,
-                    sellable_requirements_json, option_selection_snapshot_state, normalized_option_ids_json
+                    option_selection_snapshot_state, normalized_option_ids_json
                 ) SELECT ?, order_id, 1, menu_id, '라떼', '[]', unit_price_krw,
                     quantity, gross_krw, coupon_discount_krw, points_applied_krw, cash_payable_krw,
-                    sellable_requirements_json, option_selection_snapshot_state, normalized_option_ids_json
+                    option_selection_snapshot_state, normalized_option_ids_json
                 FROM ordering_order_line WHERE order_id = ? AND line_sequence = 0
                 """.trimIndent(),
                 UUID.randomUUID(),

@@ -47,12 +47,6 @@ export function reorderFailure(failure: unknown): ReorderFailure | null {
         description: "다른 픽업 시간을 골라 주세요.",
         items: [],
       };
-    case "STOCK_NOT_AVAILABLE":
-      return {
-        title: "재고가 부족해요",
-        description: "현재 재고를 확인한 뒤 메뉴 수량이나 구성을 다시 선택해 주세요.",
-        items: [],
-      };
     case "IDEMPOTENCY_REQUEST_IN_PROGRESS":
       return {
         title: "같은 주문을 처리하고 있어요",

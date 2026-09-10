@@ -108,3 +108,9 @@ primitive가 아니다. 대신 내부 시각 요소와 token은 canonical system
 
 실행하지 않은 검증은 `Not run`, sandbox/infra 차단은 `Blocked`로 구분한다. Static Storybook은 live MCP를
 대체하지 않는다.
+
+## Merchant catalog composition
+
+`/store/management`의 메뉴 탭과 `/store/catalog` 진입은 `StoreCatalogPage`의 같은 편집기를 사용한다.
+`PageHeading`, `Button`, `ChipButton`, `Checkbox`, `TextField`, `FeedbackState`를 재사용한다.
+메뉴 생성·전체 저장·품절·판매 재개·보관과 주문 접수 정책을 API에 연결하며 feature CSS는 배치를 소유한다.

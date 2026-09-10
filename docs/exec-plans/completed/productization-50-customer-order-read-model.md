@@ -63,7 +63,7 @@ UUID 입력창을 없앤다. 로그인한 고객의 활성 주문과 과거 주�
 2. cursor에 customer scope와 필터(활성 여부, 기간)를 함께 서명하고 매 요청 인가를 다시 수행한다.
 3. Projection 자체는 Aggregate를 로딩하지 않는다. 단, BR-03의 만료 물질화는 기존 Order 만료
    명령 경계를 사용한다.
-4. 반환 후보인 만료 `PENDING_PAYMENT`는 worker를 기다리지 않고 먼저 Order 만료와 네 자원
+4. 반환 후보인 만료 `PENDING_PAYMENT`는 worker를 기다리지 않고 먼저 Order 만료와 세 자원
    해제를 확정한다. 실패하면 stale 결과 대신 503이다.
 5. 표시 값은 스냅샷을 사용한다. 매장·슬롯 테이블을 조인하지 않는다.
 6. `allowedActions`는 서버가 계산한다. 프론트엔드가 상태로 분기하지 않는다.
@@ -77,7 +77,7 @@ GET /me/orders
   ArgumentResolver → CustomerActor
   Tx R1(readOnly): customer scope + filter + cursor로 limit + 1 candidate ID와 scan boundary 조회
   Tx W1: candidate 중 기한이 지난 PENDING_PAYMENT를 ID 순서로 lock
-         Order 만료 + 슬롯·재고·쿠폰·포인트 예약 해제를 한 transaction에서 처리
+         Order 만료 + 슬롯·쿠폰·포인트 예약 해제를 한 transaction에서 처리
          하나라도 실패하면 전체 rollback과 503
   Tx R2(readOnly): 고정한 candidate ID의 CustomerOrderSummary Projection 조회
                    allowedActions 계산 (순수 함수, DB 접근 없음)
@@ -123,7 +123,7 @@ GET /me/orders/{orderReference}
 - `from > to`, 형식 오류, 페이지 도중 필터 변경: 400. 서버가 기간을 임의로 보정하지 않는다.
 - 다른 고객의 `orderReference` 상세 조회: 403. 존재하지 않으면 404.
 - 조회 실패: 503. 빈 목록이나 stale 데이터로 대체하지 않는다.
-- 목록·상세 만료 물질화 중 네 자원 중 하나라도 해제 실패: 전체 transaction rollback 후 503.
+- 목록·상세 만료 물질화 중 세 자원 중 하나라도 해제 실패: 전체 transaction rollback 후 503.
   이미 조회한 stale Projection이나 부분 만료 결과를 반환하지 않는다.
 - 라인 요약 조회 실패: 주문 목록 전체 실패. 요약을 빈 문자열로 채우지 않는다.
 - `allowedActions` 계산에 필요한 값이 누락된 주문: 명시적 실패. 빈 집합으로 조용히 넘기지 않는다.

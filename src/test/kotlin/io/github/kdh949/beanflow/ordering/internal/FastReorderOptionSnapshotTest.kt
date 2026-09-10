@@ -56,7 +56,6 @@ internal class FastReorderOptionSnapshotTest {
         optionNamesJson = "[]",
         optionSelectionSnapshotState = state,
         normalizedOptionIds = optionIds,
-        sellableRequirementsJson = "[]",
         unitPriceKrw = 1_000,
         quantity = 1,
         grossKrw = 1_000,

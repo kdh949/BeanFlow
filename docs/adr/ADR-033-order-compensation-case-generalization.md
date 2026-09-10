@@ -8,12 +8,12 @@
 ## Context
 
 ADR-029가 미수락 `PAID` 고객 취소의 보상 대상을 매장 거절과 **동일**하다고 확정했다.
-결제 환불, 확정 슬롯·재고 복원, 사용 쿠폰·포인트 복원, 고객 알림 여섯 가지다.
+결제 환불, 확정 슬롯 복원, 사용 쿠폰·포인트 복원, 고객 알림 다섯 가지다.
 
 그러나 기존 보상 인프라는 거절 전용으로 고정돼 있다.
 `V8__create_rejection_compensation.sql`의 `operations_rejection_compensation_case`는
 `order_id`가 UNIQUE이고 `policy_version`이 NOT NULL FK이며 trigger 컬럼이 없다.
-`operations_rejection_compensation_step`은 여섯 step type을 CHECK로 고정한다. 타입은
+`operations_rejection_compensation_step`은 다섯 step type을 CHECK로 고정한다. 타입은
 `RejectionCompensationCase/Step`, 매장 응답 필드는 `StoreOrderResult.rejectionRecovery`,
 OpenAPI 스키마는 `RejectionRecoverySummary`/`RejectionRecoveryStep`이다.
 
@@ -46,7 +46,7 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
 - Case에 `trigger` 컬럼을 추가한다. 초기 값 집합은 `STORE_REJECTION`과
   `CUSTOMER_CANCELLATION`이며 CHECK로 강제하고 `CompensationSummary.trigger`로
   노출한다.
-- 여섯 step type, case·step 상태 집합, `(case_id, step_type)` UNIQUE,
+- 다섯 step type, case·step 상태 집합, `(case_id, step_type)` UNIQUE,
   `order_id`·`event_id`·`source_reference` UNIQUE, bounded retry와 `MANUAL_REVIEW`
   종결 규칙을 두 trigger가 **그대로 공유**한다. 실패·재시도 로직을 두 벌로 만들지
   않는다.
@@ -65,7 +65,7 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
   schema가 아니라 `OperatorCompensationView` 전용이다. 매장 응답
   `StoreOrderResult.compensationRecovery`는 `trigger`, case `state`와
   `updatedAt`만 담은 별도 `StoreCompensationSummary`를 사용한다. 기존 거절
-  응답이 여섯 step과 `attemptCount`·`lastErrorCode`·`caseId`를 매장에 노출하던
+  응답이 다섯 step과 `attemptCount`·`lastErrorCode`·`caseId`를 매장에 노출하던
   것은 authorization matrix의 "주문 보상 case step 상세 조회 = 매장 No"와 이
   ADR의 Verification을 위반하는 구현이므로 clean cutover에서 함께 축약한다.
   매장은 거절과 고객 취소를 `trigger`로 구분하고 보상이 진행 중인지 확인할 수
@@ -79,7 +79,7 @@ step에는 `RETRY_SCHEDULED`가 있고 `REQUESTED`, `FAILED`, `RECONCILING`이 �
 - 요청액이 0인 경우에만 `NOT_REQUIRED`다. 요청액이 양수인데 Refund 또는 필수
   recovery snapshot이 없으면 내부 `SETUP_INCOMPLETE`이며, ADR-050에 따라 고객
   projection은 `PROCESSING + REFUND_DELAYED`, 운영자 조회는 실제 setup issue다.
-- `BENEFIT_ONLY` 취소도 여섯 step을 모두 만들며 PAYMENT step은 Tx C1부터
+- `BENEFIT_ONLY` 취소도 다섯 step을 모두 만들며 PAYMENT step은 Tx C1부터
   `NOT_REQUIRED`, attempt 0, error null이다. Refund는 만들지 않는다(ADR-039).
 - 파생 로직은 Payment Context가 소유하는 단일 조회 지점에 둔다. `Cancellation` 응답과
   `Order.paymentRecovery`가 같은 값을 반환한다.
@@ -201,11 +201,11 @@ Order, Store, Customer ID는 metric tag로 사용하지 않는다.
 
 ## Implementation Checkpoint (2026-08-03)
 
-- pre-release gate 재확인 뒤 V8이 공통 Case, 두 benefit child와 여섯 step의 최종 shape를
+- pre-release gate 재확인 뒤 V8이 공통 Case, 두 benefit child와 다섯 step의 최종 shape를
   직접 만들고 deferred constraint가 child/step cardinality를 commit 시점에 검증한다.
 - store rejection transaction은 Order 전이, 두 policy 선택, Case/Audit, persistent event
   publications와 store idempotency V2 응답을 한 local transaction으로 commit한다.
-- 매장 projection은 trigger/state/updatedAt만 반환한다. 전체 여섯 step은 active
+- 매장 projection은 trigger/state/updatedAt만 반환한다. 전체 다섯 step은 active
   `ORDER_COMPENSATION_READ` grant와 `X-Access-Reason`, read Audit을 요구하는 운영자 endpoint에만
   반환한다.
 - Case/step terminal 상태는 단조롭고 owner transaction은 분리된다. publication exhaustion은

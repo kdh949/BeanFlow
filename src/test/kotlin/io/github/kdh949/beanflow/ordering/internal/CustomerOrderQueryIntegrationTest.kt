@@ -194,7 +194,7 @@ internal class CustomerOrderQueryIntegrationTest
         @Test
         fun `list uses a fixed three SQL statements for one and more than one hundred orders`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 120, stockAvailable = 120)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 120)
             create(fixture, "customer-query-count-000")
 
             val beforeOne = listSqlCount()
@@ -220,7 +220,7 @@ internal class CustomerOrderQueryIntegrationTest
         @Test
         fun `signed keyset cursor remains stable and rejects changed scope or signature`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 30, stockAvailable = 30)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 30)
             repeat(21) { index ->
                 clock.set(now.plusSeconds(index.toLong()))
                 create(fixture, "customer-query-page-${index.toString().padStart(3, '0')}")
@@ -291,7 +291,7 @@ internal class CustomerOrderQueryIntegrationTest
         @Test
         fun `default range is thirty Seoul days while explicit historical range has no cap`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 10, stockAvailable = 10)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 10)
             clock.set(Instant.parse("2026-06-01T03:00:00Z"))
             val oldReference = create(fixture, "customer-query-old-order")
             clock.set(now)
@@ -344,7 +344,7 @@ internal class CustomerOrderQueryIntegrationTest
         @Test
         fun `active read materializes due orders and rolls every expiry back on dependency failure`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 10, stockAvailable = 10)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 10)
             create(fixture, "customer-query-expiry-001")
             create(fixture, "customer-query-expiry-002")
             val deadlines =
@@ -372,7 +372,7 @@ internal class CustomerOrderQueryIntegrationTest
         @Test
         fun `active expiry can return an empty page with a cursor and the next page remains complete`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 30, stockAvailable = 30)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 30)
             repeat(21) { index ->
                 clock.set(now.plusSeconds(index.toLong()))
                 create(fixture, "customer-query-expiry-page-${index.toString().padStart(3, '0')}")

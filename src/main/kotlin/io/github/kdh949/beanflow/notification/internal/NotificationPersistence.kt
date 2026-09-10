@@ -56,6 +56,8 @@ internal class NotificationDeliveryEntity(
     var state: NotificationDeliveryState,
     @Column(name = "attempt_count", nullable = false)
     var attemptCount: Int,
+    @Column(name = "attempt_limit", nullable = false)
+    var attemptLimit: Int = 4,
     @Column(name = "next_attempt_at")
     var nextAttemptAt: Instant?,
     @Column(name = "provider_idempotency_key", nullable = false)

@@ -25,13 +25,13 @@ API 상태 코드를 모두 결정하는 상류 결정이다.
 ## Decision
 
 - 고객 직접 취소 대상 상태는 `PENDING_PAYMENT`와 `ACCEPTED` 이전의 `PAID`뿐이다.
-- `PENDING_PAYMENT` 취소는 픽업 슬롯, 재고, 쿠폰, 포인트 예약 해제로 완결하며
+- `PENDING_PAYMENT` 취소는 픽업 슬롯, 쿠폰, 포인트 예약 해제로 완결하며
   외부 Provider 환불을 생성하지 않는다. 자원 해제 경계는 기존 lease 만료
   transaction과 동일한 owner 집합을 사용한다.
 - 두 허용 상태 모두 취소 transaction에서 `ORDER_CANCELLATION_ACCEPTED`
   NotificationDelivery를 내구 저장한다. 외부 Notification Provider 호출은
   transaction 밖에서 수행하며 접수 알림은 환불·복원 완료를 뜻하지 않는다.
-- `PAID` 취소는 매장 거절과 동일한 보상 대상을 갖는다. 결제 환불, 확정 슬롯·재고
+- `PAID` 취소는 매장 거절과 동일한 보상 대상을 갖는다. 결제 환불, 확정 슬롯
   복원, 사용 쿠폰·포인트 복원, 고객 알림이 모두 필요하다.
 - `ACCEPTED`, `PREPARING`, `READY`, `COMPLETED`와 terminal 상태
   (`EXPIRED`, `CANCELLED`, `REJECTED`)에 대한 고객 취소 명령은 허용하지 않는다.
@@ -44,7 +44,7 @@ API 상태 코드를 모두 결정하는 상류 결정이다.
   cutoff를 도입하지 않는다.
 - 고객 취소는 만료 worker, 매장 수락, 자동 timeout 거절과 같은 Order row lock 위의
   guarded transition으로 경쟁한다. 분산락을 도입하지 않으며 기존 Tx2 잠금 순서
-  `Order → Pickup → 정렬된 Stock → Coupon → Point → Payment/Idempotency/Audit`를
+  `Order → Pickup → Coupon → Point → Payment/Idempotency/Audit`를
   그대로 사용한다.
 - deadline 경계에서는 시간 기반 전이가 이긴다. 각 상태는 기존 명령과 같은
   materialization 규칙을 따른다. `PENDING_PAYMENT`은 만료를 먼저 커밋한 뒤
@@ -133,12 +133,12 @@ API 상태 코드를 모두 결정하는 상류 결정이다.
 ### `PAID`만 허용하고 `PENDING_PAYMENT`은 lease 만료에 위임
 
 - 명시 취소 경로가 하나로 단순해지지만 결제 전 자원이 최대 5분간 점유되어 슬롯과
-  재고 회전율이 나빠진다.
+  픽업 운영 효율이 나빠진다.
 
 ## Rationale
 
 BR-14가 이미 Accepted였으므로 이 범위를 유지하는 것이 문서 정합성 비용이 가장 낮다.
-`RejectionCompensationCase`, `payment_refund`와 네 owner 복원 consumer가 이미
+`RejectionCompensationCase`, `payment_refund`와 세 owner 복원 consumer가 이미
 존재하므로 `PAID` 취소의 보상 인프라를 새로 만들지 않아도 된다. `PAID` 창이 BR-06에
 의해 최대 3분으로 제한되어 노출되는 보상 빈도의 상한이 구조적으로 작다.
 
@@ -157,7 +157,7 @@ BR-14가 이미 Accepted였으므로 이 범위를 유지하는 것이 문서 �
 - 아래는 이 ADR이 결정하지 않고 후속 ADR로 넘기는 항목이다.
   - ~~`RejectionCompensationCase`의 일반화 또는 분리~~ — ADR-033이 `OrderCompensation`
     계열로 일반화하고 `trigger` 컬럼을 추가하도록 확정했다.
-  - ~~Pickup·Stock의 `RELEASED_BY_REJECTION`~~ — ADR-040이
+  - ~~Pickup의 `RELEASED_BY_REJECTION`~~ — ADR-040이
     `RELEASED_AFTER_TERMINATION`과 별도 `restoration_trigger`로 일반화했다.
   - ~~`uq_payment_rejection_refund WHERE reason='STORE_ORDER_REJECTED'`의 고객 취소
     재사용~~ — ADR-036이 고객 취소 전용 reason과 partial unique index를 별도로

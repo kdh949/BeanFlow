@@ -72,7 +72,7 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
-                    merchant_menu_configuration_requirement,
+
                     merchant_menu_configuration,
                     merchant_menu_option,
                     merchant_menu,

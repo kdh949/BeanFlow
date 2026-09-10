@@ -66,7 +66,8 @@ internal class StoreSearchTermSourceRepository(
                    menu.name AS menu_name
               FROM merchant_store store
               LEFT JOIN merchant_store_discovery_profile profile ON profile.store_id = store.id
-              LEFT JOIN merchant_menu menu ON menu.store_id = store.id AND menu.available
+              LEFT JOIN merchant_menu menu
+                ON menu.store_id = store.id AND menu.available AND menu.lifecycle = 'ACTIVE'
              ORDER BY store.id, menu.id
             """.trimIndent(),
         ) { resultSet ->
@@ -106,6 +107,7 @@ internal class StoreSearchTermSourceRepository(
               FROM merchant_menu
              WHERE store_id = ?
                AND available
+               AND lifecycle = 'ACTIVE'
              ORDER BY id
             """.trimIndent(),
             { resultSet, _ ->

@@ -13,7 +13,7 @@ timeout이 만든 사실이므로 actor, 책임, 사유와 알림 의미가 다�
 
 현재 구현의 `OrderRejectedV1`은 `OrderRejectionActorType`, 자유 형식 `reason`,
 `rejectedAt`과 만료 혜택 정책 snapshot을 거절 의미로 고정한다. Payment, Fulfillment,
-Inventory, Promotion, Loyalty와 Notification listener도 이 구체 타입만 소비하고
+Promotion, Loyalty와 Notification listener도 이 구체 타입만 소비하고
 owner API와 source reference에 `rejection`을 사용한다. 고객 취소까지 같은 타입으로
 보내면 고객 사유를 매장 거절 사유로 오분류하거나 거절 알림과 거절 전용 환불 reference를
 생성할 수 있다.
@@ -50,7 +50,7 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
 - `OrderCancelledV1`은 미수락 `PAID` 고객 취소에서만 발행한다. 이 event는 Order가
   `CANCELLED`로 확정됐고 owner별 비동기 보상이 시작돼야 한다는 사실을 전달한다.
 - `PENDING_PAYMENT` 고객 취소에는 `OrderCancelledV1`이나 다른 취소 event를 발행하지
-  않는다. Order 전이와 픽업 슬롯·재고·쿠폰·포인트 예약 해제를 명령 transaction에서
+  않는다. Order 전이와 픽업 슬롯·쿠폰·포인트 예약 해제를 명령 transaction에서
   함께 commit하고 `200`으로 완결한다.
 - `PENDING_PAYMENT` 고객 취소에는 주문 보상 Case나 event publication 복구 Case를
   생성하지 않는다.
@@ -68,7 +68,7 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
 
 - required flag는 취소 transaction에서 Order의 immutable 금액 snapshot으로 산출한다.
   consumer는 false인 owner 작업을 만들지 않는다.
-- 픽업 슬롯과 재고는 미수락 `PAID` Order에서 확정돼 있다는 기존 불변식과 보상 Case의
+- 픽업 슬롯는 미수락 `PAID` Order에서 확정돼 있다는 기존 불변식과 보상 Case의
   필수 step을 따르므로 별도 required flag를 두지 않는다.
 - actor는 주문 소유 `customerId`, cause는 event type의 `CUSTOMER_REQUEST`, 취소 전
   상태는 이 event의 `PAID` 발행 범위로 결정되므로 중복 필드를 두지 않는다.
@@ -98,7 +98,7 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
   않으므로 새 lineage도 만들지 않는다.
 - owner consumer의 source reference는
   `order:{orderId}:customer-cancellation:{aggregateVersion}:{step}` 형식이다.
-  event consumer `step`의 허용값은 `pickup`, `stock`, `coupon`, `points`다.
+  event consumer `step`의 허용값은 `pickup`, `coupon`, `points`다.
   Tx C1이 생성하는 Refund와 NotificationDelivery는 같은 형식의 `payment`,
   `notification` step을 사용하지만 Payment와 Notification은 이 event의 consumer가
   아니다.
@@ -245,7 +245,7 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
 
 ### Payment verifier listener 유지
 
-- 앞서 선택한 `paymentRequired` routing flag와 여섯 listener 구성을 유지할 수 있다.
+- 앞서 선택한 `paymentRequired` routing flag와 다섯 listener 구성을 유지할 수 있다.
 - Refund는 Tx C1에 이미 존재하므로 listener는 owner work를 만들지 않는다. verifier
   publication 실패가 실제 Refund 진행과 충돌하고 listener-to-step 일대일 규칙에
   불필요한 예외가 생긴다.
@@ -282,7 +282,7 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
 - Eventing API의 `OrderCancelledV1`은 위 라우팅 snapshot을 직렬화한다.
 - `OrderRejectedV1`도 ADR-041의 coupon·points 전체 snapshot을 사용하며 기존 단일
   `policyVersion/policyMode/policyValidityDays` 필드를 제거한다.
-- Fulfillment, Inventory, Promotion과 Loyalty는 고객 취소를 지원하는 listener 또는
+- Fulfillment, Promotion과 Loyalty는 고객 취소를 지원하는 listener 또는
   명시적 공통 handler를 추가해야 한다.
 - Notification은 ADR-044에 따라 취소 transaction에 참여하는 public Application
   API로 접수 delivery를 만들며 `OrderCancelledV1`을 소비하지 않는다.
@@ -291,7 +291,7 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
 - owner 내부 로직을 공유하더라도 입력 계약과 source reference는 trigger를 보존해야
   하며 고객 취소를 `rejection`으로 기록하면 안 된다.
 - Event Catalog의 기존 `OrderCancelled` 이름은 `OrderCancelledV1`로 교정되고
-  네 자원 owner consumer만 포함된다.
+  세 자원 owner consumer만 포함된다.
 - 보상 Case는 ADR-033에 따라 계속 `trigger = CUSTOMER_CANCELLATION`으로 구분한다.
 - `PENDING_PAYMENT` 취소는 event publication table, 주문 보상 Case와 owner 비동기
   listener의 부하를 만들지 않는다.
@@ -306,12 +306,11 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
   않는다.
 - owner API는 applied, already-applied-same-source, in-progress-same-source와
   source-conflict를 구분할 수 있는 결과를 반환해야 한다.
-- 네 publication target과 Pickup, Stock, Coupon, Points step 사이에 검증 가능한
+- 네 publication target과 Pickup, Coupon, Points step 사이에 검증 가능한
   일대일 매핑이 필요하다. Payment와 Notification step은 각각 Tx C1에 내구 저장한
   Refund와 NotificationDelivery 상태로 갱신한다.
 - 네 target은 Plan 30의 중앙 registry에
   `beanflow.order-compensation.order-cancelled.pickup.v1 → PICKUP`,
-  `beanflow.order-compensation.order-cancelled.stock.v1 → STOCK`,
   `beanflow.order-compensation.order-cancelled.coupon.v1 → COUPON`,
   `beanflow.order-compensation.order-cancelled.points.v1 → POINTS`로 고정한다.
   listener는 같은 값을 `@ApplicationModuleListener(id = ...)`에 명시하고 Spring의
@@ -423,8 +422,8 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
 - 오래된 aggregate version event가 최신 owner 상태를 덮어쓰지 않음
 - source conflict의 bounded retry 소진과 `MANUAL_REVIEW`
 - source conflict 후 Order가 `CANCELLED`를 유지함
-- 네 owner listener 각각의 retry 소진과 정확한 단일 step 매핑
-- Coupon publication 소진 중 Refund·Notification worker와 Pickup·Stock·Points 계속 처리
+- 세 owner listener 각각의 retry 소진과 정확한 단일 step 매핑
+- Coupon publication 소진 중 Refund·Notification worker와 Pickup·Points 계속 처리
 - Case `MANUAL_REVIEW`와 성공한 다른 step 상태의 공존
 - publication completion attempt와 step `attemptCount` 불일치가 의도대로 유지됨
 - 기존 `OrderRejectedV1`의 단일 step exhaustion 회귀 테스트
@@ -440,7 +439,7 @@ Provider 명시 거절로 `cancellation_cause = PAYMENT_DECLINED`가 된 사건�
 - 수동·timeout 거절 시 `OrderCancelledV1` 미발행
 - 두 이벤트 타입의 consumer routing 분리
 - 공통 owner handler를 사용할 때 trigger별 source reference 분리
-- Pickup·Stock의 `CUSTOMER_CANCELLATION` trigger와
+- Pickup의 `CUSTOMER_CANCELLATION` trigger와
   `RELEASED_AFTER_TERMINATION` 수량 한 번 복원
 - 잘못된 교차 타입 전달이 부수효과를 만들지 않는 contract test
 - publication 재시도 소진 시 올바른 주문 보상 Case가 `MANUAL_REVIEW`로 전환됨
@@ -457,8 +456,8 @@ Order, Customer, Store ID와 취소 상세 사유는 metric tag로 사용하지 
 
 ## Implementation Checkpoint (2026-08-03)
 
-- `OrderRejectedV1` producer와 여섯 consumer는 two-policy snapshot 계약과 stable listener ID로
-  clean cutover했다. `OrderCancelledV1`은 exact 최소 DTO와 Pickup·Stock·Coupon·Points 네
+- `OrderRejectedV1` producer와 다섯 consumer는 two-policy snapshot 계약과 stable listener ID로
+  clean cutover했다. `OrderCancelledV1`은 exact 최소 DTO와 Pickup·Coupon·Points 네
   consumer만 준비됐고 producer는 Plan 40 범위로 남겼다.
 - 중앙 registry는 두 event type의 정확한 열 target만 허용한다. duplicate mapping은 시작을
   실패시키고 unknown target exhaustion은 `PUBLICATION_TARGET_UNMAPPED` 운영 case만 만들며

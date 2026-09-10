@@ -23,7 +23,6 @@ import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
-import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -63,6 +62,8 @@ internal class SettlementDisputeIntegrationTest
     constructor(
         private val filing: SettlementDisputeFilingService,
         private val decisions: SettlementDisputeDecisionService,
+        private val management: SettlementDisputeManagementService,
+        private val passwords: io.github.kdh949.beanflow.identity.internal.CustomerPasswordSecurity,
         private val batchLifecycle: SettlementBatchLifecycleService,
         private val clock: SettlementDisputeTestClock,
         private val publicationRecovery: EventPublicationRecoveryWorker,
@@ -74,6 +75,7 @@ internal class SettlementDisputeIntegrationTest
             jdbcTemplate.execute(
                 """
                 TRUNCATE TABLE
+                    operations_operator_permission_grant,
                     settlement_dispute,
                     settlement_adjustment,
                     settlement_item,
@@ -350,7 +352,8 @@ internal class SettlementDisputeIntegrationTest
                 .perform(
                     post("/api/v1/settlement-items/${fixture.itemId}/disputes")
                         .with(ownerJwt(fixture.actorId))
-                        .with(csrf())
+                        .cookie(jakarta.servlet.http.Cookie("BEANFLOW_MERCHANT_XSRF", "dispute-test-csrf-token"))
+                        .header("X-BEANFLOW-CSRF", "dispute-test-csrf-token")
                         .header("Idempotency-Key", "http-dispute-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body),
@@ -363,12 +366,327 @@ internal class SettlementDisputeIntegrationTest
                 .perform(
                     post("/api/v1/settlement-items/${fixture.itemId}/disputes")
                         .with(staffJwt(UUID.randomUUID()))
-                        .with(csrf())
+                        .cookie(jakarta.servlet.http.Cookie("BEANFLOW_MERCHANT_XSRF", "dispute-test-csrf-token"))
+                        .header("X-BEANFLOW-CSRF", "dispute-test-csrf-token")
                         .header("Idempotency-Key", "staff-http-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body),
                 ).andExpect(status().isForbidden)
         }
+
+        @Test
+        fun `management accepts once and replays only while current grant remains active`() {
+            val fixture = fixture()
+            val dispute = file(fixture, "management-filing-key")
+            val operator = grantOperator()
+            val review = management.execute(managementCommand(operator, dispute.disputeId, "REVIEW", 0))
+            val command = managementCommand(operator, dispute.disputeId, "ACCEPTED", review.version)
+            val first = management.execute(command)
+            assertThat(first.state).isEqualTo(SettlementDisputeState.ACCEPTED)
+            assertThat(management.execute(command)).isEqualTo(first)
+            assertThat(count("SELECT count(*) FROM settlement_adjustment")).isOne()
+            assertThat(value<String>("SELECT actor_id FROM operations_audit_record WHERE action = 'SETTLEMENT_DISPUTE_DECIDED'"))
+                .isEqualTo(operator.toString())
+            assertThatThrownBy { management.execute(command.copy(reason = "different reason")) }
+                .isInstanceOfSatisfying(DomainFailure::class.java) { assertThat(it.code).isEqualTo(FailureCode.IDEMPOTENCY_KEY_REUSED) }
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ?",
+                operator,
+            )
+            assertAccessDenied { management.execute(command) }
+        }
+
+        @Test
+        fun `durable approval survives publication rollback and forbids opposite decisions`() {
+            val fixture = fixture()
+            val dispute = file(fixture, "management-partial-key")
+            val operator = grantOperator()
+            val review = management.execute(managementCommand(operator, dispute.disputeId, "REVIEW", 0))
+            val command = managementCommand(operator, dispute.disputeId, "ACCEPTED", review.version)
+            jdbcTemplate.execute(
+                "ALTER TABLE event_publication ADD CONSTRAINT test_management_publication_failure CHECK (event_type <> 'io.github.kdh949.beanflow.eventing.api.SettlementDisputeDecidedV1')",
+            )
+            try {
+                assertThatThrownBy { management.execute(command) }.isInstanceOf(DomainFailure::class.java)
+            } finally {
+                jdbcTemplate.execute("ALTER TABLE event_publication DROP CONSTRAINT test_management_publication_failure")
+            }
+            val pending = management.get(operator, null, dispute.disputeId)
+            assertThat(pending.state).isEqualTo(SettlementDisputeState.UNDER_REVIEW)
+            assertThat(pending.pendingDecision).isEqualTo(SettlementDisputeState.ACCEPTED)
+            assertThat(count("SELECT count(*) FROM settlement_adjustment")).isOne()
+            assertThatThrownBy { management.execute(managementCommand(operator, dispute.disputeId, "REJECTED", pending.version)) }
+                .isInstanceOfSatisfying(DomainFailure::class.java) { assertThat(it.code).isEqualTo(FailureCode.RESOURCE_STATE_CONFLICT) }
+            assertThatThrownBy { decisions.withdraw(dispute.disputeId, DECIDED_AT) }.isInstanceOf(DomainFailure::class.java)
+            val recovered = management.execute(command)
+            assertThat(recovered.state).isEqualTo(SettlementDisputeState.ACCEPTED)
+            assertThat(recovered.pendingDecision).isNull()
+            assertThat(count("SELECT count(*) FROM settlement_adjustment")).isOne()
+        }
+
+        @Test
+        fun `stored decision replay repairs a Case completion failure without repeating the decision`() {
+            val fixture = fixture()
+            val filed = file(fixture, "management-case-recovery")
+            val operator = grantOperator()
+            val review = management.execute(managementCommand(operator, filed.disputeId, "REVIEW", 0))
+            val command = managementCommand(operator, filed.disputeId, "ACCEPTED", review.version)
+            jdbcTemplate.execute(
+                "ALTER TABLE event_publication ADD CONSTRAINT test_case_setup_failure CHECK (event_type <> 'io.github.kdh949.beanflow.eventing.api.SettlementDisputeDecidedV1')",
+            )
+            try {
+                assertThatThrownBy { management.execute(command) }.isInstanceOf(DomainFailure::class.java)
+            } finally {
+                jdbcTemplate.execute("ALTER TABLE event_publication DROP CONSTRAINT test_case_setup_failure")
+            }
+            jdbcTemplate.execute(
+                "ALTER TABLE operations_reprocessing_case ADD CONSTRAINT test_case_completion_failure CHECK (case_type <> 'SETTLEMENT_DISPUTE' OR status <> 'RESOLVED')",
+            )
+            try {
+                assertThatThrownBy { management.execute(command) }.isInstanceOf(RuntimeException::class.java)
+                assertThat(management.get(operator, null, filed.disputeId).state).isEqualTo(SettlementDisputeState.ACCEPTED)
+            } finally {
+                jdbcTemplate.execute("ALTER TABLE operations_reprocessing_case DROP CONSTRAINT test_case_completion_failure")
+            }
+            val committed = management.get(operator, null, filed.disputeId)
+            assertThat(value<String>("SELECT status FROM operations_reprocessing_case WHERE case_type = 'SETTLEMENT_DISPUTE'"))
+                .isEqualTo("MANUAL_REVIEW")
+            assertThat(management.execute(command)).isEqualTo(committed)
+            assertThat(management.execute(command)).isEqualTo(committed)
+            assertThat(value<String>("SELECT status FROM operations_reprocessing_case WHERE case_type = 'SETTLEMENT_DISPUTE'"))
+                .isEqualTo("RESOLVED")
+            assertThat(count("SELECT count(*) FROM settlement_adjustment")).isOne()
+            assertThat(count("SELECT count(*) FROM operations_audit_record WHERE action = 'SETTLEMENT_DISPUTE_DECIDED'"))
+                .isOne()
+            assertThat(
+                count(
+                    "SELECT count(*) FROM event_publication WHERE event_type = 'io.github.kdh949.beanflow.eventing.api.SettlementDisputeDecidedV1'",
+                ),
+            ).isOne()
+        }
+
+        @Test
+        fun `management request Audit failure leaves no decision intent or command`() {
+            val fixture = fixture()
+            val dispute = file(fixture, "management-audit-key")
+            decisions.startReview(dispute.disputeId)
+            val operator = grantOperator()
+            jdbcTemplate.execute(
+                "ALTER TABLE operations_audit_record ADD CONSTRAINT test_management_audit_failure CHECK (action <> 'SETTLEMENT_DISPUTE_MANAGEMENT_REQUESTED')",
+            )
+            try {
+                assertThatThrownBy {
+                    management.execute(managementCommand(operator, dispute.disputeId, "ACCEPTED", 1))
+                }.isInstanceOf(RuntimeException::class.java)
+            } finally {
+                jdbcTemplate.execute("ALTER TABLE operations_audit_record DROP CONSTRAINT test_management_audit_failure")
+            }
+            assertThat(management.get(operator, null, dispute.disputeId).pendingDecision).isNull()
+            assertThat(count("SELECT count(*) FROM settlement_dispute_management_command")).isZero()
+            assertThat(count("SELECT count(*) FROM settlement_adjustment")).isZero()
+        }
+
+        @Test
+        fun `owner withdrawal checks membership store boundary version and CSRF`() {
+            val fixture = fixture()
+            val dispute = file(fixture, "management-withdraw-key")
+            decisions.startReview(dispute.disputeId)
+            val command = managementCommand(fixture.actorId, dispute.disputeId, "WITHDRAWN", 1).copy(storeId = fixture.storeId)
+            val path = "/api/v1/stores/${fixture.storeId}/disputes/${dispute.disputeId}/withdrawals"
+            val password = "merchant-management-password-2026"
+            val loginId = "management.owner"
+            jdbcTemplate.update(
+                "UPDATE identity_merchant_account SET login_id = ?, password_hash = ? WHERE id = ?",
+                loginId,
+                passwords.encode(password),
+                fixture.actorId,
+            )
+            val csrfCookie =
+                requireNotNull(
+                    mockMvc
+                        .perform(
+                            org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                                .get("/api/v1/auth/merchant/csrf"),
+                        ).andReturn()
+                        .response
+                        .getCookie("BEANFLOW_MERCHANT_XSRF"),
+                )
+            val session =
+                requireNotNull(
+                    mockMvc
+                        .perform(
+                            post(
+                                "/api/v1/auth/merchant/sessions",
+                            ).cookie(
+                                csrfCookie,
+                            ).header(
+                                "X-BEANFLOW-CSRF",
+                                csrfCookie.value,
+                            ).contentType(MediaType.APPLICATION_JSON)
+                                .content("""{"loginId":"$loginId","password":"$password"}"""),
+                        ).andExpect(status().isOk)
+                        .andReturn()
+                        .response
+                        .getCookie("BEANFLOW_MERCHANT_SESSION"),
+                )
+            mockMvc
+                .perform(
+                    post(
+                        path,
+                    ).cookie(
+                        session,
+                        csrfCookie,
+                    ).header(
+                        "Idempotency-Key",
+                        command.key,
+                    ).contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"expectedVersion":1,"reason":"withdraw evidence"}"""),
+                ).andExpect(status().isForbidden)
+            mockMvc
+                .perform(
+                    post(
+                        path,
+                    ).cookie(
+                        session,
+                        csrfCookie,
+                    ).header(
+                        "X-BEANFLOW-CSRF",
+                        csrfCookie.value,
+                    ).header(
+                        "Idempotency-Key",
+                        command.key,
+                    ).contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"expectedVersion":1,"reason":"withdraw evidence"}"""),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.state").value("WITHDRAWN"))
+            val other = fixture()
+            assertThatThrownBy { management.get(other.actorId, other.storeId, dispute.disputeId) }
+                .isInstanceOfSatisfying(DomainFailure::class.java) { assertThat(it.code).isEqualTo(FailureCode.RESOURCE_NOT_FOUND) }
+        }
+
+        @Test
+        fun `operator HTTP review and decision require purpose grants and reject stale or unknown payload`() {
+            val fixture = fixture()
+            val dispute = file(fixture, "management-http-filing")
+            val operator = grantOperator()
+            val actor = jwt().jwt { it.subject(operator.toString()) }.authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))
+            val path = "/api/v1/operations/settlement-disputes/${dispute.disputeId}"
+            mockMvc
+                .perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get(path)
+                        .with(actor),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.version").value(0))
+            mockMvc
+                .perform(
+                    post(
+                        "$path/reviews",
+                    ).with(
+                        actor,
+                    ).header(
+                        "Idempotency-Key",
+                        "review-http-key",
+                    ).contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"expectedVersion":0,"reason":"review evidence"}"""),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.state").value("UNDER_REVIEW"))
+            mockMvc
+                .perform(
+                    post(
+                        "$path/decisions",
+                    ).with(
+                        actor,
+                    ).header(
+                        "Idempotency-Key",
+                        "decision-http-key",
+                    ).contentType(
+                        MediaType.APPLICATION_JSON,
+                    ).content("""{"outcome":"REJECTED","expectedVersion":0,"reason":"review evidence"}"""),
+                ).andExpect(status().isConflict)
+            mockMvc
+                .perform(
+                    post(
+                        "$path/decisions",
+                    ).with(
+                        actor,
+                    ).header(
+                        "Idempotency-Key",
+                        "decision-http-key",
+                    ).contentType(
+                        MediaType.APPLICATION_JSON,
+                    ).content("""{"outcome":"REJECTED","expectedVersion":1,"reason":"review evidence","amountKrw":999}"""),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    post(
+                        "$path/decisions",
+                    ).with(
+                        actor,
+                    ).header(
+                        "Idempotency-Key",
+                        "decision-http-key",
+                    ).contentType(
+                        MediaType.APPLICATION_JSON,
+                    ).content("""{"outcome":"REJECTED","expectedVersion":1,"reason":"review evidence"}"""),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.state").value("REJECTED"))
+        }
+
+        @Test
+        fun `concurrent approval keys create one adjustment and one terminal decision`() {
+            val fixture = fixture()
+            val dispute = file(fixture, "management-race-filing")
+            decisions.startReview(dispute.disputeId)
+            val operator = grantOperator()
+            val command = managementCommand(operator, dispute.disputeId, "ACCEPTED", 1)
+            val executor = Executors.newFixedThreadPool(2)
+            try {
+                val barrier = CyclicBarrier(2)
+                val futures =
+                    (1..2).map {
+                        executor.submit<DisputeManagementResponse> {
+                            barrier.await(5, TimeUnit.SECONDS)
+                            management.execute(command)
+                        }
+                    }
+                val responses = futures.map { it.get(20, TimeUnit.SECONDS) }
+                assertThat(responses[0]).isEqualTo(responses[1])
+                assertThat(count("SELECT count(*) FROM settlement_adjustment")).isOne()
+                assertThat(count("SELECT count(*) FROM settlement_dispute_management_command")).isOne()
+            } finally {
+                executor.shutdownNow()
+            }
+        }
+
+        private fun managementCommand(
+            actor: UUID,
+            dispute: UUID,
+            operation: String,
+            version: Long,
+        ) = DisputeManagementCommand(
+            actor,
+            null,
+            dispute,
+            operation,
+            "management-$operation-$dispute",
+            version,
+            "verified evidence",
+            "management-test",
+        )
+
+        private fun grantOperator(): UUID =
+            UUID.randomUUID().also { actor ->
+                listOf("SETTLEMENT_DISPUTE_READ", "SETTLEMENT_DISPUTE_DECIDE").forEach { permission ->
+                    jdbcTemplate.update(
+                        "INSERT INTO operations_operator_permission_grant(actor_id, permission, state, granted_at, version, audit_source_reference) VALUES (?, ?, 'ACTIVE', ?, 1, ?)",
+                        actor,
+                        permission,
+                        Timestamp.from(WINDOW_OPEN),
+                        "management:$actor:$permission",
+                    )
+                }
+            }
 
         private fun fixture(): Fixture {
             val storeId = insertStore()

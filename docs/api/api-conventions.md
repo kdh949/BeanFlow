@@ -220,7 +220,7 @@ reason과 evidence를
 - request body는 새 `pickupSlotId`와 `pointsToUseKrw`를 필수로, 새로 적용할
   `couponIssuanceId`를 선택적으로 받는다. 결제수단은 받지 않으며 1원 이상 결제는 생성된
   Order의 기존 payment-confirmation 명령으로 별도 승인한다.
-- Merchant 가격·판매 가능성·MenuConfiguration, Fulfillment slot, Inventory 재고,
+- Merchant 가격·판매 가능성·MenuConfiguration, Fulfillment slot,
   Promotion coupon, Loyalty point를 기존 주문 생성 transaction에서 모두 다시 검증·예약한다.
   하나라도 사용할 수 없으면 `409 REORDER_ITEMS_UNAVAILABLE` 또는 기존 owner conflict로
   전체 실패하며 부분 Order를 만들거나 품목을 자동 삭제하지 않는다.
@@ -263,7 +263,7 @@ contracts; Plan 10 does not implement those later projections.
 `POST /api/v1/orders/{orderId}/cancellations`의 성공 표현은 취소 시점 Order 상태에
 따라 두 갈래다.
 
-- `PENDING_PAYMENT` 취소는 슬롯·재고·쿠폰·포인트 해제와 Order 전이가 모두 commit된
+- `PENDING_PAYMENT` 취소는 슬롯·쿠폰·포인트 해제와 Order 전이가 모두 commit된
   뒤 `200 OK`를 반환한다. `paymentRecovery.state`는 `NOT_REQUIRED`다.
 - `PAID` 취소는 `202 Accepted`를 반환한다. Order `CANCELLED`가 확정됐다는 뜻이며
   환불·자원 복원·알림 성공을 뜻하지 않는다.
@@ -308,7 +308,7 @@ contracts; Plan 10 does not implement those later projections.
 - 취소 POST의 `paymentRecovery`는 commit 시점 snapshot이고 멱등 재생에서도 그대로다.
   최신 state와 `remainingRefundableAmountKrw`는 Order GET으로 조회한다.
 - 보상 step 상세는 운영자 전용 `GET /api/v1/operations/orders/{orderId}/compensation`
-  에서만 조회한다. 이 endpoint는 여섯 step, `attemptCount`, `lastErrorCode`,
+  에서만 조회한다. 이 endpoint는 다섯 step, `attemptCount`, `lastErrorCode`,
   `caseId`와 두 benefit policy version을 담은 `CompensationSummary`를
   `OperatorCompensationView`로 감싸 setup issue와 ReprocessingCase reference를
   추가한다.
@@ -423,7 +423,7 @@ contracts; Plan 10 does not implement those later projections.
 주문 생성의 menu ID가 존재하지 않거나 option ID가 해당 menu에 속하지 않거나
 정규화한 option 집합에 대응하는 MenuConfiguration이 없으면
 `400 INVALID_REQUEST`다. 존재하는 MenuConfiguration이 현재 판매 불가하면
-`409 MENU_CONFIGURATION_NOT_AVAILABLE`이며 재고 부족과 구분한다.
+`409 MENU_CONFIGURATION_NOT_AVAILABLE`이다.
 
 ## Dates and money
 
@@ -514,7 +514,7 @@ contracts; Plan 10 does not implement those later projections.
 
 - `now >= reservationExpiresAt`인 `PENDING_PAYMENT` Order의 조회와 결제 명령은
   응답 전에 동일한 idempotent expiry transaction을 실행한다.
-- 조회는 만료와 네 자원 해제가 모두 commit된 뒤 `EXPIRED` Order를 반환한다.
+- 조회는 만료와 세 자원 해제가 모두 commit된 뒤 `EXPIRED` Order를 반환한다.
 - 결제 명령은 만료 commit 뒤 `409 RESERVATION_EXPIRED`를 반환한다.
 - expiry transaction이 실패하면 stale `PENDING_PAYMENT`나 부분 해제를 정상
   response로 반환하지 않고 `503 DEPENDENCY_UNAVAILABLE`를 반환한다.

@@ -62,29 +62,29 @@
 
 ---
 
-# B. 주문·예약·재고·매장 수락 정책
+# B. 주문·예약·매장 수락 정책
 
 ## BR-03 결제 전 예약 lease
 
 - **Status:** Accepted for MVP
-- **Decision:** 주문 생성 후 픽업 슬롯, 판매 재고, 쿠폰, 포인트 예약은 5분간 유지한다. 5분 안에 결제가 승인되지 않으면 Payment가 `UNKNOWN`이더라도 주문을 `EXPIRED`로 전환하고 모든 예약 자원을 해제한다. 이후 reconciliation에서 Provider 승인이 확인돼도 만료 주문을 `PAID`로 되살리거나 예약을 다시 확정하지 않는다. Payment가 자동 void 또는 전액 환불을 시작하고, 외부 결과가 확정될 때까지 `RECONCILING` 또는 `MANUAL_REVIEW`와 운영 case를 남긴다.
+- **Decision:** 주문 생성 후 픽업 슬롯, 쿠폰, 포인트 예약은 5분간 유지한다. 5분 안에 결제가 승인되지 않으면 Payment가 `UNKNOWN`이더라도 주문을 `EXPIRED`로 전환하고 모든 예약 자원을 해제한다. 이후 reconciliation에서 Provider 승인이 확인돼도 만료 주문을 `PAID`로 되살리거나 예약을 다시 확정하지 않는다. Payment가 자동 void 또는 전액 환불을 시작하고, 외부 결과가 확정될 때까지 `RECONCILING` 또는 `MANUAL_REVIEW`와 운영 case를 남긴다.
 - **Expiration:** 예약 만료 시각은 주문 생성 트랜잭션에서 고정하며, 연장 API는 MVP에서 제공하지 않는다.
 - **Amendment (2026-07-28):** 결제 결과 불명 상태에서 자원이 무기한 점유되는 것을 막고 뒤늦은 승인 주문이 이미 해제된 자원을 다시 확정하지 않도록 만료 우선과 명시적 환불 복구를 확정했다.
 - **Point Reservation Amendment (2026-07-28):** 주문 생성 시점에 유효한 PointLot에서 예약한 allocation은 주문 lease가 끝날 때까지 확정 가능성을 보장한다. lease 도중 원 PointLot 만료 시각이 지나도 예약분은 결제 승인에 사용할 수 있다. 예약을 해제할 때 이미 만료된 allocation은 가용 포인트로 복원하지 않고 만료 원장으로 처리한다.
-- **Materialization Amendment (2026-07-28):** `now >= reservationExpiresAt`인 `PENDING_PAYMENT` Order의 조회·결제 명령은 worker를 기다리지 않고 먼저 Order 만료와 네 자원 해제를 같은 transaction으로 시도한다. 성공하면 `EXPIRED`를 반환하거나 만료 오류로 결제를 거부한다. 해제 실패 시 stale `PENDING_PAYMENT`나 부분 성공을 반환하지 않고 503으로 실패하며 worker 또는 다음 요청이 재시도한다.
+- **Materialization Amendment (2026-07-28):** `now >= reservationExpiresAt`인 `PENDING_PAYMENT` Order의 조회·결제 명령은 worker를 기다리지 않고 먼저 Order 만료와 세 자원 해제를 같은 transaction으로 시도한다. 성공하면 `EXPIRED`를 반환하거나 만료 오류로 결제를 거부한다. 해제 실패 시 stale `PENDING_PAYMENT`나 부분 성공을 반환하지 않고 503으로 실패하며 worker 또는 다음 요청이 재시도한다.
 - **Customer List Materialization Amendment (2026-08-12):** 고객 주문 목록도 조회에 해당한다.
   목록은 customer scope와 signed cursor로 먼저 고정한 **한 페이지의 candidate ID window** 안에서
-  만료 시각이 지난 `PENDING_PAYMENT`를 찾고, 해당 Order와 네 예약 자원을 하나의 쓰기
+  만료 시각이 지난 `PENDING_PAYMENT`를 찾고, 해당 Order와 세 예약 자원을 하나의 쓰기
   transaction에서 모두 만료·해제한 뒤 같은 candidate window를 Projection으로 다시 읽는다. 하나라도
   해제하지 못하면 전체 materialization transaction을 rollback하고 stale 목록 대신 `503`을 반환한다.
   활성 상태 필터에서 만료 Order가 제외되면 페이지가 page size보다 짧거나 비어도 scan boundary 기반
   `nextCursor`를 반환할 수 있다. 페이지를 채우려고 다음 window까지 암묵적으로 쓰지 않는다.
 - **Payment Decline Amendment (2026-07-29):** Provider가 승인을 명시적으로
-  거절하면 Payment를 `FAILED`, Order를 `CANCELLED`로 전환하고 네 예약을 같은
+  거절하면 Payment를 `FAILED`, Order를 `CANCELLED`로 전환하고 세 예약을 같은
   transaction에서 해제한다. 같은 Order에서 다른 결제수단으로 다시 승인하지 않고
   고객은 새 주문을 생성한다.
 - **Pickup Start Effective-Lease Amendment (2026-08-09):** 픽업 주문의 예약 만료 시각은
-  고정 5분 시각과 `pickupSlot.startsAt` 중 더 이른 시각이다. 이 effective lease를 슬롯·재고·쿠폰·포인트
+  고정 5분 시각과 `pickupSlot.startsAt` 중 더 이른 시각이다. 이 effective lease를 슬롯·쿠폰·포인트
   예약과 `Order.reservationExpiresAt`에 같은 값으로 고정한다. 결제 결과를 반영할 때도
   `now >= reservationExpiresAt`이면 먼저 만료를 materialize하며 슬롯을 확정하지 않는다. 이 시각 뒤의
   Provider 승인 또는 `UNKNOWN` lookup approval은 주문·예약을 되살리지 않고 기존 late-approval
@@ -96,7 +96,7 @@
 - **Fast Reorder Source Amendment (2026-08-09):** source Order에서는 `menuId`, ID 오름차순으로
   정규화된 `optionIds`, `quantity`만 새 주문 입력으로 복사한다. 과거 또는 현재의 note를 복사하지 않으며
   빠른 재주문을 위해 새 note 계약을 도입하지 않는다. 검증된 option ID snapshot이 없는 기존 OrderLine은
-  옵션 이름, 현재 메뉴 또는 sellable requirement로 추론하지 않고 재주문 불가로 명시적으로 실패한다.
+  옵션 이름, 현재 메뉴로 추론하지 않고 재주문 불가로 명시적으로 실패한다.
 - **Fast Reorder Price-Change Amendment (2026-08-09):** 재주문은 현재 Merchant 가격으로 새 Order를
   생성하며 가격 변경 자체를 실패로 만들지 않는다. 성공 응답은 혜택 적용 전 가격을 source와 current로
   비교한 line별 변경 목록과 두 subtotal을 필수로 제공한다. 변경 목록은 source line 순서이고 실제 단가가
@@ -109,15 +109,15 @@
 - **Fast Reorder Revalidation Amendment (2026-08-09):** request는 새 `pickupSlotId`, 선택적
   `couponIssuanceId`와 명시적 `pointsToUseKrw`를 받는다. 과거 메뉴·옵션 이름과 가격, coupon·point
   allocation, PaymentMethod·Payment·Refund, pickup slot·reservation, 적립·정산 snapshot, 상태와
-  deadline을 복사하지 않는다. 현재 Merchant 이름·가격·판매 상태, Fulfillment slot, Inventory stock,
+  deadline을 복사하지 않는다. 현재 Merchant 이름·가격·판매 상태, Fulfillment slot,
   명시적으로 선택한 Coupon과 points를 기존 주문 생성 경계에서 다시 quote·reserve한다. payment method는
   복사하거나 이 request에서 승인하지 않고 외부 결제가 필요하면 BR-33의 일회성
   `POST /orders/{orderId}/payment-attempts`로 Toss 결제창을 준비한다. 한 source line이라도
   삭제·판매 중지·구성 불가이면 source line 순서의 stable item
   reason을 포함한 전체 `409`이며 부분 Order나 unavailable item 자동 삭제는 없다.
 - **Rationale:** 결제 재시도를 허용하면서도 자원이 무한 점유되는 것을 방지한다.
-- **Affected Contexts:** Ordering, Fulfillment, Inventory, Promotion, Loyalty, Payment
-- **Affected Aggregates:** Order, PickupReservation, StockReservation, CouponIssuance, PointAccount
+- **Affected Contexts:** Ordering, Fulfillment, Promotion, Loyalty, Payment
+- **Affected Aggregates:** Order, PickupReservation, CouponIssuance, PointAccount
 - **Required Tests:**
   - 5분 이전 결제 성공 시 예약 확정
   - PointLot 만료가 lease 중간에 있는 주문의 승인과 해제
@@ -135,23 +135,23 @@
 - **ADR Required:** Yes — 예약 lease와 자원 확정 시점
 - **Revisit Conditions:** 실제 결제 소요시간 p95, 결제 이탈률 또는 자원 점유율 측정 후 조정
 
-## BR-04 재고 확정 시점
+## BR-04 메뉴 판매 상태
 
 - **Status:** Accepted for MVP
-- **Decision:** 주문 생성 시 재고를 임시 예약하고, 결제 승인 성공 시 확정 차감한다. 결제 실패·예약 만료·결제 전 취소 시 예약을 해제한다. 결제 승인 후 매장이 주문을 거절하면 확정 차감된 재고를 복원한다.
-- **Payment Decline Clarification (2026-07-29):** 여기서 결제 실패는 Provider가
-  부수효과 없음과 거절을 명시적으로 확정한 경우다. timeout과 응답 유실은 실패가
-  아니라 `UNKNOWN`이며 lease 만료 전까지 예약을 유지한다.
-- **Rationale:** 결제 완료 고객의 재고를 우선 보장하고 oversell을 방지한다.
-- **Affected Contexts:** Ordering, Inventory, Payment, Fulfillment
-- **Affected Aggregates:** SellableStock, StockReservation, Order, Payment
+- **Decision:** 점주는 메뉴와 옵션의 판매 여부를 직접 설정한다. 품절은 새 주문을 차단하며
+  판매 재개도 점주가 명시적으로 실행한다. 메뉴의 판매 가능 수량을 입력하거나 주문에 따라
+  자동으로 차감하지 않는다. 최종 주문은 현재 메뉴·옵션·선택 구성의 판매 가능 여부를 검증한다.
+- **Rationale:** 매장 운영자가 실제 판매 가능 여부를 판단하고 주문 가능 상태를 관리한다.
+- **Affected Contexts:** Merchant, Ordering
+- **Affected Aggregates:** Store, Menu, MenuConfiguration, Order
 - **Required Tests:**
-  - 마지막 재고에 대한 동시 예약 테스트
-  - 결제 성공 시 한 번만 확정 차감
-  - 결제 실패·만료·매장 거절 시 복원
-  - 중복 이벤트로 인한 이중 차감·이중 복원 방지
+  - 판매 가능 메뉴·옵션·선택 구성의 주문 성공
+  - 품절 메뉴·옵션·선택 구성의 신규 주문 거부
+  - 점주의 판매 재개 후 주문 성공
+  - 판매 상태 변경과 최종 주문의 Store lock 직렬화
+  - 이미 생성된 Order의 가격·이름·옵션 스냅샷 불변
 - **ADR Required:** Yes
-- **Revisit Conditions:** 매장 거절률이 높아 불필요한 재고 복원이 운영 문제로 확인될 때
+- **Revisit Conditions:** 외부 매장 시스템과 판매 상태를 동기화할 필요가 생길 때
 
 ## BR-05 픽업 슬롯 확정 시점
 
@@ -200,7 +200,7 @@
 ## BR-06 매장 수락 제한시간
 
 - **Status:** Accepted for MVP
-- **Decision:** 결제 승인 후 매장은 3분 안에 주문을 수락하거나 거절해야 한다. 2분이 지나면 매장 운영 알림을 생성하고, 3분이 지나도 응답이 없으면 주문을 자동 거절한다. 자동 거절 시 결제 전액 취소, 재고·슬롯 복원, 쿠폰·포인트 복원, 고객 알림을 수행한다.
+- **Decision:** 결제 승인 후 매장은 3분 안에 주문을 수락하거나 거절해야 한다. 2분이 지나면 매장 운영 알림을 생성하고, 3분이 지나도 응답이 없으면 주문을 자동 거절한다. 자동 거절 시 결제 전액 취소, 슬롯 복원, 쿠폰·포인트 복원, 고객 알림을 수행한다.
 - **Store Board Visibility Amendment (2026-08-12):** 수락 제한시간은 픽업 영업일과 무관하므로 점주
   실행 주문보드는 오늘 주문만으로 제한하지 않는다. 해당 매장의 모든 `PAID`, `ACCEPTED`,
   `PREPARING`, `READY`는 보드 또는 오래된 작업 큐에서 접근 가능해야 한다. `PENDING_PAYMENT`와 종료 상태는
@@ -231,8 +231,8 @@
   `PARTIAL_REFUND × POINTS` head를 추가하므로 운영 정책 API의 현재 head는 총 다섯
   개다. `PARTIAL_REFUND × COUPON`은 허용하지 않는다.
 - **Rationale:** 결제 후 무기한 대기하는 고객 경험을 방지하고 예외 흐름을 명확하게 만든다.
-- **Affected Contexts:** Ordering, Fulfillment, Payment, Inventory, Promotion, Loyalty, Notification, Operations
-- **Affected Aggregates:** Order, Payment, PickupReservation, StockReservation, CouponIssuance, PointAccount, NotificationDelivery
+- **Affected Contexts:** Ordering, Fulfillment, Payment, Promotion, Loyalty, Notification, Operations
+- **Affected Aggregates:** Order, Payment, PickupReservation, CouponIssuance, PointAccount, NotificationDelivery
 - **Required Tests:**
   - 3분 이전 수락·거절
   - 2분 경고와 3분 자동 거절
@@ -251,8 +251,8 @@
 - **Status:** Accepted for MVP
 - **Decision:** 매장은 주문 상태가 `PAID`이고 아직 `ACCEPTED`가 아닐 때만 거절할 수 있다. `ACCEPTED` 이후에는 거절 명령을 허용하지 않고 별도의 주문 취소·환불 절차를 사용한다.
 - **Rationale:** 매장 수락 이후 제조가 시작될 수 있으므로 단순 거절과 환불 책임을 분리한다.
-- **Affected Contexts:** Ordering, Fulfillment, Payment, Inventory, Promotion, Loyalty
-- **Affected Aggregates:** Order, Payment, StockReservation, PickupReservation
+- **Affected Contexts:** Ordering, Fulfillment, Payment, Promotion, Loyalty
+- **Affected Aggregates:** Order, Payment, PickupReservation
 - **Required Tests:**
   - `PAID` 상태 거절 성공
   - `ACCEPTED` 이후 거절 409
@@ -266,9 +266,9 @@
 - **Status:** Accepted for MVP
 - **Decision:** 고객은 주문이 `PENDING_PAYMENT` 또는 `PAID`이고 매장이 아직 `ACCEPTED`하지 않은 경우에만 직접 취소할 수 있다. `ACCEPTED` 이후 취소는 고객 직접 API로 허용하지 않고 운영자 또는 매장 취소·환불 절차로 처리한다.
 - **Scope Confirmation Amendment (2026-07-31):** 고객 취소 구현 범위를 위 두 상태로
-  확정한다. `PENDING_PAYMENT` 취소는 슬롯·재고·쿠폰·포인트 예약 해제만으로 완결하고
+  확정한다. `PENDING_PAYMENT` 취소는 슬롯·쿠폰·포인트 예약 해제만으로 완결하고
   외부 환불을 만들지 않는다. `PAID` 취소는 매장 거절과 동일한 owner 보상 대상
-  (결제 환불, 슬롯·재고 복원, 쿠폰·포인트 복원, 고객 알림)을 갖는다. `ACCEPTED`
+  (결제 환불, 슬롯 복원, 쿠폰·포인트 복원, 고객 알림)을 갖는다. `ACCEPTED`
   이후 고객 취소는 이번 범위의 Non-goal이며, 제조 비용 부담 주체와 취소 수수료
   정책이 Accepted 되기 전에는 상태 전이로도 허용하지 않는다. 이 amendment는
   `store-order-lifecycle` ExecPlan이 고객 취소를 Non-goal로 둔 제약을 해제한다.
@@ -298,7 +298,7 @@
   취소 요청도 `409 ORDER_STATE_CONFLICT`다.
 - **Cancellation Reason Amendment (2026-07-31):** 고객 취소 요청은 닫힌 reason code를
   필수로 받는다. 허용 값은 `CHANGED_MIND`, `ORDER_MISTAKE`, `WAIT_TOO_LONG`,
-  `PICKUP_TIME_CONFLICT`, `PAYMENT_ISSUE`, `OTHER` 여섯 가지다. 자유 입력 상세 사유는
+  `PICKUP_TIME_CONFLICT`, `PAYMENT_ISSUE`, `OTHER` 다섯 가지다. 자유 입력 상세 사유는
   선택이며 `trim` 후 최대 200자이고 제어문자를 허용하지 않는다. 빈 문자열은 저장하지
   않고 부재로 정규화한다. reason code는 고객이 신고한 사유이고 취소 원인
   `cancellation_cause`는 시스템이 판정한 값이므로 두 축은 독립이다. reason code는
@@ -323,7 +323,7 @@
   `OrderCancelledV1` 사실로 발행한다. 공통 보상 Case와 owner별 보상 구조를 공유하더라도
   고객 취소와 매장 거절의 책임·actor·사유·알림 의미는 event type 수준에서 구분한다.
   `OrderCancelledV1`은 비동기 owner 보상이 필요한 미수락 `PAID` 고객 취소에서만
-  발행한다. `PENDING_PAYMENT` 취소는 주문 명령 transaction 안의 네 예약 해제와
+  발행한다. `PENDING_PAYMENT` 취소는 주문 명령 transaction 안의 세 예약 해제와
   `200` 응답으로 완결하며 취소 event, 주문 보상 Case와 event publication 복구를
   만들지 않는다.
   event의 기본 payload는 공통 envelope, `orderId`, `cancelledAt`,
@@ -343,7 +343,7 @@
   재시도는 최초 envelope를 그대로 사용하고 새 lineage를 만들지 않는다.
   owner consumer의 중복 기준은 event ID가 아니라
   `order:{orderId}:customer-cancellation:{aggregateVersion}:{step}` source reference다.
-  event consumer의 `step`은 `pickup`, `stock`, `coupon`, `points` 중 하나다.
+  event consumer의 `step`은 `pickup`, `coupon`, `points` 중 하나다.
   Tx C1이 직접 준비하는 Payment와 Notification 작업은 같은 형식의 `payment`,
   `notification` step을 사용하지만 event consumer는 아니다.
   같은 Order terminal version의 event가 새 event ID로 다시 생성돼도 owner 부수효과를
@@ -379,12 +379,12 @@
   이 amendment의 범위가 아니다.
 - **Paid Cancellation Transaction Amendment (2026-07-31):** 미수락 `PAID` 고객
   취소는 단일 로컬 transaction에서 Order `CANCELLED`와 원인 필드, 최초 `202`를 담은
-  취소 멱등 레코드, `CUSTOMER_CANCELLATION` 주문 보상 Case와 여섯 step, 외부 결제
+  취소 멱등 레코드, `CUSTOMER_CANCELLATION` 주문 보상 Case와 다섯 step, 외부 결제
   금액이 있으면 Refund `REQUESTED`, `ORDER_CANCELLATION_ACCEPTED`
-  NotificationDelivery `PENDING`, AuditRecord, `OrderCancelledV1`과 네 owner별
+  NotificationDelivery `PENDING`, AuditRecord, `OrderCancelledV1`과 세 owner별
   영속 publication을 함께 commit한다. 한 항목이라도 저장에 실패하면 전체
-  rollback하고 `202`를 반환하지 않는다. 외부 Provider 호출과 픽업 슬롯·재고·쿠폰·
-  포인트 복원은 이 transaction에 넣지 않는다. 네 자원은 commit 후 owner listener가
+  rollback하고 `202`를 반환하지 않는다. 외부 Provider 호출과 픽업 슬롯·쿠폰·
+  포인트 복원은 이 transaction에 넣지 않는다. 세 자원은 commit 후 owner listener가
   각자의 transaction에서 처리하고, Notification Provider는 delivery worker가
   transaction과 lock 밖에서 호출한다. `PENDING_PAYMENT` 취소도 Tx C0에서 같은
   template의 NotificationDelivery를 함께 저장하며 insert 실패 시 취소를 rollback한다.
@@ -426,7 +426,7 @@
   실제 `SUCCEEDED`를 반환할 때만 성공 원장과 성공 event·별도 logical notification을
   확정하며 실패·불명은 다시 terminal 지연 상태로 수렴한다.
 - **Compensation Completion Notification Amendment (2026-07-31):** 고객 취소
-  OrderCompensationCase 전체 성공, 슬롯·재고 복원 또는 쿠폰·포인트 복원 완료에는
+  OrderCompensationCase 전체 성공, 슬롯 복원 또는 쿠폰·포인트 복원 완료에는
   별도 고객 알림을 보내지 않는다. 고객 알림은 취소 접수와 현금 환불 성공·지연으로
   제한하고, 혜택 결과는 기존 보유 내역에 반영한다. Case 완료를 원인으로
   Notification event나 Delivery를 만들지 않는다.
@@ -517,13 +517,13 @@
   처리하겠습니다.”라는 locale별 안내를 연결한다. 고객에게 재시도 여부·attempt·실패
   code·수동 검토 상태를 노출하지 않고 운영자에게는 모두 제공한다.
 - **Benefit-only Cancellation Amendment (2026-07-31):** `BENEFIT_ONLY`인 미수락
-  `PAID` 주문도 일반 고객 취소와 같은 OrderCompensationCase와 여섯 step을 만든다.
+  `PAID` 주문도 일반 고객 취소와 같은 OrderCompensationCase와 다섯 step을 만든다.
   Tx C1에서 PAYMENT step을 attempt 0, error null의 `NOT_REQUIRED`로 저장하고,
   Refund와 Provider 호출은 만들지 않는다. recovery snapshot과 고객 요약의 네
-  금액은 모두 0이고 `noticeCode`는 없다. 나머지 다섯 step은 일반 `PAID` 취소처럼
+  금액은 모두 0이고 `noticeCode`는 없다. 나머지 네 step은 일반 `PAID` 취소처럼
   처리하므로 응답은 `202`다.
 - **Confirmed Resource Restoration Amendment (2026-07-31):** 매장 거절과 고객
-  취소의 PickupReservation·StockReservation은 공통 terminal 상태
+  취소의 PickupReservation은 공통 terminal 상태
   `RELEASED_AFTER_TERMINATION`을 사용하고 별도 `restoration_trigger`로
   `STORE_REJECTION` 또는 `CUSTOMER_CANCELLATION`을 보존한다. 동일 source·trigger
   중복은 수량을 다시 바꾸지 않고, 다른 source 또는 trigger 충돌은 덮어쓰지 않고
@@ -552,8 +552,8 @@
   주문 가능하게 만들거나 대상을 자동 확대하지 않는다. 일반 마케팅 issuance는
   계속 live Campaign active 검증을 따른다.
 - **Rationale:** 제조 시작 이후 발생한 비용과 고객 편의를 구분하고 상태 전이를 단순화한다. `PAID` 창은 BR-06의 수락 deadline에 의해 최대 3분이므로 고객 이탈 경로를 제공하는 비용이 제한적이다.
-- **Affected Contexts:** Ordering, Eventing, Payment, Fulfillment, Inventory, Promotion, Loyalty, Notification, Operations
-- **Affected Aggregates:** Order, Payment, PickupReservation, StockReservation
+- **Affected Contexts:** Ordering, Eventing, Payment, Fulfillment, Promotion, Loyalty, Notification, Operations
+- **Affected Aggregates:** Order, Payment, PickupReservation
 - **Required Tests:**
   - 허용 상태별 취소
   - `ACCEPTED` 이후 고객 취소 거부
@@ -610,7 +610,7 @@
   - Tx C1 Refund source reference와 Refund worker의 PAYMENT step 갱신
   - `PAID` 취소 `202` 시 필수 내구 묶음의 전부 존재 또는 전부 rollback
   - Refund `REQUESTED` 저장 실패와 publication·Audit 저장 실패의 전체 rollback
-  - `202` 반환 시 외부 Provider 미호출과 네 자원·알림의 처리 중 상태 허용
+  - `202` 반환 시 외부 Provider 미호출과 세 자원·알림의 처리 중 상태 허용
   - commit 후 owner listener 실패에서 Order `CANCELLED` 유지와 step별 복구
   - 선행 성공 부분 환불 후 고객 취소의 남은 현금만 환불
   - 선행 부분 환불에서 이미 복원한 line 포인트의 이중 복원 부재
@@ -816,10 +816,10 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 포인트는 쿠폰 적용 후 남은 결제 예정액 전부까지 사용할 수 있다. 포인트로 전액 결제되어 최종 결제액이 0원이면 외부 PG를 호출하지 않고 `BENEFIT_ONLY` 결제 기록을 생성하여 주문을 결제 완료로 처리한다.
-- **Amendment (2026-07-28):** 0원 주문은 주문 생성 Feature에 포함한다. 주문 생성 로컬 트랜잭션 안에서 임시 예약을 획득한 뒤 `BENEFIT_ONLY Payment(APPROVED)`를 생성하고 슬롯·재고·쿠폰·포인트 예약을 확정하며 Order를 `PAID`로 커밋한다. 이 주문에는 active 결제 전 lease가 남지 않고 외부 PG 호출도 발생하지 않는다.
+- **Amendment (2026-07-28):** 0원 주문은 주문 생성 Feature에 포함한다. 주문 생성 로컬 트랜잭션 안에서 임시 예약을 획득한 뒤 `BENEFIT_ONLY Payment(APPROVED)`를 생성하고 슬롯·쿠폰·포인트 예약을 확정하며 Order를 `PAID`로 커밋한다. 이 주문에는 active 결제 전 lease가 남지 않고 외부 PG 호출도 발생하지 않는다.
 - **Customer Cancellation Amendment (2026-07-31):** 매장 수락 전 고객 취소는
   Refund 없이 PAYMENT 보상 step을 `NOT_REQUIRED`로 확정한다. Provider를 호출하지
-  않고 포인트·쿠폰·슬롯·재고와 알림 보상은 일반 `PAID` 취소와 동일하게 처리한다.
+  않고 포인트·쿠폰·슬롯와 알림 보상은 일반 `PAID` 취소와 동일하게 처리한다.
 - **Rationale:** 포인트 전액 사용을 지원하면서도 0원 결제를 외부 PG에 전송하는 불필요한 의존을 제거한다.
 - **Affected Contexts:** Ordering, Loyalty, Payment
 - **Affected Aggregates:** Order, PointAccount, Payment
@@ -1502,13 +1502,13 @@
 ## BR-30 감사 로그 대상
 
 - **Status:** Accepted for MVP
-- **Decision:** 금액, 포인트, 재고, 픽업 슬롯, 주문 terminal 상태, 정산, 이의제기 판정, 권한 변경과 수동 재처리는 감사 로그를 남긴다. 감사 로그에는 actorId, actorType, action, targetType, targetId, occurredAt, reason, before summary, after summary, correlationId를 포함한다. 감사 로그는 일반 비즈니스 Entity와 분리하고 애플리케이션 API로 수정·삭제하지 않는다.
+- **Decision:** 금액, 포인트, 픽업 슬롯, 주문 terminal 상태, 정산, 이의제기 판정, 권한 변경과 수동 재처리는 감사 로그를 남긴다. 감사 로그에는 actorId, actorType, action, targetType, targetId, occurredAt, reason, before summary, after summary, correlationId를 포함한다. 감사 로그는 일반 비즈니스 Entity와 분리하고 애플리케이션 API로 수정·삭제하지 않는다.
 - **Order Lease Amendment (2026-07-28):** 주문 생성·BENEFIT_ONLY 승인·예약·확정·만료·해제는 변경된 Aggregate target마다 별도 AuditRecord를 남기고 같은 correlationId와 source reference로 묶는다. 고객 주문 생성은 Customer actor와 표준 reason code, 시간에 의한 만료는 SYSTEM actor와 `LEASE_DEADLINE_REACHED`를 사용한다. 자유 입력 reason은 수동·운영자 명령에서만 필수다.
 - **Retention Amendment (2026-07-28):** AuditRecord는 `occurredAt`을 `Asia/Seoul`로 변환한 같은 현지 시각의 5주년까지 보존하고 그 시각부터 retention worker의 삭제 대상이 된다. 윤년은 달력 `plusYears(5)` 규칙을 따른다. 애플리케이션 API 삭제는 계속 금지하고 내부 worker만 chunk 단위로 재실행 가능하게 삭제한다.
 - **Customer Cancellation Granularity Amendment (2026-07-31):** 고객 취소와 후속
   보상은 상태가 바뀌거나 중요한 durable work가 생성된 business target마다 별도
   AuditRecord를 남기고 공통 correlation과 cancellation source로 묶는다. Tx C0는
-  Order·실제 네 예약 해제·접수 Delivery, Tx C1은
+  Order·실제 세 예약 해제·접수 Delivery, Tx C1은
   Order·CompensationCase·Payment recovery snapshot·필요한 Refund·접수 Delivery를
   기록한다. 후속 owner는 실제 owner 상태 변경 transaction에서 target Audit를
   commit한다. event publication과 IdempotencyRecord는 자체 내구 원장을 사용하고,
@@ -2291,7 +2291,7 @@
   뒤에만 migration writer lease 하에 추가한다. 이 policy는 migration 번호·index 또는 cache를
   선승인하지 않는다.
 - **Rationale:** 고객이 선택할 수 있는 혜택을 checkout 직전까지 숨기지 않되, 조회 시점의 가용성을
-  주문 transaction의 금전·재고·동시성 결정으로 오해하지 않기 위함이다.
+  주문 transaction의 금전·동시성 결정으로 오해하지 않기 위함이다.
 - **Affected Contexts:** Promotion, Ordering, Customer frontend
 - **Affected Aggregates:** CouponIssuance, Campaign, Order
 - **Required Tests:**
@@ -2321,8 +2321,8 @@
   현재 owner state의 server 계산을 확인한다. quote는 `subtotalKrw`, `couponDiscountKrw`,
   `pointsAppliedKrw`, `payableKrw`, `currency`와 line·pickup snapshot,
   `guarantee=NONE`, opaque `quoteFingerprint`를 반환한다.
-- **No-hold Boundary:** quote는 Order, 픽업·재고·쿠폰·포인트 reservation, Payment, 주문 생성
-  idempotency record, Audit 또는 event를 만들지 않는다. 가격·재고·slot을 보장하지 않고 Provider를
+- **No-hold Boundary:** quote는 Order, 픽업·쿠폰·포인트 reservation, Payment, 주문 생성
+  idempotency record, Audit 또는 event를 만들지 않는다. 가격·slot을 보장하지 않고 Provider를
   호출하지 않으며 `Idempotency-Key`를 받지 않는다.
 - **Fingerprint Authority:** quote와 final-create는 versioned canonical full fingerprint 함수를
   공유한다. fingerprint는 normalized input, line/option 구성과 표시 snapshot, 가격, benefit
@@ -2330,12 +2330,11 @@
   포함한다. Menu/Store의 표시·이미지와 함께 증가하는 coarse persistence version은 제외하고 거래를
   결정하는 canonical value 또는 분리된 trade version만 포함한다. `quotedAt`은 제외한다. fingerprint는
   금액, reservation ID, 인증·권한 token, Provider input 또는 client가 계산할 수 있는 authority가 아니다.
-- **2026-09-07 Shared Resource Amendment:** 다른 주문의 예약·확정·해제로 변하는 재고 잔여량,
-  예약량·확정량과 픽업 슬롯 예약 수·확정 수 및 이들과 함께 증가하는 기술적 version은 fingerprint에서
-  제외한다. 같은 메뉴 구성·필요 수량·가격·혜택·픽업 시간과 정원 정책이면 사용량 변화만으로 고객의
-  재확인을 요구하지 않는다. quote는 계속 비예약 계산이며 최종 주문 transaction의 owner lock 아래에서
-  현재 재고와 슬롯 잔여량을 검사한다. 부족하면 `STOCK_NOT_AVAILABLE` 또는 `PICKUP_SLOT_FULL`로
-  실패하고 거래 write를 rollback한다. 픽업 정원·시간 변경과 고객별 benefit provenance 비교는 유지한다.
+- **Shared Resource Amendment:** 다른 주문의 예약·확정·해제로 변하는 픽업 슬롯 예약 수·확정 수와
+  기술적 version은 fingerprint에서 제외한다. 같은 메뉴 구성·판매 상태·가격·혜택·픽업 시간과 정원
+  정책이면 사용량 변화만으로 재확인을 요구하지 않는다. 최종 주문 transaction의 owner lock 아래에서
+  현재 슬롯 잔여량을 검사하고 부족하면 `PICKUP_SLOT_FULL`로 실패하며 거래 write를 rollback한다.
+  메뉴·옵션·구성은 BR-04의 수동 판매 상태로 검증한다. 정원·시간과 고객별 benefit provenance 비교는 유지한다.
 - **Final Order Boundary:** `POST /orders`는 editable input과 필수
   `expectedQuoteFingerprint`만 받으며 client money를 받지 않는다. 기존 lock 순서와 짧은 주문
   transaction에서 Store root shared lock을 먼저 획득해 현재 상태를 다시 계산하고 full fingerprint가
@@ -2347,7 +2346,7 @@
   다시 확인한 주문은 새 fingerprint와 새 `Idempotency-Key`를 사용한다. 같은 key에 새 fingerprint를
   보내는 것은 `IDEMPOTENCY_KEY_REUSED`다.
 - **Failure Policy:** malformed fingerprint는 400이며 최신 조건의 자동 수락이 아니다.
-  Merchant/Fulfillment/Inventory/Promotion/Loyalty read 실패는 typed 5xx로 종료한다. client 합계,
+  Merchant/Fulfillment/Promotion/Loyalty read 실패는 typed 5xx로 종료한다. client 합계,
   0원 할인, cached/stale owner 값, 빈 slot 또는 가짜 quote로 대체하지 않는다. terminal stale 응답
   저장 실패도 503이며 성공이나 no-op으로 보이지 않는다.
 - **Scope Preservation:** BR-05의 reservation 확정 시점과 BR-33의 Toss 일회성 결제를 유지한다.
@@ -2355,8 +2354,8 @@
 - **Rationale:** customer에게 server 계산을 보여 주되 자원 hold의 새 lifecycle을 만들지 않고,
   금액뿐 아니라 거래 구성·benefit 귀속·pickup eligibility의 변경도 명시적 재확인으로 보낸다.
   terminal replay는 동일 네트워크 재시도가 나중에 뜻밖의 주문 실행으로 바뀌는 것을 막는다.
-- **Affected Contexts:** Ordering, Merchant, Fulfillment, Inventory, Promotion, Loyalty, Customer frontend
-- **Affected Aggregates:** Order, Store, Menu, PickupSlot, StockItem, CouponIssuance, PointAccount
+- **Affected Contexts:** Ordering, Merchant, Fulfillment, Promotion, Loyalty, Customer frontend
+- **Affected Aggregates:** Order, Store, Menu, PickupSlot, CouponIssuance, PointAccount
 - **Required Tests:**
   - quote 정상·validation·dependency 실패 뒤 모든 거래/idempotency/Audit/event write 부재
   - exact quote와 생성된 immutable Order line·benefit·pickup·pricing snapshot 일치
@@ -2366,8 +2365,8 @@
   - malformed/tampered fingerprint, client money 거부와 concurrent owner 변경
   - writer-first stale과 Order-first writer commit 대기의 실제 PostgreSQL 경합
   - Menu 표시 설명·분류와 Store/Menu 이미지 변경 뒤 fingerprint 불변
-  - 공유 재고·슬롯 사용량이 변해도 잔여량이 충분한 사전 견적의 주문 성공
-  - 서로 다른 고객의 동시 주문 성공과 마지막 재고·슬롯의 단일 예약 및 명시적 부족 실패
+  - 공유 슬롯 사용량이 변해도 잔여량이 충분한 사전 견적의 주문 성공
+  - 서로 다른 고객의 동시 주문 성공과 마지막 슬롯의 단일 예약 및 명시적 부족 실패
 - **ADR Required:** [ADR-123](../adr/ADR-123-order-quote-trade-terms-and-shared-availability.md)
   ([ADR-116](../adr/ADR-116-non-reserving-order-quote.md) 대체)
 - **Revisit Conditions:** 가격 보장 기간, persistent quote identity, cart hold, 사전 승인 또는 분산
@@ -2486,15 +2485,15 @@
   없으면 대상 Store 존재 여부와 무관하게 404, inactive·revoked membership 또는 허용되지 않은 역할은
   403이다. command가 membership lock을 먼저 얻으면 그 권한으로 commit한 뒤 revoke가 진행되고, revoke가
   먼저 commit되면 command는 owner state를 바꾸지 않고 403이다.
-- **Lifecycle and Bounds:** Menu·Option·Configuration·sellable-unit requirement는 active/archived
+- **Lifecycle and Bounds:** Menu·Option·Configuration은 active/archived
   수명주기를 가진다. Store당 active Menu 1,000개와 Option 5,000개, Menu당 Option 100개와
-  Configuration 500개, Configuration당 requirement 50개를 write transaction에서 검증한다. 상한을 넘은
+  Configuration 500개를 write transaction에서 검증한다. 상한을 넘은
   요청은 partial·truncated success 없이 validation failure로 거절한다.
 - **Versioning:** Store 주문 정책은 `ordering_policy_version`, Menu 거래 의미는 `trade_version`으로
   관리한다. 정규화 후 같은 전체 교체는 version·updatedAt·Audit를 바꾸지 않는다. 이미지와 표시용
   설명·카테고리는 거래 version과 주문 quote fingerprint를 바꾸지 않는다.
 - **Serialization:** 최종 주문은 Store commerce root shared lock을 transaction 종료까지 유지하고,
-  Store 정책·Menu·Option·Configuration·requirement 거래 writer는 같은 root exclusive lock을 먼저
+  Store 정책·Menu·Option·Configuration 거래 writer는 같은 root exclusive lock을 먼저
   획득한다. writer가 먼저 commit하면 이전 quote는 `ORDER_QUOTE_STALE`, 주문이 먼저 lock을 획득하면
   writer는 주문 commit 뒤 진행한다. transaction 안에서 외부 Provider를 호출하지 않는다.
 - **Idempotency and Search:** 모든 mutation은 command-transaction 멱등성과 최초 terminal response 재생을
@@ -2502,8 +2501,8 @@
   rollback한다.
 - **Rationale:** 점주 메뉴·가격 운영을 실제 production command로 제공하면서 최종 주문 snapshot과 quote가
   동시 변경된 카탈로그를 섞어 읽지 않게 하고, 과거 주문 snapshot·감사·멱등 재생을 보존한다.
-- **Affected Contexts:** Merchant, Ordering, Discovery, Inventory, Fulfillment, Identity, Merchant frontend
-- **Affected Aggregates:** Store, Menu, Option, MenuConfiguration, SellableUnitRequirement, Order
+- **Affected Contexts:** Merchant, Ordering, Discovery, Fulfillment, Identity, Merchant frontend
+- **Affected Aggregates:** Store, Menu, Option, MenuConfiguration, Order
 - **Required Tests:**
   - OWNER/STAFF, revoked membership, cross-store 인가와 Audit actor role
   - authoring-vs-revoke 두 lock 순서와 cross-store/없는 Store의 동일 404
@@ -2550,6 +2549,33 @@
 - **ADR Required:** [ADR-120](../adr/ADR-120-operations-managed-limited-coupon-campaign.md)
 - **Revisit Conditions:** 측정된 Campaign lock 대기가 목표 처리량을 막거나, 발행 후 revision·증액·대기열이
   실제 운영 요구로 승인될 때
+
+---
+
+## BR-54 운영 관리 API의 권한과 변경 경계
+
+- **Status:** Accepted
+- **Decision Date:** 2026-09-10
+- **Decision:** 픽업 슬롯 관리는 ACTIVE same-store OWNER/STAFF, 이의 철회는 OWNER에게 허용한다.
+  매장 개설·검색 식별 정보, 계약 버전, 기존 계정 소속, 이의 판정, 일반 알림/publication 복구는
+  Platform Operator의 목적별 persistent grant가 필요하다. 조회와 명령 grant를 분리한다.
+- **Rules:** 명령은 사유·멱등 키를 요구하며 replay 전에도 현재 권한을 검증한다. 변경은 expected version으로
+  보호한다. 이의 철회는 UNDER_REVIEW에서만 허용하며 FILED는 먼저 검토 전환한다. 승인 의도가 내구 저장된
+  이의는 승인 재개만 가능하고 반대 판정·철회는 거절한다. 승인 의도는 별도 Adjustment commit보다 먼저 저장한다.
+  새 매장은 주문 차단 상태로 생성한다. 슬롯 정원은 예약+확정 수량 이상이며 소비 중 시간 변경을 금지한다.
+  계약 구간은 중첩될 수 없고 과거 주문 스냅샷은 불변이다. 복구 접수는 원래 source/key의 재개일 뿐 성공 확정이 아니다.
+  MANUAL_REVIEW 복구 요청 하나는 추가 시도 한 번만 허용하고 누적 시도 횟수를 보존한다. 재실패 후에는
+  최신 version으로 다시 명시적으로 요청해야 한다.
+- **Publication Unknown Amendment (2026-09-10):** 실행 결과가 불명확한 publication은 원본 상태를
+  보존한다. 마지막 실행 시작(아직 시작하지 않았으면 claim) 이후 초기 5분을 넘기면
+  MANUAL_REVIEW/EXECUTION_OUTCOME_UNKNOWN으로 조사하고 결과 대사를 계속한다. 5분은 운영 감지
+  초기값이며 실패 판정이나 재실행 허가가 아니다. 검증된 exact listener의 동일 source 동시 replay만
+  불명 상태에서 허용하고, 나머지는 owner 결과 확인 전 재실행을 거절한다. 늦은 결과는 자기 시도에만
+  반영하고 결과 불명 원장은 90일 cleanup에서 제외한다. [ADR-125](../adr/ADR-125-publication-unknown-execution-recovery.md)를 따른다.
+- **Scope:** 재고 authoring은 제외한다. UI, 외부 지급, 자동 병합·배포는 포함하지 않는다.
+- **Revisit Conditions:** 별도 승인자 분리, 매장 self-service 개설 또는 관리 grant 운영 정책이 필요해질 때.
+- **Related:** [ADR-124](../adr/ADR-124-management-api-vertical-slices.md)
+
 
 ---
 
@@ -2603,7 +2629,7 @@
 | Topic | Related ADR |
 |---|---|
 | 금액 표현·반올림·항목별 배분 | [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
-| 예약 lease와 재고·슬롯 확정 시점 | [ADR-005](../adr/ADR-005-reservation-transaction-strategy.md), [ADR-013](../adr/ADR-013-payment-unknown-reservation-expiry.md) |
+| 예약 lease와 슬롯 확정 시점 | [ADR-005](../adr/ADR-005-reservation-transaction-strategy.md), [ADR-013](../adr/ADR-013-payment-unknown-reservation-expiry.md) |
 | 매장 카탈로그 조회 계약과 픽업 슬롯 예약 창 | [ADR-076](../adr/ADR-076-store-catalog-read-contract.md) |
 | 매장 수락 timeout과 보상 흐름 | [ADR-015](../adr/ADR-015-store-acceptance-timeout-compensation.md) |
 | 주문 가격·할인·포인트 스냅샷 | [ADR-004](../adr/ADR-004-order-price-snapshot.md), [ADR-014](../adr/ADR-014-money-allocation-and-partial-refund.md) |
@@ -2643,6 +2669,7 @@
 - [ ] 모든 정책에 Revisit Conditions가 존재하는가
 
 ---
+
 
 # Support Policy Decision Register (2026-08-10)
 

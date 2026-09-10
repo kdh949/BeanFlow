@@ -13,7 +13,7 @@ BR-06, BR-07과 BR-14는 결제 승인 후 2분 경고, 3분 수락 제한과 �
 - Ordering이 수락 deadline과 Order 전이의 owner다.
 - 2분 경고와 3분 timeout job은 order/deadline reference로 멱등하게 실행한다.
 - `PAID`에서 수락과 거절 중 하나의 guarded transition만 성공한다.
-- `REJECTED` 후 각 owner Context에 결제 환불, 재고·슬롯 해제, 쿠폰·포인트 복원과
+- `REJECTED` 후 각 owner Context에 결제 환불, 슬롯 해제, 쿠폰·포인트 복원과
   고객 알림 명령 또는 영속 event를 전달한다.
 - 보상 실패는 Order 전이를 되돌리지 않으며 각 owner 상태, retry와 Operations case로
   남긴다. Order `REJECTED`를 보상 완료로 해석하지 않는다.

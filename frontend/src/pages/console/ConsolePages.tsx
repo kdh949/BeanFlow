@@ -76,7 +76,7 @@ export function OpsOrderPage() {
 }
 
 const compensationStepLabels: Record<components["schemas"]["CompensationStep"]["type"], string> = {
-  PAYMENT: "결제 환불", PICKUP: "픽업 예약 해제", STOCK: "재고 반환", COUPON: "쿠폰 복원", POINTS: "포인트 복원", CUSTOMER_NOTIFICATION: "고객 알림",
+  PAYMENT: "결제 환불", PICKUP: "픽업 예약 해제", COUPON: "쿠폰 복원", POINTS: "포인트 복원", CUSTOMER_NOTIFICATION: "고객 알림",
 };
 
 export function CompensationResult({ result }: { result: Compensation }) {

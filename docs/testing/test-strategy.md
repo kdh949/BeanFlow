@@ -27,7 +27,6 @@
 ## Risk-first examples
 
 - 같은 Idempotency-Key 100개 동시 요청 → 승인 부작용 한 번
-- 남은 재고 1개에 동시 예약 → 성공 1개, oversell 0
 - PG 성공 후 DB write 실패 → UNKNOWN/복구 case, 재승인 없음
 - Payment UNKNOWN과 5분 만료 동시 실행 → 한 guarded transition만 승리
 - 만료 후 Provider 승인 확인 → Order 비복구, void/refund 한 번, 실패 시 명시적 recovery
@@ -75,7 +74,7 @@
   Idempotency-Key와 Order→Payment lock 순서
 - Refund: 선행 line allocation, request 3회·lookup 5회 독립 상한과 전체 8회,
   Unknown 뒤 REQUEST 0회, missing Refund 복구 뒤 LOOKUP 우선
-- Owner compensation: Pickup·Stock·Coupon·Points의 source/trigger/policy 일치,
+- Owner compensation: Pickup·Coupon·Points의 source/trigger/policy 일치,
   duplicate와 conflict, 한 publication 소진 시 한 step만 manual review
 - Benefit policy: 종료용 trigger×benefit 네 head와 PARTIAL_REFUND×POINTS 한 head,
   종료 Case의 두 immutable FK/event snapshot, 부분 환불 Refund의 POINTS policy FK,
@@ -102,7 +101,7 @@
   `cancellationReasonCode` 노출, 매장 `StoreOrder`의 `cancellationReasonCode`·
   `paymentRecovery` 부재, 두 projection의 `detail` 부재
 - Compensation projection: 매장 응답의 step 배열·`attemptCount`·`lastErrorCode`·
-  `caseId`·policy version 부재와 `trigger`·case `state` 존재, 운영자 응답의 여섯
+  `caseId`·policy version 부재와 `trigger`·case `state` 존재, 운영자 응답의 다섯
   step 존재
 - Pre-release gate: compensation legacy row, V1 publication 또는 external consumer가
   하나라도 있으면 clean cutover 차단

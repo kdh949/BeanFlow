@@ -38,8 +38,6 @@ internal class OrderCreationTransaction(
     internal companion object {
         fun pickupSource(orderId: UUID) = "order:$orderId:pickup"
 
-        fun stockSource(orderId: UUID) = "order:$orderId:stock"
-
         fun couponSource(orderId: UUID) = "order:$orderId:coupon"
 
         fun pointsSource(orderId: UUID) = "order:$orderId:points"

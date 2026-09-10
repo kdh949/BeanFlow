@@ -7,9 +7,9 @@
 
 ADR-016은 최종 결제액 0원 주문도 `BENEFIT_ONLY Payment(APPROVED)`를 만들고 Order를
 `PAID`로 확정한다. 고객이 매장 수락 전에 이 주문을 취소하면 사용 포인트·쿠폰과
-확정 슬롯·재고는 복원해야 하지만 외부 현금 환불은 없다.
+확정 슬롯는 복원해야 하지만 외부 현금 환불은 없다.
 
-ADR-033은 매장 거절과 고객 취소가 PAYMENT를 포함한 공통 여섯 보상 step을 공유하도록
+ADR-033은 매장 거절과 고객 취소가 PAYMENT를 포함한 공통 다섯 보상 step을 공유하도록
 정한다. ADR-035와 ADR-036은 취소 요청 현금액이 0인 경우 Refund 없이
 `CancellationRefundRecoverySummary.state = NOT_REQUIRED`를 사용하도록 정한다. 공통 Case의
 PAYMENT step을 생략할지, 0원 Refund를 만들지, 명시적으로 불필요 상태로 둘지
@@ -18,7 +18,7 @@ PAYMENT step을 생략할지, 0원 Refund를 만들지, 명시적으로 불필�
 ## Decision
 
 - `BENEFIT_ONLY`인 미수락 `PAID` 고객 취소도
-  `CUSTOMER_CANCELLATION` OrderCompensationCase와 공통 여섯 step을 만든다.
+  `CUSTOMER_CANCELLATION` OrderCompensationCase와 공통 다섯 step을 만든다.
 - Tx C1은 PAYMENT step을 처음부터 `NOT_REQUIRED`로 저장한다.
 - 0원 Refund row를 만들지 않고 Refund worker 또는 외부 Provider를 호출하지 않는다.
 - Payment cancellation recovery snapshot은 다음 값을 저장한다.
@@ -32,10 +32,10 @@ PAYMENT step을 생략할지, 0원 Refund를 만들지, 명시적으로 불필�
 
 - 고객 `CancellationRefundRecoverySummary`는 `state = NOT_REQUIRED`, 네 금액을 모두 0으로
   반환하고 `noticeCode`는 반환하지 않는다.
-- Order 취소, snapshot, PAYMENT `NOT_REQUIRED`, 나머지 다섯 step, AuditRecord,
-  `ORDER_CANCELLATION_ACCEPTED` NotificationDelivery, `OrderCancelledV1`과 네 자원
+- Order 취소, snapshot, PAYMENT `NOT_REQUIRED`, 나머지 네 step, AuditRecord,
+  `ORDER_CANCELLATION_ACCEPTED` NotificationDelivery, `OrderCancelledV1`과 세 자원
   owner publication은 ADR-035의 Tx C1에 함께 commit한다.
-- Pickup, Stock, Coupon, Points step은 event owner별 비동기 규칙을 따르고 Customer
+- Pickup, Coupon, Points step은 event owner별 비동기 규칙을 따르고 Customer
   Notification step은 Tx C1에 저장한 delivery의 비동기 발송 결과를 따른다.
 - `202 Accepted` 의미도 일반 `PAID` 취소와 같다. 현금 환불은 불필요하지만 나머지
   자원·혜택 복원과 알림은 아직 진행 중일 수 있다.
@@ -50,7 +50,7 @@ PAYMENT step을 생략할지, 0원 Refund를 만들지, 명시적으로 불필�
 ### PAYMENT step 생략
 
 - 불필요한 row 하나를 줄인다.
-- trigger에 관계없이 같은 여섯 step을 조회한다는 ADR-033 계약을 깨고 운영 UI가
+- trigger에 관계없이 같은 다섯 step을 조회한다는 ADR-033 계약을 깨고 운영 UI가
   step 부재와 저장 실패를 구분해야 한다.
 
 ### PAYMENT step을 PROCESSING으로 생성
@@ -88,7 +88,7 @@ Refund나 no-op worker 없이도 “현금 환불 없음”과 “다른 보상�
 - `BENEFIT_ONLY` 취소에 Refund와 Provider 호출이 없다.
 - PAYMENT step은 Tx C1부터 `NOT_REQUIRED`이며 attempt 0이다.
 - snapshot과 고객 요약의 네 금액은 모두 0이다.
-- 나머지 다섯 step은 일반 `PAID` 취소와 같은 방식으로 진행된다.
+- 나머지 네 step은 일반 `PAID` 취소와 같은 방식으로 진행된다.
 - Tx C1 일부 저장 실패는 Order 취소까지 모두 rollback한다.
 
 ## Required Tests
@@ -97,7 +97,7 @@ Refund나 no-op worker 없이도 “현금 환불 없음”과 “다른 보상�
 - Refund row 0건과 Provider 호출 0회
 - recovery snapshot 0/0/0, null Refund ID CHECK
 - 고객 `NOT_REQUIRED`, notice 부재와 네 0원 금액
-- Coupon·Points·Pickup·Stock·Notification step 처리
+- Coupon·Points·Pickup·Notification step 처리
 - PAYMENT attempt 0과 error null
 - 동일 key replay에서 Refund·Case·publication 수 불변
 - snapshot 또는 PAYMENT step 저장 실패의 전체 Tx C1 rollback

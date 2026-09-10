@@ -9,11 +9,11 @@
 [기존 실측](performance-load-rca-2026-09-07.md)의 실패는 다른 고객의 예약·확정·해제로 공유 자원
 사용량이 바뀔 때 v2 견적이 무효화되는 동작이었다.
 [ADR-123](../adr/ADR-123-order-quote-trade-terms-and-shared-availability.md)에 따라 v3 fingerprint에서
-재고 quantity/version과 슬롯 count/version만 제외했다. 가격·메뉴·옵션·혜택 귀속·픽업 시간/정원
+공유 자원의 사용량과 version만 제외했다. 가격·메뉴·옵션·혜택 귀속·픽업 시간/정원
 비교와 최종 트랜잭션의 owner row lock 및 실제 잔여량 검사는 유지한다.
 
-- 변경 전: 새 회귀를 포함한 19개 중 독립 재고 전이, 독립 슬롯 전이, 충분한 자원의 사전 견적 동시 주문 3개가 실패했다.
-- 변경 후: 동일 19개와 관련 77개 class의 368개 테스트가 모두 통과했다. 마지막 재고와 마지막 슬롯의 동시 주문은 한 건만 성공하고, 나머지는 typed failure로 종료하며 같은 키로 재생된다.
+- 변경 전: 새 회귀를 포함한 19개 중 독립 owner 전이, 충분한 자원의 사전 견적 동시 주문 3개가 실패했다.
+- 변경 후: 동일 19개와 관련 77개 class의 368개 테스트가 모두 통과했다. 마지막 자원의 동시 주문은 한 건만 성공하고, 나머지는 typed failure로 종료하며 같은 키로 재생된다.
 - 전체 CI: [34135925797](https://github.com/kdh949/BeanFlow/actions/runs/34135925797), 앱 변경 commit `1941c6201e7110f01c0eae15318f52b3dc25c5f6`, Passed.
 - 이미지: [34136862007](https://github.com/kdh949/BeanFlow/actions/runs/34136862007), revision `5aaec5281dbebf88b7465dbc294152fb3003019c`, packaged perf/portfolio startup·dependency failure smoke 및 API/web publish Passed. 후속 두 CI commit은 runner 도구와 fixture 접근 권한만 수정했다.
 - API immutable manifest: `ghcr.io/kdh949/beanflow-api@sha256:0e9439089dd6042ac824b22910e8b5b6e680474df18d4728ee56ce29535f00d5`.
@@ -33,7 +33,7 @@ revision을 직접 재확인했다. API 외 모든 의존 container identity는 
 ## 측정 조건
 
 발생기는 같은 Mac의 k6 2.2.0이며 공개 HTTPS/WAF 경로와 TLS 검증을 유지한다. 데이터는 합성 고객
-20명, 매장·메뉴·공유 재고 각 1개, 미래 슬롯 4개다. 정상 시나리오는 견적→주문→결제 준비→
+20명, 매장·메뉴 각 1개, 미래 슬롯 4개다. 정상 시나리오는 견적→주문→결제 준비→
 승인까지이며 Toss는 내부 계약 드라이버다. 자동 재견적·오류 재시도는 하지 않는다.
 VU는 실행 worker 수이고, 40/80 VU 실행도 인증 계정은 같은 20개를 사용한다.
 
@@ -74,9 +74,9 @@ v2 기준선은 서버 quote conflict counter가 112→149로 37건 증가했고
 성공률을 올린 결과가 아니다.
 
 종료 후 repeatable-read read-only DB snapshot에서 실행별 멱등 레코드·distinct order·결제 승인
-건수가 native summary와 일치했다. 재고/슬롯 counter와 활성 reservation 합계의 불일치는 0,
+건수가 native summary와 일치했다. 공유 자원 counter와 활성 reservation 합계의 불일치는 0,
 슬롯 초과 예약 0, 조회 당시 Lock waiting session 0이었다. 마지막 한 개 자원의 초과 예약 방지는
-별도 PostgreSQL 동시성 테스트로 검증했다. 넉넉한 재고를 쓴 부하 실행만으로 이를 증명하지 않는다.
+별도 PostgreSQL 동시성 테스트로 검증했다. 여유로운 자원을 쓴 부하 실행만으로 이를 증명하지 않는다.
 
 ### 2. 최초 5/s의 미투입은 VU 사전 확보 후 재실행에서 사라졌다
 
@@ -93,14 +93,14 @@ v3 최초 5/s의 HTTP p95는 236.7ms, workflow p95는 935.3ms로 v2의 105.7ms/2
 같은 조건에서도 처리에 성공한 주문·결제가 413→450건으로 늘었고 예열·배경 작업이 달라졌다.
 따라서 이번 변경을 응답 속도 개선으로 설명하지 않는다.
 
-5/s trace `265ab3b109e678ae78ae51559f2e8362`의 주문 1,140.96ms 중 재고 잠금 조회가
+5/s trace `265ab3b109e678ae78ae51559f2e8362`의 주문 1,140.96ms 중 공유 행 잠금 조회가
 583.21ms, 슬롯 잠금 조회가 390.49ms였다. 동일 root span의 profile `0e9652b12c7bc936`은
 총 wall 1.14초 중 0.98초가 poll 대기로 기록돼 DB 응답 대기 해석과 일치했다.
 
 20/s에서는 HTTP p95 343.4ms, workflow p95 1,524.9ms, Hikari active 최대 10/pending 최대 5,
 관측된 미승인 lock 최대 3이었다. transactionid 대기와 tuple 대기도 각각 관측됐다.
 trace `39135d683a75bbe5df1812dc020df9cd`의 confirmation 1,761.74ms 중 슬롯 잠금 조회가
-1,402.49ms였고, trace `75f329ad56cca781d1f989a86a5daf78`의 주문 1,347.08ms 중 재고 잠금
+1,402.49ms였고, trace `75f329ad56cca781d1f989a86a5daf78`의 주문 1,347.08ms 중 공유 행 잠금
 조회가 1,254.04ms였다. 이 표본은 공유 행의 DB 응답 대기가 긴 요청을 설명한다. SQL span과
 그를 감싼 repository span은 중복 구간이므로 더하지 않는다.
 

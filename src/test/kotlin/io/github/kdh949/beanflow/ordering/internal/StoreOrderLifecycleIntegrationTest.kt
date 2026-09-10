@@ -504,10 +504,6 @@ internal class StoreOrderLifecycleIntegrationTest
                         orderId,
                     ) == 1L &&
                     value<String>(
-                        "SELECT state FROM inventory_stock_reservation WHERE order_id = ?",
-                        orderId,
-                    ) == "RELEASED_AFTER_TERMINATION" &&
-                    value<String>(
                         "SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?",
                         orderId,
                     ) == "RELEASED_AFTER_TERMINATION"
@@ -548,12 +544,6 @@ internal class StoreOrderLifecycleIntegrationTest
                     orderId,
                 ),
             ).isEqualTo("SUCCEEDED")
-            assertThat(
-                value<Long>(
-                    "SELECT available_quantity FROM inventory_sellable_stock WHERE id = ?",
-                    fixture.sellableUnitId,
-                ),
-            ).isEqualTo(10)
             assertThat(
                 value<Long>(
                     "SELECT confirmed_count FROM fulfillment_pickup_slot WHERE id = ?",

@@ -236,7 +236,7 @@ export BEANFLOW_PYROSCOPE_ENABLED=true
 
 fixture는 repository 밖의 권한 `0600` JSON 파일로 만든다. 운영 계정·bucket·Vault grant를 사용하지 않는다.
 Session은 부하 직전에 전용 계정의 정상 login/CSRF API로 발급하고 종료 후 폐기한다. target iteration보다
-충분한 재고와 픽업 슬롯 수용량을 준비하지 않으면 business conflict를 서버 처리량 한계로 오해하게 된다.
+메뉴 판매 가능 상태와 충분한 픽업 슬롯 수용량을 준비하지 않으면 business conflict를 서버 처리량 한계로 오해하게 된다.
 
 ```json
 {
@@ -498,7 +498,7 @@ bash scripts/perf/postgres-wait-snapshot.sh
 견적 v3 배포는 [ADR-123](../adr/ADR-123-order-quote-trade-terms-and-shared-availability.md)을 따른다.
 견적과 최종 주문을 같은 API 이미지로 교체한다. 기존 v2 미제출 견적은 stale 응답 후 재조회·명시적
 재확인과 새 Idempotency-Key가 필요하다. terminal 응답 replay는 유지한다. 롤백도 반대 방향의
-재조회가 필요하다. 사용량 제외는 자원 보장이 아니며 최종 재고/슬롯 부족 실패는 계속 관측해야 한다.
+재조회가 필요하다. 사용량 제외는 자원 보장이 아니며 최종 공유 자원 부족 실패는 계속 관측해야 한다.
 
 ```bash
 bash scripts/perf/test-observability-contract.sh

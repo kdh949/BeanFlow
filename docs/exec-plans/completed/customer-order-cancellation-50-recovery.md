@@ -11,7 +11,7 @@
 
 ## Purpose / Big Picture
 
-PAID 고객 취소 뒤 Refund, 네 owner 복원, 접수·환불 알림, 정산 제외와 setup 손상을
+PAID 고객 취소 뒤 Refund, 세 owner 복원, 접수·환불 알림, 정산 제외와 setup 손상을
 재시작 가능한 작업으로 수렴시킨다. 외부 결과 불명을 성공/실패로 위장하지 않고 고객은
 안전한 요약, 운영자는 실제 내부 상태와 제한 복구 경로를 본다.
 
@@ -51,7 +51,7 @@ PAID 고객 취소 뒤 Refund, 네 owner 복원, 접수·환불 알림, 정산 �
 
 - Refund request/lookup count 분리, allowlist fail-closed와 claim crash recovery
 - customer cancellation refund success/delayed event와 NotificationDelivery
-- 네 owner listener의 source-aware 수렴과 step update
+- 세 owner listener의 source-aware 수렴과 step update
 - customer/operations compensation projection
 - inline detector, 1분 batch-100 setup scanner와 source-unique Case/Audit
 - 완전 snapshot+Refund 누락만 복구하는 2인 승인 API
@@ -125,7 +125,7 @@ Refund operator reconciliation command/marker/index를 forward migration으로 �
 
 1. request/lookup state machine과 Provider adapter allowlist를 구현한다.
 2. claim/result transaction과 terminal event를 구현한다.
-3. 네 owner listener와 step-specific recovery를 검증한다.
+3. 세 owner listener와 step-specific recovery를 검증한다.
 4. customer/operations projection과 Notification을 구현한다.
 5. Settlement exclusion 연계를 검증한다.
 6. setup inline/scanner detection과 2인 repair를 구현한다.

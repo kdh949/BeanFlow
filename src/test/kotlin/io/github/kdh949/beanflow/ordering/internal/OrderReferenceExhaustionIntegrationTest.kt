@@ -49,7 +49,6 @@ internal class OrderReferenceExhaustionIntegrationTest
             assertThat(count("ordering_order")).isZero()
             assertThat(count("ordering_pickup_counter")).isZero()
             assertThat(count("fulfillment_pickup_reservation")).isZero()
-            assertThat(count("inventory_stock_reservation")).isZero()
             assertThat(count("ordering_public_reference_registry")).isOne()
         }
 

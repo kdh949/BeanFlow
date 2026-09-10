@@ -95,7 +95,6 @@ internal class OrderPointAccrualSnapshotServiceTest
                         "[]",
                         OptionSelectionSnapshotState.SNAPSHOTTED,
                         emptyList(),
-                        "[]",
                         100,
                         2,
                         200,

@@ -46,7 +46,6 @@ io.github.kdh949.beanflow.identity.internal.CustomerCredentialSecurityTest	0.969
 io.github.kdh949.beanflow.identity.internal.MerchantAccountTest	0.003
 io.github.kdh949.beanflow.identity.internal.MerchantAuthenticationIntegrationTest	37.316
 io.github.kdh949.beanflow.identity.internal.StoreRegionEndpointIntegrationTest	23.078
-io.github.kdh949.beanflow.inventory.internal.StockReservationRepositoryTest	23.048
 io.github.kdh949.beanflow.loyalty.internal.CustomerPointFacadeIntegrationTest	19.503
 io.github.kdh949.beanflow.loyalty.internal.PartialRefundRestorationBoundaryTest	0.001
 io.github.kdh949.beanflow.loyalty.internal.PointAccountQueryIntegrationTest	22.621

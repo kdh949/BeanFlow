@@ -11,7 +11,7 @@
 
 ## Purpose / Big Picture
 
-견적의 공유 사용량 무효화를 해결한 뒤 남은 재고·픽업 슬롯 잠금 대기를 줄인다.
+견적의 공유 사용량 무효화를 해결한 뒤 남은 공유 자원 잠금 대기를 줄인다.
 잠금 보유 중 실행하는 불필요한 SQL을 없애고, 동일 조건의 실제 부하로 효과와 한계를 확인한다.
 
 ## Current State
@@ -29,7 +29,7 @@
   dropped 142, HTTP p95 1,744.4ms, workflow p95 6,362.9ms로 기준에 실패했다.
   앞선 실행의 3분 점주 접수 기한 만료가 겹쳐 자동 거절·환불·복구와 event backlog가 발생했다.
   이 혼합 결과를 고립된 주문 부하와 직접 비교하지 않는다.
-- DB blocker 표본에는 stock/slot 대기와 audit/결제 후속 SQL을 실행하는 잠금 보유자가 함께 보인다.
+- DB blocker 표본에는 픽업 슬롯 대기와 audit/결제 후속 SQL을 실행하는 잠금 보유자가 함께 보인다.
   repository span에는 connection 획득도 포함될 수 있다. 실제 JDBC span 없는 시간을 행 잠금으로
   단정하지 않는다. 2.17s 주문 trace의 첫 DB span은 0.85s 뒤 시작해 pool 대기가 함께 존재한다.
 
@@ -56,7 +56,7 @@
 
 ## Business Rules and Invariants
 
-BR-05/BR-25/BR-30/BR-49와 ADR-005/006/022/097/123을 유지한다. 현재 재고·정원을 owner lock
+BR-05/BR-25/BR-30/BR-49와 ADR-005/006/022/097/123을 유지한다. 현재 정원을 owner lock
 아래 검사하고 상태·예약·정산 입력·감사·멱등 응답을 함께 commit한다. 같은 매장·영업일의 순번은
 유일하고 커밋 후 재사용되지 않는다. rollback은 카운터도 복구한다. 감사 기록은 수정하지 않으며
 중복 source key 또는 저장 실패는 owner write와 함께 rollback한다. 보존 정책과 개인정보 검증은 유지한다.
@@ -107,7 +107,7 @@ Flyway 변경 없음. V50/V51/backfill의 authority와 카운터 보존 조건�
 - 정상 counter 발급이 ordering_order/slot의 table lock에 막히지 않음 (이력 조회 제거 regression).
 - 최초 동시 20건, 기존 카운터 증가·rollback, missing counter 기존 이력 복구, 독립 날짜·매장.
 - 새 audit N건에 존재 조회가 추가되지 않는 SQL 수 회귀, 중복/혼합 batch rollback, 기존 PII·retention.
-- Ordering 생성/결제/견적 마지막 재고·슬롯 동시성, 멱등성, 실패·rollback 및 구조 테스트.
+- Ordering 생성/결제/견적 마지막 공유 자원 동시성, 멱등성, 실패·rollback 및 구조 테스트.
 
 ## Validation Commands
 

@@ -30,14 +30,14 @@ event publication 복구를 만들지 않는다”는 ADR-029·ADR-034 경계와
   반환하지 않는다.
 - commit 후 Provider 발송 실패는 Order 취소를 되돌리지 않는다. 기존 1분, 5분,
   30분 재시도와 네 번째 실패 `MANUAL_REVIEW` 규칙을 사용한다.
-- `PENDING_PAYMENT` 취소는 Order와 네 예약 해제, 멱등 응답, AuditRecord와
+- `PENDING_PAYMENT` 취소는 Order와 세 예약 해제, 멱등 응답, AuditRecord와
   NotificationDelivery를 Tx C0에 commit한 뒤 `200`을 반환한다. Notification 발송
   성공까지 기다리지 않는다.
-- `PAID` 취소는 Tx C1의 공통 여섯 step 중 CUSTOMER_NOTIFICATION을
+- `PAID` 취소는 Tx C1의 공통 다섯 step 중 CUSTOMER_NOTIFICATION을
   `PROCESSING`으로 만들고 같은 transaction에서 delivery를 저장한다. delivery 실제
   상태가 step을 `SUCCEEDED`, `RETRY_SCHEDULED` 또는 `MANUAL_REVIEW`로 갱신한다.
 - `OrderCancelledV1`은 더 이상 Notification consumer를 갖지 않는다. owner
-  publication은 Pickup, Stock, Coupon, Points 네 개다.
+  publication은 Pickup, Coupon, Points 네 개다.
 - NotificationDelivery의 logical source는
   `order:{orderId}:customer-cancellation:{aggregateVersion}:accepted-notification`,
   Provider idempotency key는

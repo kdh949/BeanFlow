@@ -63,7 +63,7 @@ internal class ReservationExpiryTest
                     "source_reference = ?",
                     "order:$orderId:expiry",
                 ),
-            ).isEqualTo(3)
+            ).isEqualTo(2)
             assertThat(
                 value<String>(
                     "SELECT actor_type FROM operations_audit_record WHERE action = 'ORDER_EXPIRED' AND target_id = ?",
@@ -104,9 +104,10 @@ internal class ReservationExpiryTest
         fun `owner release failure rolls back order and earlier releases`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            val orderId = createOrder(fixture, "expiry-rollback-01")
+            OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, fixture.customerId, 100)
+            val orderId = createOrder(fixture, "expiry-rollback-01", pointsToUseKrw = 100)
             val deadline = orderDeadline(orderId)
-            jdbcTemplate.update("DELETE FROM inventory_stock_reservation WHERE order_id = ?", orderId)
+            jdbcTemplate.update("UPDATE loyalty_point_reservation SET state = 'RELEASED' WHERE order_id = ?", orderId)
 
             assertThatThrownBy { expiryUseCase.expireIfDue(orderId, deadline) }
                 .isInstanceOfSatisfying(DomainFailure::class.java) {
@@ -158,7 +159,7 @@ internal class ReservationExpiryTest
                     "source_reference = ?",
                     "order:$orderId:expiry",
                 ),
-            ).isEqualTo(3)
+            ).isEqualTo(2)
         }
 
         @Test
@@ -177,11 +178,6 @@ internal class ReservationExpiryTest
                 Timestamp.from(dueAt),
                 orderId,
             )
-            jdbcTemplate.update(
-                "UPDATE inventory_stock_reservation SET expires_at = ? WHERE order_id = ?",
-                Timestamp.from(dueAt),
-                orderId,
-            )
 
             assertThat(worker.runOnce()).isEqualTo(1)
             assertThat(worker.runOnce()).isZero()
@@ -191,8 +187,13 @@ internal class ReservationExpiryTest
         private fun createOrder(
             fixture: OrderCreationFixture,
             key: String,
+            pointsToUseKrw: Long = 0,
         ): UUID {
-            val response = createOrderUseCase.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command()))
+            val response =
+                createOrderUseCase.create(
+                    key,
+                    orderQuoteUseCase.attachCurrentQuote(fixture.command(pointsToUseKrw = pointsToUseKrw)),
+                )
             assertThat(response.status).isEqualTo(201)
             return requireNotNull(
                 jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java),
@@ -215,22 +216,8 @@ internal class ReservationExpiryTest
             assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("EXPIRED")
             assertThat(value<String>("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId))
                 .isEqualTo("EXPIRED")
-            assertThat(value<String>("SELECT state FROM inventory_stock_reservation WHERE order_id = ?", orderId))
-                .isEqualTo("EXPIRED")
             assertThat(value<Long>("SELECT reserved_count FROM fulfillment_pickup_slot WHERE id = ?", fixture.pickupSlotId))
                 .isZero()
-            assertThat(
-                value<Long>(
-                    "SELECT available_quantity FROM inventory_sellable_stock WHERE id = ?",
-                    fixture.sellableUnitId,
-                ),
-            ).isEqualTo(10)
-            assertThat(
-                value<Long>(
-                    "SELECT reserved_quantity FROM inventory_sellable_stock WHERE id = ?",
-                    fixture.sellableUnitId,
-                ),
-            ).isZero()
         }
 
         private inline fun <reified T : Any> value(

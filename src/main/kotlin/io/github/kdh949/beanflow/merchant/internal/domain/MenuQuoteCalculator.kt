@@ -6,7 +6,6 @@ import io.github.kdh949.beanflow.merchant.api.MenuItemUnavailableReason
 import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
 import io.github.kdh949.beanflow.merchant.api.OptionSnapshot
 import io.github.kdh949.beanflow.merchant.api.QuoteOrderLine
-import io.github.kdh949.beanflow.merchant.api.SellableUnitRequirement
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import java.util.UUID
@@ -27,7 +26,6 @@ data class MenuOptionDefinition(
 data class MenuConfigurationDefinition(
     val optionIds: Set<UUID>,
     val available: Boolean,
-    val requirements: List<SellableUnitRequirement>,
 )
 
 data class MenuDefinition(
@@ -108,7 +106,7 @@ class MenuQuoteCalculator {
         if (!configuration.available) {
             fail(FailureCode.MENU_CONFIGURATION_NOT_AVAILABLE, "Menu configuration is not available")
         }
-        return buildQuote(menu, selectedOptions, configuration, request, FailureCode.INVALID_REQUEST)
+        return buildQuote(menu, selectedOptions, request, FailureCode.INVALID_REQUEST)
     }
 
     private fun quoteCurrentLine(
@@ -159,20 +157,16 @@ class MenuQuoteCalculator {
             return unavailable(MenuItemUnavailability(MenuItemUnavailableReason.MENU_CONFIGURATION_NOT_AVAILABLE))
         }
         return CurrentMenuLineQuoteResult.Available(
-            buildQuote(menu, selectedOptions, configuration, request, FailureCode.DEPENDENCY_UNAVAILABLE),
+            buildQuote(menu, selectedOptions, request, FailureCode.DEPENDENCY_UNAVAILABLE),
         )
     }
 
     private fun buildQuote(
         menu: MenuDefinition,
         selectedOptions: List<MenuOptionDefinition>,
-        configuration: MenuConfigurationDefinition,
         request: QuoteOrderLine,
         invalidOwnerCode: FailureCode,
     ): MenuLineQuote {
-        if (configuration.requirements.isEmpty() || configuration.requirements.any { it.quantityPerLineUnit < 1 }) {
-            fail(invalidOwnerCode, "Menu configuration requirements are invalid")
-        }
         val unitPrice =
             selectedOptions.fold(menu.basePriceKrw) { price, option ->
                 try {
@@ -187,7 +181,6 @@ class MenuQuoteCalculator {
             optionSnapshots = selectedOptions.map { OptionSnapshot(it.id, it.name, it.additionalPriceKrw) },
             unitPriceKrw = unitPrice,
             quantity = request.quantity,
-            sellableUnitRequirements = configuration.requirements.sortedBy(SellableUnitRequirement::sellableUnitId),
         )
     }
 

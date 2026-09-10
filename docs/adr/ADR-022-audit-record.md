@@ -5,7 +5,7 @@
 
 ## Context
 
-BR-30은 금액, 포인트, 재고, 슬롯, terminal 주문 상태, 정산, 이의 판정, 권한과 수동
+BR-30은 금액, 포인트, 슬롯, terminal 주문 상태, 정산, 이의 판정, 권한과 수동
 재처리의 주체·사유·전후 요약을 보존하도록 정한다.
 
 ## Decision
@@ -29,10 +29,10 @@ BR-30은 금액, 포인트, 재고, 슬롯, terminal 주문 상태, 정산, 이�
 - 한 transaction summary로 합치지 않고 상태가 바뀐 Aggregate target마다 별도
   AuditRecord를 append한다.
 - 같은 transaction의 record는 correlationId와 source reference로 묶는다.
-- 최소 action은 `ORDER_CREATED`, `PICKUP_RESERVED`, `STOCK_RESERVED`,
+- 최소 action은 `ORDER_CREATED`, `PICKUP_RESERVED`,
   `COUPON_RESERVED`, `POINTS_RESERVED`, `BENEFIT_ONLY_PAYMENT_APPROVED`,
   각 reservation `CONFIRMED`, `ORDER_EXPIRED`, `PICKUP_EXPIRED`,
-  `STOCK_EXPIRED`, `COUPON_RELEASED`, `POINTS_RELEASED`다.
+  `COUPON_RELEASED`, `POINTS_RELEASED`다.
 - 고객 주문 생성과 그 원자적 부수효과는 인증된 Customer actor를 사용하고
   `CUSTOMER_ORDER_CREATION` 표준 reason code를 기록한다.
 - worker 또는 조회·결제 명령이 materialize한 deadline 만료는 trigger가 무엇이든

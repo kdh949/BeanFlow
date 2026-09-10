@@ -13,8 +13,6 @@ const labels: Record<string, string> = {
   SOLD_OUT: "품절",
   ARCHIVED: "보관됨",
   AVAILABLE: "판매 가능",
-  LOW: "재고 부족",
-  DEPLETED: "재고 없음",
   PAUSED: "일시 중지",
   FILED: "접수됨",
   UNDER_REVIEW: "검토 중",

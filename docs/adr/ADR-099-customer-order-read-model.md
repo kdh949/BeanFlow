@@ -135,7 +135,7 @@ allowedActions      서버가 계산한 수행 가능 행동
 - 목록 응답에 결제 식별자·개인정보가 포함되지 않는지 계약 테스트로 검증한다.
 - 쿠폰만, 포인트만, 쿠폰+포인트, 0원 payable 주문에서 목록·상세 `totalAmountKrw`가 각각
   `payableKrw`와 같은지 PostgreSQL 통합 테스트로 검증한다.
-- candidate window의 만료를 반환 전에 물질화하고, 네 자원 중 하나의 해제 실패가 전체 rollback과
+- candidate window의 만료를 반환 전에 물질화하고, 세 자원 중 하나의 해제 실패가 전체 rollback과
   `503`을 만드는지 PostgreSQL 통합 테스트로 검증한다.
 - 활성 필터에서 빈 페이지와 `nextCursor`가 함께 반환되어도 다음 호출에 누락·중복이 없는지 검증한다.
 

@@ -130,8 +130,6 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1image"
   /stores/{storeId}/customer-display:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1customer-display"
-  /stores/{storeId}/menus:
-    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus"
   /stores/{storeId}/menus/{menuId}/image:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus~1{menuId}~1image"
   /stores/{storeId}/menus/{menuId}/display-content:
@@ -147,10 +145,10 @@ paths:
       summary: (고객) 주문 생성
       description: |
         고객이 확인한 견적 fingerprint와 매장, 픽업 시간, 메뉴 목록을 보내 새 주문을 생성하는 API입니다.
-        서버 소유 장바구니가 없으므로 주문 항목 전체를 한 번에 보내며, 메뉴 가격·재고·
+        서버 소유 장바구니가 없으므로 주문 항목 전체를 한 번에 보내며, 메뉴 가격·판매 상태·
         픽업 슬롯·쿠폰·포인트를 이 요청 하나의 트랜잭션에서 다시 계산하며, fingerprint가
         정확히 일치한 뒤에만 모두 예약합니다. 불일치는 ORDER_QUOTE_STALE과 currentQuote를 반환합니다.
-        다른 주문의 재고·슬롯 사용량 변화는 fingerprint를 바꾸지 않으며, 잠금 아래의 현재 가용성
+        다른 주문의 슬롯 사용량 변화는 fingerprint를 바꾸지 않으며, 잠금 아래의 현재 가용성
         검사는 유지합니다. 가격·구성·혜택·픽업 시간/정원 변경에는 새 견적의 명시적 확인이 필요합니다.
         같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 그대로 재생합니다.
 
@@ -158,7 +156,7 @@ paths:
         - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
         - 401: 로그인 정보가 없거나 유효하지 않은 경우
         - 403: 매장·쿠폰 등 접근 권한이 없는 경우
-        - 409: 메뉴 판매 불가, 재고·슬롯 부족, 쿠폰·포인트 사용 불가 또는 `Idempotency-Key`가 충돌한 경우
+        - 409: 메뉴 판매 불가, 픽업 슬롯 부족, 쿠폰·포인트 사용 불가 또는 `Idempotency-Key`가 충돌한 경우
         - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
       parameters:
         - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
@@ -227,7 +225,7 @@ paths:
       summary: (고객) 주문 취소
       description: |
         고객이 내부 주문 ID로 본인 주문을 취소하는 API입니다.
-        결제 전 주문(PENDING_PAYMENT)과 매장 수락 전 결제 완료 주문(PAID)만 취소할 수 있습니다. 같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 반환합니다. 결제 전 취소는 즉시 완료되어 200을 반환하고, 결제 완료 주문은 취소를 확정한 뒤 환불·쿠폰·포인트·재고 복구를 별도로 시작하므로 202를 반환할 수 있습니다. 202는 후속 복구가 모두 끝났다는 뜻이 아닙니다.
+        결제 전 주문(PENDING_PAYMENT)과 매장 수락 전 결제 완료 주문(PAID)만 취소할 수 있습니다. 같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 반환합니다. 결제 전 취소는 즉시 완료되어 200을 반환하고, 결제 완료 주문은 취소를 확정한 뒤 환불·쿠폰·포인트 복구를 별도로 시작하므로 202를 반환할 수 있습니다. 202는 후속 복구가 모두 끝났다는 뜻이 아닙니다.
 
         주요 오류:
         - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
@@ -288,7 +286,7 @@ paths:
       summary: (고객) 공개 주문번호로 주문 취소
       description: |
         고객이 `BF-XXXX-XXXX` 형식의 공개 주문번호로 본인 주문을 찾아 취소하는 API입니다.
-        결제 전 주문(PENDING_PAYMENT)과 매장 수락 전 결제 완료 주문(PAID)만 취소할 수 있습니다. 같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 반환합니다. 결제 완료 주문은 취소 후 환불·혜택·재고 복구가 별도로 이어질 수 있습니다.
+        결제 전 주문(PENDING_PAYMENT)과 매장 수락 전 결제 완료 주문(PAID)만 취소할 수 있습니다. 같은 Idempotency-Key와 같은 요청 내용을 다시 보내면 최초 결과를 반환합니다. 결제 완료 주문은 취소 후 환불·혜택 복구가 별도로 이어질 수 있습니다.
 
         주요 오류:
         - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
@@ -424,7 +422,7 @@ paths:
       summary: (스토어) 주문 상세 조회
       description: |
         스토어 구성원이 주문 상세를 조회하는 API입니다.
-        주문이 취소되거나 거절된 경우에는 환불, 쿠폰·포인트 반환, 재고·픽업 예약 해제 같은 후속 처리의 전체 진행 상태도 함께 보여 줍니다. 스토어 화면에는 업무에 필요한 요약만 제공하며 내부 오류 코드, 재시도 횟수, 처리 건 ID, 정책 버전은 제외합니다.
+        주문이 취소되거나 거절된 경우에는 환불, 쿠폰·포인트 반환, 픽업 예약 해제 같은 후속 처리의 전체 진행 상태도 함께 보여 줍니다. 스토어 화면에는 업무에 필요한 요약만 제공하며 내부 오류 코드, 재시도 횟수, 처리 건 ID, 정책 버전은 제외합니다.
 
         주요 오류:
         - 401: 로그인 정보가 없거나 유효하지 않은 경우
@@ -519,7 +517,7 @@ paths:
       summary: (운영팀) 주문 취소·거절 후 처리 상태 조회
       description: |
         운영팀이 취소되거나 거절된 주문의 후속 처리 상태를 조회하는 API입니다.
-        환불, 픽업 예약 해제, 재고 복구, 쿠폰·포인트 반환, 고객 알림의 단계별 상태와 시도 횟수를 확인할 수 있습니다. `ORDER_COMPENSATION_READ` 권한과 조회 사유를 담은 `X-Access-Reason` 헤더가 필요하며, 조회 사실은 감사 기록에 남습니다.
+        환불, 픽업 예약 해제, 쿠폰·포인트 반환, 고객 알림의 단계별 상태와 시도 횟수를 확인할 수 있습니다. `ORDER_COMPENSATION_READ` 권한과 조회 사유를 담은 `X-Access-Reason` 헤더가 필요하며, 조회 사실은 감사 기록에 남습니다.
 
         주요 오류:
         - 400: 조회 사유가 비어 있거나 헤더 형식이 올바르지 않은 경우
@@ -884,6 +882,16 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1regions"
   /stores/{storeId}/region:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1region"
+  /stores/{storeId}/ordering-policy:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1ordering-policy"
+  /stores/{storeId}/menu-catalog:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menu-catalog"
+  /stores/{storeId}/menus:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus"
+  /stores/{storeId}/menus/{menuId}/trade-content:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus~1{menuId}~1trade-content"
+  /stores/{storeId}/menus/{menuId}/archive:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1menus~1{menuId}~1archive"
   /stores/{storeId}/settlements:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1settlements"
   /stores/{storeId}/settlements/{settlementBatchId}/items:
@@ -1038,6 +1046,48 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1break-glass-requests~1{requestId}~1reveals"
   /support/break-glass-requests/{requestId}/reviews:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1break-glass-requests~1{requestId}~1reviews"
+  /operations/settlement-disputes:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1settlement-disputes"
+  /operations/settlement-disputes/{disputeId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1settlement-disputes~1{disputeId}"
+  /operations/settlement-disputes/{disputeId}/reviews:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1settlement-disputes~1{disputeId}~1reviews"
+  /operations/settlement-disputes/{disputeId}/decisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1settlement-disputes~1{disputeId}~1decisions"
+  /stores/{storeId}/disputes/{disputeId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1disputes~1{disputeId}"
+  /stores/{storeId}/disputes/{disputeId}/withdrawals:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1disputes~1{disputeId}~1withdrawals"
+  /operations/stores:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores"
+  /operations/stores/{storeId}/identity:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1identity"
+  /operations/store-regions:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1store-regions"
+  /stores/{storeId}/pickup-slot-management:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1pickup-slot-management"
+  /stores/{storeId}/pickup-slot-management/{slotId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1pickup-slot-management~1{slotId}"
+  /operations/stores/{storeId}/settlement-terms:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1settlement-terms"
+  /operations/stores/{storeId}/settlement-terms/{termsVersionId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1settlement-terms~1{termsVersionId}"
+  /operations/stores/{storeId}/memberships:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1memberships"
+  /operations/stores/{storeId}/memberships/{accountId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1memberships~1{accountId}"
+  /operations/notification-delivery-recoveries:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1notification-delivery-recoveries"
+  /operations/notification-delivery-recoveries/{deliveryId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1notification-delivery-recoveries~1{deliveryId}"
+  /operations/notification-delivery-recoveries/{deliveryId}/retries:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1notification-delivery-recoveries~1{deliveryId}~1retries"
+  /operations/event-publication-recoveries:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1event-publication-recoveries"
+  /operations/event-publication-recoveries/{publicationId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1event-publication-recoveries~1{publicationId}"
+  /operations/event-publication-recoveries/{publicationId}/retries:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1event-publication-recoveries~1{publicationId}~1retries"
 components:
   securitySchemes:
     bearerAuth:
@@ -1118,13 +1168,13 @@ components:
           $ref: ./beanflow-v1.yaml#/components/schemas/StoreOrder
         compensationRecovery:
           $ref: '#/components/schemas/RuntimeStoreCompensationSummary'
-          description: 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다.
+          description: 매장에 허용된 범위로 축약한 환불·혜택 복구 진행 정보입니다.
     RuntimeStoreOrderTransitionResult:
       type: object
       additionalProperties: false
       required:
         - order
-      description: '스토어 주문 상태 변경 결과입니다. 거절 처리에서는 후속 복구 요약이 함께 올 수 있지만, 응답 시점에 환불·혜택·재고 복구가 모두 끝났다는 뜻은 아닙니다.'
+      description: '스토어 주문 상태 변경 결과입니다. 거절 처리에서는 후속 복구 요약이 함께 올 수 있지만, 응답 시점에 환불·혜택 복구가 모두 끝났다는 뜻은 아닙니다.'
       example:
         order:
           orderId: 74131bb9-688f-5370-8042-21015b3cd43a
@@ -1165,7 +1215,7 @@ components:
           $ref: ./beanflow-v1.yaml#/components/schemas/StoreOrder
         compensationRecovery:
           $ref: '#/components/schemas/RuntimeStoreCompensationSummary'
-          description: 매장에 허용된 범위로 축약한 환불·혜택·재고 복구 진행 정보입니다.
+          description: 매장에 허용된 범위로 축약한 환불·혜택 복구 진행 정보입니다.
     RuntimeStoreCompensationSummary:
       type: object
       additionalProperties: false
@@ -1174,7 +1224,7 @@ components:
         - state
         - updatedAt
       description: |
-        주문 취소나 거절 뒤 진행되는 환불·혜택·재고 복구를 스토어에 간단히 보여 주는 정보입니다. 발생 원인, 전체 진행 상태, 마지막 갱신 시각만 포함하며 내부 오류·재시도 횟수·정책 버전은 제외합니다.
+        주문 취소나 거절 뒤 진행되는 환불·혜택 복구를 스토어에 간단히 보여 주는 정보입니다. 발생 원인, 전체 진행 상태, 마지막 갱신 시각만 포함하며 내부 오류·재시도 횟수·정책 버전은 제외합니다.
       example:
         trigger: STORE_REJECTION
         state: PROCESSING
@@ -1202,7 +1252,7 @@ components:
     RuntimeOperatorCompensationView:
       type: object
       additionalProperties: false
-      description: 주문 거절이나 고객 취소 뒤 진행되는 환불·재고·쿠폰·포인트 복구 상황을 담는 운영자용 응답입니다.
+      description: 주문 거절이나 고객 취소 뒤 진행되는 환불·쿠폰·포인트 복구 상황을 담는 운영자용 응답입니다.
       example:
         compensation:
           caseId: f33f27d6-8e6c-5712-8567-154b01cbb087
@@ -1218,9 +1268,6 @@ components:
               state: SUCCEEDED
               attemptCount: 1
             - type: PICKUP
-              state: SUCCEEDED
-              attemptCount: 1
-            - type: STOCK
               state: SUCCEEDED
               attemptCount: 1
             - type: COUPON
@@ -1239,4 +1286,4 @@ components:
       properties:
         compensation:
           $ref: ./beanflow-v1.yaml#/components/schemas/CompensationSummary
-          description: 운영자 전용 전체 환불·혜택·재고 복구 진행 정보입니다.
+          description: 운영자 전용 전체 환불·혜택 복구 진행 정보입니다.

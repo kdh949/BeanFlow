@@ -133,11 +133,6 @@ ALTER TABLE fulfillment_pickup_reservation
     ADD CONSTRAINT chk_pickup_reservation_state
         CHECK (state IN ('RESERVED', 'CONFIRMED', 'EXPIRED', 'RELEASED'));
 
-ALTER TABLE inventory_stock_reservation
-    DROP CONSTRAINT inventory_stock_reservation_state_check,
-    ADD CONSTRAINT chk_stock_reservation_state
-        CHECK (state IN ('RESERVED', 'CONFIRMED', 'EXPIRED', 'RELEASED'));
-
 DO $$
 DECLARE
     constraint_name text;

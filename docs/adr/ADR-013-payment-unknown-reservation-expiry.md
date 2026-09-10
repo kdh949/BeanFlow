@@ -5,7 +5,7 @@
 
 ## Context
 
-BR-03은 주문 생성 후 슬롯, 재고, 쿠폰과 포인트 예약을 5분간 유지하고 그 안에
+BR-03은 주문 생성 후 슬롯, 쿠폰과 포인트 예약을 5분간 유지하고 그 안에
 결제가 승인되지 않으면 해제하도록 한다. BR-25와 ADR-007은 Provider timeout을
 실패가 아닌 `UNKNOWN`으로 보존한다. 5분 시점에 Payment가 `UNKNOWN`이면 Provider가
 실제로 승인했을 수 있으므로 예약 해제와 뒤늦은 승인 반영이 서로 충돌할 수 있다.
@@ -13,14 +13,14 @@ BR-03은 주문 생성 후 슬롯, 재고, 쿠폰과 포인트 예약을 5분간
 ## Decision
 
 5분 lease 만료 시 Payment가 `UNKNOWN`이더라도 Order를 `EXPIRED`로 전환하고 슬롯,
-재고, 쿠폰과 포인트 예약을 해제한다.
+쿠폰과 포인트 예약을 해제한다.
 
 만료의 API·worker materialization은 다음을 따른다.
 
 - deadline 판단은 `now >= reservationExpiresAt`이다.
 - scheduled worker, `GET /orders/{orderId}`와 결제 명령은 같은 idempotent
   expiry Application Service를 사용한다.
-- 조회 시 due `PENDING_PAYMENT` Order를 발견하면 응답 전에 Order 만료와 네 자원
+- 조회 시 due `PENDING_PAYMENT` Order를 발견하면 응답 전에 Order 만료와 세 자원
   해제를 하나의 로컬 transaction으로 실행한다. 성공한 뒤 `EXPIRED` Order를
   반환한다.
 - expiry transaction의 일부가 실패하면 전체를 rollback하고 조회는
@@ -42,18 +42,18 @@ BR-03은 주문 생성 후 슬롯, 재고, 쿠폰과 포인트 예약을 5분간
 확정하게 된다.
 
 - 주문 생성 transaction은 `min(createdAt + 5분, pickupSlot.startsAt)`을 effective lease로 계산해
-  `Order.reservationExpiresAt`과 슬롯·재고·쿠폰·포인트 예약에 같은 값으로 저장한다.
+  `Order.reservationExpiresAt`과 슬롯·쿠폰·포인트 예약에 같은 값으로 저장한다.
 - Payment result transaction은 Provider 호출 밖에서 받은 `now`로 due expiry를 먼저 materialize한다.
   `now >= reservationExpiresAt`이면 `PickupReservation`을 포함한 자원을 확정하지 않는다.
 - 이 경계 뒤에 확인된 Provider approval과 `UNKNOWN` payment lookup approval은 기존 late-approval
   경로로 들어가며, `EXPIRED` Order를 `PAID`로 되살리거나 슬롯 counter를 늘리지 않는다.
 - effective lease는 저장 정밀도인 microsecond로 절사한 값으로 발급한다. `timestamptz`가 담을 수
   없는 nanosecond를 그대로 돌려주면 같은 예약을 replay했을 때 최초 응답과 다른 deadline이 나오고,
-  네 자원이 공유하는 값이 응답과 저장 사이에서 갈라진다. 절사는 deadline을 1 microsecond 미만
+  세 자원이 공유하는 값이 응답과 저장 사이에서 갈라진다. 절사는 deadline을 1 microsecond 미만
   앞당기므로 lease를 늘리지 않는다.
 
 이는 새 grace period나 slot lead-time을 도입하지 않는다. 슬롯 시작 시각은 이미 BR-05와 ADR-076이
-소유한 준비 가능 경계이고, 더 이른 lease를 공통 deadline으로 쓰는 것이 네 예약 자원의 일관성을
+소유한 준비 가능 경계이고, 더 이른 lease를 공통 deadline으로 쓰는 것이 세 예약 자원의 일관성을
 보존한다.
 
 이후 reconciliation에서 Provider 승인이 확인되면:
@@ -86,7 +86,7 @@ BR-03은 주문 생성 후 슬롯, 재고, 쿠폰과 포인트 예약을 5분간
 
 ## Rationale
 
-고정 5분 lease를 유지해 자원 무기한 점유를 막고, 이미 해제된 슬롯·재고를 뒤늦은
+고정 5분 lease를 유지해 자원 무기한 점유를 막고, 이미 해제된 슬롯를 뒤늦은
 승인으로 다시 확정하여 oversell을 만드는 것을 방지한다. 고객에게 일시 승인 금액이
 보일 수 있는 비용은 명시적 void/refund 상태, 운영 case와 수동 복구로 다룬다.
 

@@ -19,7 +19,7 @@
 - source에서는 `menuId`, ID 오름차순·중복 없는 option IDs와 quantity만 사용한다. 새 slot,
   optional coupon과 points는 request가 명시하고 과거 이름·가격·benefit·payment/refund·slot·settlement
   snapshot은 새 주문 계산에 쓰지 않는다.
-- Merchant current quote의 현재 이름·가격·판매 가능성과 기존 Fulfillment, Inventory, Promotion,
+- Merchant current quote의 현재 이름·가격·판매 가능성과 기존 Fulfillment, Promotion,
   Loyalty owner reservation을 `OrderCreationWorkflow(MANDATORY)` 하나로 재사용한다. unavailable line
   하나라도 있거나 owner write가 실패하면 새 Order와 모든 reservation은 0건이다.
 - 성공은 새 `PENDING_PAYMENT` 또는 benefit-only `PAID` Order의 201이며 required price comparison은
@@ -33,7 +33,7 @@
   `SNAPSHOTTED`와 JSON option ID 배열로 저장한다. immutable DB function/CHECK가 각 원소의 canonical
   UUID, 중복 없음과 오름차순을 검증한다. 검증된 무옵션 `[]`과 identity를 알 수 없는 legacy row를
   구분하며 이름이나 current catalogue로 option ID를 추론하지 않는다.
-- direct create와 reorder는 같은 Tx O workflow를 사용한다. 새 Order, pickup/stock/coupon/point,
+- direct create와 reorder는 같은 Tx O workflow를 사용한다. 새 Order, pickup/coupon/point,
   benefit-only Payment, settlement/point-accrual snapshot, Audit와 최초 201 idempotency response가 같은
   transaction에서 commit 또는 rollback한다.
 - scope는 `(customerId, REORDER_ORDER_V1, Idempotency-Key)`이고 canonical hash는 source, slot,
@@ -95,7 +95,7 @@
   Testcontainers를 포함한다. 종료 시 기존 Modulith publication registry shutdown 경고가 있었지만
   build 실패나 test failure는 아니었다.
 - 실제 Tx I2 fault injection은 `FAILED` transition DB trigger가 Tx I2 commit만 실패시키며, 최초 503,
-  Tx O의 Order·pickup/stock reservation·Audit rollback, PROCESSING 잔류와 worker의 자동 비실행을
+  Tx O의 Order·pickup reservation·Audit rollback, PROCESSING 잔류와 worker의 자동 비실행을
   검증한다. intended Order 존재/부재 fixture 모두 metadata를 검증한다.
 
 ## Measurements and limits

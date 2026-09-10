@@ -27,7 +27,7 @@
 | [ADR-023](ADR-023-analytics-refund-and-late-events.md) | Accepted | 환불 지표와 late event 재집계 |
 | [ADR-024](ADR-024-coupon-calculation-model.md) | Accepted | 대상 품목 합계 기반 쿠폰 계산 모델 |
 | [ADR-025](ADR-025-order-creation-idempotency-transaction.md) | Accepted | 주문 생성 멱등 레코드의 선행 등록과 최초 응답 재생 |
-| [ADR-026](ADR-026-menu-configuration-sellable-unit-mapping.md) | Accepted | MenuConfiguration의 sellable unit 요구량 번역 |
+| [ADR-026](ADR-026-menu-configuration-availability.md) | Accepted | 메뉴 구성과 판매 상태 검증 |
 | [ADR-027](ADR-027-store-membership-authorization.md) | Accepted | 매장 membership 기반 객체 수준 인가 |
 | [ADR-028](ADR-028-expired-benefit-restoration-policy.md) | Accepted | 버전형 만료 혜택 복원 정책 |
 | [ADR-029](ADR-029-customer-cancellation-scope.md) | Accepted | 고객 주문 취소 범위와 보상 경계 |
@@ -41,7 +41,7 @@
 | [ADR-037](ADR-037-customer-cancellation-refund-reconciliation-budget.md) | Accepted | 고객 취소 환불의 요청·조회 예산 |
 | [ADR-038](ADR-038-retryable-refund-failure-and-customer-projection.md) | Accepted | 재시도 가능 환불 실패와 고객 상태 투영 |
 | [ADR-039](ADR-039-benefit-only-cancellation-payment-step.md) | Accepted | 0원 결제 취소의 PAYMENT 보상 표현 |
-| [ADR-040](ADR-040-order-termination-resource-release.md) | Accepted | 주문 종료 후 확정 픽업·재고 복원 상태 |
+| [ADR-040](ADR-040-order-termination-resource-release.md) | Accepted | 주문 종료 후 확정 픽업 복원 상태 |
 | [ADR-041](ADR-041-trigger-and-benefit-scoped-restoration-policy.md) | Accepted | 종료 원인·혜택별 만료 복원 정책 |
 | [ADR-042](ADR-042-benefit-restoration-ledger-metadata.md) | Accepted | 혜택 복원 원장의 원인·정책 metadata |
 | [ADR-043](ADR-043-compensation-coupon-terms-snapshot.md) | Accepted | 종료 Campaign과 독립적인 보상 쿠폰 조건 snapshot |
@@ -125,3 +125,4 @@
 | [ADR-121](ADR-121-performance-observability-and-trace-profile-correlation.md) | Accepted | 성능 관측성과 trace-profile 상관 경계 |
 | [ADR-122](ADR-122-external-keycloak-deployment.md) | Accepted | 외부 Keycloak을 사용하는 배포 모드 |
 | [ADR-123](ADR-123-order-quote-trade-terms-and-shared-availability.md) | Accepted | 주문 견적의 거래 조건과 공유 자원 잔여량 검증 분리 |
+| [ADR-124](ADR-124-management-api-vertical-slices.md) | Accepted | 관리 API의 소유권과 순차 수직 슬라이스 |

@@ -62,12 +62,25 @@ internal class SettlementDisputeQueryService(
     private val signedCursorCodec: SignedCursorCodec,
     private val clock: Clock,
     private val metrics: SettlementDisputeQueryMetrics,
+    private val grants: io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization,
 ) {
     @Transactional(readOnly = true)
-    fun list(query: ListStoreDisputesQuery): SettlementDisputePageResponse =
+    fun list(query: ListStoreDisputesQuery): SettlementDisputePageResponse = readPage(query, false)
+
+    @Transactional
+    fun listOperations(query: ListStoreDisputesQuery): SettlementDisputePageResponse = readPage(query, true)
+
+    private fun readPage(
+        query: ListStoreDisputesQuery,
+        operator: Boolean,
+    ): SettlementDisputePageResponse =
         try {
+            if (operator) {
+                grants.requireActive(query.actorId, io.github.kdh949.beanflow.operations.api.OperatorPermission.SETTLEMENT_DISPUTE_READ)
+            } else {
+                requireActiveOwner(query.actorId, query.storeId)
+            }
             val limit = normalizeLimit(query.limit)
-            requireActiveOwner(query.actorId, query.storeId)
             val scope = cursorScope(query.storeId, query.state)
             val after = query.cursor?.let { signedCursorCodec.verify(it, scope).sort }
             val fetched = repository.findPage(query.storeId, query.state, after, limit + 1)

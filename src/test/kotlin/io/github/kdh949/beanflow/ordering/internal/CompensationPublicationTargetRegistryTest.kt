@@ -6,7 +6,6 @@ import io.github.kdh949.beanflow.eventing.api.OrderCancelledV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
 import io.github.kdh949.beanflow.fulfillment.internal.OrderRejectedPickupListener
-import io.github.kdh949.beanflow.inventory.internal.OrderRejectedStockListener
 import io.github.kdh949.beanflow.loyalty.internal.OrderRejectedPointsListener
 import io.github.kdh949.beanflow.notification.internal.OrderRejectedNotificationListener
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
@@ -30,7 +29,6 @@ internal class CompensationPublicationTargetRegistryTest {
             mapOf(
                 "payment" to OrderCompensationStepType.PAYMENT,
                 "pickup" to OrderCompensationStepType.PICKUP,
-                "stock" to OrderCompensationStepType.STOCK,
                 "coupon" to OrderCompensationStepType.COUPON,
                 "points" to OrderCompensationStepType.POINTS,
                 "customer-notification" to OrderCompensationStepType.CUSTOMER_NOTIFICATION,
@@ -38,7 +36,6 @@ internal class CompensationPublicationTargetRegistryTest {
         val cancelledSteps =
             mapOf(
                 "pickup" to OrderCompensationStepType.PICKUP,
-                "stock" to OrderCompensationStepType.STOCK,
                 "coupon" to OrderCompensationStepType.COUPON,
                 "points" to OrderCompensationStepType.POINTS,
             )
@@ -74,7 +71,6 @@ internal class CompensationPublicationTargetRegistryTest {
             listOf(
                 OrderRejectedRefundListener::class.java,
                 OrderRejectedPickupListener::class.java,
-                OrderRejectedStockListener::class.java,
                 OrderRejectedCouponListener::class.java,
                 OrderRejectedPointsListener::class.java,
                 OrderRejectedNotificationListener::class.java,
@@ -90,13 +86,11 @@ internal class CompensationPublicationTargetRegistryTest {
             setOf(
                 OrderRejectedV1::class.java.name to "beanflow.order-compensation.order-rejected.payment.v1",
                 OrderRejectedV1::class.java.name to "beanflow.order-compensation.order-rejected.pickup.v1",
-                OrderRejectedV1::class.java.name to "beanflow.order-compensation.order-rejected.stock.v1",
                 OrderRejectedV1::class.java.name to "beanflow.order-compensation.order-rejected.coupon.v1",
                 OrderRejectedV1::class.java.name to "beanflow.order-compensation.order-rejected.points.v1",
                 OrderRejectedV1::class.java.name to
                     "beanflow.order-compensation.order-rejected.customer-notification.v1",
                 OrderCancelledV1::class.java.name to "beanflow.order-compensation.order-cancelled.pickup.v1",
-                OrderCancelledV1::class.java.name to "beanflow.order-compensation.order-cancelled.stock.v1",
                 OrderCancelledV1::class.java.name to "beanflow.order-compensation.order-cancelled.coupon.v1",
                 OrderCancelledV1::class.java.name to "beanflow.order-compensation.order-cancelled.points.v1",
             )

@@ -3,7 +3,9 @@ package io.github.kdh949.beanflow.schema
 import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.flywaydb.core.Flyway
+import org.flywaydb.core.api.MigrationVersion
 import org.junit.jupiter.api.Test
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver
 import org.springframework.jdbc.datasource.DriverManagerDataSource
 
 internal class FlywayMigrationSmokeTest : IsolatedPostgresSupport() {
@@ -18,12 +20,19 @@ internal class FlywayMigrationSmokeTest : IsolatedPostgresSupport() {
                 .cleanDisabled(true)
                 .load()
 
+        val packagedVersions =
+            PathMatchingResourcePatternResolver()
+                .getResources("classpath*:db/migration/V*__*.sql")
+                .map { MigrationVersion.fromVersion(requireNotNull(it.filename).substringAfter("V").substringBefore("__")) }
+        assertThat(packagedVersions).isNotEmpty()
+        assertThat(packagedVersions.min()).isEqualTo(MigrationVersion.fromVersion("1"))
+        val currentSchemaVersion = packagedVersions.max().toString()
         val firstMigration = flyway.migrate()
         val validation = flyway.validateWithResult()
         val repeatedMigration = flyway.migrate()
 
         assertThat(firstMigration.success).isTrue()
-        assertThat(firstMigration.targetSchemaVersion.toString()).isEqualTo(CURRENT_SCHEMA_VERSION)
+        assertThat(firstMigration.targetSchemaVersion.toString()).isEqualTo(currentSchemaVersion)
         assertThat(validation.validationSuccessful).isTrue()
         assertThat(validation.invalidMigrations).isEmpty()
         assertThat(repeatedMigration.success).isTrue()
@@ -34,10 +43,6 @@ internal class FlywayMigrationSmokeTest : IsolatedPostgresSupport() {
                 .current()
                 .version
                 .toString(),
-        ).isEqualTo(CURRENT_SCHEMA_VERSION)
-    }
-
-    private companion object {
-        const val CURRENT_SCHEMA_VERSION = "71"
+        ).isEqualTo(currentSchemaVersion)
     }
 }

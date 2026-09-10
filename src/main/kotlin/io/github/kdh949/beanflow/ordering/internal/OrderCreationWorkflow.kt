@@ -2,9 +2,6 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
 import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
-import io.github.kdh949.beanflow.inventory.api.ReserveStockCommand
-import io.github.kdh949.beanflow.inventory.api.StockRequirement
-import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.ReservePointsCommand
 import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
@@ -50,7 +47,6 @@ internal class OrderCreationWorkflow(
     private val storeSettlementTermsOperations: StoreSettlementTermsOperations,
     private val storeDisplaySnapshotOperations: StoreDisplaySnapshotOperations,
     private val pickupOperations: PickupReservationOperations,
-    private val stockOperations: StockReservationOperations,
     private val couponOperations: CouponReservationOperations,
     private val pointOperations: PointReservationOperations,
     private val benefitOnlyPaymentOperations: BenefitOnlyPaymentOperations,
@@ -86,7 +82,6 @@ internal class OrderCreationWorkflow(
         val storeDisplaySnapshot = preparedQuote?.storeDisplay ?: storeDisplaySnapshotOperations.require(command.storeId)
         val settlementTerms = preparedQuote?.settlementTerms ?: storeSettlementTermsOperations.findApplicable(command.storeId, createdAt)
         val quotes = preparedQuote?.menu?.lines ?: prevalidatedQuotes?.also { validatePrevalidatedQuotes(command, it) } ?: quote(command)
-        val stockRequirements = aggregateStockRequirements(quotes)
 
         val pickupReservation =
             pickupOperations.reserve(
@@ -99,16 +94,6 @@ internal class OrderCreationWorkflow(
                 ),
             )
         val reservationExpiresAt = pickupReservation.expiresAt
-        val stockReservationIds =
-            stockOperations.reserve(
-                ReserveStockCommand(
-                    orderId = orderId,
-                    storeId = command.storeId,
-                    requirements = stockRequirements,
-                    expiresAt = reservationExpiresAt,
-                    sourceReference = OrderCreationTransaction.stockSource(orderId),
-                ),
-            )
 
         val grossLines =
             quotes.mapIndexed { sequence, quote ->
@@ -198,11 +183,6 @@ internal class OrderCreationWorkflow(
                             OrderCreationTransaction.pickupSource(orderId),
                         ),
                     )
-                val stock =
-                    requireApplied(
-                        "STOCK",
-                        stockOperations.confirm(orderId, OrderCreationTransaction.stockSource(orderId)),
-                    )
                 val coupon =
                     couponQuote?.let {
                         requireApplied(
@@ -215,7 +195,7 @@ internal class OrderCreationWorkflow(
                         "POINTS",
                         pointOperations.confirm(orderId, OrderCreationTransaction.pointsSource(orderId)),
                     )
-                BenefitOnlyConfirmation(payment, pickup, stock, coupon, points)
+                BenefitOnlyConfirmation(payment, pickup, coupon, points)
             } else {
                 null
             }
@@ -275,7 +255,6 @@ internal class OrderCreationWorkflow(
                 command = command,
                 order = order,
                 pickupReservationId = pickupReservation.reservationId,
-                stockReservationIds = stockReservationIds,
                 coupon = couponQuote,
                 points = pointReservation,
                 benefit = benefitConfirmation,
@@ -332,37 +311,6 @@ internal class OrderCreationWorkflow(
         }
     }
 
-    private fun aggregateStockRequirements(quotes: List<MenuLineQuote>): List<StockRequirement> =
-        quotes
-            .flatMap { quote ->
-                quote.sellableUnitRequirements.map { requirement ->
-                    val quantity =
-                        try {
-                            Math.multiplyExact(requirement.quantityPerLineUnit, quote.quantity)
-                        } catch (_: ArithmeticException) {
-                            throw DomainFailure(
-                                FailureCode.INVALID_REQUEST,
-                                "Sellable unit requirement exceeds supported range",
-                            )
-                        }
-                    StockRequirement(requirement.sellableUnitId, quantity)
-                }
-            }.groupBy(StockRequirement::sellableUnitId)
-            .map { (id, requirements) ->
-                val quantity =
-                    requirements.fold(0L) { total, requirement ->
-                        try {
-                            Math.addExact(total, requirement.quantity)
-                        } catch (_: ArithmeticException) {
-                            throw DomainFailure(
-                                FailureCode.INVALID_REQUEST,
-                                "Aggregated sellable unit requirement exceeds supported range",
-                            )
-                        }
-                    }
-                StockRequirement(id, quantity)
-            }.sortedBy(StockRequirement::sellableUnitId)
-
     private companion object {
         val RESERVATION_LEASE: Duration = Duration.ofMinutes(5)
     }
@@ -371,7 +319,6 @@ internal class OrderCreationWorkflow(
 internal data class BenefitOnlyConfirmation(
     val payment: BenefitOnlyPaymentResult,
     val pickup: ReservationTransitionReport,
-    val stock: ReservationTransitionReport,
     val coupon: ReservationTransitionReport?,
     val points: ReservationTransitionReport,
 )

@@ -5,7 +5,7 @@
 
 ## Context
 
-미수락 `PAID` 고객 취소는 Order를 즉시 `CANCELLED`로 확정하지만 외부 환불, 네 owner
+미수락 `PAID` 고객 취소는 Order를 즉시 `CANCELLED`로 확정하지만 외부 환불, 세 owner
 자원 복원과 고객 알림은 뒤에 남는다. API는 이 차이를 `202`로 표현한다. 응답 시점에
 어떤 작업이 내구 저장돼 있어야 하는지 정하지 않으면 취소는 성공했지만 보상 재개
 근거가 없거나, 반대로 모든 owner 작업을 긴 transaction에 묶어 한 owner 장애가 고객
@@ -21,7 +21,7 @@ aggregate에서만 파생되고 `PAID` 취소는 Refund record를 commit한 뒤 
 
 ### `PENDING_PAYMENT`
 
-- Order lock, 소유권·deadline·멱등성 검증, Order `CANCELLED`, 네 예약 해제,
+- Order lock, 소유권·deadline·멱등성 검증, Order `CANCELLED`, 세 예약 해제,
   `ORDER_CANCELLATION_ACCEPTED` NotificationDelivery `PENDING`, AuditRecord와 최초
   `200` response를 담은 취소 멱등 레코드를 Tx C0 하나에서 commit한다.
 - 취소 event, OrderCompensationCase, Refund와 event publication을 생성하지 않는다.
@@ -33,19 +33,19 @@ Tx C1은 다음 항목을 한 PostgreSQL 로컬 transaction에서 모두 commit�
 
 1. Order row lock, 소유권·deadline·멱등성 검증
 2. Order `CANCELLED`와 cancellation fields
-3. `trigger = CUSTOMER_CANCELLATION`인 OrderCompensationCase와 여섯 step
+3. `trigger = CUSTOMER_CANCELLATION`인 OrderCompensationCase와 다섯 step
 4. Payment cancellation recovery snapshot
 5. 남은 refundable cash가 양수이면 그 금액의 Refund `REQUESTED`
 6. ADR-054의 변경·생성 target별 AuditRecord 집합
 7. `ORDER_CANCELLATION_ACCEPTED` NotificationDelivery `PENDING`
-8. `OrderCancelledV1`과 Pickup, Stock, Coupon, Points listener별 Spring Modulith
+8. `OrderCancelledV1`과 Pickup, Coupon, Points listener별 Spring Modulith
    persistent publication
 9. 최초 `202` status/body를 담은 cancellation command idempotency record
 
 - 위 항목 중 하나라도 저장에 실패하면 Tx C1 전체를 rollback하고 `202`를 반환하지
   않는다.
-- 외부 Provider 호출과 픽업 슬롯·재고·쿠폰·포인트 복원은 Tx C1에 포함하지 않는다.
-- 네 자원은 commit 후 `OrderCancelledV1` owner listener가 각각 별도 transaction에서
+- 외부 Provider 호출과 픽업 슬롯·쿠폰·포인트 복원은 Tx C1에 포함하지 않는다.
+- 세 자원은 commit 후 `OrderCancelledV1` owner listener가 각각 별도 transaction에서
   처리한다. NotificationDelivery는 Tx C1에서 이미 저장하고 delivery worker가
   Provider 호출과 결과 기록을 별도로 수행한다.
 - Refund worker는 Refund를 별도 claim transaction에서 claim하고 DB transaction
@@ -59,7 +59,7 @@ Tx C1은 다음 항목을 한 PostgreSQL 로컬 transaction에서 모두 commit�
 
 ### 모든 로컬 owner 보상을 Tx C1에 포함
 
-- `202` 시점에 네 자원이 즉시 반영된다. NotificationDelivery는 선택안과 무관하게
+- `202` 시점에 세 자원이 즉시 반영된다. NotificationDelivery는 선택안과 무관하게
   ADR-044의 commit gate에 포함된다.
 - 여러 owner row lock과 쓰기가 취소 transaction에 추가되고 한 owner DB 실패가 Order
   취소를 막는다. 비동기 step별 실패 격리와 persistent event의 역할도 대부분 중복
@@ -125,7 +125,7 @@ source of truth가 Refund라는 ADR-033의 기존 결정 때문에 필요하다.
   재생하고 event와 Refund를 다시 만들지 않는다.
 - commit 후 owner listener가 실패하면 Order는 `CANCELLED`를 유지하고 publication과
   해당 compensation step이 retry 또는 `MANUAL_REVIEW`로 남는다.
-- Provider timeout은 Refund `UNKNOWN` 또는 `RECONCILING`으로 남고 Order와 네 자원을
+- Provider timeout은 Refund `UNKNOWN` 또는 `RECONCILING`으로 남고 Order와 세 자원을
   되돌리지 않는다.
 - Tx C1 전에 미확정 선행 Refund를 발견하면 `409 PAYMENT_REFUND_UNRESOLVED`로
   rollback하고 Order·Case·snapshot·Audit·publication·멱등 row를 남기지 않는다.
@@ -137,15 +137,15 @@ source of truth가 Refund라는 ADR-033의 기존 결정 때문에 필요하다.
 
 - `202`가 보이면 Tx C1의 필수 항목이 모두 존재한다.
 - Tx C1 각 저장 지점의 실패 주입에서 필수 항목이 하나도 남지 않는다.
-- 외부 Provider와 네 자원 owner·Notification Provider 호출은 Tx C1에서 발생하지
+- 외부 Provider와 세 자원 owner·Notification Provider 호출은 Tx C1에서 발생하지
   않는다.
 - commit 후 owner 실패가 서로 독립적으로 관측·재시도된다.
 
 ## Required Tests
 
-- `PENDING_PAYMENT` Tx C0의 Order·네 예약·Audit·멱등 응답 원자성
+- `PENDING_PAYMENT` Tx C0의 Order·세 예약·Audit·멱등 응답 원자성
 - `PENDING_PAYMENT` 취소의 Case·Refund·event publication 부재
-- `PAID` Tx C1의 Order·Case/6 steps·Payment recovery snapshot·Refund·Audit·
+- `PAID` Tx C1의 Order·Case/5 steps·Payment recovery snapshot·Refund·Audit·
   publication·멱등 응답 원자성
 - Refund 저장 실패 전체 rollback
 - Case 또는 step 저장 실패 전체 rollback

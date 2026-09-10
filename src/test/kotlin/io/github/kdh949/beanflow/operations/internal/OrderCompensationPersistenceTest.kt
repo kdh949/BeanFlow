@@ -43,7 +43,7 @@ internal class OrderCompensationPersistenceTest
         }
 
         @Test
-        fun `case stores exactly two policies and six steps and exact replay is idempotent`() {
+        fun `case stores exactly two policies and five steps and exact replay is idempotent`() {
             val command = command()
 
             val first = operations.open(command)
@@ -52,10 +52,10 @@ internal class OrderCompensationPersistenceTest
             assertThat(replay).isEqualTo(first)
             assertThat(first.trigger).isEqualTo(OrderCompensationTrigger.STORE_REJECTION)
             assertThat(first.benefitPolicies).hasSize(2)
-            assertThat(first.steps).hasSize(6)
+            assertThat(first.steps).hasSize(5)
             assertThat(count("operations_order_compensation_case")).isEqualTo(1)
             assertThat(count("operations_order_compensation_benefit_policy_snapshot")).isEqualTo(2)
-            assertThat(count("operations_order_compensation_step")).isEqualTo(6)
+            assertThat(count("operations_order_compensation_step")).isEqualTo(5)
         }
 
         @Test
@@ -91,7 +91,7 @@ internal class OrderCompensationPersistenceTest
 
             val view = operations.open(command)
 
-            assertThat(view.steps).hasSize(6)
+            assertThat(view.steps).hasSize(5)
             assertThat(view.steps.single { it.type == OrderCompensationStepType.CUSTOMER_NOTIFICATION }.state)
                 .isEqualTo(OrderCompensationStepState.PROCESSING)
             assertThat(view.benefitPolicies).hasSize(2)
@@ -124,7 +124,6 @@ internal class OrderCompensationPersistenceTest
             operations.open(command)
             listOf(
                 OrderCompensationStepType.PICKUP,
-                OrderCompensationStepType.STOCK,
                 OrderCompensationStepType.CUSTOMER_NOTIFICATION,
             ).forEachIndexed { index, step ->
                 operations.recordStep(
@@ -172,7 +171,7 @@ internal class OrderCompensationPersistenceTest
             assertThat(results.map { it.getOrThrow() }).containsOnly(command.caseId)
             assertThat(count("operations_order_compensation_case")).isEqualTo(1)
             assertThat(count("operations_order_compensation_benefit_policy_snapshot")).isEqualTo(2)
-            assertThat(count("operations_order_compensation_step")).isEqualTo(6)
+            assertThat(count("operations_order_compensation_step")).isEqualTo(5)
         }
 
         private fun command(

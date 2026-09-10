@@ -31,14 +31,6 @@ CREATE TABLE merchant_menu_configuration (
     UNIQUE (menu_id, normalized_option_key)
 );
 
-CREATE TABLE merchant_menu_configuration_requirement (
-    id uuid PRIMARY KEY,
-    menu_configuration_id uuid NOT NULL REFERENCES merchant_menu_configuration(id),
-    sellable_unit_id uuid NOT NULL,
-    quantity_per_line_unit bigint NOT NULL CHECK (quantity_per_line_unit > 0),
-    UNIQUE (menu_configuration_id, sellable_unit_id)
-);
-
 CREATE TABLE ordering_order (
     id uuid PRIMARY KEY,
     customer_id uuid NOT NULL,
@@ -74,7 +66,6 @@ CREATE TABLE ordering_order_line (
     menu_id uuid NOT NULL,
     menu_name varchar(200) NOT NULL,
     option_names_json text NOT NULL,
-    sellable_requirements_json text NOT NULL,
     unit_price_krw bigint NOT NULL CHECK (unit_price_krw >= 0),
     quantity bigint NOT NULL CHECK (quantity > 0),
     gross_krw bigint NOT NULL CHECK (gross_krw >= 0),

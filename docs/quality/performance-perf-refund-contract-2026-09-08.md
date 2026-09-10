@@ -14,7 +14,7 @@
 수정 전 성공 승인 부하 3,678건은 자동 거절 후 `TOSS_CANCEL_INVALID_REQUEST`와
 `TOSS_REFUND_LOOKUP_AMBIGUOUS`를 거쳐 환불 UNKNOWN으로 남았다. 재현 테스트에서 기존 드라이버의
 환불 관련 4개 assertion이 실패했다. 분리한 refund branch는 **9/9 Node 테스트 통과**했다.
-수정 후 예열141+5/s301 = **442건은 환불·보상·재고·정원 복구 SUCCEEDED**를 DB로 확인했다.
+수정 후 예열141+5/s301 = **442건은 환불·보상·정원 복구 SUCCEEDED**를 DB로 확인했다.
 이는 콜론 계약 오류 제거와 환불 흐름의 증거다. 과거 UNKNOWN 8270건은 MANUAL_REVIEW로 남겨
 성공으로 바꾸지 않았다. 실제 Toss 결제/환불을 실행한 결과가 아니다.
 
@@ -33,7 +33,7 @@ node --test infra/perf/toss-driver.test.mjs
 [이미지 workflow](https://github.com/kdh949/BeanFlow/actions/runs/34151796891)가 통과했다.
 분리 PR의 head CI와 통합 이미지 검증은 서로 다른 증거다.
 
-같은 합성 고객 20명·매장/메뉴/공유 재고 각 1개·미래 픽업 슬롯 4개에서 수량 1,
+같은 합성 고객 20명·매장/메뉴 각 1개·미래 픽업 슬롯 4개에서 수량 1,
 쿠폰/포인트 없는 `toss-success`를 사용했다. HTTPS WAF를 통해 견적→주문→결제 시도→승인
 4 HTTP 요청을 실행했다. API 2GiB, PostgreSQL 1.5GiB, Hikari 10, trace sampling 1.0,
 wall profile 10ms와 load script를 고정했다. 로컬 Gradle 실행과 아래 부하는 겹치지 않았다.
@@ -59,8 +59,8 @@ threshold는 FAILED다. 수정 후 HTTP p95와 dropped가 기존 두 측정 사�
 repository span 전체를 lock 또는 connection pool 대기로 환산하지 않는다.
 
 2026-09-07 19:16:46 UTC read-only repeatable-read 확인에서 예열141·5/s301·20/s1698건의
-native 생성/승인 수와 DB가 일치했다. stock/slot counter 불일치, 정원 초과, 중복 픽업번호는 0이었다.
-예열+5/s 442건은 환불/보상/재고/정원 복구 SUCCEEDED였다. 본 실행의 비동기 환불은 당시 진행 중이었다.
+native 생성/승인 수와 DB가 일치했다. 픽업 슬롯 counter 불일치, 정원 초과, 중복 픽업번호는 0이었다.
+예열+5/s 442건은 환불/보상/정원 복구 SUCCEEDED였다. 본 실행의 비동기 환불은 당시 진행 중이었다.
 환불 이후 정산·분석 금융 이벤트의 미완료 기록은 별도 잔여 문제이며 거래 전체 완료로 표시하지 않는다.
 
 부하 fixture SHA256: `e08f3fa7e965527e527b47326e82981b7c05b10d1a1d9c5d365a7611bf5daca9`.

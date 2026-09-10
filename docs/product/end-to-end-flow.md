@@ -17,7 +17,7 @@ Failure behavior:
 1. Merchant에서 현재 메뉴·옵션·가격을 확인한다.
 2. Ordering이 메뉴명, 옵션명과 단가를 `OrderLine`에 스냅샷으로 저장한다.
 3. Fulfillment가 5분 lease의 픽업 슬롯 예약을 획득한다.
-4. Inventory가 판매 단위 재고를 예약한다.
+4. Merchant가 현재 메뉴·옵션·구성의 판매 가능 여부를 검증한다.
 5. Promotion이 쿠폰을 검증·예약한다.
 6. Loyalty가 포인트 사용분을 예약한다.
 7. 쿠폰을 먼저 적용하고 남은 금액에 포인트를 적용한다.
@@ -36,7 +36,7 @@ Invariants:
 - 정책 변경 뒤 생성된 주문만 새 version을 선택한다. 기존 주문의 policy와 unit 계산 결과는 다시
   계산하거나 갱신하지 않는다.
 - 주문 항목과 결제 예정 금액은 결제 시작 후 변경하지 않는다.
-- 마지막 슬롯·재고·쿠폰 수량을 초과할 수 없다.
+- 마지막 슬롯·쿠폰 수량을 초과할 수 없다.
 - Payment가 `UNKNOWN`이어도 5분 lease를 자동 연장하지 않는다.
 
 ## 3. Payment approval
@@ -48,7 +48,7 @@ Invariants:
 3. 성공 callback은 paymentKey, provider order와 amount를 서버에 전달한다. 서버는 고객 소유권과
    exact snapshot binding을 검증하고 stable Provider idempotency key로 승인 claim을 커밋한다.
 4. 커밋 후 DB 트랜잭션 밖에서 Toss confirm API를 호출한다.
-5. 승인 성공을 새 트랜잭션에서 기록하고 `PaymentApproved` 사실과 주문·슬롯·재고·쿠폰·포인트
+5. 승인 성공을 새 트랜잭션에서 기록하고 `PaymentApproved` 사실과 주문·슬롯·쿠폰·포인트
    예약을 함께 확정한다.
 6. 고객은 `GET /payments/{paymentId}`로 승인·불명·복구 상태를 다시 조회하고 주문 추적으로 이동한다.
 
@@ -91,13 +91,13 @@ Failure behavior:
 1. 고객이 닫힌 reason code와 선택 상세 사유로 취소를 요청한다.
 2. Application Service가 Order row lock 아래에서 소유권, 상태, 두 deadline과 멱등
    레코드를 확인한다.
-3. `PENDING_PAYMENT` 취소는 Tx C0에서 Order `CANCELLED`, 네 예약 해제, target별
+3. `PENDING_PAYMENT` 취소는 Tx C0에서 Order `CANCELLED`, 세 예약 해제, target별
    AuditRecord, 취소 접수 NotificationDelivery와 최초 `200` 응답을 함께 커밋한다.
-4. 미수락 `PAID` 취소는 Tx C1에서 Order `CANCELLED`, 보상 Case와 여섯 step, 두
+4. 미수락 `PAID` 취소는 Tx C1에서 Order `CANCELLED`, 보상 Case와 다섯 step, 두
    benefit policy snapshot, Payment cancellation recovery snapshot, 남은 현금이
    양수면 Refund `REQUESTED`, 접수 Delivery, target Audit, `OrderCancelledV1`과 네
    owner publication, 최초 `202` 응답을 함께 커밋한다.
-5. 커밋 후 픽업 슬롯, 재고, 쿠폰, 포인트 owner listener가 각자 트랜잭션에서
+5. 커밋 후 픽업 슬롯, 쿠폰, 포인트 owner listener가 각자 트랜잭션에서
    복원한다.
 6. Refund worker와 delivery worker가 트랜잭션 밖에서 외부 Provider를 호출한다.
 7. 현금 환불이 실제로 성공하거나 자동 처리가 끝나 지연이 확정되면 각각 한 번씩

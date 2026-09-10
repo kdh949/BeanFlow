@@ -6,12 +6,10 @@
 | StoreDiscoveryProfile | 검색 가능한 공개 매장명·위치 | Store당 하나, non-blank name, SRID 4326 point, verified owner source 없이는 생성 금지 | `storeId` |
 | StoreSettlementTerms | store별 versioned 수수료 계약 | applicable version 하나, fee rate `0..10000`, immutable history와 overlap 금지 | `storeId` |
 | Menu | 메뉴·옵션·가격·판매 상태 | 음수 가격 금지, 유효 옵션만 선택 | `storeId` |
-| MenuConfiguration | 주문 가능한 메뉴·옵션 구성과 재고 요구량 | 정규화한 option ID 집합은 메뉴 안에서 유일하고 sellable unit별 필요 수량은 양수 | `menuId`, `sellableUnitId` |
+| MenuConfiguration | 주문 가능한 메뉴·옵션 구성과 판매 상태 | 정규화한 option ID 집합은 메뉴 안에서 유일 | `menuId` |
 | Order | 항목 스냅샷, 금액과 상태 | 결제 시작 후 항목·금액 불변, 새 line은 정규화 option ID snapshot 필수, settlement input snapshot exactly one/tie-out, 허용 전이만 가능, `CANCELLED`는 취소 시각·원인 필수이고 그 외 상태에서는 취소 필드 부재 | IDs |
 | PickupSlot | 시간 구간과 수용량 | 예약+확정 수량 ≤ capacity | `storeId` |
 | PickupReservation | 주문의 슬롯 점유 | 주문당 활성 예약 하나, 만료 후 확정 불가, 종료 복원 state·trigger·source 일치 | `orderId`, `slotId` |
-| SellableStock | 판매 단위 수량 | 가용·예약·확정 수량 음수 금지 | `storeId`, `menuOptionId` |
-| StockReservation | 주문별 재고 점유 | 주문·SKU별 중복 활성 예약 금지, 종료 복원 state·trigger·source 일치 | IDs |
 | Campaign | 대상 품목 기반 정액·정률 할인 정책·수량·부담 | type별 금액 필드, rate `1..10000`, minimum/maximum, 대상 목록과 burden share 합 10000 유효 | `storeId`, menu IDs |
 | CouponIssuance | 발급 쿠폰 생명주기 | 동시에 두 주문에 사용 불가, 보상 issuance의 original/source/trigger/policy와 immutable terms 일치 | `memberId`, `campaignId`, `orderId` |
 | CouponReservation | 주문 쿠폰 할인·비용 부담 leg | final discount=platform+store burden legs, reservation terms immutable | `orderId`, `couponIssuanceId` |
@@ -32,7 +30,7 @@
 | ReprocessingCase | 운영 재처리 | 대상·사유·주체 필수, 중복 실행 방지 | IDs |
 | RepairProposal | 금융 setup 복구의 2인 승인 | case당 active 하나, proposer≠decider, 30분 만료, terminal 재개 금지 | case/order/payment IDs |
 | AcceptanceTimeoutWork | 관측된 PAID deadline winner의 내구 실행 | order+deadline source unique, claim lease, nonterminal 자동 정리 금지 | `orderId` |
-| OrderCompensationCase | 주문 종료 후 owner 보상 추적 | order당 하나, trigger 필수, 여섯 step과 두 benefit policy snapshot | `orderId`, event/source IDs |
+| OrderCompensationCase | 주문 종료 후 owner 보상 추적 | order당 하나, trigger 필수, 다섯 step과 두 benefit policy snapshot | `orderId`, event/source IDs |
 | AuditRecord | 중요 변경의 target별 감사 | category/class/immutable policy version snapshot, financial 5년·PII access 2년, append-only, action/target/source 중복 금지, 필수 주체·사유·correlation, PII 원문 금지 | target IDs |
 | OperatorPermissionGrant | privileged operator permission source | actor/permission unique, ACTIVE/REVOKED lifecycle, role/JWT fallback 금지 | `actorId` |
 | RetentionPolicyVersion/Head | 목적별 보존 규칙과 current pointer | version 수정·삭제 금지, category/class/duration 일치, Audit append가 head lock과 exact version을 snapshot | actor/evidence IDs |
@@ -61,13 +59,11 @@
 | `StoreRepository` | Store | store identity, valid status check | optimistic version |
 | `StoreSettlementTermsRepository` | StoreSettlementTerms | immutable version/source, fee `0..10000`, store interval overlap 금지 | store advisory lock + applicable interval query |
 | `MenuRepository` | Menu | non-negative integer KRW price, unique store/menu code | optimistic version |
-| `MenuConfigurationRepository` | MenuConfiguration | unique menu/normalized-option-set, positive sellable requirement | optimistic version |
+| `MenuConfigurationRepository` | MenuConfiguration | unique menu/normalized-option-set, availability | optimistic version |
 | `OrderRepository` | Order | order number unique, non-negative totals, cancellation timestamp/cause/reason-code/detail과 state 조합 CHECK, OrderLine option snapshot state와 nullable JSON 조합 CHECK | optimistic version + guarded transition |
 | `OrderSettlementInputSnapshotRepository` | OrderSettlementInputSnapshot | order당 exactly one, owner source FK, fee/coupon/point/benefit/net 공식·hash tie-out, update/delete 금지 | Order 생성 local transaction + order unique FK |
 | `PickupSlotRepository` | PickupSlot | unique store/time range, non-negative capacity | conditional update or row lock |
 | `PickupReservationRepository` | PickupReservation | active order reservation unique, 종료 복원 state/trigger/source CHECK | unique/partial index + row lock |
-| `SellableStockRepository` | SellableStock | unique store/sellable unit, non-negative quantities | conditional update or row lock |
-| `StockReservationRepository` | StockReservation | active order/SKU unique, 종료 복원 state/trigger/source CHECK | unique/partial index + row lock |
 | `CampaignRepository` | Campaign | valid period/type/value/minimum/maximum/target/share ratio | optimistic version |
 | `CouponReservationRepository` | CouponReservation | final discount=platform+store legs, burden source/version/share complete, row immutable | issuance lock + order/source unique |
 | `CouponIssuanceRepository` | CouponIssuance | one active reservation/use per issuance, compensation source unique, restoration metadata와 terms snapshot CHECK | unique/partial index + guarded transition |
@@ -122,11 +118,9 @@ source-reference Unique Constraint와 같은 트랜잭션 최종 방어를 함�
 
 주문 요청의 `optionIds`는 중복을 거부한 뒤 ID 오름차순으로 정규화하여
 MenuConfiguration을 조회한다. 요청의 OrderLine 순서는 금액 배분 계약이므로
-정규화하지 않는다. 여러 line이 같은 sellable unit을 요구하면 Ordering은
-`quantityPerLineUnit * lineQuantity`를 overflow 없이 합산한 뒤 Inventory에 한 번
-예약 요청한다.
+정규화하지 않는다. 점주가 품절로 설정한 메뉴·옵션·구성은 신규 주문에 사용할 수 없다.
 
 새 OrderLine은 정규화된 option ID 배열을 이름 snapshot과 별도로 저장한다. 빈 배열은
 검증된 무옵션 선택이고, legacy migration state는 검증된 ID snapshot이 없다는 뜻이므로 서로
-구분한다. legacy line의 옵션명이나 sellable requirement를 option ID로 역추론하지 않으며 해당
+구분한다. legacy line의 옵션명을 option ID로 역추론하지 않으며 해당
 line의 빠른 재주문은 `SOURCE_OPTION_SELECTION_UNAVAILABLE`로 실패한다.

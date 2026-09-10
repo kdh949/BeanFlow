@@ -2,9 +2,6 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.fulfillment.api.PickupQuoteOperations
 import io.github.kdh949.beanflow.fulfillment.api.PickupQuoteSnapshot
-import io.github.kdh949.beanflow.inventory.api.StockQuoteItem
-import io.github.kdh949.beanflow.inventory.api.StockQuoteOperations
-import io.github.kdh949.beanflow.inventory.api.StockRequirement
 import io.github.kdh949.beanflow.loyalty.api.PointQuoteOperations
 import io.github.kdh949.beanflow.loyalty.api.PointQuoteSnapshot
 import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
@@ -44,7 +41,6 @@ internal data class OrderQuoteCalculation(
     val menu: MerchantOrderQuoteSnapshot,
     val storeDisplay: StoreDisplaySnapshot,
     val pickup: PickupQuoteSnapshot,
-    val stock: List<StockQuoteItem>,
     val coupon: CouponQuoteSnapshot?,
     val points: PointQuoteSnapshot?,
     val pricing: OrderPricing,
@@ -58,7 +54,6 @@ internal class OrderQuoteCoordinator(
     private val storeDisplayOperations: StoreDisplaySnapshotOperations,
     private val settlementTermsOperations: StoreSettlementTermsOperations,
     private val pickupQuoteOperations: PickupQuoteOperations,
-    private val stockQuoteOperations: StockQuoteOperations,
     private val couponQuoteOperations: CouponQuoteOperations,
     private val pointQuoteOperations: PointQuoteOperations,
     private val pointAccrualPolicyOperations: OrdinaryPointAccrualPolicyQuoteOperations,
@@ -103,18 +98,11 @@ internal class OrderQuoteCoordinator(
             } else {
                 pointAccrualPolicyOperations.inspectForQuote(command.storeId)
             }
-        val stockRequirements = aggregateStockRequirements(menu.lines)
         val pickup =
             if (lock) {
                 pickupQuoteOperations.lockForOrderCreation(command.storeId, command.pickupSlotId)
             } else {
                 pickupQuoteOperations.inspect(command.storeId, command.pickupSlotId)
-            }
-        val stock =
-            if (lock) {
-                stockQuoteOperations.lockForOrderCreation(command.storeId, stockRequirements)
-            } else {
-                stockQuoteOperations.inspect(command.storeId, stockRequirements)
             }
         val grossLines = grossLines(menu.lines)
         val coupon =
@@ -175,7 +163,6 @@ internal class OrderQuoteCoordinator(
                 menu = menu,
                 storeDisplay = storeDisplay,
                 pickup = pickup,
-                stock = stock,
                 coupon = coupon,
                 points = points,
                 pricing = pricing,
@@ -197,7 +184,6 @@ internal class OrderQuoteCoordinator(
             menu = menu,
             storeDisplay = storeDisplay,
             pickup = pickup,
-            stock = stock,
             coupon = coupon,
             points = points,
             pricing = pricing,
@@ -222,6 +208,11 @@ internal class OrderQuoteCoordinator(
         if (menu.lines.size != command.lines.size) {
             throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Merchant quote count does not match order lines")
         }
+        if (menu.menuTradeVersions.keys != command.lines.map { it.menuId }.toSet() ||
+            menu.menuTradeVersions.values.any { it < 0 }
+        ) {
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Merchant trade versions do not match order lines")
+        }
         command.lines.zip(menu.lines).forEach { (requested, quoted) ->
             if (requested.menuId != quoted.menuId || requested.quantity != quoted.quantity ||
                 requested.optionIds.sortedBy { it.toString() } != quoted.optionSnapshots.map { it.optionId }
@@ -235,42 +226,16 @@ internal class OrderQuoteCoordinator(
         lines.mapIndexed { sequence, line ->
             CouponPricingLine(sequence, line.menuId, Krw.of(line.unitPriceKrw).multiply(line.quantity).value)
         }
-
-    private fun aggregateStockRequirements(quotes: List<MenuLineQuote>): List<StockRequirement> =
-        quotes
-            .flatMap { quote ->
-                quote.sellableUnitRequirements.map { requirement ->
-                    val quantity =
-                        try {
-                            Math.multiplyExact(requirement.quantityPerLineUnit, quote.quantity)
-                        } catch (_: ArithmeticException) {
-                            throw DomainFailure(FailureCode.INVALID_REQUEST, "Sellable unit requirement exceeds supported range")
-                        }
-                    StockRequirement(requirement.sellableUnitId, quantity)
-                }
-            }.groupBy(StockRequirement::sellableUnitId)
-            .map { (id, requirements) ->
-                val quantity =
-                    requirements.fold(0L) { total, requirement ->
-                        try {
-                            Math.addExact(total, requirement.quantity)
-                        } catch (_: ArithmeticException) {
-                            throw DomainFailure(FailureCode.INVALID_REQUEST, "Aggregated sellable unit requirement exceeds supported range")
-                        }
-                    }
-                StockRequirement(id, quantity)
-            }.sortedBy { it.sellableUnitId.toString() }
 }
 
 internal object OrderQuoteFingerprint {
-    private const val VERSION = "order-quote-fingerprint/v3"
+    private const val VERSION = "order-quote-fingerprint/v6"
 
     fun calculate(
         command: OrderQuoteCommand,
         menu: MerchantOrderQuoteSnapshot,
         storeDisplay: StoreDisplaySnapshot,
         pickup: PickupQuoteSnapshot,
-        stock: List<StockQuoteItem>,
         coupon: CouponQuoteSnapshot?,
         points: PointQuoteSnapshot?,
         pricing: OrderPricing,
@@ -296,9 +261,11 @@ internal object OrderQuoteFingerprint {
                     }
                     value(menu.storeAcceptingOrders)
                     value(menu.storePickupEnabled)
+                    value(menu.orderingPolicyVersion)
                     size(menu.lines.size)
                     menu.lines.forEach { line ->
                         value(line.menuId)
+                        value(menu.menuTradeVersions[line.menuId])
                         value(line.menuName)
                         value(line.unitPriceKrw)
                         value(line.quantity)
@@ -307,11 +274,6 @@ internal object OrderQuoteFingerprint {
                             value(option.optionId)
                             value(option.name)
                             value(option.additionalPriceKrw)
-                        }
-                        size(line.sellableUnitRequirements.size)
-                        line.sellableUnitRequirements.sortedBy { it.sellableUnitId.toString() }.forEach { requirement ->
-                            value(requirement.sellableUnitId)
-                            value(requirement.quantityPerLineUnit)
                         }
                     }
                     value(storeDisplay.storeId)
@@ -322,12 +284,6 @@ internal object OrderQuoteFingerprint {
                     value(pickup.endsAt)
                     value(pickup.capacity)
                     // ADR-123: shared usage is checked under owner locks, not a customer trade term.
-                    size(stock.size)
-                    stock.sortedBy { it.sellableUnitId.toString() }.forEach { item ->
-                        value(item.sellableUnitId)
-                        value(item.storeId)
-                        value(item.requiredQuantity)
-                    }
                     nullable(coupon) { current ->
                         value(current.couponIssuanceId)
                         value(current.issuanceVersion)

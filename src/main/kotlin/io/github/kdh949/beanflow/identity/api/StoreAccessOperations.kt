@@ -25,4 +25,21 @@ interface StoreAccessOperations {
         storeId: UUID,
         actorRoles: Set<StoreActorRole>,
     ): StoreActor
+
+    /**
+     * Revalidates catalogue authoring authority while holding the membership row shared lock.
+     * A missing membership is intentionally indistinguishable from a missing target Store.
+     */
+    fun requireCatalogAccess(
+        actorId: UUID,
+        storeId: UUID,
+        actorRoles: Set<StoreActorRole>,
+    ): StoreActor
+
+    /** Holds the ACTIVE membership shared lock through a caller-owned authoring transaction. */
+    fun requireStoreAuthoringAccess(
+        actorId: UUID,
+        storeId: UUID,
+        actorRoles: Set<StoreActorRole>,
+    ): StoreActor
 }

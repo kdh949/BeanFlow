@@ -75,7 +75,7 @@ internal class AuditPermissionBoundaryConcurrencyTest
                         "SELECT action FROM operations_audit_record",
                         String::class.java,
                     ),
-                ).isEqualTo("STOCK_RESERVED")
+                ).isEqualTo("PICKUP_RESERVED")
             } finally {
                 executor.shutdownNow()
             }
@@ -199,7 +199,7 @@ internal class AuditPermissionBoundaryConcurrencyTest
             actorId = "SYSTEM",
             actorType = AuditActorType.SYSTEM,
             category = AuditCategory.ORDER_AND_FULFILLMENT,
-            action = "STOCK_RESERVED",
+            action = "PICKUP_RESERVED",
             targetType = "S10_CONCURRENCY",
             targetId = UUID.nameUUIDFromBytes("s10-audit:$index".toByteArray()),
             occurredAt = occurredAt,

@@ -84,7 +84,7 @@ Tx1 (기존 주문 생성 트랜잭션)
        StoreDisplaySnapshotOperations.require(storeId) → owner-verified storeName
   2. 기존 픽업 예약
        PickupReservationGrant → reservationId, expiresAt, startsAt, endsAt
-  3. 기존 재고·쿠폰·포인트 예약과 가격 계산
+  3. 기존 쿠폰·포인트 예약과 가격 계산
   4. 픽업 순번 발급
        startsAt의 영업일 → INSERT ... ON CONFLICT DO UPDATE ... RETURNING
   5. 주문번호 예약

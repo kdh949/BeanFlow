@@ -86,15 +86,11 @@ internal class FastReorderIdempotencyReconciliationTest
         @Test
         fun `failed Tx I2 leaves processing then reconciliation stops automatic execution`() {
             val source = sourceOrder()
+            jdbcTemplate.update("UPDATE merchant_menu SET available = false WHERE id = ?", source.fixture.menuId)
             val key = "reorder-tx-i2-failure"
             val orderBefore = count("ordering_order")
             val pickupBefore = count("fulfillment_pickup_reservation")
-            val stockBefore = count("inventory_stock_reservation")
             val auditBefore = count("operations_audit_record")
-            jdbcTemplate.update(
-                "UPDATE inventory_sellable_stock SET available_quantity = 0 WHERE id = ?",
-                source.fixture.sellableUnitId,
-            )
             installFailedTransitionTrigger()
             val first =
                 try {
@@ -107,7 +103,6 @@ internal class FastReorderIdempotencyReconciliationTest
             assertThat(first.body).contains("\"code\":\"DEPENDENCY_UNAVAILABLE\"")
             assertThat(count("ordering_order")).isEqualTo(orderBefore)
             assertThat(count("fulfillment_pickup_reservation")).isEqualTo(pickupBefore)
-            assertThat(count("inventory_stock_reservation")).isEqualTo(stockBefore)
             assertThat(count("operations_audit_record")).isEqualTo(auditBefore)
             assertThat(
                 jdbcTemplate.queryForObject(

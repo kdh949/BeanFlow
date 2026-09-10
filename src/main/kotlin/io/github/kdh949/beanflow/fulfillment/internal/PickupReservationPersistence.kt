@@ -24,11 +24,11 @@ internal class PickupSlotEntity(
     @Column(name = "store_id", nullable = false)
     val storeId: UUID,
     @Column(name = "starts_at", nullable = false)
-    val startsAt: Instant,
+    var startsAt: Instant,
     @Column(name = "ends_at", nullable = false)
-    val endsAt: Instant,
+    var endsAt: Instant,
     @Column(nullable = false)
-    val capacity: Long,
+    var capacity: Long,
     @Column(name = "reserved_count", nullable = false)
     var reservedCount: Long = 0,
     @Column(name = "confirmed_count", nullable = false)
@@ -36,6 +36,36 @@ internal class PickupSlotEntity(
     @Version
     var version: Long = 0,
 ) {
+    fun replaceSchedule(
+        newStartsAt: Instant,
+        newEndsAt: Instant,
+        newCapacity: Long,
+        now: Instant,
+    ) {
+        if (!startsAt.isAfter(now)) {
+            throw io.github.kdh949.beanflow.shared.api.DomainFailure(
+                io.github.kdh949.beanflow.shared.api.FailureCode.RESOURCE_STATE_CONFLICT,
+                "Started pickup slot cannot be changed",
+            )
+        }
+        require(newStartsAt.isAfter(now) && newEndsAt.isAfter(newStartsAt) && newCapacity >= 0)
+        if (newCapacity < reservedCount || newCapacity - reservedCount < confirmedCount) {
+            throw io.github.kdh949.beanflow.shared.api.DomainFailure(
+                io.github.kdh949.beanflow.shared.api.FailureCode.RESOURCE_STATE_CONFLICT,
+                "Pickup capacity cannot be lower than reserved and confirmed usage",
+            )
+        }
+        if ((reservedCount > 0 || confirmedCount > 0) && (startsAt != newStartsAt || endsAt != newEndsAt)) {
+            throw io.github.kdh949.beanflow.shared.api.DomainFailure(
+                io.github.kdh949.beanflow.shared.api.FailureCode.RESOURCE_STATE_CONFLICT,
+                "Consumed pickup slot cannot move its time window",
+            )
+        }
+        startsAt = newStartsAt
+        endsAt = newEndsAt
+        capacity = newCapacity
+    }
+
     fun reserveOne() {
         if (reservedCount + confirmedCount >= capacity) {
             throw IllegalStateException("Pickup slot capacity is exhausted")

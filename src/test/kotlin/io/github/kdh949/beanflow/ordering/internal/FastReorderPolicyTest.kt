@@ -1,7 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
-import io.github.kdh949.beanflow.merchant.api.SellableUnitRequirement
 import io.github.kdh949.beanflow.ordering.internal.domain.Krw
 import io.github.kdh949.beanflow.ordering.internal.domain.Order
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderDisplayIdentitySnapshot
@@ -73,7 +72,6 @@ internal class FastReorderPolicyTest {
             optionNamesJson = "[]",
             optionSelectionSnapshotState = OptionSelectionSnapshotState.SNAPSHOTTED,
             normalizedOptionIds = emptyList(),
-            sellableRequirementsJson = "[]",
             unitPriceKrw = unitPriceKrw,
             quantity = quantity,
             grossKrw = Math.multiplyExact(unitPriceKrw, quantity),
@@ -94,7 +92,6 @@ internal class FastReorderPolicyTest {
                 optionSnapshots = emptyList(),
                 unitPriceKrw = unitPriceKrw,
                 quantity = quantity,
-                sellableUnitRequirements = listOf(SellableUnitRequirement(UUID.randomUUID(), 1)),
             )
         val pricing =
             OrderPricingCalculator().calculate(

@@ -20,7 +20,7 @@ ADR-029가 고객 취소의 기능 범위와 Order 모델을 확정했다. 남�
 
 셋째, `PAID` 취소는 보상이 비동기이므로 진행 상태를 누가 어느 수준까지 조회하는지
 정해야 한다. 매장 거절은 `GET /api/v1/store-orders/{orderId}`가 매장 구성원에게
-`RejectionRecoverySummary`의 6개 step을 노출하는 선례를 이미 갖고 있으나 고객용
+`RejectionRecoverySummary`의 5개 step을 노출하는 선례를 이미 갖고 있으나 고객용
 보상 조회 경로는 존재하지 않는다.
 
 ## Decision
@@ -59,9 +59,9 @@ ADR-029가 고객 취소의 기능 범위와 Order 모델을 확정했다. 남�
   상태는 조회하지 않는다. 매장은 자기 매장 주문의 운영 판단에 필요한 정보만 본다.
 - **Store compensation projection amendment (2026-08-01):** 매장 보상 조회도
   step 상세를 받지 않는다. `StoreOrderResult.compensationRecovery`는 `trigger`,
-  case `state`와 `updatedAt`만 담은 `StoreCompensationSummary`이며, 여섯 step,
+  case `state`와 `updatedAt`만 담은 `StoreCompensationSummary`이며, 다섯 step,
   `attemptCount`, `lastErrorCode`, `caseId`와 정책 version은 계속 운영자
-  전용이다. 기존 거절 응답이 여섯 step을 매장에 노출하던 선례는 이 결정과
+  전용이다. 기존 거절 응답이 다섯 step을 매장에 노출하던 선례는 이 결정과
   authorization matrix에 맞춰 ADR-033 clean cutover에서 축약한다. 계약 구조는
   ADR-033이 소유한다.
 - **Order projection amendment (2026-08-01):** 위 두 문장을 schema 수준으로
@@ -96,7 +96,7 @@ ADR-029가 고객 취소의 기능 범위와 Order 모델을 확정했다. 남�
 
 ### 고객에게 step 상세 전부 노출
 
-- 구현은 단순하지만 `PAYMENT`, `PICKUP`, `STOCK`, `COUPON`, `POINTS`,
+- 구현은 단순하지만 `PAYMENT`, `PICKUP`, `COUPON`, `POINTS`,
   `CUSTOMER_NOTIFICATION` 내부 보상 구조와 오류 코드가 공개 계약이 되어 이후 변경이
   어려워진다.
 
@@ -164,7 +164,7 @@ ADR-029가 고객 취소의 기능 범위와 Order 모델을 확정했다. 남�
   `PROCESSING + REFUND_DELAYED`
 - 고객 enum에 내부 Refund 상태와 `SETUP_INCOMPLETE`가 없음
 - 고객 응답 DTO에 `cancellation_detail`과 운영자 전용 필드 부재
-- 운영자 조회가 6개 step, `attemptCount`와 `lastErrorCode`를 반환
+- 운영자 조회가 5개 step, `attemptCount`와 `lastErrorCode`를 반환
 - 매장 조회 응답에 결제 환불 진행이 포함되지 않음
 - 매장 조회 응답에 step 배열·`attemptCount`·`lastErrorCode`·`caseId`·정책 version
   부재와 `trigger`·case `state`·`updatedAt` 존재

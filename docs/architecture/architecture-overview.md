@@ -29,7 +29,6 @@ Customer / Store / Operations API
 - Discovery
 - Ordering
 - Fulfillment
-- Inventory
 - Promotion
 - Loyalty
 - Payment
@@ -47,7 +46,7 @@ Bounded Context 수는 배포 서비스 수와 같지 않다.
 
 - 현재 요청 성공 여부를 결정하는 검증·예약
 - 메뉴 가격과 판매 가능 여부
-- 슬롯·재고·쿠폰·포인트 예약
+- 슬롯·쿠폰·포인트 예약
 - 사용자의 명령에 대한 즉시 충돌 응답
 
 이벤트:

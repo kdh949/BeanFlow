@@ -51,9 +51,9 @@
   `OrderCompensationStep`에 매핑한다. registry의 duplicate key/ID는 startup failure이며,
   retry exhaustion 시 unknown target은 어떤 step도 추측해 변경하지 않고 publication을
   incomplete로 유지한 채 `PUBLICATION_TARGET_UNMAPPED` 운영 case로 fail closed한다.
-- `OrderRejectedV1`은 PAYMENT, PICKUP, STOCK, COUPON, POINTS,
-  CUSTOMER_NOTIFICATION 여섯 stable target을, `OrderCancelledV1`은 PICKUP, STOCK,
-  COUPON, POINTS 네 stable target만 가진다. 각 exact ID는 Plan 30 Event Contract 표가
+- `OrderRejectedV1`은 PAYMENT, PICKUP, COUPON, POINTS,
+  CUSTOMER_NOTIFICATION 다섯 stable target을, `OrderCancelledV1`은 PICKUP,
+  COUPON, POINTS 세 stable target만 가진다. 각 exact ID는 Plan 30 Event Contract 표가
   canonical이다.
 - contract test는 실제 application listener ID 집합과 registry 표가 일치하는지, 하나의
   target retry exhaustion이 해당 step 하나만 변경하는지 검증한다. target rename/version
@@ -131,3 +131,13 @@
 - [Event Catalog](../architecture/event-catalog.md)
 - [ADR-019](ADR-019-notification-retry-and-manual-recovery.md)
 - [ADR-023](ADR-023-analytics-refund-and-late-events.md)
+
+## 2026-09-10 명시적 운영 복구 API
+
+수동 claim과 결과 불명의 후속 정책은 [ADR-125](ADR-125-publication-unknown-execution-recovery.md)를 따른다.
+아래 초기 위임 및 RUNNING 유지 설명은 해당 범위에서 ADR-125로 대체한다.
+
+ADR-124에 따라 전용 권한·사유·멱등 키와 현재 Case version으로 원본 publication 한 건의 추가 시도를 예약한다.
+기존 자동 후보 제외는 유지하며 명시적 RUNNING 요청 원장과 baseline attempts가 일치하는 경우만 별도 후보로
+선택한다. 기존 registry가 실제 claim/resubmit/completion을 처리하며 payload·listener·누적 attempts를 초기화하지
+않는다. 완료와 재실패를 Case에 반영하고 실행 결과가 불명확한 경우 RUNNING을 유지한다.

@@ -21,6 +21,7 @@ import { CustomerCouponClaimsPage } from "./features/customer/CustomerCouponClai
 import { FavoriteStoresPage } from "./features/customer/FavoriteStoresPage";
 import { StoreRegionPage } from "./features/merchant/StoreRegionPage";
 import { StoreDisputeDetailPage } from "./features/merchant/StoreDisputeDetailPage";
+import { StoreCatalogPage } from "./features/merchant/StoreCatalogPage";
 import { StoreManagementPage } from "./features/merchant/StoreManagementPage";
 import { OperationsSessionGate } from "./features/auth/operations/OperationsSessionGate";
 import { MerchantAccountsPage } from "./features/operations/MerchantAccountsPage";
@@ -99,7 +100,8 @@ export const router = createBrowserRouter([
             { path: "settlements", element: <StoreSettlementsPage /> },
             { path: "disputes", element: <StoreDisputesPage /> },
             { path: "disputes/:disputeId", element: <StoreDisputeDetailPage /> },
-            { path: "management", element: <StoreManagementPage /> },
+            { path: "management", element: <StoreManagementPage catalogContent={<StoreCatalogPage embedded />} /> },
+            { path: "catalog", loader: () => redirect("/store/management") },
             { path: "region", element: <StoreRegionPage /> },
           ] },
         ],

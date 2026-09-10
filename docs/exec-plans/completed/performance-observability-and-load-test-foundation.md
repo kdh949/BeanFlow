@@ -196,7 +196,7 @@ RCA dashboard와 data source correlation은 이 순서를 직접 탐색하게 �
 
 ## Surprises & Discoveries
 
-- 2026-09-07: 단일 공유 재고의 5 workflow/s에서 450건 중 48건이 ORDER_QUOTE_STALE이었다.
+- 2026-09-07: 단일 공유 자원의 5 workflow/s에서 450건 중 48건이 ORDER_QUOTE_STALE이었다.
   예약 수/version이 fingerprint에 포함되어 금액과 메뉴가 같아도 다른 주문이 견적을 무효화했다.
   별도 두 견적/두 주문의 순차 재현으로 확인했다. ADR-116 변경은 이번 관측 작업에서 수행하지 않았다.
 - 2026-09-07: Tempo 검색은 table frame인데 traces panel로 렌더링해 No data가 나왔다. table로 수정했다.

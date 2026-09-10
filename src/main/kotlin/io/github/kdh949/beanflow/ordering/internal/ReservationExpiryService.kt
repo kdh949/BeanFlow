@@ -1,7 +1,6 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
-import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
@@ -28,7 +27,6 @@ import java.util.UUID
 internal class ReservationExpiryService(
     private val orderRepository: OrderJpaRepository,
     private val pickupOperations: PickupReservationOperations,
-    private val stockOperations: StockReservationOperations,
     private val couponOperations: CouponReservationOperations,
     private val pointOperations: PointReservationOperations,
     private val auditRecordOperations: AuditRecordOperations,
@@ -62,11 +60,6 @@ internal class ReservationExpiryService(
                 requireApplied(
                     "PICKUP",
                     pickupOperations.expire(orderId, now, OrderCreationTransaction.pickupSource(orderId)),
-                )
-            val stock =
-                requireApplied(
-                    "STOCK",
-                    stockOperations.expire(orderId, now, OrderCreationTransaction.stockSource(orderId)),
                 )
             val coupon =
                 if (order.couponDiscountKrw > 0) {
@@ -105,9 +98,6 @@ internal class ReservationExpiryService(
                 )
             pickup.targetIds.forEach {
                 audits += audit("PICKUP_EXPIRED", "PICKUP_RESERVATION", it, now, sourceReference, correlationId)
-            }
-            stock.targetIds.forEach {
-                audits += audit("STOCK_EXPIRED", "STOCK_RESERVATION", it, now, sourceReference, correlationId)
             }
             coupon?.targetIds?.forEach {
                 audits += audit("COUPON_RELEASED", "COUPON_RESERVATION", it, now, sourceReference, correlationId)

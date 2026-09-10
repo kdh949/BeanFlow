@@ -7,9 +7,9 @@ PickupReservation을 소유하며 Order 상태를 복제하지 않는다. API의
 ```text
 Identity ── actorId, membership ───────────────────────────────┐
                                                               v
-Merchant ── store/menu/price/business hours/sellable requirements ──> Ordering / Discovery
+Merchant ── store/menu/price/business hours/availability ──> Ordering / Discovery
 
-Ordering ── reserve/confirm/release ──> Fulfillment / Inventory
+Ordering ── reserve/confirm/release ──> Fulfillment
 Ordering ── validate/reserve/use ─────> Promotion
 Ordering ── reserve/use/restore ──────> Loyalty
 Ordering ── approval command ─────────> Payment
@@ -42,11 +42,10 @@ Support <── investigation reference and decision ──> Operations
 |---|---|---|---|---|
 | Identity | API/Application Services | Identity | 인증 actor와 membership 조회 | 요청 시 동기 |
 | Eventing | Ordering과 event consumers | 원본 Context | 중립적인 versioned event 계약 | producer/consumer compile-time 분리 |
-| Merchant | Ordering | Merchant | 메뉴 구성·가격·sellable requirement와 applicable immutable settlement-terms 공개 동기 조회 | 주문 생성 시 현재 메뉴 값과 정확히 하나의 terms version 필요 |
+| Merchant | Ordering | Merchant | 메뉴 구성·가격와 applicable immutable settlement-terms 공개 동기 조회 | 주문 생성 시 현재 메뉴 값과 정확히 하나의 terms version 필요 |
 | Merchant | Discovery | Merchant `StoreDiscoveryProfile`, Menu/MenuOption | public Query API의 동기 DTO projection | 검색·메뉴 응답은 current owner state를 사용 |
 | Fulfillment | Discovery | Fulfillment PickupSlot | public Query API의 동기 잔여 capacity DTO projection | 슬롯 응답은 조회 시점 owner state이며 예약 보장이 아님 |
 | Ordering | Fulfillment | Fulfillment | 예약 Application API | 주문 생성 트랜잭션 내 강한 일관성 |
-| Ordering | Inventory | Inventory | 예약 Application API | 주문 생성 트랜잭션 내 강한 일관성 |
 | Ordering | Promotion | Promotion | 검증·예약 API와 CouponReservation final burden-leg DTO | 주문 금액과 정산 입력 확정 전 필요 |
 | Ordering | Loyalty | Loyalty | 포인트 예약 API와 allocation별 immutable issuer DTO | 주문 금액과 정산 입력 확정 전 필요 |
 | Ordering | Payment | Ordering / Payment | Payment command와 Tx2 결과 적용 | 외부 호출과 DB tx 분리, 승인 내부 반영은 로컬 원자성 |
@@ -74,7 +73,7 @@ transaction의 commit gate이므로 같은 로컬 transaction에서 확정한다
 빠른 재주문은 Ordering이 소유한 terminal source Order를 읽는 명령이며 별도 Reorder
 Aggregate나 read model을 만들지 않는다. Ordering은 source의 `menuId`, 검증된 정규화 option ID
 snapshot과 `quantity`만 기존 주문 생성 application boundary의 입력으로 변환한다. 이후
-Merchant/Fulfillment/Inventory/Promotion/Loyalty 상호작용과 settlement/accrual snapshot 생성은
+Merchant/Fulfillment/Promotion/Loyalty 상호작용과 settlement/accrual snapshot 생성은
 일반 주문 생성과 같은 현재 owner 계약 및 원자적 transaction을 사용한다. source Order lock은
 복제할 snapshot과 소유권·상태를 확정하기 위한 것이며, 새 Order 생성 멱등성의 직렬화 root로
 간주하지 않는다.
@@ -100,11 +99,10 @@ OWNER filing/idempotency/held/재이의와 판정 상태를 소유하고 Settlem
 |---|---|---|
 | Identity | actor, role, store membership | actor identity, membership check |
 | Eventing | write data 없음 | versioned integration event 계약 |
-| Merchant | Store, 1:1 `StoreDiscoveryProfile`, Menu, MenuConfiguration, business hours, `StoreSettlementTerms` fee-contract version | menu/price/status, 검증된 공개 매장명·위치 query, sellable requirement와 applicable settlement-terms lookup |
+| Merchant | Store, 1:1 `StoreDiscoveryProfile`, Menu, MenuConfiguration, business hours, `StoreSettlementTerms` fee-contract version | menu/price/status, 검증된 공개 매장명·위치 query, applicable settlement-terms lookup |
 | Discovery | durable write data 없음; 사용자 정밀 좌표와 Merchant/Fulfillment 복제본을 저장하지 않음 | nearby store query, 매장 메뉴·픽업 슬롯 read와 request-only projection |
 | Ordering | Order, 검증된 정규화 option ID를 포함한 OrderLine snapshot, `OrderSettlementInputSnapshot`, 주문 생성·재주문·매장 전이·고객 취소 명령 IdempotencyRecord, AcceptanceTimeoutWork | order facts, immutable settlement-completion input, customer/store order API |
 | Fulfillment | PickupSlot, PickupReservation | reserve/confirm/release, release-after-termination API, 잔여 capacity slot query |
-| Inventory | SellableStock, StockReservation | reserve/confirm/release, restore-after-termination API |
 | Promotion | Campaign, CouponIssuance, CouponReservation, CompensationCouponTermsSnapshot | validate/reserve/use/restore API, immutable coupon burden leg lookup |
 | Loyalty | PointAccount, PointLot, PointReservation/Allocation, PointTransaction, PointRecoveryPending, PointAdjustmentCommandIdempotency | reserve/use/release, issuer allocation lookup, accrual·refund recovery facts, audited point-adjustment command, pending summary/query |
 | Payment | Payment, immutable Provider request snapshot, Refund와 line allocation, PaymentCancellationRecoverySnapshot, PaymentMethod, lifecycle command/work, ProviderNotificationInbox, 결제 명령 IdempotencyRecord | approval/refund and PaymentMethod lifecycle command/query facts |
@@ -117,9 +115,8 @@ OWNER filing/idempotency/held/재이의와 판정 상태를 소유하고 Settlem
 ## Translation boundaries
 
 - Payment는 외부 PG SDK 타입을 도메인에 노출하지 않는다.
-- Merchant는 정규화한 `menuId + optionIds` 구성을 Inventory가 소유한
-  `sellableUnitId + quantityPerLineUnit` 요구량으로 번역한다. Inventory는 메뉴와
-  옵션의 의미를 해석하지 않고 sellable unit 수량만 소유한다.
+- Merchant는 정규화한 `menuId + optionIds` 구성의 판매 가능 여부와 가격을 소유한다.
+  Ordering은 Merchant 공개 API를 통해 현재 판매 상태를 최종 검증한다.
 - Notification은 Provider 상태를 BeanFlow delivery 상태로 번역한다.
 - Discovery는 Merchant 쓰기 Entity를 검색 편의로 직접 확장하거나 Repository를 직접 조회하지
   않는다. Merchant는 별도 `StoreDiscoveryProfile`을 소유하고 public Query API로 DTO projection을

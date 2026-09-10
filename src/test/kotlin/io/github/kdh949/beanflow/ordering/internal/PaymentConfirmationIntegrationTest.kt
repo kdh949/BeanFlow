@@ -86,9 +86,6 @@ internal class PaymentConfirmationIntegrationTest
                 value<String>("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId),
             ).isEqualTo("CONFIRMED")
             assertThat(
-                value<String>("SELECT state FROM inventory_stock_reservation WHERE order_id = ?", orderId),
-            ).isEqualTo("CONFIRMED")
-            assertThat(
                 value<String>("SELECT approval_state FROM payment_payment WHERE order_id = ?", orderId),
             ).isEqualTo("APPROVED")
             assertThat(gateway.approvalCalls.get()).isEqualTo(1)
@@ -172,9 +169,6 @@ internal class PaymentConfirmationIntegrationTest
             ).isNotNull()
             assertThat(
                 value<String>("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId),
-            ).isEqualTo("RELEASED")
-            assertThat(
-                value<String>("SELECT state FROM inventory_stock_reservation WHERE order_id = ?", orderId),
             ).isEqualTo("RELEASED")
             assertThat(
                 value<String>("SELECT approval_state FROM payment_payment WHERE order_id = ?", orderId),
@@ -477,11 +471,11 @@ internal class PaymentConfirmationIntegrationTest
         @Test
         fun `owner failure rolls back approval state order and earlier confirmations`() {
             val fixture = OrderCreationFixture()
-            val orderId = pendingOrder(fixture, "payment-owner-fault-order")
+            val orderId = pendingOrder(fixture, "payment-owner-fault-order", pointsToUseKrw = 100)
+            jdbcTemplate.update("UPDATE loyalty_point_reservation SET state = 'RELEASED' WHERE order_id = ?", orderId)
             val paymentMethodId = insertPaymentMethod(fixture.customerId)
-            jdbcTemplate.update("DELETE FROM inventory_stock_reservation WHERE order_id = ?", orderId)
             gateway.enqueueApproval(
-                ProviderPaymentResult.Approved("provider-owner-fault", 1_000, "KRW"),
+                ProviderPaymentResult.Approved("provider-owner-fault", 900, "KRW"),
             )
 
             assertThatThrownBy {
@@ -727,10 +721,19 @@ internal class PaymentConfirmationIntegrationTest
         private fun pendingOrder(
             fixture: OrderCreationFixture,
             key: String,
+            pointsToUseKrw: Long = 0,
         ): UUID {
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            assertThat(createOrderUseCase.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command())).status)
-                .isEqualTo(201)
+            if (pointsToUseKrw > 0) {
+                OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, fixture.customerId, pointsToUseKrw)
+            }
+            assertThat(
+                createOrderUseCase
+                    .create(
+                        key,
+                        orderQuoteUseCase.attachCurrentQuote(fixture.command(pointsToUseKrw = pointsToUseKrw)),
+                    ).status,
+            ).isEqualTo(201)
             return value("SELECT id FROM ordering_order")
         }
 
@@ -780,11 +783,6 @@ internal class PaymentConfirmationIntegrationTest
             jdbcTemplate.update("UPDATE ordering_order SET reservation_expires_at = ? WHERE id = ?", dueAt, orderId)
             jdbcTemplate.update(
                 "UPDATE fulfillment_pickup_reservation SET expires_at = ? WHERE order_id = ?",
-                dueAt,
-                orderId,
-            )
-            jdbcTemplate.update(
-                "UPDATE inventory_stock_reservation SET expires_at = ? WHERE order_id = ?",
                 dueAt,
                 orderId,
             )

@@ -381,6 +381,10 @@ internal class SettlementDisputeDecisionService(
     ): SettlementDisputeDecisionResult =
         try {
             val dispute = locked(disputeId)
+            if (dispute.decisionIntent != null && dispute.decisionIntent != outcome) {
+                throw DomainFailure(FailureCode.RESOURCE_STATE_CONFLICT, "A different SettlementDispute decision is pending")
+            }
+            val effectiveDecisionAt = dispute.decisionRequestedAt ?: decidedAt
             if (dispute.state == outcome) {
                 resolveCaseAfterCommit(disputeId, decidedAt)
                 return dispute.toDecisionResult()
@@ -402,7 +406,7 @@ internal class SettlementDisputeDecisionService(
                                 settlementItemId = dispute.settlementItemId,
                                 adjustmentSource = "dispute:${dispute.id}:accepted",
                                 reasonCode = SettlementAdjustmentReasonCode.DISPUTE_ACCEPTED,
-                                effectiveAt = decidedAt,
+                                effectiveAt = effectiveDecisionAt,
                                 amountKrw = dispute.expectedAdjustmentKrw,
                                 correlationId = dispute.correlationId,
                             ),
@@ -411,9 +415,9 @@ internal class SettlementDisputeDecisionService(
                     null
                 }
             when (outcome) {
-                SettlementDisputeState.ACCEPTED -> dispute.accept(requireNotNull(adjustmentId), decidedAt)
-                SettlementDisputeState.REJECTED -> dispute.reject(decidedAt)
-                SettlementDisputeState.WITHDRAWN -> dispute.withdraw(decidedAt)
+                SettlementDisputeState.ACCEPTED -> dispute.accept(requireNotNull(adjustmentId), effectiveDecisionAt)
+                SettlementDisputeState.REJECTED -> dispute.reject(effectiveDecisionAt)
+                SettlementDisputeState.WITHDRAWN -> dispute.withdraw(effectiveDecisionAt)
                 else -> error("Unsupported SettlementDispute decision")
             }
             repository.saveAndFlush(dispute)
@@ -476,14 +480,14 @@ internal class SettlementDisputeDecisionService(
 
     private fun SettlementDisputeEntity.decisionAudit(): AppendAuditRecordCommand =
         AppendAuditRecordCommand(
-            actorId = SYSTEM_ACTOR,
-            actorType = AuditActorType.SYSTEM,
+            actorId = decisionActorId?.toString() ?: SYSTEM_ACTOR,
+            actorType = decisionActorType?.let(AuditActorType::valueOf) ?: AuditActorType.SYSTEM,
             category = AuditCategory.SETTLEMENT_AND_DISPUTE,
             action = "SETTLEMENT_DISPUTE_DECIDED",
             targetType = "SETTLEMENT_DISPUTE",
             targetId = id,
             occurredAt = requireNotNull(decidedAt),
-            reason = state.name,
+            reason = decisionReason ?: state.name,
             beforeSummary = mapOf("state" to SettlementDisputeState.UNDER_REVIEW.name),
             afterSummary =
                 buildMap {
@@ -491,7 +495,7 @@ internal class SettlementDisputeDecisionService(
                     put("heldAmountKrw", heldAmountKrw.toString())
                     settlementAdjustmentId?.let { put("settlementAdjustmentId", it.toString()) }
                 },
-            correlationId = correlationId,
+            correlationId = decisionCorrelationId ?: correlationId,
             sourceReference = "settlement-dispute:$id:decided",
         )
 

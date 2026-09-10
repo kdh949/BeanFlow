@@ -192,17 +192,17 @@ WHERE c.order_id = :order_id
 ORDER BY p.benefit_type;
 ```
 
-step은 `PAYMENT`, `PICKUP`, `STOCK`, `COUPON`, `POINTS`,
+step은 `PAYMENT`, `PICKUP`, `COUPON`, `POINTS`,
 `CUSTOMER_NOTIFICATION`이다. 주문에서 사용하지 않은 항목은 `NOT_REQUIRED`이고,
 나머지가 모두 `SUCCEEDED` 또는 `NOT_REQUIRED`일 때만 case가 `SUCCEEDED`다.
 `PROCESSING`, `RETRY_SCHEDULED`, `UNKNOWN`, `MANUAL_REVIEW`를 완료로 해석하지 않는다.
 
-Pickup, Stock, Coupon과 Points owner는 event source reference Unique Constraint로
+Pickup, Coupon과 Points owner는 event source reference Unique Constraint로
 중복 delivery를 방어한다. owner 처리는 성공했지만 step 기록이 실패한 경우 같은
 publication을 재처리하면 owner가 `ALREADY_APPLIED`를 반환하고 step만 복구된다.
 수량이나 원장을 직접 보정하지 않는다.
 
-Pickup·Stock은 terminal state `RELEASED_AFTER_TERMINATION`과
+Pickup은 terminal state `RELEASED_AFTER_TERMINATION`과
 `restoration_trigger`를 함께 확인한다. 거절은 `STORE_REJECTION`, 고객 취소는
 `CUSTOMER_CANCELLATION`이어야 한다. 같은 source·trigger의 재전달은 수량 변화 없이
 멱등 성공이고, 다른 source 또는 trigger가 보이면 row를 수정하지 말고

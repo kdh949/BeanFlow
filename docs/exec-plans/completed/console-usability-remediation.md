@@ -38,7 +38,7 @@
 
 ### Non-goals
 
-새 재고·배송·분석 모델, 새로운 금액/승인 정책, 인증 방식 교체, 권한 완화, 가짜 runtime 데이터,
+새 배송·분석 모델, 새로운 금액/승인 정책, 인증 방식 교체, 권한 완화, 가짜 runtime 데이터,
 관측되지 않은 거래 성공, migration, merge와 deployment는 범위가 아니다.
 
 ## Business Rules and Invariants

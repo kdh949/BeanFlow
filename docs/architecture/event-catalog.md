@@ -18,13 +18,13 @@
 | Event | Producer | Consumers | Duplicate handling | Source of truth |
 |---|---|---|---|---|
 | OrderPlaced | Ordering | internal orchestration | event ID / order version | Order |
-| OrderExpired | Ordering | Fulfillment, Inventory, Promotion, Loyalty | order ID + terminal version | Order |
-| OrderCancelledV1 | Ordering | Fulfillment, Inventory, Promotion, Loyalty | order ID + terminal version + owner step source reference | Order |
+| OrderExpired | Ordering | Fulfillment, Promotion, Loyalty | order ID + terminal version | Order |
+| OrderCancelledV1 | Ordering | Fulfillment, Promotion, Loyalty | order ID + terminal version + owner step source reference | Order |
 | PaymentApproved | Payment | Ordering, Analytics | payment ID + version | Payment |
 | PaymentApprovalUnknown | Payment | Operations | reconciliation case unique | Payment |
 | PaymentApprovalReconciled | Payment | Ordering, Operations, Analytics | provider transaction unique | Payment |
-| OrderPaid | Ordering | Fulfillment, Inventory, Promotion, Loyalty | order version per consumer | Order |
-| OrderRejectedV1 | Ordering | Payment, Fulfillment, Inventory, Promotion, Loyalty, Notification | event ID + owner source reference | Order |
+| OrderPaid | Ordering | Fulfillment, Promotion, Loyalty | order version per consumer | Order |
+| OrderRejectedV1 | Ordering | Payment, Fulfillment, Promotion, Loyalty, Notification | event ID + owner source reference | Order |
 | StoreAcceptanceWarningRequestedV1 | Ordering | Notification | order/deadline unique | Order |
 | OrderAcceptedV1 | Ordering | Analytics | order version | Order |
 | OrderReadyV1 | Ordering | Notification | event+recipient+logical channel unique | Order |
@@ -46,7 +46,7 @@
 | AnalyticsBackfillRequired | Analytics | Operations | source event/day unique | ReprocessingCase |
 
 `OrderCancelledV1`은 미수락 `PAID` 고객 취소의 비동기 owner 보상 fact다.
-`PENDING_PAYMENT` 고객 취소는 네 예약 해제를 주문 명령 transaction에서 완결하므로
+`PENDING_PAYMENT` 고객 취소는 세 예약 해제를 주문 명령 transaction에서 완결하므로
 이 event를 발행하지 않는다.
 
 ## Immutable financial event contracts
@@ -123,7 +123,7 @@ Application API를 동기 호출하며, Notification consumer는 이번 구현�
 않는다.
 
 OrderCompensationCase 전체 완료는 고객 Notification event를 생산하지 않는다.
-슬롯·재고·쿠폰·포인트 복원 완료도 개별 고객 알림 event로 확장하지 않는다.
+슬롯·쿠폰·포인트 복원 완료도 개별 고객 알림 event로 확장하지 않는다.
 
 `PointRecoveryPendingRecorded`는 실제 차감 `RECOVERY` transaction이 아니라 새
 `PointRecoveryPending(PENDING)`의 생성 사실이다. 해당 Aggregate가 없으면 이 event를
@@ -172,25 +172,23 @@ envelope를 그대로 재사용한다.
 
 Owner source reference는
 `order:{orderId}:customer-cancellation:{aggregateVersion}:{step}`이다. event
-consumer step은 `pickup`, `stock`, `coupon`, `points` 네 개다.
+consumer step은 `pickup`, `coupon`, `points` 세 개다.
 Tx C1이 생성하는 Refund와 NotificationDelivery는 같은 형식의 `payment`,
 `notification` step을 사용하지만 Payment와 Notification은 이 event의 consumer가
 아니다. 같은 Order version을 표현하는 event는 event ID가 달라도 owner work를 새로
 만들지 않는다. event ID는 publication과 추적에 사용하고 owner 부수효과의 유일한
 중복 기준으로 사용하지 않는다.
 
-Plan 30의 영속 listener target은 아래 열 개만 허용한다.
+Plan 30의 영속 listener target은 아래 여덟 개만 허용한다.
 
 | Event | Stable listener ID | Step |
 |---|---|---|
 | `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.payment.v1` | PAYMENT |
 | `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.pickup.v1` | PICKUP |
-| `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.stock.v1` | STOCK |
 | `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.coupon.v1` | COUPON |
 | `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.points.v1` | POINTS |
 | `OrderRejectedV1` | `beanflow.order-compensation.order-rejected.customer-notification.v1` | CUSTOMER_NOTIFICATION |
 | `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.pickup.v1` | PICKUP |
-| `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.stock.v1` | STOCK |
 | `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.coupon.v1` | COUPON |
 | `OrderCancelledV1` | `beanflow.order-compensation.order-cancelled.points.v1` | POINTS |
 
@@ -198,7 +196,7 @@ annotation, 중앙 registry와 실제 publication target 집합은 이 표와 �
 duplicate registry는 시작 실패다. unknown target은 `PUBLICATION_TARGET_UNMAPPED` 운영 case를
 남기되 비슷한 step이나 Case 전체를 추측해 변경하지 않는다.
 
-Pickup과 Stock consumer는 `OrderCancelledV1`을
+Pickup consumer는 `OrderCancelledV1`을
 `restorationTrigger = CUSTOMER_CANCELLATION`으로 매핑하고 공통
 `RELEASED_AFTER_TERMINATION` 전이를 호출한다. `OrderRejectedV1`은
 `STORE_REJECTION`으로 매핑한다. trigger를 source 문자열에서 추론하지 않는다.
@@ -221,7 +219,7 @@ publication completion attempt는 owner business attempt가 아니므로 보상 
 `attemptCount`에 합산하지 않는다. 이 규칙은 `OrderCancelledV1`과
 `OrderRejectedV1`에 동일하게 적용한다.
 
-`OrderCancelledV1` public DTO, exact fixture와 네 owner listener는 Plan 30에서 위 최종
+`OrderCancelledV1` public DTO, exact fixture와 세 owner listener는 Plan 30에서 위 최종
 계약으로 구현됐다. producer와 고객 취소 HTTP command는 Plan 40 범위이며 최초 운영
 publication부터 V1을 동결한다. 필수 필드 제거, 이름·타입·의미 변경은
 `OrderCancelledV2`로 이행한다. 구
@@ -233,7 +231,7 @@ rollback 기간이 끝날 때까지 유지한다. 이중 발행은 별도 Accept
 ## Delivery principles
 
 - 초기 모듈 내부 전달은 Spring application event 또는 Spring Modulith event를 사용한다.
-- 금액·재고·슬롯·쿠폰·포인트·정산·알림·Analytics projection을 변경하는 cross-module
+- 금액·슬롯·쿠폰·포인트·정산·알림·Analytics projection을 변경하는 cross-module
   event는 원본 트랜잭션과 함께 영속 publication을 기록한다.
 - 단순한 동일 요청 내부 orchestration은 동기 Application API를 사용할 수 있지만,
   이미 확정된 사실의 후속 처리를 in-memory event만으로 완료했다고 간주하지 않는다.

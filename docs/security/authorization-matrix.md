@@ -2,6 +2,20 @@
 
 | Resource / Action | Customer | Store Owner | Store Staff | Platform Operator | Settlement Operator |
 |---|---:|---:|---:|---:|---:|
+| 이의 판정 목록·상세 (`/operations/settlement-disputes/**`) | No | No | No | Active `SETTLEMENT_DISPUTE_READ` grant | No |
+| 이의 검토·승인·기각 | No | No | No | Active `SETTLEMENT_DISPUTE_DECIDE` grant + reason + idempotency + expectedVersion + Audit | No |
+| 매장 이의 상세·철회 (`/stores/{storeId}/disputes/{disputeId}/**`) | No | ACTIVE same-store OWNER + CSRF(철회) | No | No | No |
+| 매장 목록·식별 정보·지역 코드 (`/operations/stores`, `/operations/stores/{id}/identity`, `/operations/store-regions`) | No | No | No | Active `STORE_IDENTITY_READ` grant | No |
+| 매장 개설·이름·좌표 교체 | No | No | No | Active `STORE_IDENTITY_WRITE` grant + reason + idempotency + expectedVersion(교체) + Audit | No |
+| 매장별 수수료 계약 목록·상세 | No | No | No | Active `STORE_SETTLEMENT_TERMS_READ` grant | No |
+| 미래 수수료 계약 버전 등록 | No | No | No | Active `STORE_SETTLEMENT_TERMS_WRITE` grant + reason + idempotency + expectedRevision + Audit | No |
+| 매장 소속 목록·상세 | No | No | No | Active `STORE_MEMBERSHIP_READ` grant | No |
+| 기존 계정 매장 소속 추가·역할 변경·철회·재활성화 | No | No | No | Active `STORE_MEMBERSHIP_WRITE` grant + reason + idempotency + expectedVersion(변경) + Audit | No |
+| 일반 알림 복구 Case·실행 상태 조회 | No | No | No | Active `NOTIFICATION_RECOVERY_READ` grant | No |
+| MANUAL_REVIEW 알림 추가 시도 예약 | No | No | No | Active `NOTIFICATION_RECOVERY_RETRY` grant + reason + idempotency + owner/Case version + Audit | No |
+| 이벤트 publication 복구 Case·실행 상태 조회 | No | No | No | Active `EVENT_PUBLICATION_RECOVERY_READ` grant | No |
+| MANUAL_REVIEW publication 원본 추가 시도 예약 | No | No | No | Active `EVENT_PUBLICATION_RECOVERY_RETRY` grant + reason + idempotency + Case version + Audit | No |
+| 픽업 슬롯 관리 (`/stores/{storeId}/pickup-slot-management/**`) | No | ACTIVE same-store OWNER + CSRF(변경) + idempotency + version(교체) + Audit | ACTIVE same-store STAFF + 동일 조건 | No | No |
 | 고객 가입·로그인 | Self | No | No | No | No |
 | 점주 로그인·비밀번호 변경 | No | Self | Self | No | No |
 | 점주 계정 발급·exact 조회·초기화·잠금 해제 | No | No | No | Active `MERCHANT_CREDENTIAL_MANAGE` grant + reason + idempotency + Audit | No |

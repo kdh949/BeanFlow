@@ -142,6 +142,15 @@ internal class NotificationDelivery private constructor(
         updatedAt = now
     }
 
+    fun resumeManualRetry(now: Instant) {
+        check(state == NotificationDeliveryState.MANUAL_REVIEW) { "Only manual-review delivery can be resumed" }
+        check(attemptCount < Int.MAX_VALUE) { "Notification attempt history is full" }
+        state = NotificationDeliveryState.RETRY_SCHEDULED
+        nextAttemptAt = now
+        clearClaim()
+        updatedAt = now
+    }
+
     fun requireClaim(token: UUID) {
         check(state == NotificationDeliveryState.PROCESSING && claimToken == token) {
             "Notification delivery claim is no longer owned"

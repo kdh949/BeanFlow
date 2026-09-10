@@ -10,7 +10,7 @@
 - 발생기: 별도 Mac의 k6 2.2.0, 공개 `https://beanflow.dhkim.cloud` 경유. TLS 검증 활성. 기본 curl의 CA 체인 오류는 기존 Homebrew OpenSSL CA bundle을 명시해 해결했고, k6 기본 TLS 검증도 통과했다.
 - API: `beanflow-api:perf-observability-20260907`, image `sha256:94979cf47cb2354f7152f4330725b324188090977bf6a81be89eb7c01ae9ddd6`, 2 GiB 제한, JVM MaxRAMPercentage 70. PostgreSQL 1.5 GiB, Hikari max 10.
 - `perf`, trace sampling 1.0, wall profile 10ms. 앱은 Doppler, 모니터링은 기존 env-file 설정을 사용한다.
-- 데이터: 정상 가입·로그인한 합성 고객 20명, 합성 점주 1명, 매장 1개, 메뉴/공유 재고 1개, 미래 슬롯 4개. 재고 100,000개, 슬롯별 용량 100,000. 잠금 실험만 슬롯 1개로 제한했다. GLOBAL 정책은 기존 값을 사용했다.
+- 데이터: 정상 가입·로그인한 합성 고객 20명, 합성 점주 1명, 매장 1개, 메뉴 1개, 미래 슬롯 4개. 슬롯별 용량 100,000. 잠금 실험만 슬롯 1개로 제한했다. GLOBAL 정책은 기존 값을 사용했다.
 - 매장 fixture는 기존 엔티티와 DB 제약을 확인한 단일 트랜잭션으로 추가했다. 최초 지역 코드 FK 오류는 전체 rollback됐고, 실제 지역 코드로 재실행했다. 인증 세션은 정상 로그인 API로 발급했다.
 - 정상 결제는 견적→주문→결제 준비→승인까지다. 점주 접수·제조·픽업은 하지 않았으므로 기존 접수 만료·자동 거절·환불 worker도 시간 경과에 따라 실행됐다. 이후 실행은 이 배경 작업과 누적 데이터의 영향을 포함한다.
 - Toss는 내부 계약 드라이버이며 실제 결제망 성능이 아니다. AIStor/Vault는 실제 배포 의존성을 사용하지만 이번 시나리오는 이미지 업로드나 암호화 처리량 측정이 아니다.
@@ -42,13 +42,13 @@ workflow는 HTTP 요청 수와 다르다. 숫자는 실행 종료의 native `sum
 
 ## 원인과 대응
 
-### 1. 공유 재고 변경이 견적을 무효화한다 — 직접 재현
+### 1. 공유 자원 변경이 견적을 무효화한다 — 직접 재현
 
-같은 메뉴·슬롯의 견적 두 개를 먼저 받은 뒤 주문을 순서대로 제출했다. 첫 요청은 201, 다음 요청은 409 ORDER_QUOTE_STALE이었다. 오류의 currentQuote와 원래 quote는 표시 금액과 메뉴 구성이 같았다. `OrderQuoteCoordinator.kt`의 fingerprint는 슬롯 reserved/confirmed count 및 version, 재고 available/reserved/confirmed quantity 및 version을 포함한다. 다른 주문이나 만료·거절에 따른 자원 회수도 이를 바꾼다. 슬롯을 나눠도 재고 하나를 공유하면 충돌이 남을 수 있다.
+같은 메뉴·슬롯의 견적 두 개를 먼저 받은 뒤 주문을 순서대로 제출했다. 첫 요청은 201, 다음 요청은 409 ORDER_QUOTE_STALE이었다. 오류의 currentQuote와 원래 quote는 표시 금액과 메뉴 구성이 같았다. `OrderQuoteCoordinator.kt`의 fingerprint는 공유 자원의 사용량 및 version을 포함한다. 다른 주문이나 만료·거절에 따른 자원 회수도 이를 바꾼다. 동일 자원을 공유하는 한 충돌이 남을 수 있다.
 
 5/s 구간 API CPU 최대 0.82 core, working set 최대 약 1.16 GiB/2 GiB, Hikari active 최대 3, pending 0, 관측된 미승인 DB lock 0이었다. 10초/15초 scrape에서 관측된 값이므로 짧은 미관측 대기까지 없었다는 주장은 하지 않는다. 그럼에도 이번 48건 실패가 견적 충돌이라는 응답·metric 증거는 명확하다.
 
-**우선 대응:** [ADR-116](../adr/ADR-116-non-reserving-order-quote.md)을 먼저 검토해 고객이 확인한 거래 의미와 순간적인 자원 점유 변화를 구분하는 fingerprint 계약을 설계한다. 가격·메뉴·benefit provenance·픽업 window 검증과 최종 트랜잭션의 원자적 재고/용량 검증은 유지해야 한다. 변경한다면 fingerprint version, 동시 주문/마지막 재고/정책 변경 테스트를 함께 갱신해야 한다. 현재 ADR을 유지하는 동안에는 재조회·고객 재확인·새 멱등 키가 필요하며 무조건 자동 재시도로 성공 처리하면 안 된다. 이번 작업에서는 제품 정책을 변경하지 않았다.
+**우선 대응:** [ADR-116](../adr/ADR-116-non-reserving-order-quote.md)을 먼저 검토해 고객이 확인한 거래 의미와 순간적인 자원 점유 변화를 구분하는 fingerprint 계약을 설계한다. 가격·메뉴·benefit provenance·픽업 window 검증과 최종 트랜잭션의 원자적 자원 가용성 검증은 유지해야 한다. 변경한다면 fingerprint version, 동시 주문/마지막 슬롯/정책 변경 테스트를 함께 갱신해야 한다. 현재 ADR을 유지하는 동안에는 재조회·고객 재확인·새 멱등 키가 필요하며 무조건 자동 재시도로 성공 처리하면 안 된다. 이번 작업에서는 제품 정책을 변경하지 않았다.
 
 ### 2. 외부 결제 지연은 연결 풀 포화와 다른 현상이다 — exact trace/profile
 

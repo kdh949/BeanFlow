@@ -187,7 +187,6 @@ internal class CreateOrderService(
         val resource =
             when (code) {
                 FailureCode.PICKUP_SLOT_FULL -> "pickup"
-                FailureCode.STOCK_NOT_AVAILABLE -> "stock"
                 FailureCode.COUPON_NOT_AVAILABLE -> "coupon"
                 FailureCode.POINT_BALANCE_INSUFFICIENT -> "points"
                 FailureCode.ORDER_QUOTE_STALE -> "quote"

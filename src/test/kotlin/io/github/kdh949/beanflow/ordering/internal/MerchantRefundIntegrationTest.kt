@@ -361,7 +361,7 @@ internal class MerchantRefundIntegrationTest
 
         private fun paidOrder(): PaidOrder {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 10, stockAvailable = 10)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 10)
             val key = "merchant-refund-${UUID.randomUUID()}"
             val created = createOrders.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command(quantity = 3)))
             assertThat(created.status).isEqualTo(201)

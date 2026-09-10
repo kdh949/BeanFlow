@@ -17,7 +17,6 @@ internal class OrderCreationAuditFactory {
         command: CreateOrderCommand,
         order: Order,
         pickupReservationId: UUID,
-        stockReservationIds: List<UUID>,
         coupon: CouponReservationQuote?,
         points: PointReservationResult?,
         benefit: BenefitOnlyConfirmation?,
@@ -48,19 +47,6 @@ internal class OrderCreationAuditFactory {
                     after = mapOf("state" to "RESERVED"),
                 ),
             )
-        stockReservationIds.forEach {
-            records +=
-                audit(
-                    command,
-                    "STOCK_RESERVED",
-                    "STOCK_RESERVATION",
-                    it,
-                    occurredAt,
-                    correlationId,
-                    source,
-                    after = mapOf("state" to "RESERVED"),
-                )
-        }
         coupon?.let {
             records +=
                 audit(
@@ -101,9 +87,6 @@ internal class OrderCreationAuditFactory {
                 )
             it.pickup.targetIds.forEach { id ->
                 records += confirmation(command, "PICKUP", id, occurredAt, correlationId, source)
-            }
-            it.stock.targetIds.forEach { id ->
-                records += confirmation(command, "STOCK", id, occurredAt, correlationId, source)
             }
             it.coupon?.targetIds?.forEach { id ->
                 records += confirmation(command, "COUPON", id, occurredAt, correlationId, source, "USED")

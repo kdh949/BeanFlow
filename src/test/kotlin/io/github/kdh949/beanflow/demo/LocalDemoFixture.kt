@@ -52,10 +52,6 @@ internal object LocalDemoFixture {
     /** One configuration per orderable option combination. */
     val PLAIN_CONFIGURATION_ID: UUID = UUID.fromString("d4000000-0000-4000-8000-000000000001")
     val EXTRA_SHOT_CONFIGURATION_ID: UUID = UUID.fromString("d4000000-0000-4000-8000-000000000002")
-    val PLAIN_REQUIREMENT_ID: UUID = UUID.fromString("d4000000-0000-4000-8000-000000000101")
-    val EXTRA_SHOT_REQUIREMENT_ID: UUID = UUID.fromString("d4000000-0000-4000-8000-000000000102")
-
-    val COFFEE_SELLABLE_UNIT_ID: UUID = UUID.fromString("d5000000-0000-4000-8000-000000000001")
 
     val PICKUP_SLOT_IDS: List<UUID> =
         listOf(
@@ -97,7 +93,6 @@ internal object LocalDemoFixture {
     const val SOLD_OUT_PRICE_KRW = 6_000L
     const val EXTRA_SHOT_PRICE_KRW = 500L
     const val OAT_MILK_PRICE_KRW = 800L
-    const val STOCK_QUANTITY = 500L
     const val INITIAL_POINT_BALANCE_KRW = 0L
     const val COUPON_DISCOUNT_KRW = 1_000L
     const val SETTLEMENT_FEE_RATE_BPS = 300

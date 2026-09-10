@@ -5,8 +5,8 @@
 
 ## Context
 
-ADR-033은 매장 거절과 고객 취소가 PAYMENT, PICKUP, STOCK, COUPON, POINTS,
-CUSTOMER_NOTIFICATION 여섯 보상 step을 공유하도록 정했다. ADR-044는 고객 취소의
+ADR-033은 매장 거절과 고객 취소가 PAYMENT, PICKUP, COUPON, POINTS,
+CUSTOMER_NOTIFICATION 다섯 보상 step을 공유하도록 정했다. ADR-044는 고객 취소의
 CUSTOMER_NOTIFICATION step이 Tx C1에 저장한 취소 접수 Delivery 상태를 따르도록
 정했고, ADR-045·ADR-046은 환불 성공과 지연 후속 알림을 추가했다.
 
@@ -45,7 +45,7 @@ Case 완료 의미를 불안정하게 만든다.
   기본 알림 Delivery, 환불 후속 event publication, 후속 Delivery와 두 종류의
   ReprocessingCase를 함께 탐색할 수 있어야 한다. 이것은 상태를 합성한다는 뜻이
   아니라 연결된 독립 원장을 한 화면에 제시한다는 뜻이다.
-- 공통 여섯-step enum과 `(case_id, step_type)` 유일성은 유지한다. 일곱 번째 환불
+- 공통 다섯-step enum과 `(case_id, step_type)` 유일성은 유지한다. 여섯 번째 환불
   알림 step을 추가하지 않는다.
 
 ## Alternatives Considered
@@ -59,7 +59,7 @@ Case 완료 의미를 불안정하게 만든다.
 ### REFUND_NOTIFICATION step 추가
 
 - 기본 알림과 환불 알림을 구분해 Case에 표시할 수 있다.
-- 매장 거절과 공유하는 여섯-step 구조가 trigger별 가변 shape로 바뀌고, 지연 뒤 성공
+- 매장 거절과 공유하는 다섯-step 구조가 trigger별 가변 shape로 바뀌고, 지연 뒤 성공
   두 번째 알림 문제는 여전히 남는다.
 
 ## Rationale
@@ -93,7 +93,7 @@ NotificationDelivery라는 독립적인 내구 상태가 있으므로 이를 Cas
 - 후속 success/delayed event·Delivery 처리 전후 기본 step 불변
 - Case 완료 뒤 후속 publication·Delivery 실패의 Case 불변
 - 후속 실패별 올바른 ReprocessingCase와 운영 조회 연결
-- 여섯-step enum과 Case unique shape 유지
+- 다섯-step enum과 Case unique shape 유지
 
 ## Required Tests
 

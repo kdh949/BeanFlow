@@ -212,9 +212,9 @@ internal class FastReorderMigrationTest : IsolatedPostgresSupport() {
             """
             INSERT INTO ordering_order_line (
                 id, order_id, line_sequence, menu_id, menu_name, option_names_json,
-                sellable_requirements_json, unit_price_krw, quantity, gross_krw,
+                unit_price_krw, quantity, gross_krw,
                 coupon_discount_krw, points_applied_krw, cash_payable_krw
-            ) VALUES (?, ?, 0, ?, 'Legacy menu', '[]', '[]', 1000, 1, 1000, 0, 0, 1000)
+            ) VALUES (?, ?, 0, ?, 'Legacy menu', '[]', 1000, 1, 1000, 0, 0, 1000)
             """.trimIndent(),
             lineId,
             orderId,
@@ -232,10 +232,10 @@ internal class FastReorderMigrationTest : IsolatedPostgresSupport() {
             """
             INSERT INTO ordering_order_line (
                 id, order_id, line_sequence, menu_id, menu_name, option_names_json,
-                sellable_requirements_json, unit_price_krw, quantity, gross_krw,
+                unit_price_krw, quantity, gross_krw,
                 coupon_discount_krw, points_applied_krw, cash_payable_krw,
                 option_selection_snapshot_state, normalized_option_ids_json
-            ) VALUES (?, ?, ?, ?, 'Current menu', '[]', '[]', 1000, 1, 1000, 0, 0, 1000, ?, ?::jsonb)
+            ) VALUES (?, ?, ?, ?, 'Current menu', '[]', 1000, 1, 1000, 0, 0, 1000, ?, ?::jsonb)
             """.trimIndent(),
             UUID.randomUUID(),
             orderId,

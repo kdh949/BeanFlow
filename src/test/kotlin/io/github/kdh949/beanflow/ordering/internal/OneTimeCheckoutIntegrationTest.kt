@@ -273,8 +273,6 @@ internal class OneTimeCheckoutIntegrationTest
             assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("EXPIRED")
             assertThat(value<String>("SELECT state FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId))
                 .isEqualTo("EXPIRED")
-            assertThat(value<String>("SELECT state FROM inventory_stock_reservation WHERE order_id = ?", orderId))
-                .isEqualTo("EXPIRED")
         }
 
         private fun assertNoProviderCalls() {

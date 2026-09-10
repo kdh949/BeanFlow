@@ -274,7 +274,6 @@ internal class OrderCompensationService(
             }
 
             OrderCompensationStepType.PICKUP,
-            OrderCompensationStepType.STOCK,
             -> {
                 OrderCompensationStepState.PROCESSING
             }

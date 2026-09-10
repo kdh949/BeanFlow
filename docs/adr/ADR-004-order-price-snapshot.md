@@ -17,7 +17,7 @@ OrderLine에 menuId와 함께 주문 당시 메뉴명, 옵션명, 단가, 수량
   중복 없는 immutable snapshot으로 보존한다. 옵션 없는 선택은 빈 집합이고 snapshot
   부재와 구분한다.
 - 기존 OrderLine에 검증된 option ID snapshot이 없으면 이름, 현재 Merchant 상태 또는
-  sellable requirement에서 option ID를 추론하거나 backfill하지 않는다. 해당 line을
+  현재 메뉴에서 option ID를 추론하거나 backfill하지 않는다. 해당 line을
   source로 한 빠른 재주문은 명시적으로 실패한다.
 - note는 현재 주문 생성·OrderLine 계약에 없으며 빠른 재주문 source snapshot에
   추가하거나 복사하지 않는다.

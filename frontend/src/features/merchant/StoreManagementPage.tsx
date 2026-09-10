@@ -1,10 +1,10 @@
-import { BarChart3, Boxes, Clock3, Gift, PackageSearch, Settings2 } from "lucide-react";
+import { BarChart3, Clock3, Gift, PackageSearch, Settings2 } from "lucide-react";
 import { useState } from "react";
 import { EmptyState, InlineNotice, PageHeading, Tab, TabList, TabPanel, Tabs } from "../../design-system";
 import { StatusText } from "../../presentation/shared";
 import { won } from "../../lib/format";
 
-type Workspace = "catalog" | "inventory" | "hours" | "benefits" | "analytics";
+type Workspace = "catalog" | "hours" | "benefits" | "analytics";
 
 export type StoreCatalogItem = {
   menuId: string;
@@ -15,15 +15,6 @@ export type StoreCatalogItem = {
   optionSummary: string;
 };
 
-export type StoreInventoryItem = {
-  inventoryId: string;
-  name: string;
-  onHand: number;
-  reserved: number;
-  unit: string;
-  state: "AVAILABLE" | "LOW" | "DEPLETED";
-};
-
 export type StoreScheduleDay = { day: string; hours: string; closed: boolean };
 export type StoreMetric = { label: string; value: string; change: string };
 
@@ -31,7 +22,7 @@ export type StoreManagementPageProps = {
   initialWorkspace?: Workspace;
   scenario?: "contract-pending" | "ready" | "empty";
   catalog?: readonly StoreCatalogItem[];
-  inventory?: readonly StoreInventoryItem[];
+  catalogContent?: React.ReactNode;
   schedule?: readonly StoreScheduleDay[];
   pickupPolicy?: { acceptingOrders: boolean; pickupEnabled: boolean; nextWindow: string; version: number };
   benefitPolicy?: { pointRateLabel: string; couponPolicyLabel: string; campaignCount: number };
@@ -40,7 +31,6 @@ export type StoreManagementPageProps = {
 
 const workspaces: Array<{ value: Workspace; label: string; icon: typeof Settings2 }> = [
   { value: "catalog", label: "메뉴와 가격", icon: PackageSearch },
-  { value: "inventory", label: "재고", icon: Boxes },
   { value: "hours", label: "영업시간과 픽업", icon: Clock3 },
   { value: "benefits", label: "포인트와 쿠폰", icon: Gift },
   { value: "analytics", label: "매출", icon: BarChart3 },
@@ -51,7 +41,7 @@ export function StoreManagementPage({
   initialWorkspace = "catalog",
   scenario = "contract-pending",
   catalog = [],
-  inventory = [],
+  catalogContent,
   schedule = [],
   pickupPolicy,
   benefitPolicy,
@@ -67,16 +57,9 @@ export function StoreManagementPage({
         </TabList>
         <TabPanel value="catalog">
           <WorkspaceSection eyebrow="판매 메뉴" title="메뉴와 가격">
-            {scenario === "contract-pending" ? <ContractPending title="메뉴 관리를 준비하고 있습니다" description="지금은 메뉴, 옵션, 가격과 판매 상태를 바꿀 수 없습니다." />
+            {catalogContent ?? (scenario === "contract-pending" ? <ContractPending title="메뉴 관리를 준비하고 있습니다" description="지금은 메뉴, 옵션, 가격과 판매 상태를 바꿀 수 없습니다." />
               : catalog.length === 0 ? <EmptyState title="등록된 메뉴가 없습니다" description="메뉴 등록 기능이 준비되면 첫 메뉴를 추가할 수 있습니다." />
-                : <div className="management-card-grid">{catalog.map((item) => <article className="surface-card management-card" key={item.menuId}><div className="panel-heading"><div><span className="context-label">{item.category}</span><h3>{item.name}</h3></div><StatusText domain="catalog" state={item.state} /></div><strong className="management-value bf-num">{won.format(item.priceKrw)}</strong><p>{item.optionSummary}</p></article>)}</div>}
-          </WorkspaceSection>
-        </TabPanel>
-        <TabPanel value="inventory">
-          <WorkspaceSection eyebrow="남은 수량" title="재고">
-            {scenario === "contract-pending" ? <ContractPending title="재고 관리를 준비하고 있습니다" description="지금은 남은 수량과 주문에 잡힌 수량을 확인하거나 바꿀 수 없습니다." />
-              : inventory.length === 0 ? <EmptyState title="등록된 재고가 없습니다" description="메뉴와 재고를 연결하면 남은 수량을 볼 수 있습니다." />
-                : <div className="management-card-grid">{inventory.map((item) => <article className="surface-card management-card" key={item.inventoryId}><div className="panel-heading"><div><span className="context-label">재고 항목</span><h3>{item.name}</h3></div><StatusText domain="catalog" state={item.state} /></div><strong className="management-value">남은 {item.onHand - item.reserved}{item.unit}</strong><dl className="detail-list"><div><dt>보유</dt><dd>{item.onHand}{item.unit}</dd></div><div><dt>주문 예약</dt><dd>{item.reserved}{item.unit}</dd></div></dl></article>)}</div>}
+                : <div className="management-card-grid">{catalog.map((item) => <article className="surface-card management-card" key={item.menuId}><div className="panel-heading"><div><span className="context-label">{item.category}</span><h3>{item.name}</h3></div><StatusText domain="catalog" state={item.state} /></div><strong className="management-value bf-num">{won.format(item.priceKrw)}</strong><p>{item.optionSummary}</p></article>)}</div>)}
           </WorkspaceSection>
         </TabPanel>
         <TabPanel value="hours">

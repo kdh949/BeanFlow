@@ -33,7 +33,7 @@ seed도, 토큰 발급 수단도 없어 수동 SQL과 임의 JWT를 만들어야
   `StoreDiscoveryProfilePrecheck`)가 실패하면 시작하지 않는다.
 - 인증은 `NimbusJwtDecoder.withJwkSetUri(...)`다. 실제 JWKS HTTP endpoint가 없으면 어떤 요청도
   통과하지 못한다. subject는 actor UUID, `roles` claim이 `ROLE_*` 권한이 된다.
-- Store, Menu, MenuOption, MenuConfiguration, SellableStock, PickupSlot을 만드는 public API가
+- Store, Menu, MenuOption, MenuConfiguration, PickupSlot을 만드는 public API가
   runtime OpenAPI 26개 operation 어디에도 없다.
 - 기존 bootstrap CLI 2종(`operator-permission-bootstrap`,
   `ordinary-point-accrual-policy-bootstrap`)은 OIDC workload identity를 검증한다.
@@ -95,7 +95,7 @@ seed도, 토큰 발급 수단도 없어 수동 SQL과 임의 JWT를 만들어야
 |---|---|---|---|---|---|---|
 | SQL seed script | 없음. 제약을 SQL에 재작성 | 수동 `ON CONFLICT` | **높음.** migration과 별도로 유지해야 함 | 낮음 | profile 개념 없음 | 부 |
 | **Spring Boot bootstrap CLI** | Entity·DB 제약·Hibernate 매핑 검증 재사용 | 고정 UUID + 단일 transaction | 낮음. 앱과 같은 매핑 | 중간, 기존 CLI 2종과 동일 관례 | Spring profile로 강제 | **채택** |
-| public API를 통한 setup | 최상 | endpoint 멱등성에 의존 | 없음 | 낮음 | 자연스러움 | **불가.** Store/Menu/Slot/Stock 생성 endpoint가 없고 편의를 위해 추가하지 않는다 |
+| public API를 통한 setup | 최상 | endpoint 멱등성에 의존 | 없음 | 낮음 | 자연스러움 | **불가.** Store/Menu/Slot 생성 endpoint가 없고 편의를 위해 추가하지 않는다 |
 | Testcontainers 실행 wrapper | 중간 | 매 실행 새 DB | 낮음 | 낮음 | 좋음 | 부. 사용자가 붙을 수 있는 지속 환경이 아니고 수명이 테스트 프로세스에 묶인다 |
 
 ## Failure Semantics
@@ -167,7 +167,7 @@ JWT, private key, 좌표는 출력하지 않는다.
 
 - 2026-08-07: 기존 sandbox adapter가 `@Profile("local & !prod")`라 `local-demo`만 켜면 활성화되지
   않는다. 기존 게이트를 바꾸는 대신 `local,local-demo`를 함께 활성화하기로 했다.
-- 2026-08-07: Store/Menu/Slot/Stock 생성 public API가 없어 "public API를 통한 setup" 대안이
+- 2026-08-07: Store/Menu/Slot 생성 public API가 없어 "public API를 통한 setup" 대안이
   성립하지 않는다. 편의를 위한 production endpoint 추가는 금지이므로 bootstrap CLI를 택했다.
 - 2026-08-07: README의 "현재 source에 없는 capability"에 nearby·menu·슬롯 조회 API와 PointAccount
   read가 남아 있으나 둘 다 구현돼 있다. 이번 작업에서 정정한다.

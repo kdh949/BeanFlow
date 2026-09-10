@@ -26,7 +26,6 @@ Behavior:
 Examples:
 
 - 주문 생성 중 DB 장애
-- 재고 예약 저장 실패
 - 결제 승인 요청 결과 불명
 
 Behavior:
@@ -133,7 +132,7 @@ Behavior:
   event와 모순이면 원하는 terminal 상태가 같더라도 성공으로 간주하지 않는다.
 - 충돌 상태를 덮어쓰지 않고 `COMPENSATION_SOURCE_CONFLICT`로 publication을
   실패시켜 bounded retry와 `MANUAL_REVIEW`로 보낸다.
-- Pickup·Stock의 `RELEASED_AFTER_TERMINATION`도 동일 source reference와 동일
+- Pickup의 `RELEASED_AFTER_TERMINATION`도 동일 source reference와 동일
   `restoration_trigger`일 때만 멱등 성공이다. 다른 source 또는 trigger는 terminal
   상태가 같아도 충돌이며 수량·원인을 덮어쓰지 않는다.
 - Coupon·Points owner도 source reference, restoration trigger와 policy version ID가
@@ -151,14 +150,14 @@ Behavior:
 #### Paid customer cancellation commit gate
 
 - `202`를 반환하기 전에 Order 취소, 취소 멱등 응답, 주문 보상 Case, 필요한 Refund
-  `REQUESTED`, 취소 접수 NotificationDelivery `PENDING`, AuditRecord와 네 owner
+  `REQUESTED`, 취소 접수 NotificationDelivery `PENDING`, AuditRecord와 세 owner
   영속 event publication이 한 로컬 transaction으로 commit돼야 한다.
 - `CUSTOMER_CANCELLATION × COUPON/POINTS` policy head 또는 version이 없거나 Case의
   두 FK snapshot과 event 전체 snapshot이 일치하지 않으면 필수 설정·commit-gate
   손상이다. fallback policy나 최신 head 추측 없이 transaction을 rollback하고
   `503 DEPENDENCY_UNAVAILABLE`로 실패한다.
 - 위 저장 중 하나라도 실패하면 전체 rollback하고 business success를 반환하지 않는다.
-- `PENDING_PAYMENT` 취소도 접수 NotificationDelivery 저장 실패 시 Order와 네 예약
+- `PENDING_PAYMENT` 취소도 접수 NotificationDelivery 저장 실패 시 Order와 세 예약
   해제를 함께 rollback한다. 두 상태 모두 Provider 발송은 transaction 밖에서
   수행하고 commit 후 발송 실패로 취소를 되돌리지 않는다.
 - rollback된 요청은 취소 멱등 레코드를 남기지 않으며 같은 key 재시도가 명령을 다시
@@ -253,3 +252,14 @@ backup restore reapplies deletion decisions.
 - 운영자가 어떻게 발견하고 복구하는가
 - metric, log와 correlation이 존재하는가
 - fallback이 활성화되지 않았음을 어떻게 검증하는가
+
+### Publication 결과 불명 수동 복구
+
+- 수동 claim 후 결과가 확인되지 않으면 마지막 실제 실행 시작(시작 전에는 claim) 시각으로 조사한다.
+  초기 5분 경과는 MANUAL_REVIEW/UNKNOWN 전이 조건이며 확정 실패나 이전 실행 종료의 증거가 아니다.
+- 요청 ID와 baseline은 실제 claim에서 원자적으로 검사한다. 동일 키 replay와 오래된 후보는 추가 예산을 만들지 않는다.
+- 결과 불명 replay는 동시 실행과 owner commit 후 ACK 유실 안전성을 검증한 exact listener만 허용한다.
+  초기 대상은 OrderReadyV1의 알림 접수이며 외부 발송은 별도 owner worker가 담당한다.
+- 원본 상태와 source/payload는 보존한다. 늦은 결과는 자기 시도에 기록하며 새 시도의 publication/Case를 덮지 않는다.
+  UNKNOWN은 계속 대사하고 90일 완료 원장 정리에서 제외한다.
+- 상세 정책은 [ADR-125](../adr/ADR-125-publication-unknown-execution-recovery.md)를 따른다.

@@ -4,9 +4,6 @@ import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
 import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
-import io.github.kdh949.beanflow.inventory.api.ReserveStockCommand
-import io.github.kdh949.beanflow.inventory.api.StockRequirement
-import io.github.kdh949.beanflow.inventory.api.StockReservationOperations
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.api.OrderQuoteCommand
 import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
@@ -31,7 +28,6 @@ internal class OrderQuoteIntegrationTest
         private val quotes: OrderQuoteUseCase,
         private val orders: CreateOrderUseCase,
         private val jdbcTemplate: JdbcTemplate,
-        private val stocks: StockReservationOperations,
         private val pickups: PickupReservationOperations,
         transactionManager: PlatformTransactionManager,
     ) {
@@ -119,47 +115,6 @@ internal class OrderQuoteIntegrationTest
         }
 
         @Test
-        fun `other stock reservations confirmations and releases preserve an available quote`() {
-            val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            val quote = quotes.quote(fixture.quoteCommand())
-            val confirmedOrder = UUID.randomUUID()
-            val releasedOrder = UUID.randomUUID()
-            val expiresAt = Instant.parse("2030-01-01T00:05:00Z")
-
-            fun reserve(orderId: UUID) =
-                transactions.executeWithoutResult {
-                    stocks.reserve(
-                        ReserveStockCommand(
-                            orderId,
-                            fixture.storeId,
-                            listOf(StockRequirement(fixture.sellableUnitId, 1)),
-                            expiresAt,
-                            "other-order:$orderId",
-                        ),
-                    )
-                }
-
-            reserve(confirmedOrder)
-            assertThat(quotes.quote(fixture.quoteCommand()).quoteFingerprint).isEqualTo(quote.quoteFingerprint)
-            transactions.executeWithoutResult { stocks.confirm(confirmedOrder, "other-order:$confirmedOrder") }
-            assertThat(quotes.quote(fixture.quoteCommand()).quoteFingerprint).isEqualTo(quote.quoteFingerprint)
-            reserve(releasedOrder)
-            transactions.executeWithoutResult {
-                stocks.release(releasedOrder, expiresAt.minusSeconds(60), "other-order:$releasedOrder")
-            }
-            assertThat(quotes.quote(fixture.quoteCommand()).quoteFingerprint).isEqualTo(quote.quoteFingerprint)
-
-            val response = orders.create("stock-usage-stable-001", fixture.command(expectedQuoteFingerprint = quote.quoteFingerprint))
-
-            assertThat(response.status).isEqualTo(201)
-            assertThat(jdbcTemplate.queryForObject("SELECT reserved_count FROM fulfillment_pickup_slot", Long::class.java)).isOne()
-            assertThat(
-                jdbcTemplate.queryForObject("SELECT available_quantity FROM inventory_sellable_stock", Long::class.java),
-            ).isEqualTo(8)
-        }
-
-        @Test
         fun `other pickup reservations confirmations and releases preserve an available quote`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
@@ -192,9 +147,6 @@ internal class OrderQuoteIntegrationTest
             assertThat(response.status).isEqualTo(201)
             assertThat(jdbcTemplate.queryForObject("SELECT reserved_count FROM fulfillment_pickup_slot", Long::class.java)).isOne()
             assertThat(jdbcTemplate.queryForObject("SELECT confirmed_count FROM fulfillment_pickup_slot", Long::class.java)).isOne()
-            assertThat(
-                jdbcTemplate.queryForObject("SELECT available_quantity FROM inventory_sellable_stock", Long::class.java),
-            ).isEqualTo(9)
         }
 
         @Test
@@ -423,20 +375,12 @@ internal class OrderQuoteIntegrationTest
                 fixture.menuId,
                 optionId.toString(),
             )
-            jdbcTemplate.update(
-                "INSERT INTO merchant_menu_configuration_requirement " +
-                    "(id, menu_configuration_id, sellable_unit_id, quantity_per_line_unit) VALUES (?, ?, ?, 1)",
-                UUID.randomUUID(),
-                configurationId,
-                fixture.sellableUnitId,
-            )
             return optionId
         }
 
         private fun assertNoTransactionWrites() {
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isZero()
-            assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "inventory_stock_reservation")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "promotion_coupon_reservation")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "loyalty_point_reservation")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "payment_payment")).isZero()

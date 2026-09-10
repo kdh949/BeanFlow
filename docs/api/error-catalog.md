@@ -26,7 +26,6 @@
 | FAVORITE_STORE_LIMIT_EXCEEDED | 409 | No, remove a favorite first | 고객당 즐겨찾기 상한 200개를 넘기는 추가 시도. 이미 즐겨찾기인 매장의 반복 PUT은 상한과 무관하게 204다 |
 | BRAND_STATE_CONFLICT | 409 | Maybe, after reading the brand again | `expectedVersion` 불일치, 보관된 브랜드 배정, 또는 소속 매장이 남은 브랜드의 보관 시도 |
 | PICKUP_SLOT_FULL | 409 | Maybe | 슬롯 수용량 없음 |
-| STOCK_NOT_AVAILABLE | 409 | Maybe | 판매 재고 부족 |
 | COUPON_NOT_AVAILABLE | 409 | No | 쿠폰 만료·사용·조건 불충족 |
 | POINT_BALANCE_INSUFFICIENT | 409 | No | 사용 가능 포인트 부족 |
 | POINT_ADJUSTMENT_INSUFFICIENT_AVAILABLE | 409 | No | 감사형 음수 포인트 조정에 필요한 미예약 available PointLot 합이 부족함. 부분 차감이나 recovery pending을 만들지 않음 |
@@ -111,7 +110,7 @@ representation state다. Payment Provider timeout은 step `UNKNOWN`으로 남고
 | `MENU_CONFIGURATION_NOT_AVAILABLE` | 현재 정규화 메뉴·옵션 조합의 판매 가능한 MenuConfiguration이 없음 |
 
 menu 자체가 사라지거나 판매 중지된 line은 그 상위 원인 하나만 반환한다. 이 오류와 기존
-`PICKUP_SLOT_FULL`, `STOCK_NOT_AVAILABLE`, `COUPON_NOT_AVAILABLE`,
+`PICKUP_SLOT_FULL`, `COUPON_NOT_AVAILABLE`,
 `POINT_BALANCE_INSUFFICIENT`는 DB/owner 조회 장애를 의미하지 않는다. owner 조회나 저장 실패는
 `503 DEPENDENCY_UNAVAILABLE`이며 빈 item 목록, 현재값 추정 또는 부분 재주문으로 바꾸지 않는다.
 

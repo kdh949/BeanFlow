@@ -13,7 +13,7 @@ Payment READY/APPROVING과 결제 멱등 레코드를 Tx1에서 커밋하고 PG�
 별도 Tx2에서 결과를 기록한다.
 
 2026-07-29 payment-confirmation 구현에서는 Ordering Application Service가 Tx2를
-조정한다. 승인 결과, Order `PAID`, 슬롯·재고·쿠폰·포인트 확정과 AuditRecord를
+조정한다. 승인 결과, Order `PAID`, 슬롯·쿠폰·포인트 확정과 AuditRecord를
 하나의 로컬 PostgreSQL transaction으로 커밋한다. Provider latency 동안에는 DB
 transaction 또는 connection을 유지하지 않는다.
 

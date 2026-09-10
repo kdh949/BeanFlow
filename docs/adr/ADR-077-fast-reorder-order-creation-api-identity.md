@@ -36,8 +36,7 @@ draft·quote·Reorder Aggregate와 그 만료·재검증 생명주기가 없다.
 - source OrderLine에서는 `menuId`, ID 오름차순의 중복 없는 `optionIds`, `quantity`만
   새 주문 생성 입력으로 복사한다. note, 이름과 가격 snapshot은 복사 입력이 아니다.
 - Ordering은 향후 migration 이후 생성되는 OrderLine에 normalized option ID snapshot을
-  보존한다. 기존 line에 검증된 snapshot이 없으면 옵션 이름, sellable requirement 또는
-  현재 Merchant state로 ID를 추론하지 않고 재주문 불가로 실패한다.
+  보존한다. 기존 line에 검증된 snapshot이 없으면 옵션 이름, 현재 Merchant state로 ID를 추론하지 않고 재주문 불가로 실패한다.
 - `SNAPSHOTTED` option ID 배열은 각 원소가 canonical UUID 문자열이고 UUID 오름차순이며
   중복이 없다는 조건을 애플리케이션과 DB CHECK가 함께 보호한다. 검증된 무옵션은 `[]`다.
 - 성공 응답은 기존 `CreateOrderResult`의 상태별 `order`와 선택적 `payment` 의미를
@@ -87,7 +86,7 @@ draft·quote·Reorder Aggregate와 그 만료·재검증 생명주기가 없다.
   아니다. Tx I1은 `REORDER_ORDER_V1` scope와 intended new Order ID를 등록하고, Tx O는
   source Order를 잠가 소유권·terminal 상태·option snapshot을 읽은 뒤 기존 원자적 주문
   생성 workflow를 실행하며, Tx I2는 확정 실패 응답을 저장한다.
-- Tx O에서 source read, current Merchant quote, slot→sorted stock→coupon→points 예약,
+- Tx O에서 source read, current Merchant quote, slot→coupon→points 예약,
   새 Order·모든 immutable snapshot·Audit, 가격 비교와 최초 201 response를 하나의 local
   transaction으로 commit한다. 재주문을 위한 별도 reservation transaction이나 source
   read와 create 사이에 성공으로 간주하는 중간 상태를 만들지 않는다.

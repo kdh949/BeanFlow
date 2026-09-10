@@ -46,7 +46,7 @@ client와 실패 semantics를 재사용한다.
 ### In Scope
 
 - 고객 환불 내역·쿠폰 발급 화면과 각각의 ready/empty/contract-pending story
-- 점주 메뉴·가격, 재고, 영업시간·픽업, 매장 혜택, 매출 분석 workspace와 이의제기 상세 화면
+- 점주 메뉴·가격, 영업시간·픽업, 매장 혜택, 매출 분석 workspace와 이의제기 상세 화면
 - 운영 실패 큐·상세, 정산 대사, 감사 로그와 승인·라우팅·추적·쿠폰·캠페인·지급 workspace
 - 고객센터 후속 업무 workspace
 - 기존 Customer/Console shell navigation과 router 연결

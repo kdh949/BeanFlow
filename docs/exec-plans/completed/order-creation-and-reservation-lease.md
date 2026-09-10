@@ -16,7 +16,7 @@ Status: Completed
 ## Purpose / Big Picture
 
 인증된 고객이 `POST /api/v1/orders`를 호출하면 서버가 요청 당시 메뉴·옵션·가격과
-혜택 배분을 Order에 고정하고, 픽업 슬롯·판매 재고·쿠폰·포인트를 하나의 PostgreSQL
+혜택 배분을 Order에 고정하고, 픽업 슬롯·쿠폰·포인트를 하나의 PostgreSQL
 트랜잭션에서 예약한다. 외부 결제가 필요한 주문은 `PENDING_PAYMENT`와 정확히 5분 뒤의
 `reservationExpiresAt`을 반환한다. 경계 시각까지 결제가 승인되지 않으면 Order와
 모든 예약 자원을 원자적으로 만료·해제하며, 동일 요청 재시도와 동시에 들어온 마지막
@@ -87,7 +87,7 @@ shell이다.
 - 결제 가능 구간은 `[createdAt, reservationExpiresAt)`이다. 정확한 경계 시각부터
   만료로 취급한다.
 - lease 연장 API는 MVP에 없다.
-- Order, 픽업 슬롯, 재고, 쿠폰과 포인트 예약은 공개 Application API를 통해 하나의
+- Order, 픽업 슬롯, 쿠폰과 포인트 예약은 공개 Application API를 통해 하나의
   로컬 PostgreSQL 트랜잭션에서 변경한다.
 - 일부 실패는 전체 트랜잭션을 롤백한다.
 - Payment가 `UNKNOWN`이어도 lease를 연장하지 않는다.
@@ -109,7 +109,7 @@ shell이다.
 
    확정안은 Payment 모듈의 최소 `BENEFIT_ONLY` 로컬 경로만 이 Feature에 포함하고,
    외부 PG 승인·UNKNOWN·reconciliation은 계속 제외하는 것이다. 이 경우 같은
-   트랜잭션에서 Payment를 승인하고 네 예약을 확정한 뒤 Order를 `PAID`로 전환한다.
+   트랜잭션에서 Payment를 승인하고 세 예약을 확정한 뒤 Order를 `PAID`로 전환한다.
    BR-11, ADR-016, 상태 머신과 transaction boundary에 기록했다.
 
 2. **쿠폰 계산 모델 부재 — Resolved**
@@ -124,21 +124,11 @@ shell이다.
    정률은 basis point 버림 후 선택적 maximum을 적용한다. 대상 범위 생략은 store의
    모든 line, 빈 대상 집합은 invalid Campaign이다. BR-08과 ADR-024에 기록했다.
 
-3. **재고 sellable unit 매핑 부재 — Resolved**
+3. **메뉴 구성 검증**
 
-   요청은 `menuId + optionIds + quantity`를 전달하지만 Inventory 문서는
-   `menuOptionId` 또는 추상적인 sellable unit 수량을 말한다. 기본 메뉴와 옵션 조합이
-   어느 재고 단위를 몇 개 소비하는지 계약이 없다.
-
-   확정안은 Merchant가 주문 가능한 메뉴 구성마다 정규화된
-   `sellableUnitRequirements(sellableUnitId, quantityPerLineUnit)`를 반환하고
-   Inventory는 그 ID만 소유·예약하는 것이다. 이 선택은 Merchant/Inventory 공개
-   Application API와 schema에 반영한다. option ID 집합은 정렬해 구성 lookup에
-   사용하고 OrderLine 순서는 유지하며, 같은 sellable unit 요구량은 주문 전체에서
-   합산한다. 구성 부재는 400, 판매 불가는
-   `409 MENU_CONFIGURATION_NOT_AVAILABLE`, 수량 부족은
-   `409 STOCK_NOT_AVAILABLE`로 구분한다. ADR-026, Context Map, Aggregate
-   Invariants, Ubiquitous Language, transaction boundary와 API 문서에 기록했다.
+   Merchant는 정규화한 옵션 집합으로 판매 구성을 조회하고 현재 가격과 판매 상태를 검증한다.
+   구성 부재는 400, 판매 불가는 `409 MENU_CONFIGURATION_NOT_AVAILABLE`이다.
+   OrderLine 순서는 금액 배분 의미를 유지한다. 상세 계약은 ADR-026을 따른다.
 
 4. **포인트 예약의 영속 표현 부재 — Resolved**
 
@@ -173,7 +163,7 @@ shell이다.
 6. **lease의 논리 만료와 물리 해제 시점 — Resolved**
 
    worker, Order 조회와 결제 명령은 `now >= reservationExpiresAt`이면 같은
-   idempotent expiry transaction을 먼저 실행한다. 조회는 Order와 네 자원 해제가
+   idempotent expiry transaction을 먼저 실행한다. 조회는 Order와 세 자원 해제가
    commit된 뒤 `EXPIRED`를 반환하고, 결제는 409로 거부한다. expiry 실패는 stale
    성공 대신 503이며 worker 또는 다음 요청이 재시도한다. BR-03, ADR-013, 상태
    머신, transaction boundary, API 문서와 OpenAPI에 기록했다.
@@ -201,8 +191,6 @@ shell이다.
 - **Reservation lease:** 결제 전 자원을 독점적으로 점유할 수 있는 유한 시간 구간.
 - **Logical expiry:** 현재 시각이 deadline에 도달해 더 이상 결제·확정할 수 없는 의미.
 - **Physical release:** DB에서 Order와 각 예약 상태·수량을 실제 만료·복원하는 작업.
-- **Sellable unit:** Inventory가 수량을 소유하는 최소 판매 재고 식별자. Menu나 Option
-  객체 자체와 동일하다고 가정하지 않는다.
 - **Price snapshot:** 주문 이후 Menu·Campaign이 바뀌어도 재현 가능한 이름, 옵션,
   단가, 할인, 포인트, 현금 배분 값.
 - **Idempotency scope:** `actorId + API operation + Idempotency-Key`.
@@ -222,12 +210,12 @@ shell이다.
 ### In Scope
 
 - Milestone 0의 정책·ADR·OpenAPI 결정 보완
-- Merchant, Ordering, Fulfillment, Inventory, Promotion, Loyalty, Operations의
+- Merchant, Ordering, Fulfillment, Promotion, Loyalty, Operations의
   Spring Modulith 경계와 필요한 최소 공개 Application API
 - Payment의 `BENEFIT_ONLY` 최소 로컬 경로
 - 테스트 fixture가 사용할 최소 Store, Menu, MenuOption과 자원 owner write model
 - Order, OrderLine, 주문 생성 IdempotencyRecord
-- 픽업 슬롯, 재고, 선택적 쿠폰과 선택적 포인트의 5분 예약
+- 픽업 슬롯, 선택적 쿠폰과 선택적 포인트의 5분 예약
 - 정수 KRW 계산과 BR-12의 결정적 OrderLine 배분 snapshot
 - `POST /api/v1/orders`와 안정적인 오류 코드
 - 실제 PostgreSQL Flyway schema, Unique/Check/FK/Index와 concurrency control
@@ -244,7 +232,7 @@ shell이다.
 - 고객 주문 취소
 - 매장 수락·거절·3분 timeout
 - 주문 제조·준비·픽업 완료
-- 결제 후 재고·슬롯·쿠폰·포인트 확정 경로. 단, ADR-016의 `BENEFIT_ONLY` 확정만
+- 결제 후 슬롯·쿠폰·포인트 확정 경로. 단, ADR-016의 `BENEFIT_ONLY` 확정만
   예외다.
 - 포인트 적립, 환불, 정산, 이의제기, 알림, Analytics
 - 메뉴·캠페인·포인트 발급을 관리하는 외부 CRUD API
@@ -288,14 +276,12 @@ shell이다.
 - 유효 구간은 `now < reservationExpiresAt`; 경계와 이후는 expired다.
 - Order마다 active PickupReservation은 하나뿐이다.
 - PickupSlot의 `reservedCount + confirmedCount`는 capacity를 넘지 않는다.
-- Order와 sellable unit마다 active StockReservation은 하나뿐이며 합산 수량은
-  stock의 available 수량을 넘지 않는다.
 - CouponIssuance는 동시에 한 Order에서만 RESERVED/USED일 수 있다.
 - 포인트 예약은 PointAccount와 선택된 PointLot의 available 금액을 음수로 만들지
   않는다.
 - 동일 Order source reference의 예약·해제·확정은 한 번만 적용된다.
-- Order와 필요한 네 자원 예약은 모두 커밋되거나 모두 롤백된다.
-- 만료는 `PENDING_PAYMENT -> EXPIRED`와 네 자원 해제를 한 로컬 트랜잭션에서
+- Order와 필요한 세 자원 예약은 모두 커밋되거나 모두 롤백된다.
+- 만료는 `PENDING_PAYMENT -> EXPIRED`와 세 자원 해제를 한 로컬 트랜잭션에서
   수행한다.
 - 만료 worker 재실행은 이미 terminal인 예약 수량을 다시 복원하지 않는다.
 
@@ -358,22 +344,19 @@ ADR-025의 멱등 transaction을 기준으로 성공 흐름은 다음 순서를 
 1. Security principal을 Customer actor로 변환하고 correlation ID를 확보한다.
 2. idempotency scope와 canonical payload hash를 등록하거나 기존 결과를 반환한다.
 3. UUID supplier로 Order ID와 OrderLine ID를 생성하고 `Clock.instant()`를 한 번 읽는다.
-4. Merchant 공개 API로 store, menu, option, unit price와 sellable unit 요구량을
-   snapshot한다.
-5. Merchant quote의 sellable requirement를 주문 전체에서 합산한다.
-6. 모든 요청이 같은 global lock order를 사용해 Fulfillment와 Inventory 예약을
-   먼저 영속화한다. PickupSlot ID 한 개 뒤 정렬된 sellable unit ID 순서다.
-7. Promotion 공개 API로 선택적 CouponIssuance를 잠가 검증하고 할인 금액·대상 line·
+4. Merchant 공개 API로 store, menu, option, unit price와 판매 상태를 검증한다.
+5. 모든 요청이 같은 global lock order를 사용해 Fulfillment 픽업 예약을 먼저 영속화한다.
+6. Promotion 공개 API로 선택적 CouponIssuance를 잠가 검증하고 할인 금액·대상 line·
    비용 부담 snapshot을 계산해 예약한다.
-8. Ordering의 순수 allocator로 line별 coupon, points, cash 배분을 계산한 뒤
+7. Ordering의 순수 allocator로 line별 coupon, points, cash 배분을 계산한 뒤
    Loyalty가 PointAccount ID와 `(expiresAt, pointLotId)` 순서로 선택적 포인트
    reservation을 영속화한다. 선택하지 않은 쿠폰과 0 point에는 reservation을 만들지
    않는다.
-9. Ordering이 immutable snapshot과 `PENDING_PAYMENT` Order를 저장한다.
-10. Operations 공개 API가 Order와 각 자원 변경의 AuditRecord를 append한다.
-11. idempotency record를 Order ID와 201 response snapshot에 연결하고 커밋한다.
+8. Ordering이 immutable snapshot과 `PENDING_PAYMENT` Order를 저장한다.
+9. Operations 공개 API가 Order와 각 자원 변경의 AuditRecord를 append한다.
+10. idempotency record를 Order ID와 201 response snapshot에 연결하고 커밋한다.
 
-payable이 0이면 8번까지 임시 예약한 뒤 같은 transaction에서
+payable이 0이면 7번까지 임시 예약한 뒤 같은 transaction에서
 `BENEFIT_ONLY Payment(APPROVED)`를 만들고 owner API로 예약을 확정한 다음 Order를
 `PAID`로 저장한다. 이 Order는 active lease 대상이 아니며 create 응답은 상태별
 OpenAPI schema를 따른다.
@@ -388,7 +371,7 @@ OpenAPI schema를 따른다.
 3. 이미 `PAID`, `EXPIRED`, `CANCELLED`이면 no-op 성공으로 가장하지 않고
    `not eligible` 결과와 metric을 남긴다. 자원 수량은 바꾸지 않는다.
 4. 여전히 `PENDING_PAYMENT`이고 deadline에 도달했으면 Order를 `EXPIRED`로 전이하고
-   Fulfillment, Inventory, Promotion, Loyalty 공개 API로 같은 source reference를
+   Fulfillment, Promotion, Loyalty 공개 API로 같은 source reference를
    해제한다.
 5. Order와 각 해제 AuditRecord를 append하고 한 transaction으로 commit한다.
 6. 한 owner release가 실패하면 Order 전이와 다른 release도 롤백된다. 다음 worker
@@ -405,7 +388,7 @@ worker의 schedule delay, chunk size와 instance 수는 configuration property�
 - capacity·available 수량 변경은 읽고 저장하는 application check만 사용하지 않고
   row lock 또는 `... WHERE available >= requested` conditional update로 보호한다.
 - global owner/ID lock 순서를 모든 create 경로에서 동일하게 유지한다.
-- Unique Constraint는 active order reservation, stock order/unit,
+- Unique Constraint는 active order reservation,
   coupon active owner, point order reservation과 idempotency scope를 최종 방어한다.
 - 동시성 테스트는 `Thread.sleep` 순서에 기대지 않고 barrier/latch와 별도 transaction을
   사용한다.
@@ -451,7 +434,6 @@ PointLot 만료 순서와 발급 주체 비용을 결제 시 재현하지 못해
 | invalid field, overflow, invalid menu option | 400 `INVALID_REQUEST` | 결정된 멱등 정책에 따른 failed response | payload 수정 |
 | store/menu unavailable | 409 또는 404의 Milestone 0 계약 | 부분 예약 없음 | 새 주문 요청 |
 | slot capacity exhausted | 409 `PICKUP_SLOT_FULL` | 부분 예약 없음 | 다른 slot/key |
-| stock insufficient | 409 `STOCK_NOT_AVAILABLE` | 부분 예약 없음 | 수량/메뉴 변경 |
 | coupon invalid or contended | 409 `COUPON_NOT_AVAILABLE` | 부분 예약 없음 | 쿠폰 제거/변경 |
 | points insufficient or contended | 409 `POINT_BALANCE_INSUFFICIENT` | 부분 예약 없음 | point 금액 변경 |
 | same key, different payload | 409 `IDEMPOTENCY_KEY_REUSED` | 기존 record 유지 | 새 key |
@@ -475,15 +457,11 @@ owner 참조만 필요한 곳은 FK를 검토한다.
 - `merchant_store`: ID, 상태, pickup 가능 여부, version
 - `merchant_menu`: ID, store ID, name snapshot source, base price KRW, 상태, version
 - `merchant_menu_option`: ID, menu ID, name, additional price KRW, 상태
-- `merchant_menu_configuration`과 sellable unit requirement mapping
+- `merchant_menu_configuration`의 정규화 옵션과 판매 상태
 - `fulfillment_pickup_slot`: ID, store ID, starts/ends at, capacity, reserved count,
   confirmed count, version
 - `fulfillment_pickup_reservation`: ID, order ID, slot ID, state, expires at,
   source reference, timestamps, version
-- `inventory_sellable_stock`: ID, store ID, available/reserved/confirmed quantity,
-  version
-- `inventory_stock_reservation`: ID, order ID, sellable unit ID, quantity, state,
-  expires at, source reference, version
 - ADR-024의 `promotion_campaign`
 - `promotion_coupon_issuance`: ID, campaign ID, member ID, state, reserved order ID,
   expires at, version
@@ -506,7 +484,6 @@ owner 참조만 필요한 곳은 FK를 검토한다.
 - Order line `(order_id, line_sequence)` UNIQUE
 - Order number를 노출한다면 별도 UNIQUE; 이 Feature는 임의 형식을 만들지 않는다.
 - active pickup reservation의 `order_id` UNIQUE
-- stock reservation `(order_id, sellable_unit_id)` UNIQUE
 - coupon의 한 active order를 보장하는 partial UNIQUE 또는 guarded state update
 - point reservation의 source order UNIQUE와 allocation amount CHECK
 - idempotency `(actor_id, operation, idempotency_key)` UNIQUE
@@ -563,7 +540,7 @@ ADR, 아키텍처, OpenAPI에 먼저 기록한다. transcript가 아니라 결�
 **Acceptance criteria:**
 
 - [x] 0원 주문의 이번 Feature 포함 여부와 transaction이 ADR-016 및 scope에 일치한다.
-- [x] coupon model, sellable unit mapping, point reservation model이 owner API와
+- [x] coupon model, point reservation model이 owner API와
       schema를 구현할 수 있을 만큼 구체적이다.
 - [x] 주문 생성 IdempotencyRecord의 success/domain failure/crash 상태와 HTTP 재사용
       의미가 ADR-007, state machine, transaction boundary, OpenAPI에 일치한다.
@@ -660,22 +637,19 @@ correlation port, PostgreSQL integration test fixture와 Spring Modulith 구조 
 
 **Estimated scope:** M per Merchant quote / allocator slice
 
-### Milestone 3: 픽업 슬롯과 재고 예약을 PostgreSQL로 보호한다
+### Milestone 3: 픽업 슬롯 예약을 PostgreSQL로 보호한다
 
-**Description:** Fulfillment와 Inventory owner API, Aggregate, JPA adapter, migration을
+**Description:** Fulfillment owner API, Aggregate, JPA adapter, migration을
 구현하고 capacity/quantity contention을 DB에서 방어한다.
 
 **Acceptance criteria:**
 
 - [x] 마지막 slot capacity에 동시 주문이 와도 성공 합계가 capacity를 넘지 않는다.
-- [x] 마지막 stock에 동시 주문이 와도 available/reserved/confirmed 합계가 깨지지
-      않는다.
 - [x] 같은 Order source를 재요청해도 예약 행과 수량 증가가 한 번뿐이다.
 
 **Verification:**
 
 - [x] `./gradlew test --tests '*PickupReservationRepositoryTest'`
-- [x] `./gradlew test --tests '*StockReservationRepositoryTest'`
 - [x] Testcontainers PostgreSQL에서 constraint와 lock 경합 확인
 
 **Dependencies:** Milestones 0, 1, 2
@@ -683,7 +657,6 @@ correlation port, PostgreSQL integration test fixture와 Spring Modulith 구조 
 **Files likely touched:**
 
 - `src/main/kotlin/io/github/kdh949/beanflow/fulfillment/`
-- `src/main/kotlin/io/github/kdh949/beanflow/inventory/`
 - `src/main/resources/db/migration/`
 - 대응 test package
 
@@ -844,7 +817,7 @@ reservation confirmation, Order `PAID` 전이를 구현한다.
 ### PostgreSQL repository
 
 - 모든 CHECK/UNIQUE/FK/partial index
-- slot·stock·coupon·point 마지막 자원 contention
+- slot·coupon·point 마지막 자원 contention
 - lock 순서와 deadlock 없는 mixed request
 - due-order index query와 정렬
 - expiration 중복 release
@@ -906,9 +879,9 @@ structured log는 correlation ID, order ID, action, outcome code, deadline, dura
 AuditRecord는 최소 다음 action을 구분한다.
 
 - `ORDER_CREATED`
-- `PICKUP_RESERVED`, `STOCK_RESERVED`, `COUPON_RESERVED`, `POINTS_RESERVED`
+- `PICKUP_RESERVED`, `COUPON_RESERVED`, `POINTS_RESERVED`
 - `ORDER_EXPIRED`
-- `PICKUP_EXPIRED`, `STOCK_EXPIRED`, `COUPON_RELEASED`, `POINTS_RELEASED`
+- `PICKUP_EXPIRED`, `COUPON_RELEASED`, `POINTS_RELEASED`
 - 결정되면 `BENEFIT_ONLY_PAYMENT_APPROVED`와 각 reservation confirmation
 
 ## Documentation Updates
@@ -916,7 +889,7 @@ AuditRecord는 최소 다음 action을 구분한다.
 Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 문서를 먼저 갱신한다.
 
 - Business Policy: 새 제품 숫자나 고객에게 보이는 동작만 amendment
-- ADR: coupon model, sellable unit ownership, point reservation, idempotency
+- ADR: coupon model, point reservation, idempotency
   transaction, BENEFIT_ONLY 범위, audit/expiry 의미
 - Architecture: Context Map, Aggregate/constraint, state machine, transaction boundary
 - OpenAPI/API docs: create request/response, 상태별 deadline, idempotency replay,
@@ -934,7 +907,7 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 - [x] Milestone 0 결정과 문서 기록
 - [x] Milestone 1 모듈·테스트 기반
 - [x] Milestone 2 가격 snapshot·배분
-- [x] Milestone 3 슬롯·재고 예약
+- [x] Milestone 3 슬롯 예약
 - [x] Milestone 4 쿠폰·포인트 예약
 - [x] Milestone 5 atomic create·idempotency·API
 - [x] Milestone 6 expiry·release·audit
@@ -950,8 +923,6 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
   payable 0 주문에서 성립하지 않는다.
 - OpenAPI는 coupon과 points를 주문 생성 입력으로 공개하지만 Campaign 계산 모델과
   PointLot reservation 표현은 아직 계약하지 않는다.
-- Inventory owner는 문서에 있지만 메뉴·옵션 조합에서 sellable unit으로 번역하는
-  경계가 정의되지 않았다.
 - BR-30은 이 Feature의 거의 모든 자원 변경을 감사 대상으로 만들지만 기존 first
   implementation handoff에는 Operations/Audit scope가 빠져 있었다.
 - 초기 OpenAPI의 create 설명과 달리 `reservationExpiresAt`은 schema상 선택
@@ -978,7 +949,7 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
   Lot과 요약 불일치를 놓칠 수 있어 실제 unexpired Lot 합계도 같은 transaction에서
   다시 검증하도록 구현했다.
 - 초기 Create flow의 coupon 계산 순서와 global lock order가 충돌했다. Merchant
-  quote에서 stock 요구량을 먼저 계산하고 Tx O가 slot → sorted stock → coupon →
+  quote에서 메뉴 구성을 먼저 검증하고 Tx O가 slot → coupon →
   point 순서로 잠근 뒤 coupon 결과로 가격을 계산하도록 계획과 구현을 맞췄다.
 - PostgreSQL `char(64)` payload hash는 Hibernate의 String/varchar validation과
   타입이 달랐다. hash 길이는 `varchar(64) CHECK (length(payload_hash) = 64)`로
@@ -995,11 +966,10 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 | Date | Status | Decision | Rationale | Record |
 |---|---|---|---|---|
 | 2026-07-28 | Accepted existing | 외부 결제 필요 Order의 lease는 생성 시각부터 5분, 연장 없음 | BR-03 | Business Policy |
-| 2026-07-28 | Accepted existing | Order와 네 자원 예약은 한 로컬 PostgreSQL transaction | 강한 일관성과 현재 modular monolith 조건 | ADR-005 |
+| 2026-07-28 | Accepted existing | Order와 세 자원 예약은 한 로컬 PostgreSQL transaction | 강한 일관성과 현재 modular monolith 조건 | ADR-005 |
 | 2026-07-28 | Accepted existing | 정확한 deadline부터 Payment UNKNOWN이어도 만료하고 late approval은 Order를 복구하지 않음 | 무기한 점유와 oversell 방지 | ADR-013 |
 | 2026-07-28 | Accepted | BENEFIT_ONLY 최소 Payment를 이 Feature에 포함하고 주문 생성 tx에서 Payment 승인·예약 확정·Order PAID를 원자적으로 커밋 | BR-11과 foundation scope 충돌 해결 | BR-11, ADR-016 |
 | 2026-07-28 | Accepted | FIXED_KRW/RATE_BPS Coupon은 대상 line 합계로 minimum과 할인을 계산 | 비대상 품목이 쿠폰을 활성화하거나 할인받지 않도록 함 | BR-08, ADR-024 |
-| 2026-07-28 | Accepted | Merchant가 정규화한 menu/options를 sellable requirements로 번역하고 Inventory는 수량만 소유 | Inventory ownership과 수량 불변식 | ADR-026, Context Map |
 | 2026-07-28 | Accepted | PointReservation/Allocation이 생성 시 유효한 Lot을 선만료순으로 예약하고 주문 lease까지 사용을 보장 | 만료 순서·비용 주체 재현과 lease 보장 | BR-03, ADR-011 |
 | 2026-07-28 | Accepted | Tx I1 선행 PROCESSING, Tx O 성공 원자 완료, Tx I2 실패 저장과 최초 HTTP response 재생 | atomic reservation과 replay 의미 연결 | BR-25, ADR-025 |
 | 2026-07-28 | Accepted | worker·조회·결제 명령이 같은 expiry tx를 사용하고 성공 후에만 EXPIRED/409, 실패는 503 | API와 DB 상태 일치, stale 성공 방지 | BR-03, ADR-013 |
@@ -1007,7 +977,7 @@ Milestone 0과 구현 중 현실이 달라질 때 코드보다 계획과 결정 
 | 2026-07-28 | Accepted | POST /orders 201은 상태별 `{order, payment?}` envelope | lease deadline과 BENEFIT_ONLY Payment를 모호하지 않게 표현 | API conventions, OpenAPI |
 | 2026-07-28 | Minor | 실제 영속 event producer가 없는 동안 Spring Modulith JPA publication starter를 비활성화 | 사용하지 않는 publication schema를 자동 생성하거나 Hibernate validation을 우회하지 않음 | MD-2026-001 |
 | 2026-07-28 | Accepted | Coupon은 eligible line에만 gross 비율로 배분하고 Points는 coupon 적용 후 line 잔액 비율로 배분 | 대상 제한을 지키면서 line benefit이 gross를 초과하지 않고 쿠폰→포인트 순서를 재현 | BR-12, ADR-014, ADR-024 |
-| 2026-07-28 | Minor | Tx O의 잠금 순서를 slot → sorted stock → coupon → point로 고정하고 coupon 결과 뒤 가격을 계산 | Create flow의 초기 서술과 global lock order 충돌을 제거하고 같은 고객 결과로 deadlock 위험을 줄임 | ExecPlan |
+| 2026-07-28 | Minor | Tx O의 잠금 순서를 slot → coupon → point로 고정하고 coupon 결과 뒤 가격을 계산 | Create flow의 초기 서술과 global lock order 충돌을 제거하고 같은 고객 결과로 deadlock 위험을 줄임 | ExecPlan |
 | 2026-07-28 | Minor | 고객 GET·결제 guard는 존재·소유권 확인 후 expiry를 materialize | 다른 고객이 due Order 상태를 변경하거나 존재 여부를 추론하는 경로를 차단 | ExecPlan, authorization contract test |
 
 ## Outcomes & Retrospective
@@ -1016,7 +986,7 @@ Milestone 0~7을 완료했다.
 
 실제 결과:
 
-- POST `/api/v1/orders`는 Merchant snapshot을 기준으로 슬롯 → 정렬된 재고 → 쿠폰 →
+- POST `/api/v1/orders`는 Merchant snapshot을 기준으로 슬롯 → 정렬된 쿠폰 →
   포인트 순서로 잠그고 Order·OrderLine·owner reservation·IdempotencyRecord와
   target별 AuditRecord를 한 PostgreSQL transaction으로 커밋한다.
 - 동일 actor/operation/key는 정규화 payload hash와 최초 HTTP response를 보존한다.
@@ -1026,7 +996,7 @@ Milestone 0~7을 완료했다.
   worker, GET과 payment lease guard는 같은 Order-lock expiry transaction을 사용하며,
   경계 시각부터 owner 수량을 한 번만 복원하고 Order를 `EXPIRED`로 만든다.
 - payable 0은 Provider collaborator가 없는 Payment 전용 경로에서
-  `BENEFIT_ONLY/APPROVED/0 KRW` Payment를 만들고 슬롯·재고·선택 쿠폰·포인트를
+  `BENEFIT_ONLY/APPROVED/0 KRW` Payment를 만들고 슬롯·선택 쿠폰·포인트를
   확정한 뒤 active deadline 없는 `PAID` Order로 같은 transaction에서 커밋한다.
 - owner 누락 fault injection에서 생성·BENEFIT_ONLY confirm·expiry 모두 부분 성공을
   남기지 않고 rollback됐다. 실패는 409/503과 metric/log로 드러나며 fake/local/no-op
@@ -1064,10 +1034,10 @@ Milestone 0~7을 완료했다.
 ## Revision Notes
 
 - 2026-07-28: 관련 정책·ADR·OpenAPI·아키텍처·현재 코드 대조 후 초기 ExecPlan 작성.
-  0원 주문, coupon model, sellable unit, point reservation, idempotency transaction,
+  0원 주문, coupon model, point reservation, idempotency transaction,
   logical/physical expiry, audit와 OpenAPI deadline을 구현 전 decision gate로 기록.
 - 2026-07-28: Milestone 0 착수. 승인된 추천안에 따라 BENEFIT_ONLY 주문 생성 범위와
-  Merchant 소유 sellable requirement 번역을 결정 기록에 반영. 기능 코드는 미변경.
+  Merchant 소유 메뉴 구성 검증을 결정 기록에 반영. 기능 코드는 미변경.
 - 2026-07-28: Coupon minimum과 할인 기준을 대상 line 합계로 확정하고
   FIXED_KRW/RATE_BPS 계산 모델을 BR-08과 ADR-024에 기록.
 - 2026-07-28: PointReservation/Allocation과 예약 시점 유효성 보장을 확정. lease 중
@@ -1082,8 +1052,6 @@ Milestone 0~7을 완료했다.
   retention worker만 due record를 chunk 삭제하도록 확정.
 - 2026-07-28: 주문 생성 201을 PENDING_PAYMENT/필수 deadline과
   PAID/필수 BENEFIT_ONLY Payment의 envelope oneOf으로 확정.
-- 2026-07-28: Merchant MenuConfiguration과 Inventory SellableUnit 번역 경계를
-  ADR-026으로 승격하고 configuration/availability/stock 오류를 구분.
 - 2026-07-28: Milestone 0 acceptance criteria를 모두 충족하고 문서·OpenAPI 검증
   통과 결과를 기록. 기능 구현 전에 중단.
 - 2026-07-28: Milestone 1 완료. 8개 owner/shared 모듈의 공개 `api`와 `internal`
@@ -1094,13 +1062,12 @@ Milestone 0~7을 완료했다.
   Coupon은 eligible line에만, Points는 coupon 적용 후 line 잔액 기준으로 순차
   배분하도록 BR-12와 ADR-014/024를 amendment한 뒤 구현 재개.
 - 2026-07-28: Milestone 2 완료. Merchant menu/option/configuration quote snapshot,
-  sellable requirement 정규화, KRW add/multiply overflow guard와 순차 benefit
+  옵션 집합 정규화, KRW add/multiply overflow guard와 순차 benefit
   allocator, immutable OrderLine snapshot을 구현. `./gradlew test --tests
   '*OrderPricing*' --tests '*OrderTest'` 통과.
-- 2026-07-28: Milestone 3 완료. PickupSlot과 SellableStock row lock, DB
+- 2026-07-28: Milestone 3 완료. PickupSlot row lock, DB
   CHECK/UNIQUE/FK, order/source idempotency와 reserve/confirm/expire owner API를
   구현. `./gradlew test --tests '*PickupReservationRepositoryTest'`,
-  `./gradlew test --tests '*StockReservationRepositoryTest'` 및 두 class 동시
   재실행, `./gradlew test --tests '*ModularityTests'` 통과.
 - 2026-07-28: Milestone 4 완료. Campaign 대상 line 계산과 CouponIssuance row lock,
   최초 coupon quote snapshot, PointAccount/Lot 잠금과 구체 allocation,
@@ -1122,11 +1089,11 @@ Milestone 0~7을 완료했다.
   '*ModularityTests'` 통과. owner release 누락 fault injection은 Order·선행 release와
   expiry audit가 모두 rollback됨을 확인했다.
 - 2026-07-28: Milestone 7 완료. Payment owner의 `BENEFIT_ONLY/APPROVED/0 KRW`
-  record와 DB 제약을 추가하고, Tx O에서 임시 예약 뒤 Payment 승인, 네 owner 확정,
+  record와 DB 제약을 추가하고, Tx O에서 임시 예약 뒤 Payment 승인, 세 owner 확정,
   Order `PAID`, target별 audit와 멱등 응답을 원자적으로 커밋했다.
   `./gradlew test --tests '*BenefitOnlyOrderCreationTest'` 통과. 쿠폰과 포인트를 함께
   사용하는 0원 주문의 금액·상태 tie-out, 1원 주문 분기, 같은 key 동시 요청의 단일
-  Payment, stock confirmation fault의 전체 rollback, Provider collaborator 부재를
+  Payment, pickup confirmation fault의 전체 rollback, Provider collaborator 부재를
   PostgreSQL Testcontainers에서 확인했다.
 - 2026-07-28: complete feature checkpoint 통과. `./gradlew clean test`,
   `bash scripts/verify-docs.sh`, `*ModularityTests`, PostgreSQL Testcontainers의

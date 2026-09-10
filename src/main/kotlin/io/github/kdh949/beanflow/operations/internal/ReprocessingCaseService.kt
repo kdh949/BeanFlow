@@ -51,7 +51,7 @@ internal class ReprocessingCaseEntity(
     @Column(nullable = false)
     var status: ReprocessingCaseStatus,
     @Column(nullable = false)
-    val reason: String,
+    var reason: String,
     @Column(name = "correlation_id", nullable = false)
     val correlationId: String,
     @Column(name = "created_at", nullable = false)

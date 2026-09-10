@@ -140,7 +140,7 @@ internal class OrderControllerContractTest
         @Test
         fun `quote resource contention returns its stable 409 code without writes`() {
             val fixture = OrderCreationFixture()
-            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, stockAvailable = 0)
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 0)
 
             mockMvc
                 .perform(
@@ -152,7 +152,7 @@ internal class OrderControllerContractTest
                         ).contentType(MediaType.APPLICATION_JSON)
                         .content(quoteRequestBody(fixture)),
                 ).andExpect(status().isConflict)
-                .andExpect(jsonPath("$.code").value("STOCK_NOT_AVAILABLE"))
+                .andExpect(jsonPath("$.code").value("PICKUP_SLOT_FULL"))
                 .andExpect(jsonPath("$.correlationId").isNotEmpty)
             org.assertj.core.api.Assertions
                 .assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order"))
@@ -452,6 +452,5 @@ internal class OrderControllerContractTest
             val dueAt = Timestamp.from(Instant.now().minusSeconds(1))
             jdbcTemplate.update("UPDATE ordering_order SET reservation_expires_at = ? WHERE id = ?", dueAt, orderId)
             jdbcTemplate.update("UPDATE fulfillment_pickup_reservation SET expires_at = ? WHERE order_id = ?", dueAt, orderId)
-            jdbcTemplate.update("UPDATE inventory_stock_reservation SET expires_at = ? WHERE order_id = ?", dueAt, orderId)
         }
     }

@@ -24,7 +24,7 @@ BR-11은 쿠폰 적용 후 남은 금액 전부를 포인트로 사용할 수 �
   대상이 아니다.
 - 취소·환불은 외부 환불 없이 사용 포인트와 쿠폰 예약을 owner Context 규칙에 따라
   복원한다.
-- ADR-039에 따라 미수락 `PAID` 고객 취소는 공통 여섯 보상 step을 만들되 PAYMENT를
+- ADR-039에 따라 미수락 `PAID` 고객 취소는 공통 다섯 보상 step을 만들되 PAYMENT를
   Tx C1에서 `NOT_REQUIRED`로 저장한다. Refund와 Provider 호출은 없고 recovery
   snapshot과 고객 요약 금액은 모두 0이다.
 
@@ -53,7 +53,7 @@ BR-11은 쿠폰 적용 후 남은 금액 전부를 포인트로 사용할 수 �
 - 0원 주문에서 Provider 호출 0회
 - 같은 키 동시 요청에서 Payment 한 건
 - 1원 이상 주문의 BENEFIT_ONLY 거부
-- Order, Payment와 네 자원 확정의 전체 commit 또는 rollback
+- Order, Payment와 세 자원 확정의 전체 commit 또는 rollback
 - 0원 주문이 lease 만료 후보에 포함되지 않음
 - 취소 시 포인트·쿠폰 복원 tie-out
 

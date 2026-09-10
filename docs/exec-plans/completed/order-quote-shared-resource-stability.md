@@ -11,21 +11,21 @@
 
 ## Purpose / Big Picture
 
-다른 고객의 주문이 공유 재고나 픽업 슬롯 사용량을 바꾸더라도 구매 조건과 잔여량이 유효하면
+다른 고객의 주문이 공유 자원 사용량을 바꾸더라도 구매 조건과 잔여량이 유효하면
 기존 견적으로 주문할 수 있게 한다. 정책·코드·회귀 테스트를 갱신하고 검증한 이미지를 perf 서버에
 배포한 뒤 동일 부하 조건으로 오류·지연·자원 사용을 다시 측정한다.
 
 ## Current State
 
-수정 전 v2 fingerprint는 재고 quantity/version과 슬롯 count/version을 포함했다. 당시 perf API의
+수정 전 v2 fingerprint는 공유 자원의 사용량과 version을 포함했다. 당시 perf API의
 Toss-success 5 workflow/s, 90초 실행에서 450건 중 48건이 stale였다. 2회 견적 후 순차 주문하는
-별도 재현도 실패했다. Inventory/Fulfillment는 이미 최종 transaction의 row lock 아래에서 현재
+별도 재현도 실패했다. 자원 owner는 이미 최종 transaction의 row lock 아래에서 현재
 가용성을 검사하므로 fingerprint material만 좁혀도 초과 예약 보호를 유지할 수 있다.
 
 ## Definitions
 
 - 거래 조건: 고객 입력·가격·구성·혜택 귀속·픽업 시간/정원 등 재확인이 필요한 의미.
-- 사용량: 다른 주문의 예약·확정·해제에 따라 변하는 현재 재고/슬롯 카운터.
+- 사용량: 다른 주문의 예약·확정·해제에 따라 변하는 현재 공유 자원 카운터.
 - workflow/s: quote→order→payment 사용자 흐름의 초당 시작 수이며 HTTP RPS와 다르다.
 
 ## Scope
@@ -43,13 +43,13 @@ DB schema, transaction/lock 순서, Provider/결제 상태, UI 자동 재시도,
 
 BR-49의 비예약 quote, BR-25의 terminal replay와 BR-05의 실제 예약 가용성 검증을 유지한다.
 가격·옵션·쿠폰·포인트 provenance·픽업 시간/정원 변경은 재확인 대상이다. 사용량 변화만으로
-stale되지 않지만 부족한 재고/슬롯의 주문은 명시적으로 실패한다. 자동 수락/fallback은 없다.
+stale되지 않지만 부족한 공유 자원의 주문은 명시적으로 실패한다. 자동 수락/fallback은 없다.
 
 ## Architecture and Transaction Boundaries
 
 Ordering의 `OrderQuoteCoordinator`가 quote/final-create에 동일 v3 함수를 사용한다.
 `OrderCreationTransaction`의 Store root→owner row lock→검사→예약/Order commit 순서는 유지한다.
-Inventory StockItem과 Fulfillment PickupSlot의 검사·상태 전이 코드는 변경하지 않는다.
+Fulfillment PickupSlot의 검사·상태 전이 코드는 변경하지 않는다.
 
 ## Alternatives Considered
 
@@ -58,7 +58,7 @@ Inventory StockItem과 Fulfillment PickupSlot의 검사·상태 전이 코드는
 
 ## Failure Semantics
 
-가용성 부족은 기존 `STOCK_NOT_AVAILABLE`/`PICKUP_SLOT_FULL`, 조건 변경은 `ORDER_QUOTE_STALE`다.
+가용성 부족은 기존 `PICKUP_SLOT_FULL`, 조건 변경은 `ORDER_QUOTE_STALE`다.
 실패 시 거래 write는 rollback하고 BR-25 응답을 저장·재생한다. 의존성 오류를 성공으로 바꾸지 않는다.
 배포 실패 시 기존 이미지와 Compose override를 복원하고 health를 재확인한다.
 
@@ -84,18 +84,18 @@ request/response/event shape는 그대로다. OpenAPI의 낡은 v1 설명을 v3 
 
 ## Required Tests
 
-- 공유 재고만 변하는 경우와 공유 슬롯만 변하는 경우 사전 견적 성공
+- 공유 슬롯 사용량이 변하는 경우 사전 견적 성공
 - 예약/확정/해제 사용량 전이와 충분한 자원 견적 안정성
-- 사전 견적 두 고객 동시 주문: 충분한 자원 성공, 마지막 재고/슬롯 초과 예약 방지
+- 사전 견적 두 고객 동시 주문: 충분한 자원 성공, 마지막 공유 자원 초과 예약 방지
 - 기존 가격/옵션/혜택/정원 stale, 무부수효과, terminal replay, writer 직렬화
-- Ordering 통합·API 계약, 관련 Inventory/Fulfillment, 구조 검증과 formatter
+- Ordering 통합·API 계약, 관련 자원 owner, 구조 검증과 formatter
 - 문서/OpenAPI, 관측성/배포/load tooling 계약, packaged image smoke
 
 ## Validation Commands
 
 ```bash
 ./gradlew test --tests '*OrderQuoteIntegrationTest' --tests '*CreateOrderConcurrencyTest'
-./gradlew spotlessCheck test --tests '*ordering*' --tests '*inventory*' --tests '*fulfillment*' --tests '*architecture*' bootJar
+./gradlew spotlessCheck test --tests '*ordering*' --tests '*fulfillment*' --tests '*architecture*' bootJar
 bash scripts/verify-docs.sh
 bash scripts/perf/test-observability-contract.sh
 gh workflow run build-personal-staging-images.yml --ref feature/load-test-monitoring-foundation
@@ -119,9 +119,9 @@ BR-49, ADR-123/ADR-116 status/ADR index, OpenAPI 설명, 기존 관측성 계획
 - [x] 2026-09-07 사용자 정책 수정 및 commit/push/build/deploy/재측정 승인
 - [x] 기존 owner 잠금·가용성 검사와 v2의 과도한 사용량 비교 확인
 - [x] BR-49, ADR-123과 계획 갱신
-- [x] v2에서 19개 중 새 회귀 3개 실패 확인: 재고만 갱신, 슬롯만 갱신, 충분한 자원 동시 주문
+- [x] v2에서 19개 중 새 회귀 3개 실패 확인: 독립 owner 갱신과 충분한 자원 동시 주문
 - [x] v3의 동일 회귀 19개 통과, formatter와 문서/OpenAPI 검증 통과
-- [x] Ordering/Inventory/Fulfillment/architecture 및 배포 키 관련 77개 class, 368개 테스트 통과 (실패/skip 0)
+- [x] Ordering/자원 owner/architecture 및 배포 키 관련 77개 class, 368개 테스트 통과 (실패/skip 0)
 - [x] `spotlessCheck`, `bootJar`, 문서/OpenAPI, 관측성/배포/load tooling 계약 통과
 - [x] `643fe25` 관측성 보완, `1941c62` 견적 개선 커밋 및 feature 브랜치 push
 - [x] 전체 CI `34135925797` 성공 (`1941c62`의 backend 6 shards 및 frontend)
@@ -129,7 +129,7 @@ BR-49, ADR-123/ADR-116 status/ADR index, OpenAPI 설명, 기존 관측성 계획
 - [x] `5aaec528` API 배포·health/AIStor/cursor 확인, DB 및 전체 의존 container identity 유지
 - [x] 서버 직접 재현: 두 사전 견적 모두 201, 첫 주문 후 두 번째 fingerprint 유지, 두 terminal replay 일치
 - [x] v3 예열/1/s/5/s 비교/5/s VU20/10/s/20/s 총 3,120건 승인, Grafana 직접 확인과 trace 분석
-- [x] DB 실행별 건수·재고/슬롯 counter 정합성, 부하 종료 후 회복 확인
+- [x] DB 실행별 건수·공유 자원 counter 정합성, 부하 종료 후 회복 확인
 - [x] 최초 5/s 미투입 1건과 20/s 잠금 대기를 포함한 한계·후속 범위 기록
 
 ## Surprises & Discoveries
@@ -176,8 +176,8 @@ Doppler 배포 token은 읽기 전용이며 이 변경은 secret 쓰기를 요�
 10/s·90초 900건, 20/s·60초 1,200건도 모두 승인됐다. 전체 v3 6회 3,120건/12,480 HTTP다.
 
 응답 속도 개선이나 capacity 상한은 주장하지 않는다. 20/s workflow p95는 1.52초이며 Hikari
-pending 최대 5와 재고/슬롯 DB 대기가 나타났다. 부하 종료 후 대기는 회복했고, read-only DB
-snapshot의 실행별 distinct order/승인 건수 및 재고/슬롯 카운터 정합성을 확인했다.
+pending 최대 5와 공유 자원 DB 대기가 나타났다. 부하 종료 후 대기는 회복했고, read-only DB
+snapshot의 실행별 distinct order/승인 건수 및 공유 자원 카운터 정합성을 확인했다.
 5/s exact span profile은 DB 응답 대기를 뒷받침했지만 20/s 두 span profile 조회는 빈 결과여서
 CPU 원인 근거로 사용하지 않았다. 수집 결과가 없는 것을 0으로 대체하지 않았다.
 

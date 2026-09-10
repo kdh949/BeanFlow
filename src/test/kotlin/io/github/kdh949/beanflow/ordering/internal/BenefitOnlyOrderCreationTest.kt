@@ -74,9 +74,6 @@ internal class BenefitOnlyOrderCreationTest
             assertThat(value<String>("SELECT state FROM fulfillment_pickup_reservation")).isEqualTo("CONFIRMED")
             assertThat(value<Long>("SELECT reserved_count FROM fulfillment_pickup_slot")).isZero()
             assertThat(value<Long>("SELECT confirmed_count FROM fulfillment_pickup_slot")).isEqualTo(1)
-            assertThat(value<String>("SELECT state FROM inventory_stock_reservation")).isEqualTo("CONFIRMED")
-            assertThat(value<Long>("SELECT reserved_quantity FROM inventory_sellable_stock")).isZero()
-            assertThat(value<Long>("SELECT confirmed_quantity FROM inventory_sellable_stock")).isEqualTo(1)
             assertThat(value<String>("SELECT state FROM loyalty_point_reservation")).isEqualTo("USED")
             assertThat(value<String>("SELECT state FROM promotion_coupon_reservation")).isEqualTo("USED")
             assertThat(
@@ -115,7 +112,6 @@ internal class BenefitOnlyOrderCreationTest
                 "BENEFIT_ONLY_PAYMENT_APPROVED",
                 "ORDER_CREATED",
                 "PICKUP_CONFIRMED",
-                "STOCK_CONFIRMED",
                 "COUPON_CONFIRMED",
                 "POINTS_CONFIRMED",
             )
@@ -140,7 +136,6 @@ internal class BenefitOnlyOrderCreationTest
                 .doesNotContain("\"payment\"")
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "payment_payment")).isZero()
             assertThat(value<String>("SELECT state FROM fulfillment_pickup_reservation")).isEqualTo("RESERVED")
-            assertThat(value<String>("SELECT state FROM inventory_stock_reservation")).isEqualTo("RESERVED")
             assertThat(value<String>("SELECT state FROM loyalty_point_reservation")).isEqualTo("RESERVED")
         }
 
@@ -169,7 +164,6 @@ internal class BenefitOnlyOrderCreationTest
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "payment_payment")).isEqualTo(1)
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "loyalty_point_transaction")).isEqualTo(1)
             assertThat(value<Long>("SELECT confirmed_count FROM fulfillment_pickup_slot")).isEqualTo(1)
-            assertThat(value<Long>("SELECT confirmed_quantity FROM inventory_sellable_stock")).isEqualTo(1)
         }
 
         @Test
@@ -177,7 +171,7 @@ internal class BenefitOnlyOrderCreationTest
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, priceKrw = 1_000)
             OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, fixture.customerId, 1_000)
-            installStockConfirmationFault()
+            installPickupConfirmationFault()
 
             try {
                 val response =
@@ -191,12 +185,10 @@ internal class BenefitOnlyOrderCreationTest
                 assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order")).isZero()
                 assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "payment_payment")).isZero()
                 assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isZero()
-                assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "inventory_stock_reservation")).isZero()
                 assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "loyalty_point_reservation")).isZero()
                 assertThat(value<Long>("SELECT reserved_count FROM fulfillment_pickup_slot")).isZero()
-                assertThat(value<Long>("SELECT reserved_quantity FROM inventory_sellable_stock")).isZero()
             } finally {
-                removeStockConfirmationFault()
+                removePickupConfirmationFault()
             }
         }
 
@@ -207,13 +199,13 @@ internal class BenefitOnlyOrderCreationTest
                 .allMatch { it == PaymentJpaRepository::class.java }
         }
 
-        private fun installStockConfirmationFault() {
+        private fun installPickupConfirmationFault() {
             jdbcTemplate.execute(
                 """
-                CREATE OR REPLACE FUNCTION test_remove_stock_reservation()
+                CREATE OR REPLACE FUNCTION test_remove_pickup_reservation()
                 RETURNS trigger AS ${'$'}body${'$'}
                 BEGIN
-                    DELETE FROM inventory_stock_reservation WHERE order_id = NEW.order_id;
+                    DELETE FROM fulfillment_pickup_reservation WHERE order_id = NEW.order_id;
                     RETURN NEW;
                 END;
                 ${'$'}body${'$'} LANGUAGE plpgsql
@@ -221,18 +213,18 @@ internal class BenefitOnlyOrderCreationTest
             )
             jdbcTemplate.execute(
                 """
-                CREATE TRIGGER test_remove_stock_reservation_after_payment
+                CREATE TRIGGER test_remove_pickup_reservation_after_payment
                 AFTER INSERT ON payment_payment
-                FOR EACH ROW EXECUTE FUNCTION test_remove_stock_reservation()
+                FOR EACH ROW EXECUTE FUNCTION test_remove_pickup_reservation()
                 """.trimIndent(),
             )
         }
 
-        private fun removeStockConfirmationFault() {
+        private fun removePickupConfirmationFault() {
             jdbcTemplate.execute(
-                "DROP TRIGGER IF EXISTS test_remove_stock_reservation_after_payment ON payment_payment",
+                "DROP TRIGGER IF EXISTS test_remove_pickup_reservation_after_payment ON payment_payment",
             )
-            jdbcTemplate.execute("DROP FUNCTION IF EXISTS test_remove_stock_reservation()")
+            jdbcTemplate.execute("DROP FUNCTION IF EXISTS test_remove_pickup_reservation()")
         }
 
         private inline fun <reified T : Any> value(

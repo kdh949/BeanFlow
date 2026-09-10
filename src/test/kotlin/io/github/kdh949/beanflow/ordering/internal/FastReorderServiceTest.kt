@@ -82,7 +82,6 @@ internal class FastReorderServiceTest
                 source.orderId,
             )
             val pickupBefore = count("fulfillment_pickup_reservation")
-            val stockBefore = count("inventory_stock_reservation")
 
             val response = reorderOrder.reorder("reorder-legacy-01", source.command())
 
@@ -94,7 +93,6 @@ internal class FastReorderServiceTest
             )
             assertThat(count("ordering_order")).isOne()
             assertThat(count("fulfillment_pickup_reservation")).isEqualTo(pickupBefore)
-            assertThat(count("inventory_stock_reservation")).isEqualTo(stockBefore)
         }
 
         @Test
@@ -117,12 +115,22 @@ internal class FastReorderServiceTest
             val source = sourceOrder()
             val orderBefore = count("ordering_order")
             val pickupBefore = count("fulfillment_pickup_reservation")
-            val stockBefore = count("inventory_stock_reservation")
+            val activeConfigurationIndex =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema() " +
+                            "AND indexname = 'uq_merchant_menu_configuration_active_option_key'",
+                        String::class.java,
+                    ),
+                )
             jdbcTemplate.execute(
                 "ALTER TABLE merchant_menu_configuration " +
                     "DROP CONSTRAINT ck_merchant_menu_configuration_normalized_option_key",
             )
             try {
+                // 손상 데이터 주입에는 UUID 변환을 수행하는 유일 인덱스도 일시 해제해야 한다.
+                // 실제 스키마의 정의를 보관했다가 finally에서 그대로 복원한다.
+                jdbcTemplate.execute("DROP INDEX uq_merchant_menu_configuration_active_option_key")
                 jdbcTemplate.update(
                     "UPDATE merchant_menu_configuration SET normalized_option_key = 'not-a-uuid' WHERE menu_id = ?",
                     source.fixture.menuId,
@@ -138,7 +146,6 @@ internal class FastReorderServiceTest
                 assertThat(replay.replay).isTrue()
                 assertThat(count("ordering_order")).isEqualTo(orderBefore)
                 assertThat(count("fulfillment_pickup_reservation")).isEqualTo(pickupBefore)
-                assertThat(count("inventory_stock_reservation")).isEqualTo(stockBefore)
                 assertThat(
                     jdbcTemplate.queryForObject(
                         "SELECT status FROM ordering_idempotency_record " +
@@ -156,6 +163,7 @@ internal class FastReorderServiceTest
                         "ADD CONSTRAINT ck_merchant_menu_configuration_normalized_option_key " +
                         "CHECK (beanflow_is_canonical_uuid_csv(normalized_option_key))",
                 )
+                jdbcTemplate.execute(activeConfigurationIndex)
             }
         }
 
@@ -202,23 +210,19 @@ internal class FastReorderServiceTest
         }
 
         @Test
-        fun `stock failure rolls back the new pickup reservation order snapshots and audit`() {
+        fun `sold out menu prevents a new order without changing source snapshots or audit`() {
             val source = sourceOrder()
+            jdbcTemplate.update("UPDATE merchant_menu SET available = false WHERE id = ?", source.fixture.menuId)
             val pickupBefore = count("fulfillment_pickup_reservation")
-            val stockBefore = count("inventory_stock_reservation")
             val auditBefore = count("operations_audit_record")
-            jdbcTemplate.update(
-                "UPDATE inventory_sellable_stock SET available_quantity = 0 WHERE id = ?",
-                source.fixture.sellableUnitId,
-            )
 
-            val response = reorderOrder.reorder("reorder-stock-fail", source.command())
+            val response = reorderOrder.reorder("reorder-sold-out", source.command())
 
             assertThat(response.status).isEqualTo(409)
-            assertThat(response.body).contains("\"code\":\"STOCK_NOT_AVAILABLE\"")
+            assertThat(response.body).contains("\"code\":\"REORDER_ITEMS_UNAVAILABLE\"")
+            assertThat(response.body).contains("\"reason\":\"MENU_NOT_AVAILABLE\"")
             assertThat(count("ordering_order")).isOne()
             assertThat(count("fulfillment_pickup_reservation")).isEqualTo(pickupBefore)
-            assertThat(count("inventory_stock_reservation")).isEqualTo(stockBefore)
             assertThat(count("operations_audit_record")).isEqualTo(auditBefore)
         }
 
@@ -233,7 +237,6 @@ internal class FastReorderServiceTest
             assertThat(second.status).isEqualTo(201)
             assertThat(count("ordering_order")).isEqualTo(3)
             assertThat(count("fulfillment_pickup_reservation")).isEqualTo(3)
-            assertThat(count("inventory_stock_reservation")).isEqualTo(3)
         }
 
         @Test

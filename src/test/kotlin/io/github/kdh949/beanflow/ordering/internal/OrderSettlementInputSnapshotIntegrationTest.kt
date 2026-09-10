@@ -141,7 +141,7 @@ internal class OrderSettlementInputSnapshotIntegrationTest
         }
 
         @Test
-        fun `snapshot persistence failure rolls back order coupon point stock and pickup`() {
+        fun `snapshot persistence failure rolls back order coupon point and pickup`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             val couponIssuanceId = OrderCreationDatabaseFixture.insertFixedCoupon(jdbcTemplate, fixture, 100)
@@ -305,7 +305,6 @@ internal class OrderSettlementInputSnapshotIntegrationTest
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order_settlement_input_snapshot"))
                 .isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation")).isZero()
-            assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "inventory_stock_reservation")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "promotion_coupon_reservation")).isZero()
             assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "loyalty_point_reservation")).isZero()
         }

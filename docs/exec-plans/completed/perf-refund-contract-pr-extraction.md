@@ -71,7 +71,7 @@ Flyway 변경 없음. 측정 DB를 삭제하거나 실패 상태를 성공으로
 수정 전 성공 승인 부하 3,678건은 자동 거절 후 `TOSS_CANCEL_INVALID_REQUEST`와
 `TOSS_REFUND_LOOKUP_AMBIGUOUS`를 거쳐 환불 UNKNOWN으로 남았다. 재현 테스트에서 기존 드라이버의
 환불 관련 4개 assertion이 실패했다. 분리한 refund branch는 **9/9 Node 테스트 통과**했다.
-수정 후 예열141+5/s301 = **442건은 환불·보상·재고·정원 복구 SUCCEEDED**를 DB로 확인했다.
+수정 후 예열141+5/s301 = **442건은 환불·보상·정원 복구 SUCCEEDED**를 DB로 확인했다.
 이는 콜론 계약 오류 제거와 환불 흐름의 증거다. 과거 UNKNOWN 8270건은 MANUAL_REVIEW로 남겨
 성공으로 바꾸지 않았다. 실제 Toss 결제/환불을 실행한 결과가 아니다.
 

@@ -47,7 +47,7 @@ Discovery, Ordering, Loyalty, Customer 계정의 기존 읽기 API와 frontend c
 
 ## Failure Semantics
 
-조회 실패를 잔액 0이나 빈 추천으로 대체하지 않는다. 포인트 입력이 유효하지 않으면 견적·주문을 막는다. 금액과 재고·슬롯 변동은 서버 오류와 stale 견적 확인으로 처리한다. 외부 결제 UNKNOWN/RECONCILING/MANUAL_REVIEW를 그대로 유지한다. 검색 조건이 바뀌면 이전 페이지와 늦게 도착한 응답을 표시하지 않는다.
+조회 실패를 잔액 0이나 빈 추천으로 대체하지 않는다. 포인트 입력이 유효하지 않으면 견적·주문을 막는다. 금액과 판매 상태·슬롯 변동은 서버 오류와 stale 견적 확인으로 처리한다. 외부 결제 UNKNOWN/RECONCILING/MANUAL_REVIEW를 그대로 유지한다. 검색 조건이 바뀌면 이전 페이지와 늦게 도착한 응답을 표시하지 않는다.
 
 ## Data and Migration
 

@@ -6,8 +6,7 @@
 | Store Order | 별도 Aggregate가 아니라 매장 관점에서 조회·처리하는 Order의 API 표현 | Ordering |
 | OrderLine | 주문 당시 메뉴명, 옵션명, 단가, 수량과 혜택 배분을 보존하는 내부 Entity | Ordering |
 | Fast Reorder | 소유 고객의 terminal source Order에서 메뉴 ID·정규화 option ID·수량만 가져와 현재 조건을 재검증하고 새 Order를 즉시 생성하는 Ordering 명령. 별도 Aggregate나 draft가 아니다. | Ordering |
-| MenuConfiguration | 정규화한 메뉴·옵션 조합을 가격 snapshot 원천과 sellable unit별 필요 수량에 연결하는 Merchant 소유 구성 | Merchant |
-| Sellable Unit | Inventory가 수량을 소유하는 최소 재고 식별자. 메뉴·옵션 의미는 Merchant의 MenuConfiguration이 번역한다. | Inventory |
+| MenuConfiguration | 정규화한 메뉴·옵션 조합과 판매 가능 여부를 나타내는 Merchant 소유 구성 | Merchant |
 | StoreDiscoveryProfile | Store와 1:1인 Merchant 소유 검색 profile. 검증된 공개 매장명과 `geography(Point,4326)` 위치를 가지며 Store 쓰기 Entity와 분리된다. | Merchant |
 | Precise query coordinate | 한 nearby 요청의 검증과 read query 동안에만 사용하고 어떤 durable record에도 남기지 않는 고객 위·경도 | Discovery |
 | Pickup-capable store | `open`과 `pickupAvailable`이 모두 true인 매장. `open = acceptingOrders`, `pickupAvailable = acceptingOrders && pickupEnabled`로 현재 owner state만 투영한다. | Merchant |
@@ -17,7 +16,6 @@
 | Payment Confirmation | 고객이 결제수단 승인을 요청하고 BeanFlow가 그 결과를 Payment에 확정하거나 `UNKNOWN`으로 보존하는 API 명령 | Payment |
 | Reservation | 결제 전 제한 시간 동안 자원을 임시 점유한 상태 | 각 자원 Context |
 | PickupSlot | 특정 매장의 시간 구간과 수용량 | Fulfillment |
-| StockReservation | 주문을 위해 판매 단위 재고를 임시 또는 확정 점유한 기록 | Inventory |
 | Campaign | 할인·쿠폰 발급 조건과 비용 부담을 정의한 정책 | Promotion |
 | CouponIssuance | 특정 사용자에게 발급된 쿠폰의 예약·사용·복원 생명주기 | Promotion |
 | PointAccount | 사용자와 LoyaltyProgram 조합의 가용 잔액 요약 | Loyalty |

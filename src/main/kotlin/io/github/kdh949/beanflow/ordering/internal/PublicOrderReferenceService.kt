@@ -49,7 +49,7 @@ internal class PublicOrderReferenceService(
 
     /**
      * Resolves the owned source order from its public reference and hands the
-     * internal ID to the existing fast reorder transaction. State, price, stock
+     * internal ID to the existing fast reorder transaction. State, price
      * and slot revalidation stay in that use case and are not duplicated here.
      */
     fun reorderCustomerOrder(

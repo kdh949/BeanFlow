@@ -65,7 +65,7 @@ internal class ActorPathHttpSessionIdResolver(
     }
 
     private fun delegate(request: HttpServletRequest): HttpSessionIdResolver? =
-        when (registry.classify(request.requestURI.removePrefix(request.contextPath))) {
+        when (registry.classify(request.requestURI.removePrefix(request.contextPath), request.method)) {
             AuthenticationChain.CUSTOMER -> customer
             AuthenticationChain.MERCHANT -> merchant
             AuthenticationChain.PUBLIC, AuthenticationChain.OPERATIONS, null -> null

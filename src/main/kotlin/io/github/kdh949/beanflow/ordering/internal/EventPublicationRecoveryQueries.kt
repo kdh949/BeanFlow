@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.shared.api.DomainFailure
+import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.modulith.events.EventPublication
 import org.springframework.modulith.events.core.EventPublicationRepository
@@ -32,20 +34,40 @@ internal class EventPublicationRecoveryQueries(
         require(limit > 0) { "Automatic recovery requires a bounded batch" }
         return jdbcTemplate.query(
             """
-            SELECT p.* FROM event_publication p
-            WHERE $AUTOMATIC_CANDIDATE
+            SELECT p.*, (SELECT r.id FROM ordering_manual_publication_recovery r WHERE r.publication_id = p.id AND r.status = 'RUNNING') AS manual_request_id FROM event_publication p
+            WHERE ($AUTOMATIC_CANDIDATE
               AND p.completion_attempts BETWEEN 0 AND ?
               AND p.publication_date < ?
               AND COALESCE(p.last_resubmission_date, p.publication_date)
-                    + (CASE p.completion_attempts $delays END) * interval '1 second' <= ?
+                    + (CASE p.completion_attempts $delays END) * interval '1 second' <= ?)
+              OR (p.completion_date IS NULL
+                  AND EXISTS (SELECT 1 FROM ordering_manual_publication_recovery request
+                      JOIN operations_reprocessing_case c ON c.id = request.case_id
+                      WHERE request.publication_id = p.id AND request.status = 'RUNNING'
+                        AND c.status = 'RUNNING' AND request.baseline_attempts = p.completion_attempts
+                        AND request.claimed_at IS NULL
+                        AND (p.status = 'FAILED' OR p.status IS NULL OR
+                            (request.replay_unknown AND p.status IN ('PROCESSING', 'RESUBMITTED')))))
             ORDER BY p.publication_date, p.id LIMIT ?
             """.trimIndent(),
-            { rs, _ -> publication(rs) },
+            { rs, _ -> publication(rs, rs.getObject("manual_request_id", UUID::class.java)) },
             EventPublicationRetrySchedule.maximumResubmissions,
             Timestamp.from(before),
             Timestamp.from(now),
             limit,
         )
+    }
+
+    fun validateManualPayload(id: UUID) {
+        try {
+            jdbcTemplate.query("SELECT * FROM event_publication WHERE id = ?", { rs, _ -> publication(rs) }, id).single()
+        } catch (failure: RuntimeException) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Persisted publication payload cannot be read",
+                targetReference = id.toString(),
+            )
+        }
     }
 
     fun findExhaustedIds(batchSize: Int): List<UUID> =
@@ -110,7 +132,10 @@ internal class EventPublicationRecoveryQueries(
             ),
         )
 
-    private fun publication(rs: ResultSet): TargetEventPublication =
+    private fun publication(
+        rs: ResultSet,
+        requestId: UUID? = null,
+    ): TargetEventPublication =
         RecoveryPublication(
             id = rs.getObject("id", UUID::class.java),
             payload = serializer.deserialize(rs.getString("serialized_event"), Class.forName(rs.getString("event_type"))),
@@ -119,6 +144,7 @@ internal class EventPublicationRecoveryQueries(
             state = EventPublication.Status.valueOf(rs.getString("status") ?: "PUBLISHED"),
             attempts = rs.getInt("completion_attempts"),
             resubmittedAt = rs.getTimestamp("last_resubmission_date")?.toInstant(),
+            manualRequestId = requestId,
         )
 
     private companion object {
@@ -160,7 +186,9 @@ private class RecoveryPublication(
     private var state: EventPublication.Status,
     private val attempts: Int,
     private val resubmittedAt: Instant?,
-) : TargetEventPublication {
+    override val manualRequestId: UUID?,
+) : TargetEventPublication,
+    PublicationClaimCandidate {
     private var completedAt: Instant? = null
 
     override fun getIdentifier(): UUID = id
