@@ -117,6 +117,8 @@ BR-54, ADR-124를 대체/보완하는 결과 불명 복구 결정, ADR-010, 운�
 - Passed: SettlementDisputeIntegrationTest 16 tests (failure/error 0), spotlessApply.
 - #153: PostgreSQL pg_blocking_pids로 실제 슬롯 lock 대기를 확인한 뒤 Clock을 시작 이후로 이동해 변경 거절과 기존 응답 replay를 검증했다.
 - Passed: PickupSlotManagementIntegrationTest 7 tests (failure/error 0), spotlessApply.
+- #154: Store shared lock 대기 뒤 계약 적용 시간이 지나면 INVALID_REQUEST로 전체 등록을 rollback한다. 기존 응답 replay는 유지한다.
+- Passed: StoreSettlementTermsManagementIntegrationTest 6 tests (failure/error 0), spotlessApply.
 - 나머지 구현과 원격 CI/thread 검증은 Pending이다.
 
 ## Surprises & Discoveries
