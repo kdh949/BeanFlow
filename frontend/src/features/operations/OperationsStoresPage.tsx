@@ -2,9 +2,11 @@ import { useCallback, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { Button, EmptyState, LoadingState, PageHeading, TextAreaField, TextField } from "../../design-system";
+import { Button, EmptyState, LoadingState, PageHeading, Tab, TabList, TabPanel, Tabs, TextAreaField, TextField } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
 import { useResource } from "../shared/useResource";
+import { StoreTermsWorkspace } from "./StoreTermsWorkspace";
+import { StoreMembershipsWorkspace } from "./StoreMembershipsWorkspace";
 
 type StoreIdentity = components["schemas"]["StoreIdentitySnapshot"];
 type Region = components["schemas"]["OperatorStoreRegion"];
@@ -37,12 +39,16 @@ export function OperationsStoresPage() {
 }
 
 function StoreWorkspace({ storeId, onChanged }: { storeId: string; onChanged: () => void }) {
+  const [workspace, setWorkspace] = useState("identity");
   const identity = useResource(useCallback(async () => unwrap(await operationsApi.GET("/operations/stores/{storeId}/identity", { params: { path: { storeId } } })), [storeId]));
   const [saved, setSaved] = useState(false);
   return <section className="management-workspace"><h2>선택한 매장</h2><p className="support-case-reference">{storeId}</p>
+    <Tabs value={workspace} onValueChange={setWorkspace}><TabList label="선택한 매장 업무"><Tab value="identity">식별정보·브랜드</Tab><Tab value="terms">정산 계약</Tab><Tab value="memberships">점주·직원 소속</Tab></TabList>
+    <TabPanel value="identity">
     {saved ? <p role="status">식별정보를 저장했습니다.</p> : null}
     {identity.state.status === "loading" ? <LoadingState label="현재 식별정보를 불러오는 중" /> : identity.state.status === "failed" ? <ErrorState error={identity.state.error} retry={identity.reload} /> : <div className="surface-card management-card"><IdentityForm key={identity.state.value.version} current={identity.state.value} onSaved={() => { setSaved(true); identity.reload(); onChanged(); }} onRefresh={() => { setSaved(false); identity.reload(); }} /></div>}
     <StoreBrandEditor storeId={storeId} />
+    </TabPanel><TabPanel value="terms"><StoreTermsWorkspace storeId={storeId} /></TabPanel><TabPanel value="memberships"><StoreMembershipsWorkspace storeId={storeId} /></TabPanel></Tabs>
   </section>;
 }
 

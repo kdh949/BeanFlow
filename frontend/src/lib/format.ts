@@ -18,6 +18,16 @@ export const shortTime = new Intl.DateTimeFormat("ko-KR", {
   minute: "2-digit",
 });
 
+/** Contract and history boundaries must distinguish the same day in different years. */
+export const fullDateTime = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 export function compactId(value: string) {
   return value.length > 13 ? `${value.slice(0, 8)}…${value.slice(-4)}` : value;
 }

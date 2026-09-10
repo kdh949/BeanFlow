@@ -1,0 +1,29 @@
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, userEvent } from "storybook/test";
+import { http, HttpResponse } from "msw";
+import MockDate from "mockdate";
+import { ids } from "../../../.storybook/fixtures";
+import { StoreTermsWorkspace } from "./StoreTermsWorkspace";
+
+const original = { termsVersionId: "95000000-0000-4000-8000-000000000001", storeId: ids.store, sourceReference: "contract-2026", feeRateBps: 250, effectiveFrom: "2026-01-01T00:00:00Z", effectiveTo: "2026-10-31T15:00:00Z" };
+let terms = [original];
+let key: string | null = null;
+const handlers = [
+  http.get("/api/v1/operations/stores/:storeId/settlement-terms", () => HttpResponse.json({ items: terms, revision: terms.length, nextCursor: null })),
+  http.get("/api/v1/operations/stores/:storeId/settlement-terms/:id", ({ params }) => HttpResponse.json({ terms: terms.find(item => item.termsVersionId === params.id), revision: terms.length })),
+  http.post("/api/v1/operations/stores/:storeId/settlement-terms", async ({ request }) => { const body = await request.json() as typeof original & { expectedRevision: number }; expect(body.expectedRevision).toBe(1); expect(body.feeRateBps).toBe(300); const added = { ...body, termsVersionId: "95000000-0000-4000-8000-000000000002", storeId: ids.store }; terms = [...terms, added]; return HttpResponse.json({ terms: added, revision: terms.length }, { status: 201 }); }),
+];
+const meta = { title: "Patterns/Operations/Store settlement terms", component: StoreTermsWorkspace, tags: ["autodocs"], args: { storeId: ids.store }, beforeEach: () => { MockDate.set("2026-10-01T00:00:00Z"); terms = [original]; key = null; return () => MockDate.reset(); }, parameters: { a11y: { test: "error" }, msw: { handlers }, docs: { story: { inline: false, height: "1100px" }, description: { component: "현재 불변 정산 계약 버전을 조회하고 미래 구간의 새 수수료 계약을 등록합니다. 변경 기준 revision과 동일 요청 키를 유지합니다." } } } } satisfies Meta<typeof StoreTermsWorkspace>;
+export default meta; type Story = StoryObj<typeof meta>;
+async function fill(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) {
+  await userEvent.click(await canvas.findByRole("button", { name: "새 정산 계약" }));
+  await userEvent.type(canvas.getByLabelText("계약 참조번호"), "contract-2026-nov"); await userEvent.type(canvas.getByLabelText("수수료율 (%)"), "3");
+  await userEvent.type(canvas.getByLabelText("적용 시작 (한국 시간)"), "2026-11-01T00:00"); await userEvent.type(canvas.getByLabelText("적용 종료 (한국 시간)"), "2027-11-01T00:00");
+  await userEvent.type(canvas.getByLabelText("정산 계약 등록 사유"), "갱신 계약 승인");
+}
+export const ExistingTerms: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("button", { name: "contract-2026 상세" })); await expect(await canvas.findByRole("heading", { name: "계약 상세" })).toBeVisible(); await expect(canvas.getAllByText("2.50%").length).toBeGreaterThan(0); } };
+export const RegisterFuture: Story = { play: async ({ canvas }) => { await fill(canvas); await userEvent.click(canvas.getByRole("button", { name: "정산 계약 등록" })); await expect(await canvas.findByText("새 정산 계약을 등록했습니다.")).toBeVisible(); await expect(await canvas.findByRole("button", { name: "contract-2026-nov 상세" })).toBeVisible(); await expect((await canvas.findAllByText(/2027\. 11\. 1\./)).length).toBeGreaterThan(0); } };
+export const OverlapConflict: Story = { parameters: { msw: { handlers: [http.post("/api/v1/operations/stores/:storeId/settlement-terms", () => HttpResponse.json({ code: "RESOURCE_STATE_CONFLICT", correlationId: "TERMS-CONFLICT" }, { status: 409 })), ...handlers] } }, play: async ({ canvas }) => { await fill(canvas); await userEvent.click(canvas.getByRole("button", { name: "정산 계약 등록" })); await expect(await canvas.findByText("문의 코드 TERMS-CONFLICT")).toBeVisible(); await expect(canvas.getByText("현재 상태와 요청이 맞지 않습니다")).toBeVisible(); await expect(canvas.getByRole("button", { name: "현재 계약 목록 다시 읽기" })).toBeEnabled(); } };
+export const Unavailable: Story = { parameters: { msw: { handlers: [http.get("/api/v1/operations/stores/:storeId/settlement-terms", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE" }, { status: 503 }))] } }, play: async ({ canvas }) => { await expect(await canvas.findByRole("alert")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "새 정산 계약" })).not.toBeInTheDocument(); } };
+export const LostResponse: Story = { parameters: { msw: { handlers: [http.post("/api/v1/operations/stores/:storeId/settlement-terms", async ({ request }) => { if (!key) { key = request.headers.get("Idempotency-Key"); return HttpResponse.error(); } expect(request.headers.get("Idempotency-Key")).toBe(key); return HttpResponse.json({ terms: original, revision: 1 }, { status: 201 }); }), ...handlers] } }, play: async ({ canvas }) => { await fill(canvas); await userEvent.click(canvas.getByRole("button", { name: "정산 계약 등록" })); await expect(await canvas.findByRole("alert")).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "정산 계약 등록" })); await expect(await canvas.findByText("새 정산 계약을 등록했습니다.")).toBeVisible(); } };
+export const TermsPagination: Story = { parameters: { msw: { handlers: [http.get("/api/v1/operations/stores/:storeId/settlement-terms", ({ request }) => new URL(request.url).searchParams.has("cursor") ? HttpResponse.json({ items: [{ ...original, sourceReference: "older-contract" }], revision: 2, nextCursor: null }) : HttpResponse.json({ items: [original], revision: 2, nextCursor: "terms-next" })), ...handlers] } }, play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("button", { name: "다음 정산 계약" })); await expect(await canvas.findByRole("button", { name: "older-contract 상세" })).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "이전 정산 계약" })); await expect(await canvas.findByRole("button", { name: "contract-2026 상세" })).toBeVisible(); } };

@@ -15,6 +15,10 @@ const knownErrors: Record<string, Omit<RequestErrorPresentation, "reference">> =
     title: "요청한 대상을 찾을 수 없습니다",
     description: "대상이 존재하는지, 현재 계정으로 접근할 수 있는지 확인해 주세요.",
   },
+  RESOURCE_STATE_CONFLICT: {
+    title: "현재 상태와 요청이 맞지 않습니다",
+    description: "대상의 현재 상태를 다시 조회하고, 변경할 내용과 적용 조건을 확인해 주세요.",
+  },
   REFUND_QUANTITY_UNAVAILABLE: {
     title: "환불 가능 수량이 바뀌었습니다",
     description: "환불 가능 상태를 다시 조회하고 품목과 수량을 선택해 주세요.",
