@@ -212,3 +212,13 @@ export const OpenCaseFromLink: Story = {
     await expect(canvas.getByRole("link", { name: "상담 후속 업무" })).toHaveAttribute("href", `/support/follow-up?caseId=${caseId}`);
   },
 };
+
+export const CaseManagementLink: Story = {
+  parameters: { msw: { handlers: caseHandlers } },
+  play: async ({ canvas }) => { await openCase(canvas); await expect(canvas.getByRole("link", { name: "상담 상태·담당자 관리" })).toHaveAttribute("href", `/support/cases/${caseId}`); },
+};
+
+export const PartiallyCreatedCase: Story = {
+  parameters: { msw: { handlers: [...caseHandlers, http.post("/api/v1/support/searches", () => HttpResponse.json({ searchId: "a0000000-0000-4000-8000-000000000001", items: [{ subjectType: "CUSTOMER", subjectId: customerId, maskedDisplayName: "홍*동", matchedCriterionType: "PHONE", maskedMatchedValue: "***-****-0000" }], matchedCount: 1, ambiguous: false, hasMore: false })), http.post("/api/v1/support/cases", () => HttpResponse.json({ ...activeCase, subjectLinks: [] }, { status: 201 })), http.post("/api/v1/support/cases/:caseId/subject-links", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE", correlationId: "CASE-LINK-FAILED" }, { status: 503 }))] } },
+  play: async ({ canvas }) => { await userEvent.type(canvas.getByLabelText("전화번호 또는 이메일"), "01000000000"); await userEvent.click(canvas.getByRole("button", { name: "정확 검색" })); await canvas.findByRole("button", { name: "새 상담 건에 연결" }); await userEvent.selectOptions(canvas.getByLabelText("문의 분류"), "SAFETY"); await userEvent.selectOptions(canvas.getByLabelText("우선순위"), "LOW"); await userEvent.click(await canvas.findByRole("button", { name: "새 상담 건에 연결" })); await expect(await canvas.findByText(`상담 ID ${caseId}`)).toBeVisible(); await expect(canvas.getByRole("link", { name: "상담 상태·담당자 관리" })).toHaveAttribute("href", `/support/cases/${caseId}`); await expect(await canvas.findByRole("alert")).toBeVisible(); },
+};

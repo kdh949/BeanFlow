@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
+import { caseCategoryLabels, casePriorityLabels } from "./supportCaseLabels";
 import { SupportTimelinePanel } from "./SupportTimelinePanel";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
@@ -30,15 +31,7 @@ type PersonalField = components["schemas"]["SupportPersonalDataField"];
 type CompensationEvaluation = components["schemas"]["SupportCompensationEvaluationResource"];
 type Compensation = components["schemas"]["SupportCompensationResource"];
 
-const nextCaseState: Partial<Record<SupportCase["state"], SupportCase["state"]>> = {
-  OPEN: "IN_PROGRESS",
-  IN_PROGRESS: "RESOLVED",
-  WAITING: "IN_PROGRESS",
-  RESOLVED: "CLOSED",
-};
-
 const personalFieldLabels: Record<string, string> = { CUSTOMER_PRIMARY_PHONE: "고객 등록 전화번호", STORE_SUPPORT_PHONE: "매장 상담 전화번호", COURIER_RELAY_PHONE: "배달원 안심 전화번호" };
-const caseActionLabels: Partial<Record<SupportCase["state"], string>> = { OPEN: "상담 시작", IN_PROGRESS: "해결 처리", WAITING: "상담 재개", RESOLVED: "상담 종료" };
 const fieldBySubject: Record<SubjectLink["subjectType"], PersonalField | null> = {
   CUSTOMER: "CUSTOMER_PRIMARY_PHONE",
   STORE: "STORE_SUPPORT_PHONE",
@@ -80,8 +73,6 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
   const [caseLoading, setCaseLoading] = useState(false);
   const [caseError, setCaseError] = useState<unknown>(null);
   const [creatingCase, setCreatingCase] = useState(false);
-  const [transitioning, setTransitioning] = useState(false);
-  const transitionIntent = useRef(new SubmissionIntent());
 
   const [verification, setVerification] = useState<VerificationSession | null>(null);
   const [challenge, setChallenge] = useState<VerificationChallenge | null>(null);
@@ -175,6 +166,7 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
       priority: casePriority,
       reason: "MASKED_EXACT_SEARCH_CASE_INTAKE",
     };
+    let createdCaseId: string | undefined;
     setCreatingCase(true);
     setCaseError(null);
     try {
@@ -182,6 +174,7 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
         params: { header: { "Idempotency-Key": caseIntent.current.keyFor(JSON.stringify(body)) } },
         body,
       }));
+      createdCaseId = created.caseId;
       const linkBody = {
         subjectType: candidate.subjectType === "RIDER" ? "DELIVERY" as const : candidate.subjectType,
         subjectId: candidate.subjectId,
@@ -199,38 +192,10 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
       linkIntent.current.complete();
       await openCase(created.caseId);
     } catch (error) {
+      if (createdCaseId) await openCase(createdCaseId);
       setCaseError(error);
     } finally {
       setCreatingCase(false);
-    }
-  }
-
-  async function transitionCase() {
-    if (!supportCase) return;
-    const targetState = nextCaseState[supportCase.state];
-    if (!targetState) return;
-    const body = {
-      targetState,
-      expectedVersion: supportCase.version,
-      reason: `SUPPORT_WORKSPACE_${supportCase.state}_TO_${targetState}`,
-    };
-    setTransitioning(true);
-    setCaseError(null);
-    clearSensitiveState();
-    try {
-      await operationsApi.POST("/support/cases/{caseId}/status-transitions", {
-        params: {
-          path: { caseId: supportCase.caseId },
-          header: { "Idempotency-Key": transitionIntent.current.keyFor(JSON.stringify(body)) },
-        },
-        body,
-      }).then(unwrap);
-      transitionIntent.current.complete();
-      await openCase(supportCase.caseId);
-    } catch (error) {
-      setCaseError(error);
-    } finally {
-      setTransitioning(false);
     }
   }
 
@@ -388,11 +353,11 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
 
   return (
     <div className="console-page support-workspace">
-      <PageHeading title="고객지원 콘솔" />
+      <PageHeading title="고객지원 콘솔" action={<ButtonLink variant="secondary" to="/support/cases">상담 목록</ButtonLink>} />
       {supportCase ? <>
           <section className="surface-card support-case-header">
             <div><span className="context-label">현재 상담 건</span><h2>상담 {compactId(supportCase.caseId)}</h2><p className="support-case-reference">상담 ID {supportCase.caseId}</p><p>담당자 {compactId(supportCase.assigneeId)} · 버전 {supportCase.version}</p></div>
-            <div><StatusText state={supportCase.state} /><ButtonLink variant="secondary" to={`/support/follow-up?caseId=${encodeURIComponent(supportCase.caseId)}`}>상담 후속 업무</ButtonLink>{nextCaseState[supportCase.state] ? <Button variant="secondary" loading={transitioning} onClick={() => void transitionCase()}>{caseActionLabels[supportCase.state]}</Button> : null}</div>
+            <div><StatusText state={supportCase.state} /><ButtonLink variant="secondary" to={`/support/follow-up?caseId=${encodeURIComponent(supportCase.caseId)}`}>상담 후속 업무</ButtonLink><ButtonLink variant="secondary" to={`/support/cases/${encodeURIComponent(supportCase.caseId)}`}>상담 상태·담당자 관리</ButtonLink></div>
           </section>
       </> : null}
 
@@ -428,8 +393,8 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
                 <article key={`${candidate.subjectType}-${candidate.subjectId}`}>
                   <div><StatusText state={candidate.subjectType} /><strong>{candidate.maskedDisplayName}</strong><span>{candidate.maskedMatchedValue}</span><code>{candidate.subjectId}</code></div>
                   <div className="candidate-case-options">
-                    <SelectField label="문의 분류" value={caseCategory} onValueChange={(value) => setCaseCategory(value as typeof caseCategory)}><option value="ACCOUNT_RECOVERY">계정 복구</option><option value="PAYMENT_OR_REFUND">결제·환불</option><option value="PRIVACY">개인정보</option><option value="COMPENSATION">보상</option></SelectField>
-                    <SelectField label="우선순위" value={casePriority} onValueChange={(value) => setCasePriority(value as typeof casePriority)}><option value="NORMAL">보통</option><option value="HIGH">높음</option><option value="URGENT">긴급</option></SelectField>
+                    <SelectField label="문의 분류" value={caseCategory} onValueChange={(value) => setCaseCategory(value as typeof caseCategory)}>{Object.entries(caseCategoryLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>
+                    <SelectField label="우선순위" value={casePriority} onValueChange={(value) => setCasePriority(value as typeof casePriority)}>{Object.entries(casePriorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>
                     <Button loading={creatingCase} onClick={() => void createCaseFor(candidate)}><FilePlus2 size={16} /> 새 상담 건에 연결</Button>
                   </div>
                 </article>

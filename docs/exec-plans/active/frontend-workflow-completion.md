@@ -152,7 +152,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] R3a: 주문 후속 처리 5단계·고객 취소 환불 LOOKUP 예약 및 복구 제안 생성/현재 조회/2인 판정 구현. 제안 조회 GET은 기존 grant와 DTO를 재사용하며 만료·자기 판정을 차단한다. 관련 Storybook 14개, PostgreSQL 복구 계약 14개와 Runtime parity 1개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. PaymentSetupIssue JSON Schema 6개 사례 및 390px 제안 화면 넘침 없음 확인.
 - [x] R3b: 감사 사유가 있는 포인트 계정/거래 커서 조회와 부호 있는 조정 구현. 양수 비용 주체·미래 만료를 추정하지 않고 직접 선택하며 음수 요청에서는 제거한다. 관련 Storybook 10개, PostgreSQL 조정/투영 18개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 조정 폼과 만료 오류 화면 넘침 없음 확인.
 - [x] R3c: 운영 공개 주문 환불 미리보기/실행과 공통 품목 환불 화면 구현. 관련 Storybook 24개, PostgreSQL 환불 계약 17개와 Runtime parity 1개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. 390px 결과 불명 화면 넘침 없음 확인. 전체 Storybook MCP 434개, build/sites(4개) Passed. build-storybook 및 문서 화면 검사(85 docs/47 states) Passed. 기능별 커밋 완료. 이의·복구 PR 생성은 아래 이력에 기록한다.
-- [ ] H1–H2 상담 관리 구현·검증·커밋·PR.
+- [x] H1a: 상담 목록/필터/커서/모든 요청 유형 접수와 상태·배정·접촉·내부 노트·대상 연결 관리 구현. 명령 후 현재 상태를 재조회하고 응답 유실은 같은 요청으로 확인한다. 부분 접수 뒤 연결 실패도 생성된 Case 진입을 남긴다. 관련 Storybook 26개, PostgreSQL/도메인 14개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 기존 토큰의 카드 여백을 재사용했으며 390px 화면에서 가로 넘침 없음 확인.
+- [ ] H1b–H2 본인 확인/제한형 열람 및 상담 승인 업무 구현·검증·커밋·PR.
 - [ ] H3–H4 상담 후속 처리 구현·검증·커밋·PR.
 - [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.
 - [ ] 전체 로컬 검증, 원격 CI 확인, 최종 diff/PR topology 검토.
@@ -165,6 +166,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - 운영 PR: https://github.com/kdh949/BeanFlow/pull/162 (`feature/frontend-operations-management`, head `1577242`, base `feature/frontend-store-management`). 이의·복구 branch: `feature/frontend-dispute-recovery`.
 
 - 운영 PR #162의 preflight/frontend/backend-build/6개 backend test shard 및 집계 build 원격 CI가 모두 통과했다.
+
+- 이의·복구 PR: https://github.com/kdh949/BeanFlow/pull/163 (`feature/frontend-dispute-recovery`, head `e22a3c5`, base `feature/frontend-operations-management`). 상담 관리 branch: `feature/frontend-support-management`. 원격 CI 대기 중.
 
 ## Surprises & Discoveries
 
@@ -183,6 +186,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - R3c 초기 backend 검증은 Kotlin 증분 캐시 손상 경고와 Gradle heap 부족으로 컴파일 중단됐다. `-Pkotlin.incremental=false -Pkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" --max-workers=1`로 동일 테스트를 재실행해 통과했다. 로컬 진단 heap dump는 Git에 포함하지 않고 보존한다. 저장소 JVM 설정은 변경하지 않았다.
 
 - R3c 전체 Storybook은 실행 로그에서 434개 Passed였으나 MCP 완료 응답이 반환되지 않았다. 작업용 서버/보조 테스트 프로세스만 재시작하고 telemetry를 비활성화한 재실행에서 전체 434개 Passed 응답을 확인했다.
+
+- PR #163 최초 원격 frontend 검사는 준비/재조회 완료 전에 클릭하거나 단언한 4개 Storybook에서 실패했다. 버튼 활성화 및 실제 결과를 기다리도록 4개 story 파일을 보정했고 관련 5개 MCP 검증 Passed. `e22a3c5` 후속 커밋으로 원격 CI를 재실행한다.
 
 ## Decision Log
 
