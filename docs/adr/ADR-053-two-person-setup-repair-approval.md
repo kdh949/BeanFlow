@@ -151,3 +151,11 @@ Operator, Order, Payment, Refund와 Provider 식별자는 metric tag로 사용�
 - [ADR-027](ADR-027-store-membership-authorization.md)
 - [ADR-032](ADR-032-customer-cancellation-idempotency.md)
 - [ADR-052](ADR-052-safe-setup-repair-scope.md)
+
+### 운영 화면에서의 제안 조회 (2026-09-11)
+
+`GET /operations/reprocessing-repair-proposals/{proposalId}`는 기존
+`PLATFORM_OPERATOR` 및 `PAYMENT_CANCELLATION_SETUP_REPAIR` 권한으로 제안의 현재 DTO를
+조회한다. 승인자는 제안 ID, 대상 Case, 제안자, 만료와 terminal 상태를 읽은 뒤 기존 결정
+명령을 보낸다. 조회는 제안 만료·복구를 실행하거나 금액·외부 결제 식별값을 공개하지 않는다.
+권한 확인과 제안 읽기는 한 application transaction에서 수행하고 Aggregate 상태는 변경하지 않는다.

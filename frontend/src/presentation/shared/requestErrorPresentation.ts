@@ -19,6 +19,22 @@ const knownErrors: Record<string, Omit<RequestErrorPresentation, "reference">> =
     title: "현재 상태와 요청이 맞지 않습니다",
     description: "대상의 현재 상태를 다시 조회하고, 변경할 내용과 적용 조건을 확인해 주세요.",
   },
+  REPROCESSING_PROPOSAL_STALE: {
+    title: "복구 제안 이후 상태가 바뀌었습니다",
+    description: "현재 복구 건을 다시 확인하고 필요한 경우 새 제안을 준비해 주세요.",
+  },
+  REPROCESSING_PROPOSAL_EXPIRED: {
+    title: "복구 제안 기한이 지났습니다",
+    description: "현재 상태를 확인하고 새 제안을 준비해 주세요.",
+  },
+  REPROCESSING_APPROVER_MUST_DIFFER: {
+    title: "다른 담당자의 판정이 필요합니다",
+    description: "제안자는 자신의 복구 제안을 승인하거나 반려할 수 없습니다.",
+  },
+  REPROCESSING_NOT_SAFE: {
+    title: "현재 상태에서 복구할 수 없습니다",
+    description: "복구에 필요한 정보와 현재 처리 상태를 다시 확인해 주세요.",
+  },
   REFUND_QUANTITY_UNAVAILABLE: {
     title: "환불 가능 수량이 바뀌었습니다",
     description: "환불 가능 상태를 다시 조회하고 품목과 수량을 선택해 주세요.",

@@ -1681,6 +1681,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/reprocessing-repair-proposals/{proposalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 누락 환불 복구 제안의 현재 상태 조회
+         * @description 활성 PLATFORM_OPERATOR와 PAYMENT_CANCELLATION_SETUP_REPAIR grant가 필요하다. 제안자·만료·현재 판정만 반환하며 고객 정보와 외부 결제 식별값은 노출하지 않는다. 조회는 만료 처리나 복구 실행을 수행하지 않는다.
+         */
+        get: operations["getCustomerCancellationSetupRepairProposal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/reprocessing-repair-proposals/{proposalId}/decisions": {
         parameters: {
             query?: never;
@@ -5310,6 +5330,8 @@ export interface components {
         RuntimeOperatorCompensationView: {
             /** @description 운영자 전용 전체 환불·혜택 복구 진행 정보입니다. */
             compensation: components["schemas"]["CompensationSummary"];
+            paymentSetupIssue?: components["schemas"]["PaymentSetupIssue"];
+            setupReprocessingCaseId?: components["schemas"]["Identifier"];
         };
         OperationsOidcConfiguration: {
             /** Format: uri */
@@ -7316,6 +7338,19 @@ export interface components {
             /** @description 리소스가 마지막으로 변경된 시각입니다. */
             updatedAt: components["schemas"]["DateTime"];
         };
+        /** @description Operator-only integrity issue; never returned in customer or store representations */
+        PaymentSetupIssue: {
+            /** @constant */
+            state: "SETUP_INCOMPLETE";
+            missingArtifacts?: ("CANCELLATION_REFUND" | "PAYMENT_RECOVERY_SNAPSHOT")[];
+            invariantViolations?: ("SOURCE_MISMATCH" | "AMOUNT_TIE_OUT_MISMATCH")[];
+            detectedAt: components["schemas"]["DateTime"];
+            lastErrorCode: string;
+        } & ({
+            missingArtifacts: ("CANCELLATION_REFUND" | "PAYMENT_RECOVERY_SNAPSHOT")[];
+        } | {
+            invariantViolations: ("SOURCE_MISMATCH" | "AMOUNT_TIE_OUT_MISMATCH")[];
+        });
         /**
          * @description 점주 계정이 특정 매장에서 보유한 OWNER 또는 STAFF 멤버십입니다.
          * @example {
@@ -14622,6 +14657,32 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getCustomerCancellationSetupRepairProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposalId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 복구 제안 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepairProposal"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

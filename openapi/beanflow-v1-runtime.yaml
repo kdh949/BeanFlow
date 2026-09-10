@@ -646,6 +646,8 @@ paths:
           $ref: ./beanflow-v1.yaml#/components/responses/Conflict
         '503':
           $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+  /operations/reprocessing-repair-proposals/{proposalId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1reprocessing-repair-proposals~1{proposalId}"
   /operations/reprocessing-repair-proposals/{proposalId}/decisions:
     post:
       tags:
@@ -1293,3 +1295,7 @@ components:
         compensation:
           $ref: ./beanflow-v1.yaml#/components/schemas/CompensationSummary
           description: 운영자 전용 전체 환불·혜택 복구 진행 정보입니다.
+        paymentSetupIssue:
+          $ref: ./beanflow-v1.yaml#/components/schemas/PaymentSetupIssue
+        setupReprocessingCaseId:
+          $ref: ./beanflow-v1.yaml#/components/schemas/Identifier

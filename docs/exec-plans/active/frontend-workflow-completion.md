@@ -149,7 +149,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] O3/M12: 매장별 포인트 설정 목록/필터/커서, 실제 적용 정책 조회/변경, 공통·매장별 이력 구현. 불완전한 공통 정책을 0%로 표시하지 않고 편집을 차단한다. 관련 Storybook 16개 및 전체 393개, backend 정책/동시성/Runtime parity 8개, frontend 단위 224개와 boundary/copy 21개 Passed. typecheck/check:design/build/build-storybook/docs smoke(79 docs/47 states)/sites(4개), 문서 검증(18개) Passed. 390px 포인트 화면 넘침 없음 확인. 운영 PR 생성은 아래 이력에 기록한다.
 - [x] R1: 점주 상세/철회/새 증빙 재접수와 운영 매장별 목록/검토/판정 구현. 명령 실패 후 현재 pending 판정을 다시 확인하며 상충 판정을 숨긴다. BR-22의 14개 달력 날짜 및 BR-24의 종결 건 재접수에 맞춰 예시 설명을 수정했다. 관련 Storybook 23개, PostgreSQL/도메인 19개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 판정 일부 처리 화면 넘침 없음 확인.
 - [x] R2: 알림/이벤트 수동 복구 목록·커서·원본 상세·1회 재시도·결과 확인 구현. 202 접수와 완료를 분리하고 UNKNOWN 재실행은 recoverable/차단 사유를 따른다. 관련 Storybook 13개, PostgreSQL 복구/동시성/부분 실패 19개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 결과 불명 화면 넘침 없음 확인.
-- [ ] R3 주문 취소·환불·포인트 조사 및 복구 구현·검증·커밋·PR.
+- [x] R3a: 주문 후속 처리 5단계·고객 취소 환불 LOOKUP 예약 및 복구 제안 생성/현재 조회/2인 판정 구현. 제안 조회 GET은 기존 grant와 DTO를 재사용하며 만료·자기 판정을 차단한다. 관련 Storybook 14개, PostgreSQL 복구 계약 14개와 Runtime parity 1개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. PaymentSetupIssue JSON Schema 6개 사례 및 390px 제안 화면 넘침 없음 확인.
+- [ ] R3b–R3c 포인트 조사·조정 및 운영 환불 구현·검증·커밋·PR.
 - [ ] H1–H2 상담 관리 구현·검증·커밋·PR.
 - [ ] H3–H4 상담 후속 처리 구현·검증·커밋·PR.
 - [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.
@@ -162,6 +163,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 
 - 운영 PR: https://github.com/kdh949/BeanFlow/pull/162 (`feature/frontend-operations-management`, head `1577242`, base `feature/frontend-store-management`). 이의·복구 branch: `feature/frontend-dispute-recovery`.
 
+- 운영 PR #162의 preflight/frontend/backend-build/6개 backend test shard 및 집계 build 원격 CI가 모두 통과했다.
+
 ## Surprises & Discoveries
 
 - 기존 active plan의 일부 Current State는 이미 구현된 OIDC·카탈로그·쿠폰 selector보다 오래됐다.
@@ -173,6 +176,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - 계정 조회의 X-Access-Reason에 한글을 직접 넣으면 브라우저 Headers 생성 단계에서 실패한다. 기존 조회 화면처럼 한글 목적 선택을 ASCII 사유 코드로 전송하고, 명령 본문의 변경 사유는 한글을 유지한다. 계정 exact 조회는 MERCHANT_CREDENTIAL_MANAGE, 소속 변경은 별도 STORE_MEMBERSHIP_WRITE 권한이므로 기존 ID 입력 경로도 제공한다.
 
 - 포인트 정책 OpenAPI의 discriminator mapping 누락과 global request의 required-only allOf 때문에 생성 타입이 실제 상태 값을 허용하지 않았다. 기존 서버 상태와 필드 제약을 명시하도록 계약을 보정하고 생성 타입 및 runtime parity를 검증했다. 제품 정책/서버 동작은 변경하지 않는다.
+
+- 실제 주문 후속 처리 DTO와 target에는 존재하는 paymentSetupIssue/setupReprocessingCaseId가 runtime 계약에서 누락되어 복구 진입을 생성 타입으로 사용할 수 없었다. runtime을 실제 응답과 맞추고, PaymentSetupIssue의 required-only anyOf를 명시적 allOf/anyOf로 정리했다. 두 오류 목록 중 적어도 하나는 비어 있지 않아야 하며 다른 목록은 실제 DTO처럼 빈 배열을 허용한다. 최초 경로 대조 실패는 저장소 검사기의 인용된 참조 표기로 보정한 후 통과했다.
 
 ## Decision Log
 

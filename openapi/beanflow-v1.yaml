@@ -2315,6 +2315,28 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /operations/reprocessing-repair-proposals/{proposalId}:
+    get:
+      tags: [Operations]
+      operationId: getCustomerCancellationSetupRepairProposal
+      summary: 누락 환불 복구 제안의 현재 상태 조회
+      description: 활성 PLATFORM_OPERATOR와 PAYMENT_CANCELLATION_SETUP_REPAIR grant가 필요하다. 제안자·만료·현재 판정만 반환하며 고객 정보와 외부 결제 식별값은 노출하지 않는다. 조회는 만료 처리나 복구 실행을 수행하지 않는다.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: proposalId
+          required: true
+          schema: { $ref: '#/components/schemas/Identifier' }
+      responses:
+        '200':
+          description: 현재 복구 제안
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RepairProposal' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
   /operations/reprocessing-repair-proposals/{proposalId}/decisions:
     post:
       tags: [Operations]
@@ -13192,22 +13214,35 @@ components:
       additionalProperties: false
       description: Operator-only integrity issue; never returned in customer or store representations
       required: [state, detectedAt, lastErrorCode]
-      anyOf:
-        - required: [missingArtifacts]
-        - required: [invariantViolations]
+      allOf:
+        - anyOf:
+            - required: [missingArtifacts]
+              properties:
+                missingArtifacts:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    enum: [CANCELLATION_REFUND, PAYMENT_RECOVERY_SNAPSHOT]
+            - required: [invariantViolations]
+              properties:
+                invariantViolations:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    enum: [SOURCE_MISMATCH, AMOUNT_TIE_OUT_MISMATCH]
       properties:
         state:
           const: SETUP_INCOMPLETE
         missingArtifacts:
           type: array
-          minItems: 1
           uniqueItems: true
           items:
             type: string
             enum: [CANCELLATION_REFUND, PAYMENT_RECOVERY_SNAPSHOT]
         invariantViolations:
           type: array
-          minItems: 1
           uniqueItems: true
           items:
             type: string
