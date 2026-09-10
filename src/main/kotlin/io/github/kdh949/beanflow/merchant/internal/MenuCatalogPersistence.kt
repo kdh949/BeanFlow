@@ -9,6 +9,7 @@ import java.time.Instant
 import java.util.UUID
 
 internal data class MenuCatalogCommandRecord(
+    val id: UUID,
     val payloadHash: String,
     val responseJson: String,
 )
@@ -37,11 +38,20 @@ internal class MenuCatalogCommandRepository(
         jdbc
             .query(
                 """
-                SELECT payload_hash, response_json
+                SELECT id, payload_hash, response_json
                   FROM merchant_menu_catalog_command
                  WHERE actor_id = ? AND operation = ? AND idempotency_key = ?
                 """.trimIndent(),
-                { row, _ -> MenuCatalogCommandRecord(row.getString("payload_hash"), row.getString("response_json")) },
+                {
+                    row,
+                    _,
+                    ->
+                    MenuCatalogCommandRecord(
+                        row.getObject("id", UUID::class.java),
+                        row.getString("payload_hash"),
+                        row.getString("response_json"),
+                    )
+                },
                 actorId,
                 operation,
                 idempotencyKey,

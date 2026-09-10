@@ -95,7 +95,7 @@ internal class MenuCatalogApplicationService(
         val actor = storeAccess.requireCatalogAccess(context.actorId, storeId, ALLOWED_ROLES)
         val now = clock.instant()
         val result = catalog.create(CreateMenuCatalogCommand(context.actorId, context.idempotencyKey, storeId, definition, now))
-        if (result.changed) audit(actor.role, context, result.content, null, ACTION_CREATED, now)
+        if (result.changed) audit(actor.role, context, result.commandId, result.content, null, ACTION_CREATED, now)
         return result.content
     }
 
@@ -121,7 +121,7 @@ internal class MenuCatalogApplicationService(
                     now,
                 ),
             )
-        if (result.changed) audit(actor.role, context, result.content, result.previous, ACTION_UPDATED, now)
+        if (result.changed) audit(actor.role, context, result.commandId, result.content, result.previous, ACTION_UPDATED, now)
         return result.content
     }
 
@@ -138,13 +138,14 @@ internal class MenuCatalogApplicationService(
             catalog.archive(
                 ArchiveMenuCatalogCommand(context.actorId, context.idempotencyKey, storeId, menuId, expectedVersion, now),
             )
-        if (result.changed) audit(actor.role, context, result.content, result.previous, ACTION_ARCHIVED, now)
+        if (result.changed) audit(actor.role, context, result.commandId, result.content, result.previous, ACTION_ARCHIVED, now)
         return result.content
     }
 
     private fun audit(
         role: StoreActorRole,
         context: MenuCatalogCommandContext,
+        commandId: UUID,
         after: MenuTradeContent,
         before: MenuTradeContent?,
         action: String,
@@ -164,7 +165,7 @@ internal class MenuCatalogApplicationService(
                     beforeSummary = before?.auditSummary().orEmpty(),
                     afterSummary = after.auditSummary(),
                     correlationId = correlationIds.currentOrCreate(),
-                    sourceReference = "menu-catalog:${context.actorId}:${sha256(context.idempotencyKey)}",
+                    sourceReference = "menu-catalog:$commandId",
                 ),
             ),
         )

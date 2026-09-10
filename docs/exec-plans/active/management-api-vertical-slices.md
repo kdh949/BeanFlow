@@ -41,6 +41,13 @@ DB 제약·테스트·OpenAPI를 함께 제공하는 수직 슬라이스로 검�
 - 사용자는 재고를 제외하고 #150 뒤의 순차 stack 구현을 승인했다. 정확한 시작점은 위 #150 head이며
   첫 branch는 `feature/dispute-management-api`다. ADR-124가 이 수동 stack의 순서와 writer 경계를 고정한다.
 
+### 최종 통합의 부모 갱신 (2026-09-10)
+
+최초 부모 이후 #150이 `88828060a2a762a479cebdcf2dbdebc1ca1d63be`로 전진했다. 해당 head의 backend,
+6개 test shard, frontend, CodeQL 및 집계 build가 모두 성공한 것을 확인했다. ADR-124에 갱신 검토를
+기록하고 첫 PR부터 정상 merge로 전파한다. V74~V80 번호 충돌은 없으며 새 부모 위에서 전체 backend
+검증을 다시 실행한다. 앞선 부모의 실패 관측은 당시 head의 기록이며 최종 head의 상태를 뜻하지 않는다.
+
 ## Definitions
 
 - **관리 명령:** 인증된 사람이 명시적 사유와 멱등 키로 요청한 상태 변경이다.
