@@ -8152,6 +8152,128 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ReplaceStoreMembershipRequest'
+  /operations/notification-delivery-recoveries:
+    get:
+      tags:
+      - Operations
+      operationId: listNotificationDeliveryRecoveryCases
+      summary: 알림 수동 복구 Case 목록 조회
+      description: NOTIFICATION_RECOVERY_READ grant. MANUAL_REVIEW/RUNNING/RESOLVED 이력을 actor/kind-bound signed cursor로
+        조회한다. targetId는 상세 경로의 원본 식별자다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 알림 수동 복구 Case 목록 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManualRecoveryCasePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/notification-delivery-recoveries/{deliveryId}:
+    get:
+      tags:
+      - Operations
+      operationId: getNotificationDeliveryRecovery
+      summary: 알림 원본 실행 상태와 복구 Case 조회
+      description: NOTIFICATION_RECOVERY_READ grant. 원본 상태와 Case version을 반환하며 payload, 수신자, Provider 비밀 정보를 노출하지 않는다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: deliveryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: 알림 원본 실행 상태와 복구 Case 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRecoveryView'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/notification-delivery-recoveries/{deliveryId}/retries:
+    post:
+      tags:
+      - Operations
+      operationId: retryNotificationDeliveryManualRecovery
+      summary: 알림 원본의 추가 시도 한 번 예약
+      description: NOTIFICATION_RECOVERY_RETRY grant. MANUAL_REVIEW와 현재 version을 검증하고 같은 원본/key의 한 번 실행을 예약한다. 누적 횟수와 payload를
+        보존한다. HTTP는 실행하지 않으며 Case RUNNING은 완료를 뜻하지 않는다. 최초 응답은 현재 권한 확인 후 동일 키로 replay한다. 실제 성공은 RESOLVED, 재실패는 MANUAL_REVIEW이며
+        결과 불명은 RUNNING이다. 이벤트의 unsupported/reserved listener는 409다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: deliveryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: 알림 원본의 추가 시도 한 번 예약
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManualRecoveryAcceptance'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetryNotificationDeliveryRequest'
 components:
   securitySchemes:
     bearerAuth:
@@ -8689,6 +8811,149 @@ components:
         type: string
         const: no-store
   schemas:
+    ManualRecoveryCaseView:
+      type: object
+      additionalProperties: false
+      required:
+      - caseId
+      - kind
+      - targetId
+      - status
+      - version
+      - reason
+      - updatedAt
+      - resolution
+      properties:
+        caseId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+          - NOTIFICATION_DELIVERY
+          - EVENT_PUBLICATION
+        targetId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - OPEN
+          - MANUAL_REVIEW
+          - RUNNING
+          - RESOLVED
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        resolution:
+          anyOf:
+          - type: string
+          - type: 'null'
+    ManualRecoveryCasePage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManualRecoveryCaseView'
+        nextCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+    ManualRecoveryAcceptance:
+      type: object
+      additionalProperties: false
+      required:
+      - commandId
+      - recoveryCase
+      - acceptedAt
+      properties:
+        commandId:
+          type: string
+          format: uuid
+        recoveryCase:
+          $ref: '#/components/schemas/ManualRecoveryCaseView'
+        acceptedAt:
+          type: string
+          format: date-time
+    RetryNotificationDeliveryRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - expectedVersion
+      - expectedCaseVersion
+      - reason
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedCaseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    NotificationRecoveryView:
+      type: object
+      additionalProperties: false
+      required:
+      - deliveryId
+      - state
+      - version
+      - attemptCount
+      - attemptLimit
+      - nextAttemptAt
+      - lastFailureCode
+      - recoveryCase
+      properties:
+        deliveryId:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum:
+          - PENDING
+          - PROCESSING
+          - SUCCEEDED
+          - SKIPPED
+          - RETRY_SCHEDULED
+          - MANUAL_REVIEW
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        attemptCount:
+          type: integer
+          minimum: 0
+        attemptLimit:
+          type: integer
+          minimum: 4
+        nextAttemptAt:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        lastFailureCode:
+          anyOf:
+          - type: string
+          - type: 'null'
+        recoveryCase:
+          anyOf:
+          - $ref: '#/components/schemas/ManualRecoveryCaseView'
+          - type: 'null'
     AddStoreMembershipRequest:
       type: object
       additionalProperties: false

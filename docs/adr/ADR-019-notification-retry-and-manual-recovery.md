@@ -54,3 +54,10 @@ Provider SLA, 비용, rate limit 또는 다채널 우선순위가 확정될 때
 - BR-27, BR-30
 - [ADR-009](ADR-009-explicit-failure-semantics.md)
 - [ADR-010](ADR-010-initial-event-publication.md)
+
+## 2026-09-10 명시적 운영 복구 API
+
+ADR-124의 API는 MANUAL_REVIEW인 동일 Delivery의 attemptLimit을 누적 attemptCount+1로 설정하여 추가 시도
+한 번만 예약한다. 최초 자동 시도 한도 4는 유지한다. provider idempotency key·payload·시도 이력은 보존하며
+재실패/lease 소진은 MANUAL_REVIEW로 돌아간다. 성공 또는 정책에 따른 marketing skip만 Case를 RESOLVED로
+전환한다. HTTP는 외부 Provider를 호출하지 않고 RUNNING Case와 접수 응답만 저장한다.

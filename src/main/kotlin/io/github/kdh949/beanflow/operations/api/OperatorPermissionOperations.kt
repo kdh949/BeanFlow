@@ -59,6 +59,8 @@ enum class OperatorPermission {
     STORE_SETTLEMENT_TERMS_WRITE,
     STORE_MEMBERSHIP_READ,
     STORE_MEMBERSHIP_WRITE,
+    NOTIFICATION_RECOVERY_READ,
+    NOTIFICATION_RECOVERY_RETRY,
 }
 
 interface OperatorPermissionAuthorization {

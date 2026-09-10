@@ -1076,6 +1076,12 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1memberships"
   /operations/stores/{storeId}/memberships/{accountId}:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1memberships~1{accountId}"
+  /operations/notification-delivery-recoveries:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1notification-delivery-recoveries"
+  /operations/notification-delivery-recoveries/{deliveryId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1notification-delivery-recoveries~1{deliveryId}"
+  /operations/notification-delivery-recoveries/{deliveryId}/retries:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1notification-delivery-recoveries~1{deliveryId}~1retries"
 components:
   securitySchemes:
     bearerAuth:

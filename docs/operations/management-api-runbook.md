@@ -95,3 +95,22 @@ Audit에는 revision, feeRateBps, 근거 reference digest를 기록하며 원문
   기존 읽기 요청은 이미 시작한 응답을 마칠 수 있으며 철회 후 새 접근은 거절된다.
 - 현재 운영 grant 확인 뒤 같은 key/payload를 replay한다. 다른 payload는 409이고 Audit 실패는 소속과 원장을
   rollback한다. 완료 응답은 90일 후 최대 100행씩 정리하며 소속 자체를 삭제하지 않는다.
+
+## 일반 알림 수동 복구
+
+1. `NOTIFICATION_RECOVERY_READ`로 `GET /api/v1/operations/notification-delivery-recoveries`의 Case 이력을 조회한다.
+   목록의 targetId는 Delivery ID다. actor/kind-bound signed cursor와 limit 1~100을 사용한다.
+2. `GET .../{deliveryId}`에서 원본 state/version, 누적 attemptCount/attemptLimit과 recoveryCase.version을 확인한다.
+   payload·수신자·Provider 키는 HTTP 응답에 노출하지 않는다.
+3. `NOTIFICATION_RECOVERY_RETRY`로 `POST .../{deliveryId}/retries`에 Idempotency-Key와
+   `{expectedVersion, expectedCaseVersion, reason}`을 보낸다. 원본과 Case가 MANUAL_REVIEW여야 한다.
+4. 202는 동일 Delivery의 추가 시도 한 번이 내구 저장되었다는 뜻이다. Case는 RUNNING이며 발송 성공이 아니다.
+   최초 자동 한도 4와 누적 이력은 유지하고 attemptLimit만 현재 attemptCount+1로 늘린다.
+5. 기존 워커가 같은 provider idempotency key와 payload로 실행한다. ACK 또는 정책에 따른 marketing skip은
+   Case RESOLVED, 재실패/claim lease 소진은 MANUAL_REVIEW다. 새 수신자나 payload로 복제하지 않는다.
+6. 재실패 후에는 상세의 최신 두 version으로 새 키를 사용해 다시 요청한다. 응답 유실은 같은 키/payload로
+   재시도하며 현재 grant를 다시 확인한다. 오래된 version, 다른 payload 또는 실행 중 요청은 409다.
+
+HTTP 트랜잭션은 Provider를 호출하지 않는다. 예산 변경·Case RUNNING·Audit·응답 원장을 함께 commit하며
+어느 저장이든 실패하면 전부 rollback한다. 완료 접수 응답은 90일 후 최대 100행씩 정리한다. 실제 실행 상태는
+원본 Delivery와 Case에 남는다. UNKNOWN/claim 진행 상태를 운영 API로 강제 성공 처리하지 않는다.

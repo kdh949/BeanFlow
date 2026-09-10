@@ -23,7 +23,7 @@
    원본 dirty checkout은 보존하고 한 isolated worktree에서 한 writer만 V74부터 순차 DDL을 작성한다.
    ADR-072의 독립 writer 병렬 실행을 허용하지 않는다. 선행 branch 변경은 자동 합치지 않고 다시 검증한다.
 5. 각 PR은 직전 branch를 base로 하고 증분 테스트·계약·문서를 포함한다. Draft 동안에도 개별 slice의 검증과
-   전체 stack completion을 구분한다. 전체 완료는 여섯 구현·검증·PR 및 exact ancestry 확인이며 merge/deploy와 다르다.
+   전체 stack completion을 구분한다. 전체 완료는 여섯 기능 구현·검증 및 일곱 PR 및 exact ancestry 확인이며 merge/deploy와 다르다.
 6. 재고 관리와 UI는 범위 밖이다. 신규 production dependency와 초기 DDL 재작성은 하지 않는다.
 
 ### 픽업 슬롯 authoring 경계
@@ -51,6 +51,21 @@ credential 상태를 변경하지 않는다. 비밀번호 미설정/만료 상�
 카탈로그·픽업·이의 철회의 membership shared lock과 직렬화한다. 요청 시작 시만 읽는 기존 조회 경로는
 현재 요청을 마칠 수 있지만 철회 이후 새 접근은 거절한다. 마지막 OWNER 자동 승계/계정 삭제는 제공하지 않는다.
 
+### 일반 Delivery와 publication의 명시적 재시도
+
+HTTP는 MANUAL_REVIEW Case와 원본 상태를 검증하고 동일 원본의 추가 시도 한 번을 예약한다. 조회/재시도 grant는
+알림과 publication별로 분리한다. Case expectedVersion과 알림 owner version을 확인하며 payload/provider key와
+누적 시도 횟수는 보존한다. Notification은 원본의 attemptLimit을 현재 횟수+1로 늘리고 기존 worker에서 실행한다.
+이벤트는 명시적 요청 원장의 baseline attempts와 일치하는 exact publication만 기존 registry의 claim lifecycle에
+넘긴다. 원장 없는 Case는 자동 후보에서 계속 제외한다. registered transactional listener와 event type을 검증하며
+예약 Analytics target와 unmapped target는 재시도를 거절한다.
+
+Case 상태는 접수 때 RUNNING이다. 실제 성공/skip은 RESOLVED, 실제 재실패는 MANUAL_REVIEW로 돌아간다.
+PROCESSING/RESUBMITTED처럼 결과 불명 상태는 임의로 성공 또는 실패 처리하지 않고 RUNNING으로 노출한다.
+외부 실행 전 process가 종료되어도 DB 요청이 남고, 실행 횟수가 baseline보다 증가하면 추가 자동 재실행하지 않는다.
+Notification result는 Case를 같은 트랜잭션으로 갱신하고 publication 결과는 bounded reconciliation으로 반영한다.
+기존 완료 command와 달리 RUNNING publication 요청은 90일 cleanup에서 제외한다.
+
 ## Alternatives Considered
 
 단순 Controller wrapper는 권한·감사 actor·부분 commit 실패를 해결하지 못한다. 독립 sibling migration은
@@ -74,3 +89,10 @@ PostgreSQL commit/rollback·replay·동시성·권한·Audit 장애, API parity,
 
 - [ADR-072](ADR-072-execplan-unattended-execution-and-migration-lane.md)
 - [Business Policy](../product/business-policy-decisions.md)
+
+### 복구 PR 분할 (2026-09-10)
+
+일반 복구 기능은 Notification Provider 호출과 Modulith publication 실행의 실패 모델이 달라 리뷰 범위를
+알림 복구(V79)와 publication 복구(V80)의 두 PR로 나눈다. 여섯 기능의 전체 범위는 유지하며 총 일곱 PR이다.
+Notification 소유 실행 변경과 공통 Case lifecycle port를 먼저 제공하고, 다음 PR에서 Ordering 실행 원장과
+publication 후보 선택·결과 대사를 추가한다. 각 PR은 자체 Runtime API parity와 독립 마이그레이션을 검증한다.

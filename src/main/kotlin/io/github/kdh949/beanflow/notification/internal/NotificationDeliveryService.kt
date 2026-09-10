@@ -31,6 +31,8 @@ import io.github.kdh949.beanflow.notification.internal.domain.NotificationLogica
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationRecipientType
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationTarget
 import io.github.kdh949.beanflow.notification.internal.domain.NotificationTemplate
+import io.github.kdh949.beanflow.operations.api.ManualRecoveryCaseOperations
+import io.github.kdh949.beanflow.operations.api.ManualRecoveryKind
 import io.github.kdh949.beanflow.operations.api.NotificationReprocessingCaseOperations
 import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
 import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
@@ -93,6 +95,7 @@ private data class RequestedNotification(
 @Service
 internal class NotificationDeliveryService(
     private val deliveryRepository: NotificationDeliveryJpaRepository,
+    private val manualRecoveryCases: ManualRecoveryCaseOperations,
     private val inboxRepository: NotificationInboxItemJpaRepository,
     private val inboxQueries: NotificationInboxQueryRepository,
     private val provider: NotificationProvider,
@@ -424,15 +427,16 @@ internal class NotificationDeliveryService(
             if (entity.classification == NotificationClassification.MARKETING && !marketingOptIn(entity.recipientId)) {
                 delivery.skip(now)
                 entity.apply(delivery)
+                manualRecoveryCases.finish(ManualRecoveryKind.NOTIFICATION_DELIVERY, entity.id, true, now)
                 afterCommit { marketingSkippedMetric(entity.template) }
                 return@mapNotNull null
             }
             val token = identifierSource.next()
             try {
-                delivery.claim(token, now, claimLease, MAX_ATTEMPTS)
+                delivery.claim(token, now, claimLease, entity.attemptLimit)
             } catch (_: IllegalStateException) {
-                if (entity.attemptCount >= MAX_ATTEMPTS) {
-                    delivery.markManualReviewAfterExpiredClaim(now, MAX_ATTEMPTS)
+                if (entity.attemptCount >= entity.attemptLimit) {
+                    delivery.markManualReviewAfterExpiredClaim(now, entity.attemptLimit)
                     entity.apply(delivery)
                     enterManualReview(entity, "CLAIM_LEASE_EXPIRED", now)
                 }
@@ -454,6 +458,27 @@ internal class NotificationDeliveryService(
                 dueAt = dueAt,
             )
         }
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun resumeManual(
+        deliveryId: UUID,
+        expectedVersion: Long,
+        now: Instant,
+    ) {
+        val entity =
+            deliveryRepository.findLockedById(deliveryId)
+                ?: fail(FailureCode.RESOURCE_NOT_FOUND, "Notification delivery was not found")
+        if (entity.version != expectedVersion || entity.state != NotificationDeliveryState.MANUAL_REVIEW ||
+            entity.attemptCount >= Int.MAX_VALUE || entity.attemptCount != entity.attemptLimit
+        ) {
+            fail(FailureCode.RESOURCE_STATE_CONFLICT, "Notification state or version cannot be resumed")
+        }
+        val delivery = entity.toDomain()
+        delivery.resumeManualRetry(now)
+        entity.apply(delivery)
+        entity.attemptLimit = maxOf(MAX_ATTEMPTS, entity.attemptCount + 1)
+        deliveryRepository.flush()
     }
 
     fun callProvider(claim: ClaimedNotificationDelivery): NotificationProviderResult {
@@ -499,6 +524,7 @@ internal class NotificationDeliveryService(
             is NotificationProviderResult.Acknowledged -> {
                 delivery.succeed(result.providerDeliveryReference, now)
                 entity.apply(delivery)
+                manualRecoveryCases.finish(ManualRecoveryKind.NOTIFICATION_DELIVERY, entity.id, true, now)
                 if (entity.template == NotificationTemplate.ORDER_REJECTED) {
                     recordRejectionStep(
                         requireNotNull(entity.orderId) { "Rejected order notification is missing its order" },
@@ -724,7 +750,7 @@ internal class NotificationDeliveryService(
         unknown: Boolean,
         now: Instant,
     ) {
-        delivery.recordFailure(code, now, RETRY_DELAYS, MAX_ATTEMPTS)
+        delivery.recordFailure(code, now, RETRY_DELAYS, entity.attemptLimit)
         entity.apply(delivery)
         if (delivery.state == NotificationDeliveryState.MANUAL_REVIEW) {
             enterManualReview(entity, normalized(code), now)
@@ -763,6 +789,7 @@ internal class NotificationDeliveryService(
                 now,
             )
         }
+        manualRecoveryCases.finish(ManualRecoveryKind.NOTIFICATION_DELIVERY, entity.id, false, now)
         meterRegistry.counter("beanflow.notification.delivery.manual_review.count").increment()
     }
 

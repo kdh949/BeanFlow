@@ -2564,6 +2564,8 @@
   이의는 승인 재개만 가능하고 반대 판정·철회는 거절한다. 승인 의도는 별도 Adjustment commit보다 먼저 저장한다.
   새 매장은 주문 차단 상태로 생성한다. 슬롯 정원은 예약+확정 수량 이상이며 소비 중 시간 변경을 금지한다.
   계약 구간은 중첩될 수 없고 과거 주문 스냅샷은 불변이다. 복구 접수는 원래 source/key의 재개일 뿐 성공 확정이 아니다.
+  MANUAL_REVIEW 복구 요청 하나는 추가 시도 한 번만 허용하고 누적 시도 횟수를 보존한다. 재실패 후에는
+  최신 version으로 다시 명시적으로 요청해야 한다. 실행 결과가 불명확하면 RUNNING을 유지한다.
 - **Scope:** 재고 authoring은 제외한다. UI, 외부 지급, 자동 병합·배포는 포함하지 않는다.
 - **Revisit Conditions:** 별도 승인자 분리, 매장 self-service 개설 또는 관리 grant 운영 정책이 필요해질 때.
 - **Related:** [ADR-124](../adr/ADR-124-management-api-vertical-slices.md)

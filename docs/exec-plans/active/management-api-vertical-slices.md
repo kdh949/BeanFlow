@@ -162,7 +162,7 @@ Controller는 DTO·입력 검증·actor·correlation을 Application Service에 �
 3. 픽업 슬롯 관리 슬라이스 구현·검증·commit·child PR.
 4. 수수료 계약 관리 슬라이스 구현·검증·commit·child PR.
 5. membership 관리 슬라이스 구현·검증·commit·child PR.
-6. 일반 알림·event publication 복구 슬라이스 구현·검증·commit·child PR.
+6. 일반 알림 복구와 event publication 복구를 각각 수직 슬라이스 commit·child PR로 구현·검증한다.
 8. combined regression, PR별 exact base/head ancestry·원격 CI 확인 및 completion 기록.
 
 ## Required Tests
@@ -302,3 +302,21 @@ Provider credential 또는 개인 정보를 metric label/log에 추가하지 않
   Audit rollback, 현재 운영 grant와 signed cursor를 확인했다. 테스트 정리 누락과 만료 계정 시각 fixture를
   수정한 후 최종 전체 대상 suite가 통과했다.
 - 전체 backend suite와 원격 CI는 별도 gate이며 재고 및 UI 변경은 없다.
+
+### 복구 PR 분할 (2026-09-10)
+
+일반 복구 기능은 Notification Provider 호출과 Modulith publication 실행의 실패 모델이 달라 리뷰 범위를
+알림 복구(V79)와 publication 복구(V80)의 두 PR로 나눈다. 여섯 기능의 전체 범위는 유지하며 총 일곱 PR이다.
+Notification 소유 실행 변경과 공통 Case lifecycle port를 먼저 제공하고, 다음 PR에서 Ordering 실행 원장과
+publication 후보 선택·결과 대사를 추가한다. 각 PR은 자체 Runtime API parity와 독립 마이그레이션을 검증한다.
+
+### 알림 수동 복구 슬라이스 검증 (2026-09-10)
+
+- 소속 PR #155 head `10bcff3` 위에 알림 복구를 분리하고 V79를 작성했다. 선행 픽업 PR의 고객 주문
+  스냅샷 회귀 테스트 수정은 #154/#155를 거쳐 반영했다. 해당 수정은 고객 취소 23 + 픽업 관리 6 tests를 통과했다.
+- Passed: 알림 관리 5, 기존 알림 repository 12, 상태 4, 기존 publication 복구 9, Runtime API parity 1,
+  Modulith 1, Flyway smoke 1 = 33 tests. SpotlessCheck, bootJar, 문서 검증도 통과했다.
+- 문서 검증: target 204 paths/231 operations, runtime 194 paths/221 operations, 414 schemas.
+- 실제 Notification worker에서 동일 Provider key/payload, 추가 시도 한 번, 재실패/lease 소진 후 수동 검토,
+  실제 성공 후 Case 해결, Audit rollback과 동시 접수 및 권한/cursor를 확인했다.
+- publication 복구 구현은 다음 V80 PR에서 제공한다. 전체 backend suite와 원격 CI는 별도 gate다.
