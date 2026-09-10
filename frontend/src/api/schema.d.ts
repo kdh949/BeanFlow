@@ -5374,10 +5374,230 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/support-inquiries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 내 문의 목록
+         * @description BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부 메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다. 쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+         */
+        get: operations["listCustomerSupportInquiries"];
+        put?: never;
+        /**
+         * 고객 문의 접수
+         * @description BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부 메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다. 쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+         */
+        post: operations["createCustomerSupportInquiry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/support-inquiries/{inquiryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 내 문의와 공개 답변
+         * @description BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부 메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다. 쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+         */
+        get: operations["getCustomerSupportInquiry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/support-inquiries/{inquiryId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 내 문의에 추가 메시지
+         * @description BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부 메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다. 쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+         */
+        post: operations["appendCustomerInquiryMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/inquiries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 상담 접수함
+         * @description BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부 메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다. 쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+         */
+        get: operations["listSupportInquiries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/inquiries/{inquiryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 상담 접수 및 공개 대화 문맥
+         * @description BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부 메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다. 쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+         */
+        get: operations["getSupportInquiry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/inquiries/{inquiryId}/claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 문의 인수와 상담 연결
+         * @description BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부 메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다. 쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+         */
+        post: operations["claimSupportInquiry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/inquiries/{inquiryId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 담당 상담원의 공개 답변
+         * @description BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부 메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다. 쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+         */
+        post: operations["appendSupportInquiryMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        CustomerInquiryCategory: "ORDER_STATUS" | "PICKUP_RESCHEDULE" | "ORDER_CANCELLATION" | "PAYMENT_OR_REFUND" | "COUPON_OR_POINT" | "CUSTOMER_PROFILE" | "DELIVERY_STATUS" | "ACCOUNT_RECOVERY" | "PRIVACY" | "SAFETY" | "OTHER";
+        /** @enum {string} */
+        CustomerInquiryState: "RECEIVED" | "OPEN" | "IN_PROGRESS" | "WAITING" | "RESOLVED" | "CLOSED";
+        /** @enum {string} */
+        InquiryMessageAuthor: "CUSTOMER" | "SUPPORT";
+        CustomerInquirySummary: {
+            /** Format: uuid */
+            inquiryId: string;
+            title: string;
+            category: components["schemas"]["CustomerInquiryCategory"];
+            state: components["schemas"]["CustomerInquiryState"];
+            orderReference: string | null;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        InquiryMessage: {
+            /** Format: uuid */
+            id: string;
+            author: components["schemas"]["InquiryMessageAuthor"];
+            content: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CustomerInquiryPage: {
+            items: components["schemas"]["CustomerInquirySummary"][];
+            nextCursor: string | null;
+        };
+        CustomerInquiryDetail: {
+            inquiry: components["schemas"]["CustomerInquirySummary"];
+            messages: components["schemas"]["InquiryMessage"][];
+            nextMessageCursor: string | null;
+            canReply: boolean;
+        };
+        SupportInquiryDetail: {
+            detail: components["schemas"]["CustomerInquiryDetail"];
+            caseId: string | null;
+            caseVersion: number | null;
+            canClaim: boolean;
+            canReply: boolean;
+        };
+        CreateCustomerInquiryRequest: {
+            title: string;
+            category: components["schemas"]["CustomerInquiryCategory"];
+            content: string;
+            orderReference?: string | null;
+        };
+        InquiryMessageRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            content: string;
+        };
+        SupportInquiryMessageRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+            /** Format: int64 */
+            expectedCaseVersion: number;
+            content: string;
+        };
+        InquiryClaimRequest: {
+            /** Format: int64 */
+            expectedVersion: number;
+        };
+        InquiryCommandResult: {
+            /** Format: uuid */
+            inquiryId: string;
+            messageId: string | null;
+        };
+        InquiryClaimResult: {
+            /** Format: uuid */
+            inquiryId: string;
+            /** Format: uuid */
+            caseId: string;
+        };
         /**
          * @description 현재 계정에서 가능한 긴급 열람 명령입니다. 모든 쓰기에서 재검증합니다.
          * @example DECIDE
@@ -9691,6 +9911,11 @@ export interface components {
          *     }
          */
         SupportCase: {
+            /**
+             * Format: uuid
+             * @description 내장 고객 문의와 연결된 경우 공개 대화로 돌아갈 문의 ID. 내부 메모를 공개하지 않습니다.
+             */
+            customerInquiryId?: string;
             caseId: components["schemas"]["Identifier"];
             state: components["schemas"]["SupportCaseState"];
             priority: components["schemas"]["SupportCasePriority"];
@@ -20906,6 +21131,349 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listCustomerSupportInquiries: {
+        parameters: {
+            query?: {
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerInquiryPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createCustomerSupportInquiry: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCustomerInquiryRequest"];
+            };
+        };
+        responses: {
+            /** @description 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InquiryCommandResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCustomerSupportInquiry: {
+        parameters: {
+            query?: {
+                messageCursor?: string;
+            };
+            header?: never;
+            path: {
+                inquiryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerInquiryDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    appendCustomerInquiryMessage: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Token copied from the BEANFLOW_CUSTOMER_XSRF cookie. */
+                "X-BEANFLOW-CSRF": components["parameters"]["CustomerCsrfToken"];
+            };
+            path: {
+                inquiryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InquiryMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InquiryCommandResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSupportInquiries: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                unclaimed?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerInquiryPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSupportInquiry: {
+        parameters: {
+            query?: {
+                messageCursor?: string;
+            };
+            header?: never;
+            path: {
+                inquiryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportInquiryDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    claimSupportInquiry: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                inquiryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InquiryClaimRequest"];
+            };
+        };
+        responses: {
+            /** @description 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InquiryClaimResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    appendSupportInquiryMessage: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                inquiryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportInquiryMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InquiryCommandResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }

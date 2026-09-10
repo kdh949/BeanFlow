@@ -121,6 +121,7 @@ internal data class SupportCaseResource(
     val openedAt: Instant,
     val closedAt: Instant?,
     val subjectLinks: List<SupportSubjectLinkResource>,
+    val customerInquiryId: UUID? = null,
 )
 
 internal data class SupportCaseSummaryResource(
@@ -226,6 +227,7 @@ internal class SupportCaseApplicationService(
     private val subjectLinks: SupportCaseSubjectLinkJpaRepository,
     private val idempotency: SupportCaseIdempotencyJpaRepository,
     private val queryRepository: SupportCaseQueryRepository,
+    private val customerInquiries: CustomerInquiryRepository,
     private val commandLock: SupportCaseCommandLock,
     private val cursors: SignedCursorCodec,
     private val permissions: OperatorPermissionAuthorization,
@@ -858,7 +860,7 @@ internal class SupportCaseApplicationService(
     }
 
     private fun SupportCaseEntity.toResource(links: List<SupportSubjectLinkResource>): SupportCaseResource =
-        SupportCaseResource(id, state, priority, currentAssigneeId, version, openedAt, closedAt, links)
+        SupportCaseResource(id, state, priority, currentAssigneeId, version, openedAt, closedAt, links, customerInquiries.findIdByCase(id))
 
     private fun SupportCaseSubjectLinkEntity.toResource(): SupportSubjectLinkResource =
         SupportSubjectLinkResource(id, subjectType, subjectId, relationship, linkedAt)

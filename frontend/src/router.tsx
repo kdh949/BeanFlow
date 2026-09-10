@@ -54,6 +54,9 @@ export const router = createBrowserRouter([
             { path: "payments/:paymentId/success", element: <PaymentSuccessPage /> },
             { path: "payments/:paymentId/fail", element: <PaymentFailPage /> },
             { path: "orders", element: <CustomerOrdersPage /> },
+            { path: "support", lazy: async () => { const { CustomerInquiryDirectoryPage: Component } = await import("./features/support/CustomerInquiryPages"); return { Component }; } },
+            { path: "support/new", lazy: async () => { const { CustomerInquiryCreatePage: Component } = await import("./features/support/CustomerInquiryPages"); return { Component }; } },
+            { path: "support/:inquiryId", lazy: async () => { const { CustomerInquiryDetailPage: Component } = await import("./features/support/CustomerInquiryPages"); return { Component }; } },
             { path: "points", element: <CustomerPointsPage /> },
             { path: "coupons", element: <CouponWalletPage /> },
             { path: "refunds", loader: () => redirect("/app/orders?status=PAST") },
@@ -113,6 +116,8 @@ export const router = createBrowserRouter([
       { lazy: async () => { const { OperationsSessionGate: Component } = await import("./features/auth/operations/OperationsSessionGate"); return { Component }; }, children: [
         { index: true, lazy: async () => { const { SupportWorkspacePage: Component } = await import("./features/support/SupportWorkspacePage"); return { Component }; } },
         { path: "cases", lazy: async () => { const { SupportCaseDirectoryPage: Component } = await import("./features/support/SupportCaseDirectoryPage"); return { Component }; } },
+        { path: "inquiries", lazy: async () => { const { SupportInquiryDirectoryPage: Component } = await import("./features/support/SupportInquiryPages"); return { Component }; } },
+        { path: "inquiries/:inquiryId", lazy: async () => { const { SupportInquiryDetailPage: Component } = await import("./features/support/SupportInquiryPages"); return { Component }; } },
         { path: "action-requests/:requestId", lazy: async () => { const { SupportOrderActionPage: Component } = await import("./features/support/SupportOrderActionWorkspace"); return { Component }; } },
         { path: "break-glass/:requestId", lazy: async () => { const { SupportBreakGlassPage: Component } = await import("./features/support/SupportBreakGlassWorkspace"); return { Component }; } },
         { path: "profile-changes/:profileChangeId", lazy: async () => { const { SupportProfileChangePage: Component } = await import("./features/support/SupportProfileChangeWorkspace"); return { Component }; } },

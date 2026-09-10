@@ -84,6 +84,7 @@ internal class CustomerAuthenticationIntegrationTest(
         jdbc.execute(
             """
             TRUNCATE TABLE
+                support_customer_inquiry,
                 spring_session_attributes,
                 spring_session,
                 identity_login_attempt,
@@ -92,6 +93,64 @@ internal class CustomerAuthenticationIntegrationTest(
             CASCADE
             """.trimIndent(),
         )
+    }
+
+    @Test
+    fun `native customer inquiries use the browser session csrf and owner boundary`() {
+        val csrf = issueCsrf()
+        register(csrf, "support.customer", VALID_PASSWORD, "문의 고객")
+        val session =
+            requireNotNull(
+                login(
+                    csrf,
+                    "support.customer",
+                    VALID_PASSWORD,
+                ).andExpect(status().isOk).andReturn().response.getCookie("BEANFLOW_CUSTOMER_SESSION"),
+            )
+        val body = """{"title":"문의 제목","category":"OTHER","content":"상품 이용을 확인해 주세요."}"""
+        mockMvc
+            .perform(
+                post(
+                    "/api/v1/me/support-inquiries",
+                ).cookie(session).header("Idempotency-Key", "browser-inquiry-key").contentType(MediaType.APPLICATION_JSON).content(body),
+            ).andExpect(status().isForbidden)
+        val response =
+            mockMvc
+                .perform(
+                    post(
+                        "/api/v1/me/support-inquiries",
+                    ).cookie(
+                        session,
+                        csrf,
+                    ).header(
+                        CSRF_HEADER,
+                        csrf.value,
+                    ).header("Idempotency-Key", "browser-inquiry-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body),
+                ).andExpect(status().isCreated)
+                .andReturn()
+        val id =
+            tools.jackson.databind.json.JsonMapper
+                .builder()
+                .build()
+                .readTree(response.response.contentAsString)["inquiryId"]
+                .asText()
+        mockMvc
+            .perform(
+                get("/api/v1/me/support-inquiries/$id").cookie(session),
+            ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.inquiry.state").value("RECEIVED"))
+        register(csrf, "support.other", VALID_PASSWORD, "다른 고객")
+        val otherSession =
+            requireNotNull(
+                login(
+                    csrf,
+                    "support.other",
+                    VALID_PASSWORD,
+                ).andExpect(status().isOk).andReturn().response.getCookie("BEANFLOW_CUSTOMER_SESSION"),
+            )
+        mockMvc.perform(get("/api/v1/me/support-inquiries/$id").cookie(otherSession)).andExpect(status().isNotFound)
     }
 
     @AfterEach

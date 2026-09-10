@@ -51,6 +51,7 @@ export function ConsoleFrame({ kind, access, actorLabel, ownsAnyStore = false, m
   const supportItems = [
     { to: "/support", label: "고객지원", icon: Headset, end: true },
     { to: "/support/cases", label: "상담 목록", icon: ReceiptText, end: false },
+    { to: "/support/inquiries", label: "고객 문의", icon: ReceiptText, end: false },
   ];
   const unavailablePaths = new Set<string>();
   const items = kind === "store" ? storeItems : kind === "ops" ? opsItems : supportItems;

@@ -157,7 +157,7 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] H2: 현재 주문/요청 권한/매장 동의 대상 조회와 주문 조치 평가·생성·수정·별도 승인·재배정·실행, 점주 건별 동의·한시 위임 구현. typed 선택값과 canonical digest를 대조하고 기존 트랜잭션·정책 버전을 유지한다. PostgreSQL 평가·승인·실행/Runtime parity 20개 및 서버 digest 1개, frontend 단위 229개와 boundary/copy 21개 Passed. 전체 Storybook MCP 488개, typecheck/check:design/build/build-storybook/docs smoke(93 docs/47 states)/sites(4개), 문서 검증 18개 Passed. 상담·매장 동의의 모바일 렌더링과 가로 넘침 없음 확인. 상담 관리 PR 생성은 아래 이력에 기록한다.
 - [x] H3a: 수락 후 해결 승인안·현재 승인·실행 계획·5단계 상태/결과·환불 LOOKUP 재조정 구현. 생성된 Resolution ID를 다시 조회하고 소비된 승인안의 만료와 후속 처리를 구분한다. 실제 실행 권한과 달랐던 S60 재검사를 SUPPORT_RESOLUTION_EXECUTE로 맞췄다. PostgreSQL/도메인/승인/Runtime parity 및 서버 digest 34개, frontend 단위 231개와 boundary/copy 21개 Passed. 전체 실행 로그에서 497개 interaction 통과 후 최종 변경의 MCP 29개 interaction/a11y Passed. typecheck/check:design/build/sites(4개)/문서(18개) Passed. 390px 단계 화면 넘침 없음 확인. static Storybook과 문서 화면 전체 검사는 H3b–H4 후 PR 검증에서 실행한다.
 - [x] H3b: 고정 보상 폼을 혜택·비용 책임·분담·증빙 선택과 현재 승인/지급/알림 재시도로 교체했다. 현재 대기 중인 별도 승인자에게 비개인정보 검토 자료와 불변 쿠폰 조건을 제공하고 기존 GET 열람 범위를 유지한다. 새 요청은 같은 사고 ID를 유지한다. PostgreSQL/API/Runtime parity 18개, frontend 단위 231개와 boundary/copy 21개, 전체 511개 MCP interaction/a11y(8개 순차 묶음의 모든 응답) Passed. typecheck/check:design/build/sites 4개/문서 18개 Passed. 390px 보상 화면 넘침 없음 확인. 최종 정적 Storybook·98개 Docs/47개 상태 화면도 Passed.
-- [ ] H4 정보 정정·운영 결정·긴급 열람 구현·검증·커밋·PR.
+- [x] H4: 정보 정정·운영 결정·긴급 열람을 구현했다. 로컬 전체 Storybook MCP 546개, 단위 233개 및 boundary/copy 21개, build/design/docs/sites, 관련 backend/계약 검증 Passed. PR #166 (`feature/frontend-support-profile-access`, `fed14d7`)의 원격 CI 전체 Passed.
 - [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.
 - [ ] 전체 로컬 검증, 원격 CI 확인, 최종 diff/PR topology 검토.
 
@@ -172,7 +172,7 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 
 - 운영 PR #162의 preflight/frontend/backend-build/6개 backend test shard 및 집계 build 원격 CI가 모두 통과했다.
 
-- 이의·복구 PR: https://github.com/kdh949/BeanFlow/pull/163 (`feature/frontend-dispute-recovery`, head `e22a3c5`, base `feature/frontend-operations-management`). 상담 관리 branch: `feature/frontend-support-management`. 원격 frontend와 backend-build 및 테스트 shard 5개 통과, shard 0/6 실패 원인 확인 중.
+- 이의·복구 PR: https://github.com/kdh949/BeanFlow/pull/163 (`feature/frontend-dispute-recovery`, head `e22a3c5`, base `feature/frontend-operations-management`). 상담 관리 branch: `feature/frontend-support-management`. 후속 수정 head `9bbdacb`의 원격 CI 전체 Passed.
 
 ## Surprises & Discoveries
 
@@ -224,3 +224,5 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - H4b 검증: PostgreSQL/API 5개·도메인 4개·Runtime parity 1개 Passed. 초기 조회의 read-only transaction과 권한 검사 잠금 충돌을 확인하고 정상 transaction으로 수정 후 10개 전부 재실행했다. 최종 frontend 단위 233개와 boundary/copy 21개, 전체 546개 MCP interaction/a11y, typecheck·디자인 검사(190 tokens, 99 story files, 54 routes), 앱·정적 Storybook build, Sites 4개, Docs 103개/47개 상태 화면, 문서 18개 Passed. 390px 긴급 열람 사후 검토 화면에서 가로 넘침 없음과 본문 15px 토큰 확인.
 
 - H4 마지막 검토에서 원 요청자의 실행 권한을 승인 요청 행 잠금 전에 확인하도록 순서를 맞췄다. 정정 통합 16개를 다시 실행해 Passed를 확인했다.
+
+- PR #165 (`feature/frontend-support-follow-up`, `fcaa4cf`)와 #166 (`feature/frontend-support-profile-access`, `fed14d7`) 원격 CI 전체 Passed. #166은 #165를 base로 한다.

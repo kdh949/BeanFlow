@@ -519,3 +519,7 @@
 .media-editor { display: flex; flex-direction: column; gap: var(--sp-4); }
 /* Intrinsic 512px server thumbnail; fit the available editing column. */
 .media-editor-image { max-width: 100%; height: auto; object-fit: cover; border-radius: var(--r-md); }
+
+/* Public inquiry text is primary reading content on customer and support surfaces. */
+.inquiry-heading { overflow-wrap: anywhere; }
+.management-card > .inquiry-message-content { color: var(--text-body); font-size: var(--fs-body); line-height: var(--lh-body); white-space: pre-wrap; overflow-wrap: anywhere; }

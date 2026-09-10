@@ -8974,6 +8974,406 @@ paths:
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
 
+  /me/support-inquiries:
+    get:
+      tags:
+      - Support
+      operationId: listCustomerSupportInquiries
+      summary: 내 문의 목록
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - customerSession: []
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInquiryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Support
+      operationId: createCustomerSupportInquiry
+      summary: 고객 문의 접수
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - customerSession: []
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CustomerCsrfToken'
+      responses:
+        '201':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InquiryCommandResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerInquiryRequest'
+  /me/support-inquiries/{inquiryId}:
+    get:
+      tags:
+      - Support
+      operationId: getCustomerSupportInquiry
+      summary: 내 문의와 공개 답변
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - customerSession: []
+      parameters:
+      - in: path
+        name: inquiryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: messageCursor
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInquiryDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/support-inquiries/{inquiryId}/messages:
+    post:
+      tags:
+      - Support
+      operationId: appendCustomerInquiryMessage
+      summary: 내 문의에 추가 메시지
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - customerSession: []
+      parameters:
+      - in: path
+        name: inquiryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CustomerCsrfToken'
+      responses:
+        '201':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InquiryCommandResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InquiryMessageRequest'
+  /support/inquiries:
+    get:
+      tags:
+      - Support
+      operationId: listSupportInquiries
+      summary: 상담 접수함
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+      - in: query
+        name: unclaimed
+        schema:
+          type: boolean
+          default: true
+      responses:
+        '200':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInquiryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /support/inquiries/{inquiryId}:
+    get:
+      tags:
+      - Support
+      operationId: getSupportInquiry
+      summary: 상담 접수 및 공개 대화 문맥
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: inquiryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: messageCursor
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportInquiryDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /support/inquiries/{inquiryId}/claims:
+    post:
+      tags:
+      - Support
+      operationId: claimSupportInquiry
+      summary: 문의 인수와 상담 연결
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: inquiryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InquiryClaimResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InquiryClaimRequest'
+  /support/inquiries/{inquiryId}/messages:
+    post:
+      tags:
+      - Support
+      operationId: appendSupportInquiryMessage
+      summary: 담당 상담원의 공개 답변
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: inquiryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InquiryCommandResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupportInquiryMessageRequest'
 components:
   securitySchemes:
     bearerAuth:
@@ -9511,6 +9911,244 @@ components:
         type: string
         const: no-store
   schemas:
+    CustomerInquiryCategory:
+      type: string
+      enum:
+      - ORDER_STATUS
+      - PICKUP_RESCHEDULE
+      - ORDER_CANCELLATION
+      - PAYMENT_OR_REFUND
+      - COUPON_OR_POINT
+      - CUSTOMER_PROFILE
+      - DELIVERY_STATUS
+      - ACCOUNT_RECOVERY
+      - PRIVACY
+      - SAFETY
+      - OTHER
+    CustomerInquiryState:
+      type: string
+      enum:
+      - RECEIVED
+      - OPEN
+      - IN_PROGRESS
+      - WAITING
+      - RESOLVED
+      - CLOSED
+    InquiryMessageAuthor:
+      type: string
+      enum:
+      - CUSTOMER
+      - SUPPORT
+    CustomerInquirySummary:
+      type: object
+      additionalProperties: false
+      required:
+      - inquiryId
+      - title
+      - category
+      - state
+      - orderReference
+      - version
+      - createdAt
+      properties:
+        inquiryId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        category:
+          $ref: '#/components/schemas/CustomerInquiryCategory'
+        state:
+          $ref: '#/components/schemas/CustomerInquiryState'
+        orderReference:
+          anyOf:
+          - type: string
+          - type: 'null'
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+    InquiryMessage:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - author
+      - content
+      - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        author:
+          $ref: '#/components/schemas/InquiryMessageAuthor'
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CustomerInquiryPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerInquirySummary'
+        nextCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+    CustomerInquiryDetail:
+      type: object
+      additionalProperties: false
+      required:
+      - inquiry
+      - messages
+      - nextMessageCursor
+      - canReply
+      properties:
+        inquiry:
+          $ref: '#/components/schemas/CustomerInquirySummary'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/InquiryMessage'
+        nextMessageCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+        canReply:
+          type: boolean
+    SupportInquiryDetail:
+      type: object
+      additionalProperties: false
+      required:
+      - detail
+      - caseId
+      - caseVersion
+      - canClaim
+      - canReply
+      properties:
+        detail:
+          $ref: '#/components/schemas/CustomerInquiryDetail'
+        caseId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        caseVersion:
+          anyOf:
+          - type: integer
+            format: int64
+            minimum: 0
+          - type: 'null'
+        canClaim:
+          type: boolean
+        canReply:
+          type: boolean
+    CreateCustomerInquiryRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - title
+      - category
+      - content
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        category:
+          $ref: '#/components/schemas/CustomerInquiryCategory'
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        orderReference:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+    InquiryMessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - expectedVersion
+      - content
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    SupportInquiryMessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - expectedVersion
+      - expectedCaseVersion
+      - content
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedCaseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    InquiryClaimRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - expectedVersion
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    InquiryCommandResult:
+      type: object
+      additionalProperties: false
+      required:
+      - inquiryId
+      - messageId
+      properties:
+        inquiryId:
+          type: string
+          format: uuid
+        messageId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+    InquiryClaimResult:
+      type: object
+      additionalProperties: false
+      required:
+      - inquiryId
+      - caseId
+      properties:
+        inquiryId:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
     BreakGlassWorkflowAction:
       type: string
       enum:
@@ -17162,6 +17800,10 @@ components:
             linkedAt: "2026-08-15T09:01:00Z"
             caseVersion: 2
       properties:
+        customerInquiryId:
+          type: string
+          format: uuid
+          description: 내장 고객 문의와 연결된 경우 공개 대화로 돌아갈 문의 ID. 내부 메모를 공개하지 않습니다.
         caseId:
           $ref: "#/components/schemas/Identifier"
         state:

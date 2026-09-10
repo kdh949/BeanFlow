@@ -1123,6 +1123,20 @@ paths:
   /support/break-glass-requests/{requestId}/workflow:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1break-glass-requests~1{requestId}~1workflow"
 
+  /me/support-inquiries:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1support-inquiries"
+  /me/support-inquiries/{inquiryId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1support-inquiries~1{inquiryId}"
+  /me/support-inquiries/{inquiryId}/messages:
+    $ref: "./beanflow-v1.yaml#/paths/~1me~1support-inquiries~1{inquiryId}~1messages"
+  /support/inquiries:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1inquiries"
+  /support/inquiries/{inquiryId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1inquiries~1{inquiryId}"
+  /support/inquiries/{inquiryId}/claims:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1inquiries~1{inquiryId}~1claims"
+  /support/inquiries/{inquiryId}/messages:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1inquiries~1{inquiryId}~1messages"
 components:
   securitySchemes:
     bearerAuth:
@@ -1138,6 +1152,34 @@ components:
       in: cookie
       name: BEANFLOW_MERCHANT_SESSION
   schemas:
+    CustomerInquiryCategory:
+      $ref: "./beanflow-v1.yaml#/components/schemas/CustomerInquiryCategory"
+    CustomerInquiryState:
+      $ref: "./beanflow-v1.yaml#/components/schemas/CustomerInquiryState"
+    InquiryMessageAuthor:
+      $ref: "./beanflow-v1.yaml#/components/schemas/InquiryMessageAuthor"
+    CustomerInquirySummary:
+      $ref: "./beanflow-v1.yaml#/components/schemas/CustomerInquirySummary"
+    InquiryMessage:
+      $ref: "./beanflow-v1.yaml#/components/schemas/InquiryMessage"
+    CustomerInquiryPage:
+      $ref: "./beanflow-v1.yaml#/components/schemas/CustomerInquiryPage"
+    CustomerInquiryDetail:
+      $ref: "./beanflow-v1.yaml#/components/schemas/CustomerInquiryDetail"
+    SupportInquiryDetail:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportInquiryDetail"
+    CreateCustomerInquiryRequest:
+      $ref: "./beanflow-v1.yaml#/components/schemas/CreateCustomerInquiryRequest"
+    InquiryMessageRequest:
+      $ref: "./beanflow-v1.yaml#/components/schemas/InquiryMessageRequest"
+    SupportInquiryMessageRequest:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportInquiryMessageRequest"
+    InquiryClaimRequest:
+      $ref: "./beanflow-v1.yaml#/components/schemas/InquiryClaimRequest"
+    InquiryCommandResult:
+      $ref: "./beanflow-v1.yaml#/components/schemas/InquiryCommandResult"
+    InquiryClaimResult:
+      $ref: "./beanflow-v1.yaml#/components/schemas/InquiryClaimResult"
     BreakGlassWorkflowAction:
       $ref: "./beanflow-v1.yaml#/components/schemas/BreakGlassWorkflowAction"
     BreakGlassWorkflowResource:
