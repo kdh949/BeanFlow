@@ -2565,7 +2565,13 @@
   새 매장은 주문 차단 상태로 생성한다. 슬롯 정원은 예약+확정 수량 이상이며 소비 중 시간 변경을 금지한다.
   계약 구간은 중첩될 수 없고 과거 주문 스냅샷은 불변이다. 복구 접수는 원래 source/key의 재개일 뿐 성공 확정이 아니다.
   MANUAL_REVIEW 복구 요청 하나는 추가 시도 한 번만 허용하고 누적 시도 횟수를 보존한다. 재실패 후에는
-  최신 version으로 다시 명시적으로 요청해야 한다. 실행 결과가 불명확하면 RUNNING을 유지한다.
+  최신 version으로 다시 명시적으로 요청해야 한다.
+- **Publication Unknown Amendment (2026-09-10):** 실행 결과가 불명확한 publication은 원본 상태를
+  보존한다. 마지막 실행 시작(아직 시작하지 않았으면 claim) 이후 초기 5분을 넘기면
+  MANUAL_REVIEW/EXECUTION_OUTCOME_UNKNOWN으로 조사하고 결과 대사를 계속한다. 5분은 운영 감지
+  초기값이며 실패 판정이나 재실행 허가가 아니다. 검증된 exact listener의 동일 source 동시 replay만
+  불명 상태에서 허용하고, 나머지는 owner 결과 확인 전 재실행을 거절한다. 늦은 결과는 자기 시도에만
+  반영하고 결과 불명 원장은 90일 cleanup에서 제외한다. [ADR-125](../adr/ADR-125-publication-unknown-execution-recovery.md)를 따른다.
 - **Scope:** 재고 authoring은 제외한다. UI, 외부 지급, 자동 병합·배포는 포함하지 않는다.
 - **Revisit Conditions:** 별도 승인자 분리, 매장 self-service 개설 또는 관리 grant 운영 정책이 필요해질 때.
 - **Related:** [ADR-124](../adr/ADR-124-management-api-vertical-slices.md)

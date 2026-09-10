@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.eventing.api.OrderCancelledV1
+import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import org.springframework.context.ApplicationContext
 import org.springframework.context.event.ApplicationListenerMethodAdapter
@@ -67,4 +68,13 @@ internal class ManualPublicationTargetRegistry(
                 eventType !in setOf(OrderRejectedV1::class.java.name, OrderCancelledV1::class.java.name) ||
                     compensation.find(eventType, listenerId) != null
             )
+
+    /** ADR-125: DB의 source unique constraint와 실제 동시 replay 테스트로 검증한 대상만 허용한다. */
+    fun supportsUnknownReplay(
+        eventType: String,
+        listenerId: String,
+    ): Boolean =
+        supports(eventType, listenerId) && eventType == OrderReadyV1::class.java.name &&
+            listenerId ==
+            "io.github.kdh949.beanflow.notification.internal.OrderReadyNotificationListener.on(${OrderReadyV1::class.java.name})"
 }

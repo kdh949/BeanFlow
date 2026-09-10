@@ -134,6 +134,9 @@
 
 ## 2026-09-10 명시적 운영 복구 API
 
+수동 claim과 결과 불명의 후속 정책은 [ADR-125](ADR-125-publication-unknown-execution-recovery.md)를 따른다.
+아래 초기 위임 및 RUNNING 유지 설명은 해당 범위에서 ADR-125로 대체한다.
+
 ADR-124에 따라 전용 권한·사유·멱등 키와 현재 Case version으로 원본 publication 한 건의 추가 시도를 예약한다.
 기존 자동 후보 제외는 유지하며 명시적 RUNNING 요청 원장과 baseline attempts가 일치하는 경우만 별도 후보로
 선택한다. 기존 registry가 실제 claim/resubmit/completion을 처리하며 payload·listener·누적 attempts를 초기화하지

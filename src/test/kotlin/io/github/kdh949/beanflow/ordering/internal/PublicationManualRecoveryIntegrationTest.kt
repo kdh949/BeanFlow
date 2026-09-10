@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
+import io.github.kdh949.beanflow.notification.internal.NotificationDeliveryService
 import io.github.kdh949.beanflow.operations.api.ManualRecoveryAcceptance
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -11,6 +12,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -18,8 +20,14 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.modulith.events.EventPublication.Status
+import org.springframework.modulith.events.IncompleteEventPublications
+import org.springframework.modulith.events.ResubmissionOptions
+import org.springframework.modulith.events.core.PublicationTargetIdentifier
+import org.springframework.modulith.events.core.TargetEventPublication
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -29,10 +37,15 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.ObjectMapper
 import java.sql.Timestamp
+import java.time.Duration
+import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 @Import(
     TestcontainersConfiguration::class,
@@ -61,8 +74,15 @@ internal class PublicationManualRecoveryIntegrationTest(
     @Autowired private val jdbc: JdbcTemplate,
     @Autowired private val mvc: MockMvc,
     @Autowired private val mapper: ObjectMapper,
+    @Autowired private val execution: ManualPublicationExecutionService,
+    @Autowired private val scope: AutomaticPublicationRecoveryScope,
+    @Autowired private val publications: IncompleteEventPublications,
+    @Autowired private val retention: PublicationManualCommandRetention,
     @Autowired transactionManager: PlatformTransactionManager,
 ) {
+    @MockitoSpyBean private lateinit var repository: AutomaticPublicationRecoveryRepository
+
+    @MockitoSpyBean private lateinit var readyService: NotificationDeliveryService
     private val tx = TransactionTemplate(transactionManager)
 
     @BeforeEach fun clean() {
@@ -72,6 +92,7 @@ internal class PublicationManualRecoveryIntegrationTest(
         )
         listener.reset()
         clock.reset()
+        Mockito.reset(repository, readyService)
     }
 
     @Test fun `HTTP acceptance preserves the source and registry completes only the selected publication`() {
@@ -338,6 +359,11 @@ internal class PublicationManualRecoveryIntegrationTest(
             "UPDATE event_publication SET status = 'PROCESSING', completion_attempts = 7 WHERE id = ?",
             c.publicationId,
         )
+        jdbc.update(
+            "UPDATE ordering_manual_publication_recovery SET claimed_at = ? WHERE publication_id = ?",
+            Timestamp.from(clock.instant()),
+            c.publicationId,
+        )
         results.runOnce()
         assertThat(
             management
@@ -445,6 +471,326 @@ internal class PublicationManualRecoveryIntegrationTest(
                 ).recoveryCase!!
                 .status,
         ).isEqualTo("MANUAL_REVIEW")
+    }
+
+    @Test fun `legacy NULL publication is claimed and actually dispatched once`() {
+        val c = command()
+        jdbc.update("UPDATE event_publication SET status = NULL WHERE id = ?", c.publicationId)
+        val original = source(c.publicationId)
+        management.retry(c)
+        listener.allowSuccess()
+        worker.runOnce()
+        await { management.get(c.actorId, c.publicationId).completedAt != null }
+        results.runOnce()
+        assertThat(management.get(c.actorId, c.publicationId).attemptCount).isEqualTo(7)
+        assertThat(management.get(c.actorId, c.publicationId).recoveryCase!!.status).isEqualTo("RESOLVED")
+        assertThat(source(c.publicationId)).isEqualTo(original)
+    }
+
+    @Test fun `a stale worker cannot consume an old or newer manual request after another worker finishes`() {
+        val c = command()
+        management.retry(c)
+        val selected = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val pool = Executors.newSingleThreadExecutor()
+        try {
+            val stale =
+                pool.submit {
+                    scope.run(clock.instant()) {
+                        publications.resubmitIncompletePublications(
+                            ResubmissionOptions.defaults().withFilter {
+                                selected.countDown()
+                                check(release.await(20, TimeUnit.SECONDS))
+                                true
+                            },
+                        )
+                    }
+                }
+            check(selected.await(5, TimeUnit.SECONDS))
+            worker.runOnce()
+            await {
+                val current = management.get(c.actorId, c.publicationId)
+                current.attemptCount == 7 && current.status == "FAILED"
+            }
+            results.runOnce()
+            val version = management.get(c.actorId, c.publicationId).recoveryCase!!.version
+            val next = management.retry(c.copy(key = "new-manual-after-failure", expectedCaseVersion = version))
+            release.countDown()
+            stale.get(5, TimeUnit.SECONDS)
+            assertThat(management.get(c.actorId, c.publicationId).attemptCount).isEqualTo(7)
+            assertThat(
+                jdbc.queryForObject(
+                    "SELECT claimed_at IS NULL FROM ordering_manual_publication_recovery WHERE id = ?",
+                    Boolean::class.java,
+                    next.commandId,
+                ),
+            ).isTrue()
+            listener.allowSuccess()
+            worker.runOnce()
+            await { management.get(c.actorId, c.publicationId).completedAt != null }
+            assertThat(management.get(c.actorId, c.publicationId).attemptCount).isEqualTo(8)
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
+            check(pool.awaitTermination(10, TimeUnit.SECONDS))
+        }
+    }
+
+    @Test fun `interrupted claim becomes unknown and verified listener resumes safely`() {
+        val (c, _) = readyCommand()
+        val original = source(c.publicationId)
+        val accepted = management.retry(c)
+        assertThat(execution.claim(PublicationClaimSelection(c.publicationId, 6, accepted.commandId), clock.instant())).isTrue()
+        clock.advance(Duration.ofMinutes(4))
+        results.runOnce()
+        assertThat(management.get(c.actorId, c.publicationId).recoveryCase!!.status).isEqualTo("RUNNING")
+        clock.advance(Duration.ofMinutes(2))
+        results.runOnce()
+        val unknown = management.get(c.actorId, c.publicationId)
+        assertThat(unknown.status).isEqualTo("RESUBMITTED")
+        assertThat(unknown.executionOutcome).isEqualTo("UNKNOWN")
+        assertThat(unknown.recoveryCase!!.reason).isEqualTo("EXECUTION_OUTCOME_UNKNOWN")
+        assertThat(unknown.recoverable).isTrue()
+        assertThat(repository.countByStatus(Status.RESUBMITTED)).isZero()
+        worker.runOnce()
+        assertThat(management.get(c.actorId, c.publicationId).attemptCount).isEqualTo(7)
+        assertThat(management.retry(c)).isEqualTo(accepted)
+        management.retry(c.copy(key = "ready-after-interruption", expectedCaseVersion = unknown.recoveryCase.version))
+        worker.runOnce()
+        await { management.get(c.actorId, c.publicationId).completedAt != null }
+        results.runOnce()
+        assertThat(management.get(c.actorId, c.publicationId).recoveryCase!!.status).isEqualTo("RESOLVED")
+        assertOwnerRowsOnce()
+        assertThat(source(c.publicationId)).isEqualTo(original)
+    }
+
+    @Test fun `unknown execution remains durable and unverified listener cannot retry even when the row says failed`() {
+        val c = command()
+        val accepted = management.retry(c)
+        execution.claim(PublicationClaimSelection(c.publicationId, 6, accepted.commandId), clock.instant())
+        clock.advance(Duration.ofMinutes(6))
+        jdbc.execute(
+            "ALTER TABLE operations_audit_record ADD CONSTRAINT test_unknown_audit_failure " +
+                "CHECK (action <> 'PUBLICATION_EXECUTION_UNKNOWN')",
+        )
+        try {
+            assertThatThrownBy { results.runOnce() }.isInstanceOf(RuntimeException::class.java)
+            assertThat(management.get(c.actorId, c.publicationId).recoveryCase!!.status).isEqualTo("RUNNING")
+        } finally {
+            jdbc.execute("ALTER TABLE operations_audit_record DROP CONSTRAINT test_unknown_audit_failure")
+        }
+        results.runOnce()
+        val view = management.get(c.actorId, c.publicationId)
+        assertThat(view.recoverable).isFalse()
+        assertThat(view.retryBlockedReason).isEqualTo("UNKNOWN_EXECUTION_REQUIRES_OWNER_RECONCILIATION")
+        failure(FailureCode.RESOURCE_STATE_CONFLICT) {
+            management.retry(c.copy(key = "unverified-unknown-retry", expectedCaseVersion = view.recoveryCase!!.version))
+        }
+        jdbc.update(
+            "UPDATE ordering_manual_publication_recovery SET completed_at = ? WHERE id = ?",
+            Timestamp.from(clock.instant().minus(Duration.ofDays(91))),
+            accepted.commandId,
+        )
+        retention.cleanup()
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM ordering_manual_publication_recovery WHERE id = ?",
+                Long::class.java,
+                accepted.commandId,
+            ),
+        ).isOne()
+        jdbc.update("UPDATE event_publication SET status = 'FAILED' WHERE id = ?", c.publicationId)
+        assertThat(management.get(c.actorId, c.publicationId).recoverable).isFalse()
+        results.runOnce()
+        assertThat(management.get(c.actorId, c.publicationId).executionOutcome).isEqualTo("FAILED")
+        assertThat(management.get(c.actorId, c.publicationId).recoverable).isTrue()
+    }
+
+    @Test fun `owner commit without ACK permits replay and fences late old success`() {
+        val (c, event) = readyCommand()
+        val oldEntered = CountDownLatch(1)
+        val oldRelease = CountDownLatch(1)
+        val newEntered = CountDownLatch(1)
+        val newRelease = CountDownLatch(1)
+        val fallback = TargetEventPublication.of(event, PublicationTargetIdentifier.of(READY_LISTENER), clock.instant())
+        Mockito
+            .doAnswer { invocation ->
+                val publication = invocation.arguments[0] as TargetEventPublication
+                if (publication.identifier == c.publicationId) {
+                    val old = publication.completionAttempts == 6
+                    (if (old) oldEntered else newEntered).countDown()
+                    check((if (old) oldRelease else newRelease).await(20, TimeUnit.SECONDS))
+                }
+                invocation.callRealMethod()
+            }.`when`(repository)
+            .markCompleted(
+                Mockito.any(TargetEventPublication::class.java) ?: fallback,
+                Mockito.any(Instant::class.java) ?: clock.instant(),
+            )
+        val first = management.retry(c)
+        try {
+            worker.runOnce()
+            check(oldEntered.await(5, TimeUnit.SECONDS))
+            assertOwnerRowsOnce()
+            clock.advance(Duration.ofMinutes(6))
+            results.runOnce()
+            val version = management.get(c.actorId, c.publicationId).recoveryCase!!.version
+            val next = management.retry(c.copy(key = "safe-after-ack-loss", expectedCaseVersion = version))
+            worker.runOnce()
+            check(newEntered.await(5, TimeUnit.SECONDS))
+            oldRelease.countDown()
+            await { outcome(first.commandId) == "SUCCEEDED" }
+            results.runOnce()
+            assertThat(management.get(c.actorId, c.publicationId).status).isEqualTo("PROCESSING")
+            assertThat(management.get(c.actorId, c.publicationId).recoveryCase!!.status).isEqualTo("RUNNING")
+            assertThat(outcome(next.commandId)).isNull()
+            newRelease.countDown()
+            await { management.get(c.actorId, c.publicationId).completedAt != null }
+            results.runOnce()
+            assertThat(management.get(c.actorId, c.publicationId).recoveryCase!!.status).isEqualTo("RESOLVED")
+            assertOwnerRowsOnce()
+        } finally {
+            oldRelease.countDown()
+            newRelease.countDown()
+            await { outcome(first.commandId) != null && outcome(first.commandId) != "UNKNOWN" }
+        }
+    }
+
+    @Test fun `late old listener failure cannot overwrite successful replay`() {
+        val (c, event) = readyCommand()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val calls = AtomicInteger()
+        Mockito
+            .doAnswer { invocation ->
+                if (calls.incrementAndGet() == 1) {
+                    entered.countDown()
+                    check(release.await(20, TimeUnit.SECONDS))
+                    throw IllegalStateException("old execution failed after recovery")
+                }
+                invocation.callRealMethod()
+            }.`when`(readyService)
+            .requestReady(Mockito.any(OrderReadyV1::class.java) ?: event)
+        val first = management.retry(c)
+        try {
+            worker.runOnce()
+            check(entered.await(5, TimeUnit.SECONDS))
+            clock.advance(Duration.ofMinutes(6))
+            results.runOnce()
+            val version = management.get(c.actorId, c.publicationId).recoveryCase!!.version
+            management.retry(c.copy(key = "overlapping-safe-replay", expectedCaseVersion = version))
+            worker.runOnce()
+            await { management.get(c.actorId, c.publicationId).completedAt != null }
+            results.runOnce()
+            val completed = management.get(c.actorId, c.publicationId)
+            release.countDown()
+            await { outcome(first.commandId) == "FAILED" }
+            results.runOnce()
+            assertThat(management.get(c.actorId, c.publicationId)).isEqualTo(completed)
+            assertOwnerRowsOnce()
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test fun `concurrent owner transactions preserve one inbox and delivery and recover the losing attempt`() {
+        val (c, event) = readyCommand()
+        val firstSaved = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val calls = AtomicInteger()
+        val secondPid = AtomicReference<Int>()
+        Mockito
+            .doAnswer { invocation ->
+                when (calls.incrementAndGet()) {
+                    1 -> {
+                        val result = invocation.callRealMethod()
+                        firstSaved.countDown()
+                        check(release.await(20, TimeUnit.SECONDS))
+                        result
+                    }
+
+                    2 -> {
+                        secondPid.set(jdbc.queryForObject("SELECT pg_backend_pid()", Int::class.java))
+                        invocation.callRealMethod()
+                    }
+
+                    else -> {
+                        invocation.callRealMethod()
+                    }
+                }
+            }.`when`(readyService)
+            .requestReady(Mockito.any(OrderReadyV1::class.java) ?: event)
+        val first = management.retry(c)
+        try {
+            worker.runOnce()
+            check(firstSaved.await(5, TimeUnit.SECONDS))
+            clock.advance(Duration.ofMinutes(6))
+            results.runOnce()
+            val version = management.get(c.actorId, c.publicationId).recoveryCase!!.version
+            val next = management.retry(c.copy(key = "concurrent-owner-replay", expectedCaseVersion = version))
+            worker.runOnce()
+            await {
+                secondPid.get()?.let { pid ->
+                    jdbc.queryForObject("SELECT cardinality(pg_blocking_pids(?)) > 0", Boolean::class.java, pid) == true
+                } == true
+            }
+            release.countDown()
+            await { outcome(first.commandId) == "SUCCEEDED" && outcome(next.commandId) == "FAILED" }
+            results.runOnce()
+            assertThat(management.get(c.actorId, c.publicationId).status).isEqualTo("FAILED")
+            assertOwnerRowsOnce()
+            val retryVersion = management.get(c.actorId, c.publicationId).recoveryCase!!.version
+            management.retry(c.copy(key = "after-concurrent-conflict", expectedCaseVersion = retryVersion))
+            worker.runOnce()
+            await { management.get(c.actorId, c.publicationId).completedAt != null }
+            results.runOnce()
+            assertThat(management.get(c.actorId, c.publicationId).recoveryCase!!.status).isEqualTo("RESOLVED")
+            assertOwnerRowsOnce()
+        } finally {
+            release.countDown()
+        }
+    }
+
+    private fun outcome(requestId: UUID): String? =
+        jdbc
+            .query(
+                "SELECT execution_outcome FROM ordering_manual_publication_recovery WHERE id = ?",
+                { rs, _ -> rs.getString("execution_outcome") },
+                requestId,
+            ).singleOrNull()
+
+    private fun assertOwnerRowsOnce() {
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notification_delivery", Long::class.java)).isOne()
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notification_inbox_item", Long::class.java)).isOne()
+        assertThat(jdbc.queryForObject("SELECT sum(attempt_count) FROM notification_delivery", Long::class.java)).isZero()
+    }
+
+    private fun readyCommand(): Pair<RetryPublicationCommand, OrderReadyV1> {
+        val c = command()
+        val event =
+            mapper.readValue(
+                jdbc.queryForObject("SELECT serialized_event FROM event_publication WHERE id = ?", String::class.java, c.publicationId),
+                OrderReadyV1::class.java,
+            )
+        val id =
+            jdbc.queryForObject(
+                "SELECT id FROM event_publication WHERE listener_id = ? " +
+                    "AND serialized_event::jsonb -> 'envelope' ->> 'eventId' = ?",
+                UUID::class.java,
+                READY_LISTENER,
+                event.envelope.eventId.toString(),
+            )!!
+        // 실패 이력은 있지만 owner 작업은 아직 commit되지 않은 publication을 준비한다.
+        jdbc.execute("TRUNCATE notification_delivery, notification_inbox_item CASCADE")
+        jdbc.update("UPDATE event_publication SET completion_date = NULL, status = 'FAILED', completion_attempts = 6 WHERE id = ?", id)
+        handoff.transition(id, clock.instant())
+        return c.copy(publicationId = id, expectedCaseVersion = management.get(c.actorId, id).recoveryCase!!.version) to event
+    }
+
+    private companion object {
+        const val READY_LISTENER =
+            "io.github.kdh949.beanflow.notification.internal.OrderReadyNotificationListener.on(" +
+                "io.github.kdh949.beanflow.eventing.api.OrderReadyV1)"
     }
 
     private fun command(): RetryPublicationCommand {

@@ -20,6 +20,7 @@ import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
@@ -66,6 +67,8 @@ internal data class PublicationRecoveryView(
     val completedAt: Instant?,
     val recoverable: Boolean,
     val recoveryCase: ManualRecoveryCaseView?,
+    val executionOutcome: String?,
+    val retryBlockedReason: String?,
 )
 
 internal data class RetryPublicationCommand(
@@ -103,7 +106,13 @@ internal class PublicationManualRecoveryService(
     private val queries: EventPublicationRecoveryQueries,
     private val jdbc: JdbcTemplate,
     private val mapper: ObjectMapper,
+    private val clock: Clock,
+    @Value("\${beanflow.publication-manual-recovery.stale-after:PT5M}") private val staleAfter: Duration,
 ) {
+    init {
+        require(!staleAfter.isZero && !staleAfter.isNegative) { "Publication stale detection duration must be positive" }
+    }
+
     fun list(
         actorId: UUID,
         cursor: String?,
@@ -142,6 +151,11 @@ internal class PublicationManualRecoveryService(
                 ManualRecoveryKind.EVENT_PUBLICATION,
                 id,
             )
+        val unknown = hasUnknownExecution(id)
+        val eligible =
+            ((row.failed() && !unknown) || (unknown && targets.supportsUnknownReplay(row.eventType, row.listenerId))) &&
+                row.completedAt == null && row.attempts < Int.MAX_VALUE && recoveryCase?.status == "MANUAL_REVIEW" &&
+                targets.supports(row.eventType, row.listenerId)
         return PublicationRecoveryView(
             id,
             row.eventType,
@@ -149,12 +163,10 @@ internal class PublicationManualRecoveryService(
             row.status ?: "PUBLISHED",
             row.attempts,
             row.completedAt,
-            row.failed() && recoveryCase?.status == "MANUAL_REVIEW" &&
-                targets.supports(
-                    row.eventType,
-                    row.listenerId,
-                ),
+            eligible,
             recoveryCase,
+            latestOutcome(id),
+            if (unknown && row.completedAt == null && !eligible) "UNKNOWN_EXECUTION_REQUIRES_OWNER_RECONCILIATION" else null,
         )
     }
 
@@ -230,7 +242,9 @@ internal class PublicationManualRecoveryService(
                 FailureCode.RESOURCE_NOT_FOUND,
                 "Publication was not found",
             )
-        if (!row.failed() ||
+        val unknown = hasUnknownExecution(row.id)
+        val replayUnknown = unknown && targets.supportsUnknownReplay(row.eventType, row.listenerId)
+        if (row.completedAt != null || (!row.failed() && !replayUnknown) || (unknown && !replayUnknown) ||
             row.attempts >= Int.MAX_VALUE ||
             !targets.supports(
                 row.eventType,
@@ -285,7 +299,7 @@ internal class PublicationManualRecoveryService(
         )
         jdbc.update(
             "INSERT INTO ordering_manual_publication_recovery(id, actor_id, publication_id, case_id, idempotency_key, " +
-                "payload_hash, response_json, baseline_attempts, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'RUNNING', ?)",
+                "payload_hash, response_json, baseline_attempts, status, created_at, case_version, replay_unknown) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'RUNNING', ?, ?, ?)",
             id,
             c.actorId,
             c.publicationId,
@@ -295,25 +309,41 @@ internal class PublicationManualRecoveryService(
             mapper.writeValueAsString(response),
             row.attempts,
             Timestamp.from(c.now),
+            recoveryCase.version,
+            replayUnknown,
         )
         return response
     }
 
+    private fun hasUnknownExecution(id: UUID): Boolean =
+        jdbc.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM ordering_manual_publication_recovery WHERE publication_id = ? AND execution_outcome = 'UNKNOWN')",
+            Boolean::class.java,
+            id,
+        ) == true
+
+    private fun latestOutcome(id: UUID): String? =
+        jdbc
+            .query(
+                "SELECT execution_outcome FROM ordering_manual_publication_recovery WHERE publication_id = ? " +
+                    "ORDER BY baseline_attempts DESC, created_at DESC, id DESC LIMIT 1",
+                { rs, _ -> rs.getString("execution_outcome") },
+                id,
+            ).firstOrNull()
+
     fun pending(): List<UUID> =
         jdbc.query(
             "SELECT r.id FROM ordering_manual_publication_recovery r LEFT JOIN event_publication p ON p.id = r.publication_id " +
-                "WHERE r.status = 'RUNNING' AND (p.id IS NULL OR p.completion_date IS NOT NULL OR " +
-                "((p.status = 'FAILED' OR p.status IS NULL) AND p.completion_attempts > r.baseline_attempts)) " +
+                "WHERE (r.status = 'RUNNING' OR r.execution_outcome = 'UNKNOWN' OR r.result_pending) AND (" +
+                "r.execution_outcome IN ('SUCCEEDED', 'FAILED') OR (r.status = 'RUNNING' AND p.id IS NULL) OR " +
+                "(p.completion_attempts = r.baseline_attempts::bigint + 1 AND (p.completion_date IS " +
+                "NOT NULL OR p.status = 'FAILED')) OR " +
+                "(r.status = 'RUNNING' AND p.completion_attempts > r.baseline_attempts AND " +
+                "(COALESCE(r.started_at, r.claimed_at, p.last_resubmission_date) IS NULL OR " +
+                "COALESCE(r.started_at, r.claimed_at, p.last_resubmission_date) <= ?))) " +
                 "ORDER BY r.created_at, r.id LIMIT 100",
-            {
-                rs,
-                _,
-                ->
-                rs.getObject(
-                    "id",
-                    UUID::class.java,
-                )
-            },
+            { rs, _ -> rs.getObject("id", UUID::class.java) },
+            Timestamp.from(clock.instant().minus(staleAfter)),
         )
 
     fun reconcile(
@@ -323,54 +353,87 @@ internal class PublicationManualRecoveryService(
         val publicationId =
             jdbc
                 .query(
-                    "SELECT publication_id FROM ordering_manual_publication_recovery WHERE id = ? AND status = 'RUNNING'",
-                    {
-                        rs,
-                        _,
-                        ->
-                        rs.getObject(
-                            "publication_id",
-                            UUID::class.java,
+                    "SELECT publication_id FROM ordering_manual_publication_recovery WHERE id = ? AND (status = 'RUNNING' OR execution_outcome = 'UNKNOWN' OR result_pending)",
+                    { rs, _ -> rs.getObject("publication_id", UUID::class.java) },
+                    id,
+                ).singleOrNull() ?: return
+        val publication = find(publicationId, true)
+        val request =
+            jdbc
+                .query(
+                    "SELECT baseline_attempts, case_version, execution_outcome, status, started_at, " +
+                        "claimed_at FROM ordering_manual_publication_recovery " +
+                        "WHERE id = ? AND (status = 'RUNNING' OR execution_outcome = 'UNKNOWN' OR result_pending) FOR UPDATE",
+                    { rs, _ ->
+                        RecoveryAttempt(
+                            rs.getInt("baseline_attempts"),
+                            rs.getLong("case_version"),
+                            rs.getString("execution_outcome"),
+                            rs.getString("status"),
+                            rs.getTimestamp("started_at")?.toInstant() ?: rs.getTimestamp("claimed_at")?.toInstant(),
                         )
                     },
                     id,
                 ).singleOrNull() ?: return
-        val publication =
-            find(
-                publicationId,
-                true,
+        val sameAttempt = publication != null && publication.attempts.toLong() == request.baseline.toLong() + 1
+        val outcome =
+            when {
+                request.outcome in setOf("SUCCEEDED", "FAILED") -> request.outcome!!
+
+                sameAttempt && publication.completedAt != null -> "SUCCEEDED"
+
+                sameAttempt && publication.failed() -> "FAILED"
+
+                request.status == "RUNNING" && (
+                    publication == null || (
+                        publication.attempts > request.baseline &&
+                            (request.startedAt == null || !request.startedAt.isAfter(now.minus(staleAfter)))
+                    )
+                ) -> "UNKNOWN"
+
+                else -> return
+            }
+        val updated = cases.recordPublicationOutcome(publicationId, request.caseVersion, outcome, now)
+        if (outcome == "UNKNOWN" && request.outcome != "UNKNOWN") {
+            audits.appendAll(
+                listOf(
+                    AppendAuditRecordCommand(
+                        actorId = "publication-recovery-worker",
+                        actorType = AuditActorType.SYSTEM,
+                        category = AuditCategory.OPERATIONS_POLICY,
+                        action = "PUBLICATION_EXECUTION_UNKNOWN",
+                        targetType = "EventPublication",
+                        targetId = publicationId,
+                        occurredAt = now,
+                        reason = "EXECUTION_OUTCOME_UNKNOWN",
+                        afterSummary = mapOf("state" to "MANUAL_REVIEW", "outcome" to "UNKNOWN"),
+                        correlationId = "publication-recovery:$id",
+                        sourceReference = "publication-recovery:$id:unknown",
+                    ),
+                ),
             )
-        val baseline =
-            jdbc
-                .query(
-                    "SELECT baseline_attempts FROM ordering_manual_publication_recovery WHERE id = ? " +
-                        "AND status = 'RUNNING' FOR UPDATE",
-                    {
-                        rs,
-                        _,
-                        ->
-                        rs.getInt("baseline_attempts")
-                    },
-                    id,
-                ).singleOrNull() ?: return
-        val resolved = publication?.completedAt != null
-        val failed =
-            publication == null ||
-                (publication.failed() && publication.attempts > baseline)
-        if (!resolved && !failed) return
-        cases.finish(
-            ManualRecoveryKind.EVENT_PUBLICATION,
-            publicationId,
-            resolved,
-            now,
-        )
+        }
         jdbc.update(
-            "UPDATE ordering_manual_publication_recovery SET status = ?, completed_at = ? WHERE id = ?",
-            if (resolved) "RESOLVED" else "MANUAL_REVIEW",
+            "UPDATE ordering_manual_publication_recovery SET status = ?, execution_outcome = ?, " +
+                "completed_at = ?, result_pending = false, " +
+                "unknown_since = CASE WHEN ? = 'UNKNOWN' THEN COALESCE(unknown_since, ?) ELSE unknown_since END, case_version = ? WHERE id = ?",
+            if (outcome == "SUCCEEDED") "RESOLVED" else "MANUAL_REVIEW",
+            outcome,
             Timestamp.from(now),
+            outcome,
+            Timestamp.from(now),
+            updated?.version ?: request.caseVersion,
             id,
         )
     }
+
+    private data class RecoveryAttempt(
+        val baseline: Int,
+        val caseVersion: Long,
+        val outcome: String?,
+        val status: String,
+        val startedAt: Instant?,
+    )
 
     private fun find(
         id: UUID,
@@ -503,7 +566,7 @@ internal class PublicationManualCommandRetention(
     fun cleanup() {
         jdbc.update(
             "DELETE FROM ordering_manual_publication_recovery WHERE id IN (SELECT id FROM ordering_manual_publication_recovery " +
-                "WHERE status <> 'RUNNING' AND completed_at < ? ORDER BY completed_at, id LIMIT 100 FOR UPDATE SKIP LOCKED)",
+                "WHERE status <> 'RUNNING' AND execution_outcome IS DISTINCT FROM 'UNKNOWN' AND completed_at < ? ORDER BY completed_at, id LIMIT 100 FOR UPDATE SKIP LOCKED)",
             Timestamp.from(clock.instant().minus(Duration.ofDays(90))),
         )
     }

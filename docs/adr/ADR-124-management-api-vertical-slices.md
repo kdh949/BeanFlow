@@ -87,6 +87,10 @@ PostgreSQL commit/rollback·replay·동시성·권한·Audit 장애, API parity,
 
 ## Revisit Conditions
 
+2026-09-10 publication 결과 불명 처리와 claim/result 위임 경계는
+[ADR-125](ADR-125-publication-unknown-execution-recovery.md)가 대체한다.
+그 밖의 관리 API 결정은 이 ADR을 유지한다.
+
 별도 승인 workflow, 분산 배포, writer 병렬화 또는 판정 비용 분담 정책 변경이 필요할 때 재검토한다.
 
 ## Related Decisions

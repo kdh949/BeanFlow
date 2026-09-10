@@ -252,3 +252,14 @@ backup restore reapplies deletion decisions.
 - 운영자가 어떻게 발견하고 복구하는가
 - metric, log와 correlation이 존재하는가
 - fallback이 활성화되지 않았음을 어떻게 검증하는가
+
+### Publication 결과 불명 수동 복구
+
+- 수동 claim 후 결과가 확인되지 않으면 마지막 실제 실행 시작(시작 전에는 claim) 시각으로 조사한다.
+  초기 5분 경과는 MANUAL_REVIEW/UNKNOWN 전이 조건이며 확정 실패나 이전 실행 종료의 증거가 아니다.
+- 요청 ID와 baseline은 실제 claim에서 원자적으로 검사한다. 동일 키 replay와 오래된 후보는 추가 예산을 만들지 않는다.
+- 결과 불명 replay는 동시 실행과 owner commit 후 ACK 유실 안전성을 검증한 exact listener만 허용한다.
+  초기 대상은 OrderReadyV1의 알림 접수이며 외부 발송은 별도 owner worker가 담당한다.
+- 원본 상태와 source/payload는 보존한다. 늦은 결과는 자기 시도에 기록하며 새 시도의 publication/Case를 덮지 않는다.
+  UNKNOWN은 계속 대사하고 90일 완료 원장 정리에서 제외한다.
+- 상세 정책은 [ADR-125](../adr/ADR-125-publication-unknown-execution-recovery.md)를 따른다.

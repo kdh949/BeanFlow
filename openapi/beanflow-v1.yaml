@@ -9104,6 +9104,8 @@ components:
       - completedAt
       - recoverable
       - recoveryCase
+      - executionOutcome
+      - retryBlockedReason
       properties:
         publicationId:
           type: string
@@ -9128,6 +9130,18 @@ components:
           anyOf:
           - $ref: '#/components/schemas/ManualRecoveryCaseView'
           - type: 'null'
+        executionOutcome:
+          description: 마지막 수동 시도의 확인된 결과. UNKNOWN은 업무 실패를 뜻하지 않는다.
+          anyOf:
+          - type: string
+            enum: [SUCCEEDED, FAILED, UNKNOWN]
+          - type: 'null'
+        retryBlockedReason:
+          description: 결과 불명 대상의 재실행을 차단한 사유. 원본 상태를 강제 실패 처리하지 않는다.
+          anyOf:
+          - type: string
+          - type: 'null'
+
     AddStoreMembershipRequest:
       type: object
       additionalProperties: false

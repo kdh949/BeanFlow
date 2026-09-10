@@ -28,6 +28,33 @@ internal class ManualRecoveryCaseService(
     private val cursors: SignedCursorCodec,
     private val clock: Clock,
 ) : ManualRecoveryCaseOperations {
+    override fun recordPublicationOutcome(
+        targetId: UUID,
+        expectedVersion: Long,
+        outcome: String,
+        now: Instant,
+    ): ManualRecoveryCaseView? {
+        require(outcome in setOf("SUCCEEDED", "FAILED", "UNKNOWN"))
+        val kind = ManualRecoveryKind.EVENT_PUBLICATION
+        val row = repository.findLockedByCaseTypeAndOwnerReference(type(kind), reference(kind, targetId)) ?: return null
+        if (row.version != expectedVersion ||
+            row.status !in setOf(ReprocessingCaseStatus.RUNNING, ReprocessingCaseStatus.MANUAL_REVIEW)
+        ) {
+            return null
+        }
+        row.status = if (outcome == "SUCCEEDED") ReprocessingCaseStatus.RESOLVED else ReprocessingCaseStatus.MANUAL_REVIEW
+        row.resolution = if (outcome == "SUCCEEDED") "OWNER_EXECUTION_COMPLETED" else null
+        row.reason =
+            when (outcome) {
+                "UNKNOWN" -> "EXECUTION_OUTCOME_UNKNOWN"
+                "FAILED" -> "OWNER_EXECUTION_FAILED"
+                else -> row.reason
+            }
+        row.updatedAt = now
+        repository.flush()
+        return row.view(kind, targetId)
+    }
+
     override fun find(
         kind: ManualRecoveryKind,
         targetId: UUID,

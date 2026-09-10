@@ -120,23 +120,41 @@ HTTP 트랜잭션은 Provider를 호출하지 않는다. 예산 변경·Case RUN
 1. `EVENT_PUBLICATION_RECOVERY_READ`로 `GET /api/v1/operations/event-publication-recoveries`를 조회한다.
    targetId가 원본 publication ID이며 actor/kind-bound signed cursor와 limit 1~100을 사용한다.
 2. `GET .../{publicationId}`에서 원본 eventType/listenerId, 실제 status/attemptCount/completedAt와 Case를 확인한다.
-   원본 serialized payload는 HTTP로 제공하지 않는다. recoverable은 현재 실패·Case·listener 조건의 판정이다.
+   원본 serialized payload는 HTTP로 제공하지 않는다. executionOutcome은 마지막 수동 시도의 결과이고,
+   recoverable은 현재 Case·실행 결과·listener 안전성 조건의 판정이다. retryBlockedReason도 함께 확인한다.
 3. 장애 원인을 해결한 뒤 `EVENT_PUBLICATION_RECOVERY_RETRY`로 `POST .../{publicationId}/retries`에
    Idempotency-Key와 `{expectedCaseVersion, reason}`을 보낸다. 202와 RUNNING은 접수 상태다.
 4. 등록된 AFTER_COMMIT listener의 원본 event type/ID만 허용한다. 예약 Analytics 및 미등록/미매핑 target,
-   완료·실행 중인 원본과 stale Case version은 409다. 기존 보상 target-to-step mapping을 우회하지 않는다.
+   완료 원본과 stale Case version은 409다. 실행 중 원본은 아래의 결과 불명 조사와 검증된 replay 조건을
+   충족해야 한다. 기존 보상 target-to-step mapping을 우회하지 않는다.
 5. 원본 payload/listener와 누적 completion attempts를 초기화하지 않는다. 원장의 baseline attempts와
-   일치하는 한 건만 기존 registry에 전달한다. registry의 원자적 claim이 누적 횟수를 늘리면 같은 요청은
-   추가 후보가 되지 않는다. 원장 없는 수동 검토 건은 자동 복구에서 계속 제외한다.
-6. 기존 worker가 실제 listener를 실행하고 결과 대사 worker가 Case를 갱신한다. 완료일 확인은 RESOLVED,
-   한 번 시도 후 명시적 FAILED는 MANUAL_REVIEW다. PROCESSING/RESUBMITTED 등 결과 불명은 RUNNING으로 남긴다.
-   불명 결과를 임의로 FAILED/COMPLETED로 SQL 변경하지 않는다. 원본 상태를 확인하고 해당 owner 장애를 조치한다.
+   일치하는 후보의 request ID를 실제 claim까지 전달한다. publication 잠금 아래 요청·Case version·baseline을
+   다시 검사하고 claimedAt과 누적 횟수를 함께 저장한다. 오래된 후보는 새로운 요청의 예산도 소비할 수 없다.
+   NULL 상태도 명시적으로 claim한다. 원장 없는 수동 검토 건은 자동 복구에서 계속 제외한다.
+6. 기존 worker가 실제 listener를 실행하고 결과 대사 worker가 Case를 갱신한다. 해당 시도의 완료는 RESOLVED,
+   명시적 FAILED는 MANUAL_REVIEW다. startedAt, dispatch 전이면 claimedAt을 기준으로 초기 5분이 지나면
+   원본 PROCESSING/RESUBMITTED는 보존하고 Case를 MANUAL_REVIEW, executionOutcome을 UNKNOWN으로 기록한다.
+   이벤트 최초 생성 시각은 조사 기준이 아니다. 시간 경과는 실패나 이전 프로세스 종료의 증거가 아니다.
 7. 같은 키/payload replay는 최초 RUNNING 응답을 반환한다. 현재 결과는 상세에서 읽는다. 재실패 후에는
    최신 Case version과 새 키로 다시 요청한다. 하나의 실패 결과 대사 오류는 다른 결과 대사를 막지 않고,
    batch 처리 후 실패를 다시 보고해 다음 tick에서 재시도한다.
+8. UNKNOWN replay는 현재 `OrderReadyV1` → `OrderReadyNotificationListener.on`만 허용한다. 이 listener는
+   동일 source의 알림함·발송 원장을 하나의 transaction과 unique constraint로 접수하며 Provider는 호출하지 않는다.
+   그 밖의 listener는 `UNKNOWN_EXECUTION_REQUIRES_OWNER_RECONCILIATION`으로 차단한다. 해당 owner의
+   실제 결과를 확인해야 하며, 주문/환불의 terminal 상태만으로 publication을 완료 처리하거나 SQL로 상태를 바꾸지 않는다.
+9. 수동 검토 이후에도 늦은 결과를 계속 대사한다. 이전 시도의 결과는 자기 요청에만 기록하고 새 시도의
+   publication/Case를 덮어쓰지 않는다. 현재 권한·최신 Case version·사유·새 키를 갖춘 명시적 요청만 추가 claim을 허용한다.
 
 publication 완료는 해당 listener 처리 완료일 뿐 알림 발송·환불·지급 전체 성공을 뜻하지 않는다. 별도 Delivery,
 Refund 또는 보상 step이 MANUAL_REVIEW이면 해당 owner의 관리 경로와 실제 상태를 함께 확인한다. 원본 거래의
 성공한 외부 작업을 다시 생성하지 않는다. 접수는 원장·Case·Audit가 원자적으로 저장되며 HTTP에서 listener를
 실행하지 않는다. 결과 대사는 실행 중인 건을 batch limit 전에 제외하므로 불명 건이 알려진 결과를 막지 않는다.
-완료 원장은 completedAt 기준 90일 후 최대 100행씩 정리하며 RUNNING 원장은 삭제하지 않는다.
+완료 원장은 completedAt 기준 90일 후 최대 100행씩 정리하며 RUNNING과 UNKNOWN 원장은 삭제하지 않는다.
+
+조사 기준 설정은 `beanflow.publication-manual-recovery.stale-after`(기본 `PT5M`, 양수 duration)다. 5분은
+실측 SLA가 아닌 초기 운영 기준이며 의존성 timeout과 실제 처리시간을 확인해 조정한다. 기준을 넘긴 사실만으로
+재실행을 허용하지 않는다. 상세 정책과 허용 대상 확대의 검증 조건은 [ADR-125](../adr/ADR-125-publication-unknown-execution-recovery.md)를 따른다.
+
+V81 배포는 이전 버전의 API/worker 프로세스가 종료된 뒤 migration과 새 버전을 시작한다. 이전 버전은
+시도별 결과 보호와 새 원장 필드를 지원하지 않으므로 혼합 버전 실행은 허용하지 않는다. 중단된 작업을
+실패로 간주하지 않고 UNKNOWN 조사로 이어간다.

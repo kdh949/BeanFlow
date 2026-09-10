@@ -68,8 +68,12 @@ Case 완료 실패는 재시도로 수렴한다. stale version과 claim 예산 �
 
 ## Data and Migration
 
-앞 세 수정은 schema를 바꾸지 않는다. #157의 unknown/claim metadata가 필요하면 V81을 단일 writer로 추가한다.
-기존 V1~V80은 다시 쓰지 않는다. schema 세부사항은 구현 전 #157의 정책/ADR과 이 문서에 확정한다.
+#157 설계 확정: V81에 request의 Case version, claimed_at, started_at, execution_outcome,
+unknown_since, 결과 대사 필요 여부와 불명 replay 허가를 추가한다. 실제 event 객체/request 연결은 dispatch 동안만 유지하며
+DB request/ordinal이 claim과 callback/Case 전이의 권위다. ADR-125에 초기 allowlist와 5분 감지 기준을 기록했다.
+
+앞 세 수정은 schema를 바꾸지 않는다. 기존 V1~V80은 다시 쓰지 않는다. V81과 이전 writer의 혼합 실행은
+지원하지 않으며 배포 시 이전 애플리케이션 프로세스를 종료한 뒤 migration과 새 버전을 시작한다.
 
 ## API and Event Contracts
 
@@ -119,11 +123,18 @@ BR-54, ADR-124를 대체/보완하는 결과 불명 복구 결정, ADR-010, 운�
 - Passed: PickupSlotManagementIntegrationTest 7 tests (failure/error 0), spotlessApply.
 - #154: Store shared lock 대기 뒤 계약 적용 시간이 지나면 INVALID_REQUEST로 전체 등록을 rollback한다. 기존 응답 replay는 유지한다.
 - Passed: StoreSettlementTermsManagementIntegrationTest 6 tests (failure/error 0), spotlessApply.
-- 나머지 구현과 원격 CI/thread 검증은 Pending이다.
+- #157: request ID/baseline을 실제 claim까지 전달하고 NULL claim, 시도별 결과 보호, UNKNOWN 조사/검증 대상 replay/보존을 구현했다.
+- Passed: 실제 동시 owner transaction의 unique 충돌과 재개, commit 뒤 ACK 유실, 늦은 성공/실패, claim 뒤 중단을 포함한 publication 관리 14 tests.
+- Passed: 최종 통합 73 tests, 실패/오류/skip 0. 이의 16, 슬롯 7, 계약 6, publication 관리 14/기존 복구 9, 알림 복구 5/알림함 6, 계약·구조·Flyway 10.
+- Passed: spotlessCheck, bootJar, verifyCiTestShards (CI와 같은 6개 shard, 313 test classes 중복/누락 없음).
+- Passed: docs verifier 18 tests, 54 policies, 125 ADRs, target 234/runtime 224 operations, 416 schemas.
+- #151~#154 최신 HEAD는 전체 backend CI가 통과했다. #155~#157 최신 원격 CI와 여섯 thread 해결은 Pending이다.
 
 ## Surprises & Discoveries
 
-없음.
+Modulith 2.1의 기본 claim은 NULL/baseline 예산을 보장하지 않는다. 기존 dispatch/advisor를 보존하면서
+실제 event 객체 identity를 request에 연결해야 비동기 callback의 세대를 구분할 수 있었다.
+테스트에서는 async listener proxy 자체 대신 내부 owner service에 장애를 주입해 실제 transaction 경계를 재현했다.
 
 ## Decision Log
 

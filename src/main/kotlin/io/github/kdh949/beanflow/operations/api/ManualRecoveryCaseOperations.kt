@@ -35,6 +35,14 @@ data class ManualRecoveryCasePage(
 
 /** Only notification/publication recovery cases; owner commands and worker results share their local transaction. */
 interface ManualRecoveryCaseOperations {
+    /** Publication 결과는 요청이 보유한 Case version에만 반영한다. 늦은 이전 시도는 새 Case를 덮지 않는다. */
+    fun recordPublicationOutcome(
+        targetId: UUID,
+        expectedVersion: Long,
+        outcome: String,
+        now: Instant,
+    ): ManualRecoveryCaseView?
+
     fun find(
         kind: ManualRecoveryKind,
         targetId: UUID,

@@ -181,6 +181,7 @@ dependencies {
 	testImplementation("org.springframework.boot:spring-boot-testcontainers")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
 	testImplementation("org.springframework.modulith:spring-modulith-starter-test")
+	testImplementation("org.springframework.modulith:spring-modulith-events-core")
 	testImplementation("io.opentelemetry:opentelemetry-sdk:1.65.0")
 	testImplementation("io.opentelemetry:opentelemetry-sdk-testing:1.65.0")
 	testImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
