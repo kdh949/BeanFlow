@@ -212,6 +212,11 @@ internal interface StoreJpaRepository : JpaRepository<StoreEntity, UUID> {
 }
 
 internal interface MenuJpaRepository : JpaRepository<MenuEntity, UUID> {
+    fun countByStoreIdAndLifecycle(
+        storeId: UUID,
+        lifecycle: MenuLifecycle,
+    ): Long
+
     fun findByIdAndStoreId(
         menuId: UUID,
         storeId: UUID,
@@ -247,13 +252,61 @@ internal interface MenuJpaRepository : JpaRepository<MenuEntity, UUID> {
     ): List<MenuEntity>
 }
 
+internal interface MenuChildCount {
+    val menuId: UUID
+    val total: Long
+}
+
 internal interface MenuOptionJpaRepository : JpaRepository<MenuOptionEntity, UUID> {
+    fun countByIdIn(ids: Collection<UUID>): Long
+
+    fun findAllByMenuIdAndLifecycle(
+        menuId: UUID,
+        lifecycle: MenuLifecycle,
+    ): List<MenuOptionEntity>
+
+    @Query(
+        "SELECT child.menuId AS menuId, count(child) AS total FROM MenuOptionEntity child WHERE child.menuId IN :menuIds AND child.lifecycle = :lifecycle GROUP BY child.menuId",
+    )
+    fun countByMenuIdsAndLifecycle(
+        menuIds: Collection<UUID>,
+        lifecycle: MenuLifecycle,
+    ): List<MenuChildCount>
+
+    @Query(
+        """
+        SELECT count(child) FROM MenuOptionEntity child JOIN MenuEntity menu ON child.menuId = menu.id
+         WHERE menu.storeId = :storeId AND menu.lifecycle = :lifecycle AND child.lifecycle = :lifecycle
+           AND (:excludedMenuId IS NULL OR menu.id <> :excludedMenuId)
+    """,
+    )
+    fun countForStore(
+        storeId: UUID,
+        lifecycle: MenuLifecycle,
+        excludedMenuId: UUID?,
+    ): Long
+
     fun findAllByMenuIdIn(menuIds: Collection<UUID>): List<MenuOptionEntity>
 
     fun findAllByMenuId(menuId: UUID): List<MenuOptionEntity>
 }
 
 internal interface MenuConfigurationJpaRepository : JpaRepository<MenuConfigurationEntity, UUID> {
+    fun countByIdIn(ids: Collection<UUID>): Long
+
+    fun findAllByMenuIdAndLifecycle(
+        menuId: UUID,
+        lifecycle: MenuLifecycle,
+    ): List<MenuConfigurationEntity>
+
+    @Query(
+        "SELECT child.menuId AS menuId, count(child) AS total FROM MenuConfigurationEntity child WHERE child.menuId IN :menuIds AND child.lifecycle = :lifecycle GROUP BY child.menuId",
+    )
+    fun countByMenuIdsAndLifecycle(
+        menuIds: Collection<UUID>,
+        lifecycle: MenuLifecycle,
+    ): List<MenuChildCount>
+
     fun findAllByMenuIdIn(menuIds: Collection<UUID>): List<MenuConfigurationEntity>
 
     fun findAllByMenuId(menuId: UUID): List<MenuConfigurationEntity>

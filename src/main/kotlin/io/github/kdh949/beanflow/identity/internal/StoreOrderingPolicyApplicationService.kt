@@ -12,10 +12,7 @@ import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.time.Clock
-import java.util.HexFormat
 import java.util.UUID
 
 internal data class StoreOrderingPolicyCommandContext(
@@ -84,7 +81,7 @@ internal class StoreOrderingPolicyApplicationService(
                         afterSummary = replacement.policy.auditSummary(),
                         correlationId = correlationIds.currentOrCreate(),
                         sourceReference =
-                            "store-ordering-policy:${context.actorId}:${sha256(context.idempotencyKey)}",
+                            "store-ordering-policy:${replacement.commandId}",
                     ),
                 ),
             )
@@ -98,9 +95,6 @@ internal class StoreOrderingPolicyApplicationService(
             "pickupEnabled" to pickupEnabled.toString(),
             "version" to version.toString(),
         )
-
-    private fun sha256(text: String): String =
-        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.toByteArray(StandardCharsets.UTF_8)))
 
     private companion object {
         val ALLOWED_ROLES = setOf(StoreActorRole.OWNER, StoreActorRole.STAFF)

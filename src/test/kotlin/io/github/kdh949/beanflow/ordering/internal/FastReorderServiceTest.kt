@@ -115,11 +115,22 @@ internal class FastReorderServiceTest
             val source = sourceOrder()
             val orderBefore = count("ordering_order")
             val pickupBefore = count("fulfillment_pickup_reservation")
+            val activeConfigurationIndex =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema() " +
+                            "AND indexname = 'uq_merchant_menu_configuration_active_option_key'",
+                        String::class.java,
+                    ),
+                )
             jdbcTemplate.execute(
                 "ALTER TABLE merchant_menu_configuration " +
                     "DROP CONSTRAINT ck_merchant_menu_configuration_normalized_option_key",
             )
             try {
+                // 손상 데이터 주입에는 UUID 변환을 수행하는 유일 인덱스도 일시 해제해야 한다.
+                // 실제 스키마의 정의를 보관했다가 finally에서 그대로 복원한다.
+                jdbcTemplate.execute("DROP INDEX uq_merchant_menu_configuration_active_option_key")
                 jdbcTemplate.update(
                     "UPDATE merchant_menu_configuration SET normalized_option_key = 'not-a-uuid' WHERE menu_id = ?",
                     source.fixture.menuId,
@@ -152,6 +163,7 @@ internal class FastReorderServiceTest
                         "ADD CONSTRAINT ck_merchant_menu_configuration_normalized_option_key " +
                         "CHECK (beanflow_is_canonical_uuid_csv(normalized_option_key))",
                 )
+                jdbcTemplate.execute(activeConfigurationIndex)
             }
         }
 
