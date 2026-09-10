@@ -5294,10 +5294,233 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/cases/{caseId}/profile-contexts/{linkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * (고객센터) 정보 정정 대상의 현재 조건
+         * @description 현재 Case 담당자·대상 연결과 정정 목적 권한을 검사하고 원문 없이 현재 owner version과 필요한 인증 수준을 조회합니다.
+         */
+        get: operations["getSupportProfileContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/profile-changes/{profileChangeId}/workflow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * (고객센터) 정보 정정 승인 및 실행 업무 조회
+         * @description 현재 읽기 권한으로 정정과 승인안 연결 및 가능한 명령을 조회합니다. 원문 또는 인증 증거를 반환하지 않습니다.
+         */
+        get: operations["getSupportProfileWorkflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/investigations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * (운영) 승인안의 조사 조회
+         * @description 지속된 운영 조사 권한으로 exact Support request/revision을 조회합니다. 현재 다른 검토자에게만 결정 가능 여부를 제공합니다.
+         */
+        get: operations["getOperationsSupportInvestigationWorkflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description 현재 상담 담당자가 정정 목적에 필요한 권한으로 조회하는 비개인정보 프로필 조건입니다. 원문은 반환하지 않습니다.
+         * @example {
+         *       "caseId": "83000000-0000-4000-8000-000000000001",
+         *       "subjectLinkId": "83000000-0000-4000-8000-000000000001",
+         *       "subjectId": "83000000-0000-4000-8000-000000000001",
+         *       "subjectType": "CUSTOMER",
+         *       "purpose": "CUSTOMER_DISPLAY_NAME",
+         *       "riskClass": "R1",
+         *       "requiredVerificationLevel": "BASIC",
+         *       "currentProfileVersion": 0
+         *     }
+         */
+        SupportProfileContextResource: {
+            caseId: components["schemas"]["Identifier"];
+            subjectLinkId: components["schemas"]["Identifier"];
+            subjectId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            subjectType: "CUSTOMER" | "STORE" | "RIDER";
+            /** @enum {string} */
+            purpose: "CUSTOMER_DISPLAY_NAME" | "CUSTOMER_LEGAL_NAME_TYPO" | "CUSTOMER_PRIMARY_PHONE" | "CUSTOMER_CREDENTIAL_RESET" | "STORE_PUBLIC_PROFILE" | "STORE_OPERATIONS_CONTACT" | "STORE_REPRESENTATIVE" | "STORE_SETTLEMENT_ACCOUNT" | "STORE_ACCESS_REREGISTRATION" | "COURIER_DISPLAY_NAME" | "COURIER_RELAY_CONTACT" | "COURIER_PROVIDER_IDENTITY" | "COURIER_PAYOUT_REFERENCE" | "COURIER_PROVIDER_REREGISTRATION";
+            /** @enum {string} */
+            riskClass: "R1" | "R2" | "R3" | "R4";
+            requiredVerificationLevel: components["schemas"]["VerificationLevel"];
+            /**
+             * Format: int64
+             * @description 현재 소유 모듈 프로필 버전입니다. 쓰기 전에 다시 검증합니다.
+             */
+            currentProfileVersion: number;
+        };
+        /**
+         * @description 현재 계정의 정보 정정 가능 명령입니다. 모든 쓰기에서 범위·인증·승인·버전을 다시 확인합니다.
+         * @example EXECUTE
+         * @enum {string}
+         */
+        SupportProfileWorkflowAction: "REVISE" | "DECIDE_SUPPORT_MANAGER" | "REASSIGN" | "EXECUTE" | "RETRY_NOTIFICATION";
+        /**
+         * @description 정보 정정 건의 마스킹 결과와 정확한 승인안 및 현재 조건입니다.
+         * @example {
+         *       "profileChange": {
+         *         "profileChangeId": "83000000-0000-4000-8000-000000000001",
+         *         "caseId": "83000000-0000-4000-8000-000000000001",
+         *         "subjectType": "CUSTOMER",
+         *         "subjectId": "83000000-0000-4000-8000-000000000001",
+         *         "purpose": "CUSTOMER_DISPLAY_NAME",
+         *         "riskClass": "R1",
+         *         "requesterActorId": "83000000-0000-4000-8000-000000000001",
+         *         "executorActorId": "83000000-0000-4000-8000-000000000001",
+         *         "verificationSessionId": "83000000-0000-4000-8000-000000000001",
+         *         "expectedProfileVersion": 0,
+         *         "currentProfileVersion": 1,
+         *         "payloadDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+         *         "actionRequestId": null,
+         *         "state": "EXECUTED",
+         *         "notificationState": "ACCEPTED",
+         *         "notificationFailureCode": null,
+         *         "maskedBefore": "김*수",
+         *         "maskedAfter": "김*원",
+         *         "version": 1,
+         *         "createdAt": "2026-09-11T09:00:00Z",
+         *         "updatedAt": "2026-09-11T09:01:00Z",
+         *         "notifications": [
+         *           {
+         *             "targetKind": "CURRENT",
+         *             "channel": "PHONE",
+         *             "state": "ACCEPTED",
+         *             "deliveryId": "83000000-0000-4000-8000-000000000001",
+         *             "failureCode": null,
+         *             "attempts": 1
+         *           }
+         *         ]
+         *       },
+         *       "approval": null,
+         *       "caseVersion": 2,
+         *       "currentProfileVersion": 1,
+         *       "verificationExpiresAt": "2026-09-11T09:15:00Z",
+         *       "allowedActions": []
+         *     }
+         */
+        SupportProfileWorkflowResource: {
+            profileChange: components["schemas"]["SupportProfileChangeResource"];
+            approval: components["schemas"]["SupportActionRequestResource"] | null;
+            /**
+             * Format: int64
+             * @description 현재 상담 버전입니다.
+             */
+            caseVersion: number;
+            /**
+             * Format: int64
+             * @description 현재 소유 모듈의 프로필 버전입니다.
+             */
+            currentProfileVersion: number;
+            verificationExpiresAt: components["schemas"]["DateTime"];
+            /** @description 현재 가능한 업무입니다. */
+            allowedActions: components["schemas"]["SupportProfileWorkflowAction"][];
+        };
+        /**
+         * @description 고정된 상담 승인안의 운영 조사 메타데이터입니다. 개인정보와 증빙 원문은 없습니다.
+         * @example {
+         *       "investigationId": "83000000-0000-4000-8000-000000000001",
+         *       "supportActionRequestId": "83000000-0000-4000-8000-000000000001",
+         *       "supportActionRevisionId": "83000000-0000-4000-8000-000000000001",
+         *       "revisionNumber": 1,
+         *       "state": "OPEN",
+         *       "openedAt": "2026-09-11T09:00:00Z",
+         *       "expiresAt": "2026-09-11T09:15:00Z",
+         *       "decidedByActorId": null,
+         *       "decidedAt": null,
+         *       "version": 0
+         *     }
+         */
+        OperationsSupportInvestigationSnapshot: {
+            investigationId: components["schemas"]["Identifier"];
+            supportActionRequestId: components["schemas"]["Identifier"];
+            supportActionRevisionId: components["schemas"]["Identifier"];
+            /** @description 조사에 고정된 승인안 번호입니다. */
+            revisionNumber: number;
+            /**
+             * @description 운영 조사 처리 상태입니다.
+             * @enum {string}
+             */
+            state: "OPEN" | "APPROVED" | "DENIED" | "RETURNED" | "ESCALATED" | "EXPIRED" | "STALE";
+            openedAt: components["schemas"]["DateTime"];
+            expiresAt: components["schemas"]["DateTime"];
+            /**
+             * Format: uuid
+             * @description 결정한 별도 운영자입니다.
+             */
+            decidedByActorId: string | null;
+            /**
+             * Format: date-time
+             * @description 결정 시각입니다.
+             */
+            decidedAt: string | null;
+            /**
+             * Format: int64
+             * @description 현재 조사 버전입니다.
+             */
+            version: number;
+        };
+        /**
+         * @description 현재 별도 검토자의 운영 조사와 결정 가능 여부입니다.
+         * @example {
+         *       "investigation": {
+         *         "investigationId": "83000000-0000-4000-8000-000000000001",
+         *         "supportActionRequestId": "83000000-0000-4000-8000-000000000001",
+         *         "supportActionRevisionId": "83000000-0000-4000-8000-000000000001",
+         *         "revisionNumber": 1,
+         *         "state": "OPEN",
+         *         "openedAt": "2026-09-11T09:00:00Z",
+         *         "expiresAt": "2026-09-11T09:15:00Z",
+         *         "decidedByActorId": null,
+         *         "decidedAt": null,
+         *         "version": 0
+         *       },
+         *       "canDecide": true
+         *     }
+         */
+        OperationsSupportInvestigationWorkflowResource: {
+            investigation: components["schemas"]["OperationsSupportInvestigationSnapshot"];
+            /** @description 현재 권한·상태·시간 및 요청자·승인자·실행자 분리를 만족하는지입니다. 결정 시 재검증합니다. */
+            canDecide: boolean;
+        };
         /**
          * @description 현재 계정과 승인 상태에서 가능한 보상 명령입니다. 실행 시 모든 조건을 다시 검증합니다.
          * @example EXECUTE
@@ -10959,8 +11182,11 @@ export interface components {
             actionRequestId: string | null;
             /** @enum {string} */
             state: "AWAITING_APPROVAL" | "READY_FOR_EXECUTION" | "EXECUTED";
-            /** @enum {string} */
-            notificationState: "PENDING" | "ACCEPTED" | "RETRY_SCHEDULED" | "MANUAL_REVIEW";
+            /**
+             * @description 원문 변경 후 알림의 미요청·처리 중·접수·재시도 상태를 구분합니다.
+             * @enum {string}
+             */
+            notificationState: "NOT_REQUESTED" | "PENDING" | "PROCESSING" | "ACCEPTED" | "RETRY_SCHEDULED" | "MANUAL_REVIEW";
             notificationFailureCode: string | null;
             maskedBefore: string | null;
             maskedAfter: string | null;
@@ -20494,6 +20720,96 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportProfileContext: {
+        parameters: {
+            query: {
+                /** @description 필드 위험 정책에 따른 정정 목적입니다. */
+                purpose: "CUSTOMER_DISPLAY_NAME" | "CUSTOMER_LEGAL_NAME_TYPO" | "CUSTOMER_PRIMARY_PHONE" | "CUSTOMER_CREDENTIAL_RESET" | "STORE_PUBLIC_PROFILE" | "STORE_OPERATIONS_CONTACT" | "STORE_REPRESENTATIVE" | "STORE_SETTLEMENT_ACCOUNT" | "STORE_ACCESS_REREGISTRATION" | "COURIER_DISPLAY_NAME" | "COURIER_RELAY_CONTACT" | "COURIER_PROVIDER_IDENTITY" | "COURIER_PAYOUT_REFERENCE" | "COURIER_PROVIDER_REREGISTRATION";
+            };
+            header?: never;
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+                linkId: components["parameters"]["SupportSubjectLinkId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 고객 보상 요청 조회 결과 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportProfileContextResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportProfileWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileChangeId: components["parameters"]["SupportProfileChangeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 고객 보상 요청 조회 결과 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportProfileWorkflowResource"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getOperationsSupportInvestigationWorkflow: {
+        parameters: {
+            query: {
+                /** @description 검토할 상담 승인 요청입니다. */
+                supportActionRequestId: components["schemas"]["Identifier"];
+                /** @description 검토할 정확한 승인안 번호입니다. */
+                revisionNumber: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 고객 보상 요청 조회 결과 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsSupportInvestigationWorkflowResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

@@ -1113,6 +1113,13 @@ paths:
   /support/compensation-coupon-templates:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1compensation-coupon-templates"
 
+  /support/cases/{caseId}/profile-contexts/{linkId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1profile-contexts~1{linkId}"
+  /support/profile-changes/{profileChangeId}/workflow:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1profile-changes~1{profileChangeId}~1workflow"
+  /operations/investigations:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1investigations"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1128,6 +1135,16 @@ components:
       in: cookie
       name: BEANFLOW_MERCHANT_SESSION
   schemas:
+    SupportProfileContextResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportProfileContextResource"
+    SupportProfileWorkflowAction:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportProfileWorkflowAction"
+    SupportProfileWorkflowResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportProfileWorkflowResource"
+    OperationsSupportInvestigationSnapshot:
+      $ref: "./beanflow-v1.yaml#/components/schemas/OperationsSupportInvestigationSnapshot"
+    OperationsSupportInvestigationWorkflowResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/OperationsSupportInvestigationWorkflowResource"
     SupportCompensationWorkflowAction:
       $ref: "./beanflow-v1.yaml#/components/schemas/SupportCompensationWorkflowAction"
     SupportCompensationTermsResource:

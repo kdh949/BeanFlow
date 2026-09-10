@@ -7,6 +7,7 @@ import { Button, ButtonLink, EmptyState, LoadingState, PageHeading, Tab, TabList
 import { compactId } from "../../lib/format";
 import { ErrorState, StatusText } from "../../presentation/shared";
 import { useResource } from "../shared/useResource";
+import { SupportProfileChangeWorkspace } from "./SupportProfileChangeWorkspace";
 import { SupportCompensationWorkspace } from "./SupportCompensationWorkspace";
 import { SupportOrderActionWorkspace } from "./SupportOrderActionWorkspace";
 import { SupportVerificationPanel } from "./SupportVerificationPanel";
@@ -20,12 +21,13 @@ export function SupportFollowUpRoute() {
   const caseId = params.get("caseId")?.trim();
   return <div className="console-page support-follow-up-page">
     <PageHeading title="상담 후속 업무" action={caseId ? <ButtonLink to={`/support?caseId=${encodeURIComponent(caseId)}`} variant="secondary">상담 처리로 돌아가기</ButtonLink> : undefined} />
-    {caseId ? <CaseHistory key={caseId} caseId={caseId} requestId={params.get("requestId") ?? undefined} compensationId={params.get("compensationId") ?? undefined} incidentId={params.get("incidentId") ?? undefined} /> : <EmptyState title="상담 건을 먼저 열어 주세요" description="고객지원에서 상담 건을 열고 상담 후속 업무를 선택해 주세요." action={<ButtonLink to="/support">상담 건 열기</ButtonLink>} />}
+    {caseId ? <CaseHistory key={caseId} caseId={caseId} profileChangeId={params.get("profileChangeId") ?? undefined} requestId={params.get("requestId") ?? undefined} compensationId={params.get("compensationId") ?? undefined} incidentId={params.get("incidentId") ?? undefined} /> : <EmptyState title="상담 건을 먼저 열어 주세요" description="고객지원에서 상담 건을 열고 상담 후속 업무를 선택해 주세요." action={<ButtonLink to="/support">상담 건 열기</ButtonLink>} />}
   </div>;
 }
 
-function CaseHistory({ caseId, requestId, compensationId, incidentId }: { caseId: string; requestId?: string; compensationId?: string; incidentId?: string }) {
-  const [workspace, setWorkspace] = useState(compensationId || incidentId ? "compensation" : requestId ? "orders" : "history");
+function CaseHistory({ caseId, requestId, compensationId, incidentId, profileChangeId }: { profileChangeId?: string; caseId: string; requestId?: string; compensationId?: string; incidentId?: string }) {
+  const [workspace, setWorkspace] = useState(profileChangeId ? "profile" : compensationId || incidentId ? "compensation" : requestId ? "orders" : "history");
+  const [profileBusy, setProfileBusy] = useState(false);
   const [verification, setVerification] = useState<components["schemas"]["VerificationSessionResource"] | null>(null);
   const { state, reload } = useResource(useCallback(async () => {
     const [caseResponse, timelineResponse] = await Promise.all([
@@ -58,11 +60,11 @@ function CaseHistory({ caseId, requestId, compensationId, incidentId }: { caseId
       <div><span className="context-label">담당자</span><strong>{compactId(supportCase.assigneeId)}</strong></div>
       <StatusText state={supportCase.state} />
     </section>
-    <Tabs value={workspace} onValueChange={setWorkspace}><TabList label="상담 후속 업무 선택"><Tab value="history">상담 이력</Tab><Tab value="orders">주문 변경</Tab><Tab value="compensation">고객 보상</Tab></TabList>
+    <Tabs value={workspace} onValueChange={setWorkspace}><TabList label="상담 후속 업무 선택"><Tab disabled={profileBusy} value="history">상담 이력</Tab><Tab disabled={profileBusy} value="orders">주문 변경</Tab><Tab disabled={profileBusy} value="compensation">고객 보상</Tab><Tab value="profile">정보 정정</Tab></TabList>
     <TabPanel value="history"><ButtonLink variant="secondary" to={`/support/cases/${caseId}`}>상담 상태·담당자·기록 관리</ButtonLink>
     <SupportTimelinePanel timeline={timeline} />
     {moreError ? <ErrorState error={moreError} retry={() => void loadMore()} /> : null}
     {timeline?.nextCursor ? <Button variant="secondary" loading={loadingMore} onClick={() => void loadMore()}>이력 더 보기</Button> : null}
-    </TabPanel><TabPanel value="orders"><div className="management-workspace"><SupportVerificationPanel initialActionScope="SUPPORT_ACTION" caseId={caseId} links={supportCase.subjectLinks} disabled={["RESOLVED", "CLOSED"].includes(supportCase.state)} onChange={setVerification} /><SupportOrderActionWorkspace supportCase={supportCase} verification={verification} initialRequestId={requestId} /></div></TabPanel><TabPanel value="compensation"><div className="management-workspace"><SupportVerificationPanel initialActionScope="SUPPORT_ACTION" caseId={caseId} links={supportCase.subjectLinks} disabled={["RESOLVED", "CLOSED"].includes(supportCase.state)} onChange={setVerification} /><SupportCompensationWorkspace supportCase={supportCase} verification={verification} initialCompensationId={compensationId} initialIncidentId={incidentId} /></div></TabPanel></Tabs>
+    </TabPanel><TabPanel value="orders"><div className="management-workspace"><SupportVerificationPanel initialActionScope="SUPPORT_ACTION" caseId={caseId} links={supportCase.subjectLinks} disabled={["RESOLVED", "CLOSED"].includes(supportCase.state)} onChange={setVerification} /><SupportOrderActionWorkspace supportCase={supportCase} verification={verification} initialRequestId={requestId} /></div></TabPanel><TabPanel value="compensation"><div className="management-workspace"><SupportVerificationPanel initialActionScope="SUPPORT_ACTION" caseId={caseId} links={supportCase.subjectLinks} disabled={["RESOLVED", "CLOSED"].includes(supportCase.state)} onChange={setVerification} /><SupportCompensationWorkspace supportCase={supportCase} verification={verification} initialCompensationId={compensationId} initialIncidentId={incidentId} /></div></TabPanel><TabPanel value="profile"><div className="management-workspace"><SupportVerificationPanel initialActionScope="SUPPORT_ACTION" caseId={caseId} links={supportCase.subjectLinks} disabled={profileBusy || ["RESOLVED", "CLOSED"].includes(supportCase.state)} onChange={setVerification} /><SupportProfileChangeWorkspace supportCase={supportCase} verification={verification} initialProfileChangeId={profileChangeId} onBusyChange={setProfileBusy} /></div></TabPanel></Tabs>
   </>;
 }

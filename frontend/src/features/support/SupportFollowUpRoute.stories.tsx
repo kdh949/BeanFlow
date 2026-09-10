@@ -61,3 +61,5 @@ export const OrderWorkflow: Story = { play: async ({ canvas }) => { await userEv
 
 export const CompensationWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "고객 보상" })); await expect(await canvas.findByLabelText("기존 보상 요청 ID")).toBeVisible(); await expect(canvas.getByText("고객 본인확인이 필요합니다")).toBeVisible(); } };
 export const ReturnedCompensation: Story = { parameters: { routing: { path: "/support/follow-up", initialEntry: `/support/follow-up?caseId=${caseId}&incidentId=${caseId}` } }, play: async ({ canvas }) => { await expect(await canvas.findByLabelText("사고 ID")).toHaveValue(caseId); } };
+
+export const ProfileWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "정보 정정" })); await expect(await canvas.findByLabelText("기존 정보 정정 ID")).toBeVisible(); await expect(canvas.getByText("정정할 대상이 없습니다")).toBeVisible(); } };

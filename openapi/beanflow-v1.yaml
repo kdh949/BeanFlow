@@ -8815,6 +8815,132 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
+  /support/cases/{caseId}/profile-contexts/{linkId}:
+    get:
+      tags:
+      - Support
+      operationId: getSupportProfileContext
+      summary: (고객센터) 정보 정정 대상의 현재 조건
+      description: 현재 Case 담당자·대상 연결과 정정 목적 권한을 검사하고 원문 없이 현재 owner version과 필요한 인증
+        수준을 조회합니다.
+      parameters:
+      - $ref: '#/components/parameters/SupportCaseId'
+      - $ref: '#/components/parameters/SupportSubjectLinkId'
+      - name: purpose
+        in: query
+        required: true
+        description: 필드 위험 정책에 따른 정정 목적입니다.
+        schema:
+          type: string
+          enum:
+          - CUSTOMER_DISPLAY_NAME
+          - CUSTOMER_LEGAL_NAME_TYPO
+          - CUSTOMER_PRIMARY_PHONE
+          - CUSTOMER_CREDENTIAL_RESET
+          - STORE_PUBLIC_PROFILE
+          - STORE_OPERATIONS_CONTACT
+          - STORE_REPRESENTATIVE
+          - STORE_SETTLEMENT_ACCOUNT
+          - STORE_ACCESS_REREGISTRATION
+          - COURIER_DISPLAY_NAME
+          - COURIER_RELAY_CONTACT
+          - COURIER_PROVIDER_IDENTITY
+          - COURIER_PAYOUT_REFERENCE
+          - COURIER_PROVIDER_REREGISTRATION
+      responses:
+        '200':
+          description: 정보 정정 목적에 필요한 현재 프로필 조건
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportProfileContextResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /support/profile-changes/{profileChangeId}/workflow:
+    get:
+      tags:
+      - Support
+      operationId: getSupportProfileWorkflow
+      summary: (고객센터) 정보 정정 승인 및 실행 업무 조회
+      description: 현재 읽기 권한으로 정정과 승인안 연결 및 가능한 명령을 조회합니다. 원문 또는 인증 증거를 반환하지 않습니다.
+      parameters:
+      - $ref: '#/components/parameters/SupportProfileChangeId'
+      responses:
+        '200':
+          description: 정보 정정의 현재 승인 및 실행 조건
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportProfileWorkflowResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/investigations:
+    get:
+      tags:
+      - Operations
+      operationId: getOperationsSupportInvestigationWorkflow
+      summary: (운영) 승인안의 조사 조회
+      description: 지속된 운영 조사 권한으로 exact Support request/revision을 조회합니다. 현재 다른 검토자에게만
+        결정 가능 여부를 제공합니다.
+      parameters:
+      - name: supportActionRequestId
+        in: query
+        required: true
+        description: 검토할 상담 승인 요청입니다.
+        schema:
+          $ref: '#/components/schemas/Identifier'
+      - name: revisionNumber
+        in: query
+        required: true
+        description: 검토할 정확한 승인안 번호입니다.
+        schema:
+          type: integer
+          minimum: 1
+      responses:
+        '200':
+          description: 현재 승인안에 연결된 운영 조사
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsSupportInvestigationWorkflowResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -9352,6 +9478,247 @@ components:
         type: string
         const: no-store
   schemas:
+    SupportProfileContextResource:
+      type: object
+      additionalProperties: false
+      description: 현재 상담 담당자가 정정 목적에 필요한 권한으로 조회하는 비개인정보 프로필 조건입니다. 원문은 반환하지 않습니다.
+      required:
+      - caseId
+      - subjectLinkId
+      - subjectId
+      - subjectType
+      - purpose
+      - riskClass
+      - requiredVerificationLevel
+      - currentProfileVersion
+      properties:
+        caseId:
+          $ref: '#/components/schemas/Identifier'
+        subjectLinkId:
+          $ref: '#/components/schemas/Identifier'
+        subjectId:
+          $ref: '#/components/schemas/Identifier'
+        subjectType:
+          type: string
+          enum:
+          - CUSTOMER
+          - STORE
+          - RIDER
+        purpose:
+          type: string
+          enum:
+          - CUSTOMER_DISPLAY_NAME
+          - CUSTOMER_LEGAL_NAME_TYPO
+          - CUSTOMER_PRIMARY_PHONE
+          - CUSTOMER_CREDENTIAL_RESET
+          - STORE_PUBLIC_PROFILE
+          - STORE_OPERATIONS_CONTACT
+          - STORE_REPRESENTATIVE
+          - STORE_SETTLEMENT_ACCOUNT
+          - STORE_ACCESS_REREGISTRATION
+          - COURIER_DISPLAY_NAME
+          - COURIER_RELAY_CONTACT
+          - COURIER_PROVIDER_IDENTITY
+          - COURIER_PAYOUT_REFERENCE
+          - COURIER_PROVIDER_REREGISTRATION
+        riskClass:
+          type: string
+          enum:
+          - R1
+          - R2
+          - R3
+          - R4
+        requiredVerificationLevel:
+          $ref: '#/components/schemas/VerificationLevel'
+        currentProfileVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 소유 모듈 프로필 버전입니다. 쓰기 전에 다시 검증합니다.
+      example:
+        caseId: 83000000-0000-4000-8000-000000000001
+        subjectLinkId: 83000000-0000-4000-8000-000000000001
+        subjectId: 83000000-0000-4000-8000-000000000001
+        subjectType: CUSTOMER
+        purpose: CUSTOMER_DISPLAY_NAME
+        riskClass: R1
+        requiredVerificationLevel: BASIC
+        currentProfileVersion: 0
+    SupportProfileWorkflowAction:
+      type: string
+      description: 현재 계정의 정보 정정 가능 명령입니다. 모든 쓰기에서 범위·인증·승인·버전을 다시 확인합니다.
+      enum:
+      - REVISE
+      - DECIDE_SUPPORT_MANAGER
+      - REASSIGN
+      - EXECUTE
+      - RETRY_NOTIFICATION
+      example: EXECUTE
+    SupportProfileWorkflowResource:
+      type: object
+      additionalProperties: false
+      description: 정보 정정 건의 마스킹 결과와 정확한 승인안 및 현재 조건입니다.
+      required:
+      - profileChange
+      - approval
+      - caseVersion
+      - currentProfileVersion
+      - verificationExpiresAt
+      - allowedActions
+      properties:
+        profileChange:
+          $ref: '#/components/schemas/SupportProfileChangeResource'
+        approval:
+          oneOf:
+          - $ref: '#/components/schemas/SupportActionRequestResource'
+          - type: 'null'
+        caseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 상담 버전입니다.
+        currentProfileVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 소유 모듈의 프로필 버전입니다.
+        verificationExpiresAt:
+          $ref: '#/components/schemas/DateTime'
+        allowedActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportProfileWorkflowAction'
+          description: 현재 가능한 업무입니다.
+      example:
+        profileChange:
+          profileChangeId: 83000000-0000-4000-8000-000000000001
+          caseId: 83000000-0000-4000-8000-000000000001
+          subjectType: CUSTOMER
+          subjectId: 83000000-0000-4000-8000-000000000001
+          purpose: CUSTOMER_DISPLAY_NAME
+          riskClass: R1
+          requesterActorId: 83000000-0000-4000-8000-000000000001
+          executorActorId: 83000000-0000-4000-8000-000000000001
+          verificationSessionId: 83000000-0000-4000-8000-000000000001
+          expectedProfileVersion: 0
+          currentProfileVersion: 1
+          payloadDigest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          actionRequestId: null
+          state: EXECUTED
+          notificationState: ACCEPTED
+          notificationFailureCode: null
+          maskedBefore: 김*수
+          maskedAfter: 김*원
+          version: 1
+          createdAt: '2026-09-11T09:00:00Z'
+          updatedAt: '2026-09-11T09:01:00Z'
+          notifications:
+          - targetKind: CURRENT
+            channel: PHONE
+            state: ACCEPTED
+            deliveryId: 83000000-0000-4000-8000-000000000001
+            failureCode: null
+            attempts: 1
+        approval: null
+        caseVersion: 2
+        currentProfileVersion: 1
+        verificationExpiresAt: '2026-09-11T09:15:00Z'
+        allowedActions: []
+    OperationsSupportInvestigationSnapshot:
+      type: object
+      additionalProperties: false
+      description: 고정된 상담 승인안의 운영 조사 메타데이터입니다. 개인정보와 증빙 원문은 없습니다.
+      required:
+      - investigationId
+      - supportActionRequestId
+      - supportActionRevisionId
+      - revisionNumber
+      - state
+      - openedAt
+      - expiresAt
+      - decidedByActorId
+      - decidedAt
+      - version
+      properties:
+        investigationId:
+          $ref: '#/components/schemas/Identifier'
+        supportActionRequestId:
+          $ref: '#/components/schemas/Identifier'
+        supportActionRevisionId:
+          $ref: '#/components/schemas/Identifier'
+        revisionNumber:
+          type: integer
+          minimum: 1
+          description: 조사에 고정된 승인안 번호입니다.
+        state:
+          type: string
+          enum:
+          - OPEN
+          - APPROVED
+          - DENIED
+          - RETURNED
+          - ESCALATED
+          - EXPIRED
+          - STALE
+          description: 운영 조사 처리 상태입니다.
+        openedAt:
+          $ref: '#/components/schemas/DateTime'
+        expiresAt:
+          $ref: '#/components/schemas/DateTime'
+        decidedByActorId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: 결정한 별도 운영자입니다.
+        decidedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: 결정 시각입니다.
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 조사 버전입니다.
+      example:
+        investigationId: 83000000-0000-4000-8000-000000000001
+        supportActionRequestId: 83000000-0000-4000-8000-000000000001
+        supportActionRevisionId: 83000000-0000-4000-8000-000000000001
+        revisionNumber: 1
+        state: OPEN
+        openedAt: '2026-09-11T09:00:00Z'
+        expiresAt: '2026-09-11T09:15:00Z'
+        decidedByActorId: null
+        decidedAt: null
+        version: 0
+    OperationsSupportInvestigationWorkflowResource:
+      type: object
+      additionalProperties: false
+      description: 현재 별도 검토자의 운영 조사와 결정 가능 여부입니다.
+      required:
+      - investigation
+      - canDecide
+      properties:
+        investigation:
+          $ref: '#/components/schemas/OperationsSupportInvestigationSnapshot'
+        canDecide:
+          type: boolean
+          description: 현재 권한·상태·시간 및 요청자·승인자·실행자 분리를 만족하는지입니다. 결정 시 재검증합니다.
+      example:
+        investigation:
+          investigationId: 83000000-0000-4000-8000-000000000001
+          supportActionRequestId: 83000000-0000-4000-8000-000000000001
+          supportActionRevisionId: 83000000-0000-4000-8000-000000000001
+          revisionNumber: 1
+          state: OPEN
+          openedAt: '2026-09-11T09:00:00Z'
+          expiresAt: '2026-09-11T09:15:00Z'
+          decidedByActorId: null
+          decidedAt: null
+          version: 0
+        canDecide: true
     SupportCompensationWorkflowAction:
       type: string
       description: 현재 계정과 승인 상태에서 가능한 보상 명령입니다. 실행 시 모든 조건을 다시 검증합니다.
@@ -18803,36 +19170,138 @@ components:
     SupportProfileChangeResource:
       type: object
       additionalProperties: false
-      description: Raw before/after values, verification proof, evidence and secrets are deliberately excluded.
-      required: [profileChangeId, caseId, subjectType, subjectId, purpose, riskClass, requesterActorId, executorActorId, verificationSessionId, expectedProfileVersion, currentProfileVersion, payloadDigest, actionRequestId, state, notificationState, notificationFailureCode, maskedBefore, maskedAfter, version, createdAt, updatedAt, notifications]
+      description: Raw before/after values, verification proof, evidence and secrets are
+        deliberately excluded.
+      required:
+      - profileChangeId
+      - caseId
+      - subjectType
+      - subjectId
+      - purpose
+      - riskClass
+      - requesterActorId
+      - executorActorId
+      - verificationSessionId
+      - expectedProfileVersion
+      - currentProfileVersion
+      - payloadDigest
+      - actionRequestId
+      - state
+      - notificationState
+      - notificationFailureCode
+      - maskedBefore
+      - maskedAfter
+      - version
+      - createdAt
+      - updatedAt
+      - notifications
       properties:
-        profileChangeId: { $ref: "#/components/schemas/Identifier" }
-        caseId: { $ref: "#/components/schemas/Identifier" }
-        subjectType: { type: string, enum: [CUSTOMER, STORE, RIDER] }
-        subjectId: { $ref: "#/components/schemas/Identifier" }
+        profileChangeId:
+          $ref: '#/components/schemas/Identifier'
+        caseId:
+          $ref: '#/components/schemas/Identifier'
+        subjectType:
+          type: string
+          enum:
+          - CUSTOMER
+          - STORE
+          - RIDER
+        subjectId:
+          $ref: '#/components/schemas/Identifier'
         purpose:
           type: string
-          enum: [CUSTOMER_DISPLAY_NAME, CUSTOMER_LEGAL_NAME_TYPO, CUSTOMER_PRIMARY_PHONE, CUSTOMER_CREDENTIAL_RESET, STORE_PUBLIC_PROFILE, STORE_OPERATIONS_CONTACT, STORE_REPRESENTATIVE, STORE_SETTLEMENT_ACCOUNT, STORE_ACCESS_REREGISTRATION, COURIER_DISPLAY_NAME, COURIER_RELAY_CONTACT, COURIER_PROVIDER_IDENTITY, COURIER_PAYOUT_REFERENCE, COURIER_PROVIDER_REREGISTRATION]
-        riskClass: { type: string, enum: [R1, R2, R3, R4] }
-        requesterActorId: { $ref: "#/components/schemas/Identifier" }
-        executorActorId: { $ref: "#/components/schemas/Identifier" }
-        verificationSessionId: { $ref: "#/components/schemas/Identifier" }
-        expectedProfileVersion: { type: integer, format: int64, minimum: 0 }
-        currentProfileVersion: { type: [integer, "null"], format: int64, minimum: 0 }
-        payloadDigest: { type: string, pattern: "^[0-9a-f]{64}$" }
-        actionRequestId: { type: [string, "null"], format: uuid }
-        state: { type: string, enum: [AWAITING_APPROVAL, READY_FOR_EXECUTION, EXECUTED] }
-        notificationState: { type: string, enum: [PENDING, ACCEPTED, RETRY_SCHEDULED, MANUAL_REVIEW] }
-        notificationFailureCode: { type: [string, "null"], pattern: "^[A-Z0-9_]{1,80}$" }
-        maskedBefore: { type: [string, "null"], maxLength: 1000 }
-        maskedAfter: { type: [string, "null"], maxLength: 1000 }
-        version: { type: integer, format: int64, minimum: 0 }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
+          enum:
+          - CUSTOMER_DISPLAY_NAME
+          - CUSTOMER_LEGAL_NAME_TYPO
+          - CUSTOMER_PRIMARY_PHONE
+          - CUSTOMER_CREDENTIAL_RESET
+          - STORE_PUBLIC_PROFILE
+          - STORE_OPERATIONS_CONTACT
+          - STORE_REPRESENTATIVE
+          - STORE_SETTLEMENT_ACCOUNT
+          - STORE_ACCESS_REREGISTRATION
+          - COURIER_DISPLAY_NAME
+          - COURIER_RELAY_CONTACT
+          - COURIER_PROVIDER_IDENTITY
+          - COURIER_PAYOUT_REFERENCE
+          - COURIER_PROVIDER_REREGISTRATION
+        riskClass:
+          type: string
+          enum:
+          - R1
+          - R2
+          - R3
+          - R4
+        requesterActorId:
+          $ref: '#/components/schemas/Identifier'
+        executorActorId:
+          $ref: '#/components/schemas/Identifier'
+        verificationSessionId:
+          $ref: '#/components/schemas/Identifier'
+        expectedProfileVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        currentProfileVersion:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        payloadDigest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        actionRequestId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        state:
+          type: string
+          enum:
+          - AWAITING_APPROVAL
+          - READY_FOR_EXECUTION
+          - EXECUTED
+        notificationState:
+          type: string
+          enum:
+          - NOT_REQUESTED
+          - PENDING
+          - PROCESSING
+          - ACCEPTED
+          - RETRY_SCHEDULED
+          - MANUAL_REVIEW
+          description: 원문 변경 후 알림의 미요청·처리 중·접수·재시도 상태를 구분합니다.
+        notificationFailureCode:
+          type:
+          - string
+          - 'null'
+          pattern: ^[A-Z0-9_]{1,80}$
+        maskedBefore:
+          type:
+          - string
+          - 'null'
+          maxLength: 1000
+        maskedAfter:
+          type:
+          - string
+          - 'null'
+          maxLength: 1000
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
         notifications:
           type: array
           maxItems: 4
-          items: { $ref: "#/components/schemas/SupportProfileChangeNotificationResource" }
+          items:
+            $ref: '#/components/schemas/SupportProfileChangeNotificationResource'
     CourierPayoutReferenceProfileChangeExecutionRequest:
       type: object
       additionalProperties: false

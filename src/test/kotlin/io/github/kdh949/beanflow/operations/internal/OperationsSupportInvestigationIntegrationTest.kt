@@ -21,6 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -85,6 +86,35 @@ internal class OperationsSupportInvestigationIntegrationTest
             listOf(requesterId, managerId, operationsId, otherOperationsId).forEach {
                 grant(it, "OPERATIONS_SUPPORT_INVESTIGATION")
             }
+        }
+
+        @Test
+        fun `investigation read binds exact revision and current separate reviewer`() {
+            val binding = seedRequest(withManager = true)
+            val investigationId = open(binding)
+
+            fun read(
+                actorId: UUID,
+                revision: Int = 1,
+            ) = mockMvc.perform(
+                get(
+                    "/api/v1/operations/investigations",
+                ).param("supportActionRequestId", binding.requestId.toString())
+                    .param("revisionNumber", revision.toString())
+                    .with(jwt().jwt { it.subject(actorId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))),
+            )
+            read(operationsId)
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.investigation.investigationId").value(investigationId.toString()))
+                .andExpect(jsonPath("$.canDecide").value(true))
+            read(requesterId).andExpect(status().isOk).andExpect(jsonPath("$.canDecide").value(false))
+            read(managerId).andExpect(status().isOk).andExpect(jsonPath("$.canDecide").value(false))
+            read(operationsId, 2).andExpect(status().isNotFound)
+            read(operationsId, 0).andExpect(status().isBadRequest)
+            revoke(operationsId, "OPERATIONS_SUPPORT_INVESTIGATION")
+            read(operationsId).andExpect(status().isForbidden)
+            assertThat(state("operations_support_investigation_case", investigationId)).isEqualTo("OPEN")
         }
 
         @Test
