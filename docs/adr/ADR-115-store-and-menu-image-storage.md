@@ -90,6 +90,13 @@ Merchant endpoint는 기존 Session Cookie와 CSRF를 사용한다. actor별 Con
 호출하지 않고 Application Service가 권한 재검증과 pointer/Audit transaction을 조정한다. Operations
 permission은 closed vocabulary에 추가하되 default grant나 role fallback으로 seed하지 않는다.
 
+### 5.1 편집 화면의 현재 이미지 조회
+
+점주용 Store/Menu image 경로는 GET으로 현재 thumbnail의 한시 URL을 조회할 수 있다. Store OWNER,
+Menu OWNER/STAFF 권한과 메뉴 소속을 검증한다. 이미지가 원래 없으면 선택적 image 필드를 생략하고,
+조회/서명 실패는 503으로 유지한다. 조회는 pointer·Audit를 변경하거나 object storage에 probe하지 않는다.
+편집 화면은 URL을 저장하지 않고 expiresAt이 지나면 이 경로를 다시 읽는다.
+
 ### 6. media 장애는 거래·텍스트 조회 readiness와 분리한다
 
 endpoint, credential, bucket과 signing endpoint는 필수 설정이다. 누락·형식 오류 또는 AIStor가 명시적으로

@@ -142,7 +142,7 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] C4: 공개 주문번호 checkout/기존 READY 시도 재개, UNKNOWN 차단, 예약 만료·주문 갱신 실패·종료 타임라인·화면 복귀 갱신 구현. 관련 PostgreSQL/계약 21개, Storybook 10개, frontend 단위 221개와 boundary/copy 21개, typecheck/check:design/docs Passed. 결제 SDK는 테스트에서 명시적으로 대체했으며 실결제는 실행하지 않았다.
 - [x] C5: 쿠폰 진입을 실제 이벤트로 통합하고 기존 주소 redirect, 점주/운영/상담 route lazy loading 구현. 전체 Storybook MCP 338개 Passed, 단위 221개 및 boundary/copy 21개 Passed. typecheck/check:design/build/build-storybook/docs smoke(70 docs/47 states)/sites(4개) Passed. Storybook docs 브라우저 검사는 sandbox 실행 제한 후 권한을 받아 재실행했다. 고객 PR 생성은 아래 이력에 기록한다.
 - [x] S1: 점주 공개 주소/길찾기/7일 운영시간 및 점주·직원 픽업 목록/상세/생성/수정 구현. 기존 준비 중/예시 수치 탭을 실제 관리·정산 진입으로 교체. 관련 Storybook 13개(공통 시간 필드/기존 카탈로그 포함) Passed, 단위 223개 및 boundary/copy 21개, typecheck/check:design Passed. 390px 브라우저에서 필드 넘침 없음 확인.
-- [ ] S2 메뉴 표시/이미지 관리 및 점주 PR 검증·생성.
+- [x] S2: 메뉴 카테고리/설명 편집과 매장·메뉴 이미지 조회/업로드/삭제/만료 갱신 구현. 현재 이미지 조회를 권한 있는 기존 authoring 경로에 추가했다. PostgreSQL 이미지 endpoint/Runtime parity 11개, 전체 Storybook MCP 353개, 단위 223개 및 boundary/copy 21개 Passed. typecheck/check:design/build/build-storybook/docs smoke(73 docs/47 states)/sites(4개), 문서 검증(18개) Passed. 이미지 관리 화면 렌더링 확인. 점주 PR 생성은 아래 이력에 기록한다.
 - [ ] O1–O3 운영 매장/정책 구현·검증·커밋·PR.
 - [ ] R1–R3 이의/복구 구현·검증·커밋·PR.
 - [ ] H1–H2 상담 관리 구현·검증·커밋·PR.
@@ -150,6 +150,7 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [ ] 전체 로컬 검증, 원격 CI 확인, 최종 diff/PR topology 검토.
 
 - 고객 PR: https://github.com/kdh949/BeanFlow/pull/160 (`feature/frontend-customer-consistency`, head `d777992`, base `main`). 후속 점주 branch: `feature/frontend-store-management`.
+- 고객 PR #160의 preflight/frontend/backend-build/6개 backend test shard/CodeQL 및 집계 build 원격 CI가 모두 통과했다.
 
 ## Surprises & Discoveries
 
@@ -158,6 +159,7 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - git metadata 쓰기는 sandbox 바깥 권한이 필요하며 요청한 branch/commit/push/PR 목적에만 사용한다.
 - Kotlin 증분 캐시가 기존 타입을 찾지 못했으나 `-Pkotlin.incremental=false` 전체 컴파일 후 관련 테스트가 통과했다. 저장소 설정은 변경하지 않았다.
 - Storybook watcher에 EMFILE 경고가 있다. catalog/read가 동작해도 HMR/변경 감지는 별도 재확인한다.
+- S2 전체 Storybook 첫 검증은 장시간 실행한 Node의 4GiB heap 소진으로 중단됐다. 재시작 후 남은 task-owned Vitest가 테스트 포트를 점유해 초기화가 실패했다. 해당 프로세스를 종료하고 8GiB heap을 지정한 로컬 서버에서 정적 빌드를 동시에 실행하지 않은 최종 전체 353개 검증이 통과했다. 저장소 런타임 설정은 변경하지 않았다.
 
 ## Decision Log
 

@@ -1,0 +1,12 @@
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, userEvent } from "storybook/test";
+import { HttpResponse, http } from "msw";
+import { ids, merchantSignedInHandlers } from "../../../.storybook/fixtures";
+import { MenuPresentationEditor } from "./MenuPresentationEditor";
+let current = { version: 3, displayCategory: "커피", description: "부드러운 우유 라떼" };
+const handlers = [http.get("/api/v1/stores/:storeId/menus/:menuId/display-content", () => HttpResponse.json(current)), http.put("/api/v1/stores/:storeId/menus/:menuId/display-content", async ({ request }) => { const body = await request.json() as typeof current & { expectedVersion: number }; expect(body.expectedVersion).toBe(3); current = { ...body, version: 4 }; return HttpResponse.json(current); }), http.get("/api/v1/stores/:storeId/menus/:menuId/image", () => HttpResponse.json({})), ...merchantSignedInHandlers];
+const meta = { title: "Patterns/Store/Menu presentation editor", component: MenuPresentationEditor, tags: ["autodocs"], args: { storeId: ids.store, menuId: ids.menu, name: "라떼" }, beforeEach: () => { current = { version: 3, displayCategory: "커피", description: "부드러운 우유 라떼" }; }, parameters: { a11y: { test: "error" }, docs: { story: { inline: false, height: "840px" } }, msw: { handlers } } } satisfies Meta<typeof MenuPresentationEditor>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+export const SaveContent: Story = { play: async ({ canvas }) => { const category = await canvas.findByLabelText("메뉴 분류"); await userEvent.clear(category); await userEvent.type(category, "시그니처"); await userEvent.click(canvas.getByRole("button", { name: "메뉴 표시 정보 저장" })); await expect(await canvas.findByText("메뉴 표시 정보를 저장했습니다.")).toBeVisible(); } };
+export const StaleContent: Story = { parameters: { msw: { handlers: [http.put("/api/v1/stores/:storeId/menus/:menuId/display-content", () => HttpResponse.json({ code: "MERCHANT_CONTENT_STALE", message: "changed" }, { status: 409 })), ...handlers] } }, play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("button", { name: "메뉴 표시 정보 저장" })); await expect(await canvas.findByRole("alert")).toBeVisible(); await expect(canvas.queryByText("메뉴 표시 정보를 저장했습니다.")).not.toBeInTheDocument(); } };

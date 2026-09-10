@@ -6,6 +6,7 @@ import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
 import { Button, Checkbox, ChipButton, EmptyState, FeedbackState, LoadingState, PageHeading, TextField } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
 import { requestErrorPresentation } from "../../presentation/shared/requestErrorPresentation";
+import { MenuPresentationEditor } from "./MenuPresentationEditor";
 import { StoreSelector } from "./StoreSelector";
 import { useMerchantStores } from "./useMerchantStores";
 
@@ -179,6 +180,7 @@ export function StoreCatalogPage({ embedded = false }: { embedded?: boolean }) {
 }
 
 function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
+  const [displayTarget, setDisplayTarget] = useState<MenuCatalogSummary | null>(null);
   const [lifecycle, setLifecycle] = useState<MenuCatalogLifecycle>("ACTIVE");
   const [items, setItems] = useState<MenuCatalogSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -236,6 +238,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
     setDraft(null);
     setCurrent(null);
     setEditing(false);
+    setDisplayTarget(null);
     setItems([]);
     setNextCursor(null);
     setLoadingMore(false);
@@ -248,6 +251,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
   }, [archiveTarget]);
 
   async function edit(item: MenuCatalogSummary) {
+    setDisplayTarget(null);
     await editById(item.menuId);
   }
 
@@ -276,6 +280,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
   function createDraft() {
     if (saving) return;
     editRequest.current += 1;
+    setDisplayTarget(null);
     setCurrent(null);
     setDraft({
       menuId: crypto.randomUUID(),
@@ -409,7 +414,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
               {item.lifecycle === "ACTIVE" ? (
                 <div className="menu-authoring-summary">
                   <MenuCatalogItemSummary item={item} />
-                  <Button variant="secondary" disabled={saving} onClick={() => void edit(item)} aria-label={`${item.name} 편집`}>편집</Button>
+                  <div className="button-row"><Button variant="secondary" disabled={saving} onClick={() => void edit(item)} aria-label={`${item.name} 편집`}>편집</Button><Button variant="ghost" disabled={saving || editing} aria-label={`${item.name} 표시 정보`} onClick={() => setDisplayTarget(item)}>표시 정보</Button></div>
                 </div>
               ) : (
                 <div className="menu-authoring-summary" aria-label={`${item.name} 보관 요약`}>
@@ -433,6 +438,8 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
           {loadingMore ? "불러오는 중" : "메뉴 더 보기"}
         </Button>
       ) : null}
+
+      {displayTarget ? <><MenuPresentationEditor key={displayTarget.menuId} storeId={storeId} menuId={displayTarget.menuId} name={displayTarget.name} onChanged={() => void loadList()} /><Button variant="ghost" onClick={() => setDisplayTarget(null)}>표시 정보 닫기</Button></> : null}
 
       {editing && draft ? (
         <MenuTradeEditor

@@ -464,7 +464,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * 현재 매장 편집 이미지 조회
+         * @description OWNER 권한과 대상 소속을 확인하고 현재 thumbnail의 한시 URL을 반환합니다. 이미지 없음과 조회 실패를 구분하며 pointer나 Audit를 변경하지 않습니다.
+         */
+        get: operations["getStoreImageForAuthoring"];
         /**
          * 매장 대표 이미지 교체
          * @description 해당 매장의 STORE_OWNER만 수행합니다. JPEG 또는 PNG 한 장을 최대 5 MiB까지 받아
@@ -518,7 +522,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * 현재 메뉴 편집 이미지 조회
+         * @description OWNER 또는 STAFF 권한과 대상 소속을 확인하고 현재 thumbnail의 한시 URL을 반환합니다. 이미지 없음과 조회 실패를 구분하며 pointer나 Audit를 변경하지 않습니다.
+         */
+        get: operations["getMenuImageForAuthoring"];
         /**
          * 메뉴 이미지 교체
          * @description 해당 매장의 STORE_OWNER 또는 STORE_STAFF가 수행합니다. URL의 매장과 메뉴의 실제
@@ -5664,6 +5672,9 @@ export interface components {
             page: components["schemas"]["PageInfo"];
             /** @description True only when a valid latitude/longitude pair was supplied and distance ordering participated. */
             distanceAvailable: boolean;
+        };
+        StorefrontImageAuthoring: {
+            image?: components["schemas"]["StorefrontImage"] | null;
         };
         StorefrontImageUploadRequest: {
             /**
@@ -12579,6 +12590,32 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    getStoreImageForAuthoring: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 선택적 이미지 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorefrontImageAuthoring"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     replaceStoreImage: {
         parameters: {
             query?: never;
@@ -12699,6 +12736,33 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getMenuImageForAuthoring: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 선택적 이미지 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorefrontImageAuthoring"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

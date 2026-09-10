@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.shared.api.MerchantActor
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.web.bind.annotation.DeleteMapping
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestMapping
@@ -19,6 +20,14 @@ import java.util.UUID
 internal class MerchantMenuImageController(
     private val service: MerchantMenuImageService,
 ) {
+    @GetMapping
+    fun current(
+        actor: MerchantActor,
+        @PathVariable storeId: UUID,
+        @PathVariable menuId: UUID,
+    ): StorefrontImageAuthoringResponse =
+        StorefrontImageAuthoringResponse(service.current(actor.actorId, storeId, menuId)?.let(StorefrontImageResponse::of))
+
     @PutMapping(consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     fun replace(
         actor: MerchantActor,

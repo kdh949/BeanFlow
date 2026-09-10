@@ -152,7 +152,7 @@ describe("StoreCatalogPage", () => {
       .mockResolvedValueOnce(response({ ...menuContent, available: true, version: 4 }));
     render(<MemoryRouter><StoreCatalogPage /></MemoryRouter>);
 
-    await userEvent.click(await screen.findByRole("button", { name: /카페 라테/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "카페 라테 편집" }));
     await userEvent.click(await screen.findByRole("checkbox", { name: /고객에게 판매 가능/ }));
     await userEvent.click(screen.getByRole("button", { name: "거래 내용 저장" }));
     expect(await screen.findByText("3번째 저장")).toBeVisible();
@@ -232,7 +232,7 @@ describe("StoreCatalogPage", () => {
     );
     render(<MemoryRouter><StoreCatalogPage /></MemoryRouter>);
 
-    await userEvent.click(await screen.findByRole("button", { name: /카페 라테/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "카페 라테 편집" }));
     const name = await screen.findByLabelText("메뉴 이름");
     await userEvent.clear(name);
     await userEvent.type(name, "새 라테");

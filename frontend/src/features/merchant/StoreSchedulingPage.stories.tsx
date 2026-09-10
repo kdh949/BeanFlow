@@ -12,6 +12,7 @@ let current = structuredClone(profile);
 let slots = [slot];
 const membership = (role = "OWNER") => http.get("/api/v1/merchant/me/stores", () => HttpResponse.json([{ storeId: ids.store, storeName: "시청점", membershipRole: role }]));
 const handlers = [membership(), ...merchantSignedInHandlers,
+  http.get("/api/v1/stores/:storeId/image", () => HttpResponse.json({})),
   http.get("/api/v1/stores/:storeId/customer-display", () => HttpResponse.json(current)),
   http.put("/api/v1/stores/:storeId/customer-display", async ({ request }) => { const body = await request.json() as typeof profile & { expectedVersion: number }; expect(body.expectedVersion).toBe(3); expect(body.operatingHours.days).toHaveLength(7); current = { ...body, version: 4 }; return HttpResponse.json(current); }),
   http.get("/api/v1/stores/:storeId/pickup-slot-management", () => HttpResponse.json({ items: slots, nextCursor: null })),

@@ -6,6 +6,7 @@ import io.github.kdh949.beanflow.shared.api.MerchantActor
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.web.bind.annotation.DeleteMapping
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestMapping
@@ -25,11 +26,22 @@ internal data class StorefrontImageResponse(
     }
 }
 
+internal data class StorefrontImageAuthoringResponse(
+    val image: StorefrontImageResponse?,
+)
+
 @RestController
 @RequestMapping("/api/v1/stores/{storeId}/image")
 internal class MerchantStoreImageController(
     private val service: MerchantStoreImageService,
 ) {
+    @GetMapping
+    fun current(
+        actor: MerchantActor,
+        @PathVariable storeId: UUID,
+    ): StorefrontImageAuthoringResponse =
+        StorefrontImageAuthoringResponse(service.current(actor.actorId, storeId)?.let(StorefrontImageResponse::of))
+
     @PutMapping(consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     fun replace(
         actor: MerchantActor,

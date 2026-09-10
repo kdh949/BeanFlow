@@ -963,6 +963,24 @@ paths:
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
   /stores/{storeId}/image:
+    get:
+      tags: [Merchant]
+      operationId: getStoreImageForAuthoring
+      summary: 현재 매장 편집 이미지 조회
+      security: [{ merchantSession: [] }]
+      description: OWNER 권한과 대상 소속을 확인하고 현재 thumbnail의 한시 URL을 반환합니다. 이미지 없음과 조회 실패를 구분하며 pointer나 Audit를 변경하지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+      responses:
+        "200":
+          description: 현재 선택적 이미지
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StorefrontImageAuthoring" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
     put:
       tags: [Merchant]
       operationId: replaceStoreImage
@@ -1317,6 +1335,25 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/menus/{menuId}/image:
+    get:
+      tags: [Merchant]
+      operationId: getMenuImageForAuthoring
+      summary: 현재 메뉴 편집 이미지 조회
+      security: [{ merchantSession: [] }]
+      description: OWNER 또는 STAFF 권한과 대상 소속을 확인하고 현재 thumbnail의 한시 URL을 반환합니다. 이미지 없음과 조회 실패를 구분하며 pointer나 Audit를 변경하지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MenuId"
+      responses:
+        "200":
+          description: 현재 선택적 이미지
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StorefrontImageAuthoring" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
     put:
       tags: [Merchant]
       operationId: replaceMenuImage
@@ -11151,6 +11188,14 @@ components:
           format: uri
           description: 비공개 AIStor 썸네일 객체의 presigned GET URL입니다.
         expiresAt: { $ref: "#/components/schemas/DateTime" }
+    StorefrontImageAuthoring:
+      type: object
+      additionalProperties: false
+      properties:
+        image:
+          anyOf:
+            - $ref: "#/components/schemas/StorefrontImage"
+            - type: "null"
     StorefrontImageUploadRequest:
       type: object
       additionalProperties: false

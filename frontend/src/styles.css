@@ -515,3 +515,7 @@
 .support-case-reference { overflow-wrap: anywhere; font-size: var(--fs-body-sm); }
 
 .support-timeline-panel > h2 { margin: 0; font-size: var(--fs-body); }
+
+.media-editor { display: flex; flex-direction: column; gap: var(--sp-4); }
+/* Intrinsic 512px server thumbnail; fit the available editing column. */
+.media-editor-image { max-width: 100%; height: auto; object-fit: cover; border-radius: var(--r-md); }

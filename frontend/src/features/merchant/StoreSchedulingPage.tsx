@@ -7,6 +7,7 @@ import { ErrorState } from "../../presentation/shared";
 import { shortDateTime } from "../../lib/format";
 import { seoulInputValue, seoulInstant } from "../../lib/seoulDateTime";
 import { useResource } from "../shared/useResource";
+import { StorefrontImageEditor } from "./StorefrontImageEditor";
 import { StoreSelector } from "./StoreSelector";
 import { useMerchantStores } from "./useMerchantStores";
 
@@ -22,7 +23,7 @@ export function StoreSchedulingPage() {
   return <div className="management-workspace">
     <StoreSelector stores={stores.stores} selected={stores.selected} onSelect={stores.select} />
     {stores.selected ? <div key={stores.selected.storeId}>
-      {stores.selected.membershipRole === "OWNER" ? <DisplayEditor storeId={stores.selected.storeId} /> : <InlineNotice tone="info" title="고객 공개 정보는 점주가 변경할 수 있습니다" description="직원은 픽업 시간과 정원을 관리할 수 있습니다." />}
+      {stores.selected.membershipRole === "OWNER" ? <><DisplayEditor storeId={stores.selected.storeId} /><StorefrontImageEditor storeId={stores.selected.storeId} label="매장 대표 이미지" /></> : <InlineNotice tone="info" title="고객 공개 정보는 점주가 변경할 수 있습니다" description="직원은 픽업 시간과 정원을 관리할 수 있습니다." />}
       <PickupSlots storeId={stores.selected.storeId} />
     </div> : <EmptyState title="관리할 매장이 없습니다" description="소속 매장과 권한을 확인해 주세요." />}
   </div>;
@@ -65,7 +66,7 @@ function DisplayForm({ storeId, current, onSaved, onRefresh }: { storeId: string
       </fieldset>; })}</div> : null}
       <p>영업시간은 한국 시간 기준입니다. 픽업 주문은 별도로 등록한 시간과 주문 접수 설정을 따릅니다.</p>
       {failure ? <ErrorState error={failure} /> : null}
-      <div className="form-actions"><Button type="submit" loading={saving}>공개 정보 저장</Button><Button type="button" variant="secondary" onClick={onRefresh}>현재 공개 정보 다시 읽기</Button></div>
+      <div className="button-row"><Button type="submit" loading={saving}>공개 정보 저장</Button><Button type="button" variant="secondary" onClick={onRefresh}>현재 공개 정보 다시 읽기</Button></div>
     </fieldset>
   </form>;
 }
@@ -93,7 +94,7 @@ function PickupSlots({ storeId }: { storeId: string }) {
         <dl className="detail-list"><div><dt>정원</dt><dd>{slot.capacity}</dd></div><div><dt>예약</dt><dd>{slot.reservedCount}</dd></div><div><dt>확정</dt><dd>{slot.confirmedCount}</dd></div></dl>
         <Button variant="secondary" disabled={Date.parse(slot.startsAt) <= Date.now()} aria-label={`${shortDateTime.format(new Date(slot.startsAt))} 픽업 시간 수정`} onClick={() => { setSelected(slot.slotId); setSaved(false); }}>수정</Button>
       </article>)}</div>}
-      <div className="form-actions"><Button variant="ghost" disabled={!query.cursor} onClick={() => setQuery({ ...query, cursor: undefined })}>처음 목록</Button><Button variant="secondary" disabled={!resource.state.value.nextCursor} onClick={() => { if (resource.state.status === "ready" && resource.state.value.nextCursor) setQuery({ ...query, cursor: resource.state.value.nextCursor }); }}>다음 픽업 목록</Button></div>
+      <div className="button-row"><Button variant="ghost" disabled={!query.cursor} onClick={() => setQuery({ ...query, cursor: undefined })}>처음 목록</Button><Button variant="secondary" disabled={!resource.state.value.nextCursor} onClick={() => { if (resource.state.status === "ready" && resource.state.value.nextCursor) setQuery({ ...query, cursor: resource.state.value.nextCursor }); }}>다음 픽업 목록</Button></div>
     </>}
   </section>;
 }
@@ -134,5 +135,5 @@ function SlotForm({ current, storeId, onSaved, onClose, onRefresh }: { current?:
     <TextAreaField label="픽업 변경 사유" required maxLength={500} value={reason} onValueChange={setReason} />
     {failure ? <ErrorState error={failure} /> : null}
     <Button type="submit" loading={saving}>픽업 시간 저장</Button>
-  </fieldset><div className="form-actions">{onRefresh ? <Button type="button" variant="secondary" disabled={saving} onClick={onRefresh}>현재 픽업 정보 다시 읽기</Button> : null}<Button type="button" variant="ghost" disabled={saving} onClick={onClose}>편집 닫기</Button></div></form>;
+  </fieldset><div className="button-row">{onRefresh ? <Button type="button" variant="secondary" disabled={saving} onClick={onRefresh}>현재 픽업 정보 다시 읽기</Button> : null}<Button type="button" variant="ghost" disabled={saving} onClick={onClose}>편집 닫기</Button></div></form>;
 }
