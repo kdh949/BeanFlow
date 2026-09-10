@@ -3,7 +3,7 @@ SET LOCAL lock_timeout = '5s';
 INSERT INTO operations_audit_action_category (action, audit_category) VALUES
  ('PICKUP_SLOT_CREATED', 'ORDER_AND_FULFILLMENT'), ('PICKUP_SLOT_REPLACED', 'ORDER_AND_FULFILLMENT');
 
-CREATE INDEX idx_pickup_slot_management_page ON fulfillment_pickup_slot(store_id, starts_at, id);
+-- 관리 목록도 V35의 (store_id, starts_at, id) covering index를 사용한다.
 CREATE TABLE fulfillment_pickup_slot_command (
  id uuid PRIMARY KEY,
  actor_id uuid NOT NULL,
