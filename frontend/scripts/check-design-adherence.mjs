@@ -169,6 +169,11 @@ for (const path of storyFiles) {
 
 const routerSource = readFileSync(join(src, "router.tsx"), "utf8");
 const routeComponents = new Set([...routerSource.matchAll(/element:\s*<([A-Z][A-Za-z0-9]+)/g)].map((match) => match[1]));
+// Lazy routes still require canonical stories just like eager route elements.
+for (const match of routerSource.matchAll(/const\s*\{\s*([A-Z][A-Za-z0-9]+):\s*Component\s*\}/g)) routeComponents.add(match[1]);
+for (const match of routerSource.matchAll(/Component:\s*\(\)\s*=>\s*<([A-Z][A-Za-z0-9]+)/g)) {
+  if (match[1] !== "Component") routeComponents.add(match[1]);
+}
 for (const component of routeComponents) {
   if (!storySource.includes(component)) violations.push({ rule: "route-story-coverage", file: "src/router.tsx", value: component });
 }

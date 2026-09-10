@@ -10,27 +10,9 @@ import { CustomerOrdersPage } from "./features/ordering/CustomerOrdersPage";
 import { CustomerLoginPage, CustomerSignupPage } from "./features/auth/customer/AuthPages";
 import { CustomerMyPage } from "./features/auth/customer/MyPage";
 import { CustomerSessionGate } from "./features/auth/customer/CustomerSessionGate";
-import { MerchantLoginPage, MerchantPasswordChangePage } from "./features/auth/merchant/MerchantAuthPages";
-import { MerchantSessionGate } from "./features/auth/merchant/MerchantSessionGate";
-import { StoreSettlementsPage } from "./features/merchant/StoreSettlementsPage";
-import { StoreDisputesPage } from "./features/merchant/StoreDisputesPage";
-import { OpsDashboardPage, OpsOrderPage } from "./pages/console/ConsolePages";
 import { ButtonLink } from "./design-system";
 import { CouponWalletPage } from "./features/customer/CouponWalletPage";
-import { CustomerCouponClaimsPage } from "./features/customer/CustomerCouponClaimsPage";
 import { FavoriteStoresPage } from "./features/customer/FavoriteStoresPage";
-import { StoreRegionPage } from "./features/merchant/StoreRegionPage";
-import { StoreDisputeDetailPage } from "./features/merchant/StoreDisputeDetailPage";
-import { StoreCatalogPage } from "./features/merchant/StoreCatalogPage";
-import { StoreManagementPage } from "./features/merchant/StoreManagementPage";
-import { OperationsSessionGate } from "./features/auth/operations/OperationsSessionGate";
-import { MerchantAccountsPage } from "./features/operations/MerchantAccountsPage";
-import { OperationsControlPage } from "./features/operations/OperationsControlPage";
-import { OperationsRecoveryPage } from "./features/operations/OperationsRecoveryPage";
-import { SupportFollowUpRoute } from "./features/support/SupportFollowUpRoute";
-import { SupportWorkspacePage } from "./features/support/SupportWorkspacePage";
-import { OperationsPolicyPage } from "./features/operations/OperationsPolicyPage";
-import { CouponCampaignsPage } from "./features/operations/CouponCampaignsPage";
 import { NotificationInboxPage } from "./features/notification/NotificationInboxPage";
 import {
   RefreshCartPage,
@@ -40,8 +22,6 @@ import {
   EventCampaignPage,
   RefreshCustomerOrderDetailPage,
   RefreshStoreDetailPage,
-  RefreshStoreOrderBoardPage,
-  RefreshStoreRefundPage,
   RefreshStoreSearchPage,
 } from "./presentation/beanflow-refresh";
 
@@ -77,7 +57,7 @@ export const router = createBrowserRouter([
             { path: "points", element: <CustomerPointsPage /> },
             { path: "coupons", element: <CouponWalletPage /> },
             { path: "refunds", loader: () => redirect("/app/orders?status=PAST") },
-            { path: "coupon-claims", element: <CustomerCouponClaimsPage /> },
+            { path: "coupon-claims", loader: () => redirect("/app/events") },
             { path: "favorites", element: <FavoriteStoresPage /> },
             { path: "notifications", element: <NotificationInboxPage /> },
             { path: "me", element: <CustomerMyPage /> },
@@ -89,22 +69,22 @@ export const router = createBrowserRouter([
   {
     path: "/store", children: [
       { element: <ConsoleShell kind="store" />, children: [
-        { path: "login", element: <MerchantLoginPage /> },
-        { path: "password", element: <MerchantPasswordChangePage /> },
+        { path: "login", lazy: async () => { const { MerchantLoginPage: Component } = await import("./features/auth/merchant/MerchantAuthPages"); return { Component }; } },
+        { path: "password", lazy: async () => { const { MerchantPasswordChangePage: Component } = await import("./features/auth/merchant/MerchantAuthPages"); return { Component }; } },
       ] },
       {
-        element: <MerchantSessionGate />, children: [
+        lazy: async () => { const { MerchantSessionGate: Component } = await import("./features/auth/merchant/MerchantSessionGate"); return { Component }; }, children: [
           { element: <ConsoleShell kind="store" />, children: [
-            { index: true, element: <RefreshStoreOrderBoardPage /> },
-            { path: "refunds/:storeId/:orderReference", element: <RefreshStoreRefundPage /> },
+            { index: true, lazy: async () => { const { RefreshStoreOrderBoardPage: Component } = await import("./presentation/beanflow-refresh/MerchantPages"); return { Component }; } },
+            { path: "refunds/:storeId/:orderReference", lazy: async () => { const { RefreshStoreRefundPage: Component } = await import("./presentation/beanflow-refresh/MerchantPages"); return { Component }; } },
           ] },
           { element: <ConsoleShell kind="store" />, children: [
-            { path: "settlements", element: <StoreSettlementsPage /> },
-            { path: "disputes", element: <StoreDisputesPage /> },
-            { path: "disputes/:disputeId", element: <StoreDisputeDetailPage /> },
-            { path: "management", element: <StoreManagementPage catalogContent={<StoreCatalogPage embedded />} /> },
+            { path: "settlements", lazy: async () => { const { StoreSettlementsPage: Component } = await import("./features/merchant/StoreSettlementsPage"); return { Component }; } },
+            { path: "disputes", lazy: async () => { const { StoreDisputesPage: Component } = await import("./features/merchant/StoreDisputesPage"); return { Component }; } },
+            { path: "disputes/:disputeId", lazy: async () => { const { StoreDisputeDetailPage: Component } = await import("./features/merchant/StoreDisputeDetailPage"); return { Component }; } },
+            { path: "management", lazy: async () => { const [{ StoreManagementPage }, { StoreCatalogPage }] = await Promise.all([import("./features/merchant/StoreManagementPage"), import("./features/merchant/StoreCatalogPage")]); return { Component: () => <StoreManagementPage catalogContent={<StoreCatalogPage embedded />} /> }; } },
             { path: "catalog", loader: () => redirect("/store/management") },
-            { path: "region", element: <StoreRegionPage /> },
+            { path: "region", lazy: async () => { const { StoreRegionPage: Component } = await import("./features/merchant/StoreRegionPage"); return { Component }; } },
           ] },
         ],
       },
@@ -112,25 +92,25 @@ export const router = createBrowserRouter([
   },
   {
     path: "/ops", element: <ConsoleShell kind="ops" />, children: [
-      { path: "auth/callback", element: <OperationsSessionGate callback /> },
+      { path: "auth/callback", lazy: async () => { const { OperationsSessionGate: Component } = await import("./features/auth/operations/OperationsSessionGate"); return { Component: () => <Component callback /> }; } },
       {
-        element: <OperationsSessionGate />, children: [
-          { index: true, element: <OpsDashboardPage /> },
-          { path: "orders", element: <OpsOrderPage /> },
-          { path: "merchant-accounts", element: <MerchantAccountsPage /> },
-          { path: "recovery", element: <OperationsRecoveryPage /> },
-          { path: "control", element: <OperationsControlPage /> },
-          { path: "policies", element: <OperationsPolicyPage /> },
-          { path: "campaigns", element: <CouponCampaignsPage /> },
+        lazy: async () => { const { OperationsSessionGate: Component } = await import("./features/auth/operations/OperationsSessionGate"); return { Component }; }, children: [
+          { index: true, lazy: async () => { const { OpsDashboardPage: Component } = await import("./pages/console/ConsolePages"); return { Component }; } },
+          { path: "orders", lazy: async () => { const { OpsOrderPage: Component } = await import("./pages/console/ConsolePages"); return { Component }; } },
+          { path: "merchant-accounts", lazy: async () => { const { MerchantAccountsPage: Component } = await import("./features/operations/MerchantAccountsPage"); return { Component }; } },
+          { path: "recovery", lazy: async () => { const { OperationsRecoveryPage: Component } = await import("./features/operations/OperationsRecoveryPage"); return { Component }; } },
+          { path: "control", lazy: async () => { const { OperationsControlPage: Component } = await import("./features/operations/OperationsControlPage"); return { Component }; } },
+          { path: "policies", lazy: async () => { const { OperationsPolicyPage: Component } = await import("./features/operations/OperationsPolicyPage"); return { Component }; } },
+          { path: "campaigns", lazy: async () => { const { CouponCampaignsPage: Component } = await import("./features/operations/CouponCampaignsPage"); return { Component }; } },
         ],
       },
     ],
   },
   {
     path: "/support", element: <ConsoleShell kind="support" />, children: [
-      { element: <OperationsSessionGate />, children: [
-        { index: true, element: <SupportWorkspacePage /> },
-        { path: "follow-up", element: <SupportFollowUpRoute /> },
+      { lazy: async () => { const { OperationsSessionGate: Component } = await import("./features/auth/operations/OperationsSessionGate"); return { Component }; }, children: [
+        { index: true, lazy: async () => { const { SupportWorkspacePage: Component } = await import("./features/support/SupportWorkspacePage"); return { Component }; } },
+        { path: "follow-up", lazy: async () => { const { SupportFollowUpRoute: Component } = await import("./features/support/SupportFollowUpRoute"); return { Component }; } },
       ] },
     ],
   },

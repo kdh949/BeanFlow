@@ -69,7 +69,7 @@ describe("customer session route boundary", () => {
     renderApp("/app/me");
 
     expect(await screen.findByRole("link", { name: "주문 내역" })).toHaveAttribute("href", "/app/orders");
-    expect(screen.getByRole("link", { name: "쿠폰 받기" })).toHaveAttribute("href", "/app/coupon-claims");
+    expect(screen.getByRole("link", { name: "쿠폰 받기" })).toHaveAttribute("href", "/app/events");
     expect(screen.queryByRole("link", { name: "환불 내역" })).not.toBeInTheDocument();
   });
 
