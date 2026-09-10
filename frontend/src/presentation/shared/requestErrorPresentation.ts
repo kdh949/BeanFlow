@@ -39,6 +39,10 @@ const knownErrors: Record<string, Omit<RequestErrorPresentation, "reference">> =
     title: "정책 버전이 변경되었습니다",
     description: "다른 운영자가 정책을 먼저 변경했습니다. 현재 값을 다시 조회해 주세요.",
   },
+  POLICY_DATA_INCOMPLETE: {
+    title: "정책 값을 확인하지 못했습니다",
+    description: "완전한 정책 정보를 다시 조회한 뒤 변경해 주세요.",
+  },
   TEMPORARY_PASSWORD_NOT_REPLAYABLE: {
     title: "임시 비밀번호를 다시 표시할 수 없습니다",
     description: "새 요청으로 임시 비밀번호를 다시 발급해 주세요.",

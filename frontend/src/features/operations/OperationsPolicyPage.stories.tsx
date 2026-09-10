@@ -76,6 +76,8 @@ export const GlobalPointPolicy: Story = {
     await expect(canvas.getByText("버전 12 적용 중")).toBeVisible();
   },
 };
+export const IncompleteGlobalPolicy: Story = { parameters: { msw: { handlers: [http.get("/api/v1/operations/policies/ordinary-point-accrual/global", () => HttpResponse.json({ ...pointPolicy, accrualRateBps: undefined }))] } }, play: async ({ canvas }) => { await userEvent.selectOptions(canvas.getByLabelText("정책 조회 사유"), "POLICY_CHANGE_REVIEW"); await userEvent.click(canvas.getByRole("button", { name: "현재 적립 정책 조회" })); await expect(await canvas.findByText("정책 값을 확인하지 못했습니다")).toBeVisible(); await expect(canvas.queryByText("0.00%")).not.toBeInTheDocument(); await expect(canvas.queryByRole("button", { name: "새 적립 정책 적용" })).not.toBeInTheDocument(); } };
+export const StorePointPolicyEntry: Story = { play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("tab", { name: "매장별 포인트" })); await expect(canvas.getByLabelText("포인트를 관리할 매장 ID")).toBeVisible(); } };
 
 export const PointPolicyConflict: Story = {
   parameters: {

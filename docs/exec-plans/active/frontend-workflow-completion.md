@@ -146,10 +146,11 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] O1: 운영 매장 목록/이전·다음 커서/생성/현재 식별정보 수정/등록 지역 선택 및 브랜드 조회·지정·해제 구현. 브랜드 현재 소속 GET은 기존 grant와 단일 projection을 재사용했다. 관련 Storybook 17개, backend 29개, frontend 단위 223개와 boundary/copy 21개, typecheck/check:design/docs Passed. 390px 브라우저의 필드/목록 넘침 없음 확인. 전체 빌드/Storybook은 O2–O3 후 PR 검증에서 실행한다.
 - [x] O2: 선택한 매장의 불변 정산 계약 목록/상세/미래 구간 등록과 기존 계정 소속 추가/역할 변경/철회/재활성화 구현. 조회 권한과 소속 변경 권한을 구분해 계정 exact 조회 또는 확인된 기존 ID를 사용한다. 연도를 포함한 계약 날짜, RESOURCE_STATE_CONFLICT 안내를 보완했다. 관련 Storybook 16개, 기존 PostgreSQL 계약 12개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 계약 폼·오류 상태와 가로 넘침 없음 확인.
 - [x] O3/F16: 브랜드 관리에 20개씩 이전/다음 커서를 연결하고 페이지 조회 실패 시 이전 결과를 제거했다. 생성·이름 변경 후 서버 정렬 목록을 다시 조회하며 결과를 별도 안내한다. 소속 매장이 있으면 이름도 바꿀 수 없다는 잘못된 설명과 사유 200자 제한을 수정했다. 관련 Storybook 4개, typecheck/check:design, 단위 224개와 boundary/copy 21개 Passed.
-- [ ] O3/M12 포인트 정책·이력 구현, 운영 PR 검증·생성.
+- [x] O3/M12: 매장별 포인트 설정 목록/필터/커서, 실제 적용 정책 조회/변경, 공통·매장별 이력 구현. 불완전한 공통 정책을 0%로 표시하지 않고 편집을 차단한다. 관련 Storybook 16개 및 전체 393개, backend 정책/동시성/Runtime parity 8개, frontend 단위 224개와 boundary/copy 21개 Passed. typecheck/check:design/build/build-storybook/docs smoke(79 docs/47 states)/sites(4개), 문서 검증(18개) Passed. 390px 포인트 화면 넘침 없음 확인. 운영 PR 생성은 아래 이력에 기록한다.
 - [ ] R1–R3 이의/복구 구현·검증·커밋·PR.
 - [ ] H1–H2 상담 관리 구현·검증·커밋·PR.
 - [ ] H3–H4 상담 후속 처리 구현·검증·커밋·PR.
+- [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.
 - [ ] 전체 로컬 검증, 원격 CI 확인, 최종 diff/PR topology 검토.
 
 - 고객 PR: https://github.com/kdh949/BeanFlow/pull/160 (`feature/frontend-customer-consistency`, head `d777992`, base `main`). 후속 점주 branch: `feature/frontend-store-management`.
@@ -166,6 +167,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - Storybook watcher에 EMFILE 경고가 있다. catalog/read가 동작해도 HMR/변경 감지는 별도 재확인한다.
 - S2 전체 Storybook 첫 검증은 장시간 실행한 Node의 4GiB heap 소진으로 중단됐다. 재시작 후 남은 task-owned Vitest가 테스트 포트를 점유해 초기화가 실패했다. 해당 프로세스를 종료하고 8GiB heap을 지정한 로컬 서버에서 정적 빌드를 동시에 실행하지 않은 최종 전체 353개 검증이 통과했다. 저장소 런타임 설정은 변경하지 않았다.
 - 계정 조회의 X-Access-Reason에 한글을 직접 넣으면 브라우저 Headers 생성 단계에서 실패한다. 기존 조회 화면처럼 한글 목적 선택을 ASCII 사유 코드로 전송하고, 명령 본문의 변경 사유는 한글을 유지한다. 계정 exact 조회는 MERCHANT_CREDENTIAL_MANAGE, 소속 변경은 별도 STORE_MEMBERSHIP_WRITE 권한이므로 기존 ID 입력 경로도 제공한다.
+
+- 포인트 정책 OpenAPI의 discriminator mapping 누락과 global request의 required-only allOf 때문에 생성 타입이 실제 상태 값을 허용하지 않았다. 기존 서버 상태와 필드 제약을 명시하도록 계약을 보정하고 생성 타입 및 runtime parity를 검증했다. 제품 정책/서버 동작은 변경하지 않는다.
 
 ## Decision Log
 

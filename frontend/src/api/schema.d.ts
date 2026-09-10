@@ -7856,7 +7856,10 @@ export interface components {
          *       "expectedPolicyVersionId": 12
          *     }
          */
-        ChangeGlobalOrdinaryPointAccrualPolicyRequest: components["schemas"]["OrdinaryPointAccrualOverrideFields"] & Record<string, never>;
+        ChangeGlobalOrdinaryPointAccrualPolicyRequest: components["schemas"]["OrdinaryPointAccrualOverrideFields"] & {
+            /** Format: int64 */
+            expectedPolicyVersionId: number;
+        };
         /**
          * @description 일반 포인트 적립 정책 목록의 다음 페이지 커서입니다.
          * @example {
@@ -8029,7 +8032,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            state: "ChangeStoreOrdinaryPointAccrualOverrideRequest";
+            state: "OVERRIDE";
         };
         /**
          * @description 특정 매장의 별도 포인트 정책을 해제하고 전체 기본 정책을 따르게 하는 요청입니다. 기존 매장 정책이 있으면 현재 버전 ID를 함께 보냅니다.
@@ -8049,7 +8052,7 @@ export interface components {
              * @description 리소스의 현재 처리 상태입니다. (enum property replaced by openapi-typescript)
              * @enum {string}
              */
-            state: "ChangeStoreOrdinaryPointAccrualInheritanceRequest";
+            state: "INHERIT_GLOBAL";
             /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
         };

@@ -2652,6 +2652,9 @@ paths:
                 - $ref: '#/components/schemas/ChangeStoreOrdinaryPointAccrualInheritanceRequest'
               discriminator:
                 propertyName: state
+                mapping:
+                  OVERRIDE: '#/components/schemas/ChangeStoreOrdinaryPointAccrualOverrideRequest'
+                  INHERIT_GLOBAL: '#/components/schemas/ChangeStoreOrdinaryPointAccrualInheritanceRequest'
       responses:
         '200':
           description: 매장 포인트 정책 변경 결과
@@ -13821,6 +13824,11 @@ components:
         - type: object
           required:
             - expectedPolicyVersionId
+          properties:
+            expectedPolicyVersionId:
+              type: integer
+              format: int64
+              minimum: 1
       description: |
         모든 매장에 기본으로 적용되는 포인트 적립 정책을 변경하는 요청입니다. `expectedPolicyVersionId`로 현재 정책이 다른 운영자에 의해 먼저 바뀌지 않았는지 확인합니다.
       example:

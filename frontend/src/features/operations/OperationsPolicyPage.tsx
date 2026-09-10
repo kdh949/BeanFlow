@@ -5,16 +5,26 @@ import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
 import { Button, EmptyState, LoadingState, PageHeading, SelectField, Tab, TabList, TabPanel, Tabs, TextAreaField, TextField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
-import { shortDateTime } from "../../lib/format";
+import { fullDateTime, shortDateTime } from "../../lib/format";
+import { PointPolicyHistory } from "./PointPolicyHistory";
+import { StorePointPolicyDirectory } from "./StorePointPolicyDirectory";
 
-type PointPolicy = components["schemas"]["OrdinaryPointAccrualPolicyVersion"];
+type PolicyVersion = components["schemas"]["OrdinaryPointAccrualPolicyVersion"];
+type PointPolicy = PolicyVersion & Required<Pick<PolicyVersion, "accrualRateBps" | "roundingMode" | "issuerType" | "issuerReference" | "expiryRule" | "validityDays">>;
+function completeGlobalPolicy(policy: PolicyVersion): PointPolicy {
+  if (policy.scopeType !== "GLOBAL" || policy.state !== "OVERRIDE" || policy.accrualRateBps === undefined || !policy.roundingMode || !policy.issuerType || !policy.issuerReference || !policy.expiryRule || policy.validityDays === undefined) {
+    throw new ApiRequestError(502, "POLICY_DATA_INCOMPLETE", "Global policy fields are incomplete");
+  }
+  return policy as PointPolicy;
+}
 type RestorationPolicy = components["schemas"]["ExpiredBenefitRestorationPolicy"];
 type Brand = components["schemas"]["Brand"];
 type SearchResult = components["schemas"]["SearchIndexRebuildResponse"];
-type Workspace = "points" | "restoration" | "brands" | "search";
+type Workspace = "points" | "store-points" | "restoration" | "brands" | "search";
 
 const workspaceItems: Array<{ id: Workspace; label: string; icon: typeof Settings2 }> = [
   { id: "points", label: "포인트 적립", icon: Settings2 },
+  { id: "store-points", label: "매장별 포인트", icon: Settings2 },
   { id: "restoration", label: "만료 혜택 복원", icon: Gift },
   { id: "brands", label: "브랜드", icon: Tags },
   { id: "search", label: "검색 색인", icon: SearchCheck },
@@ -31,7 +41,8 @@ export function OperationsPolicyPage() {
       <PageHeading title="운영 정책 관리" />
       <Tabs value={workspace} onValueChange={(value) => setWorkspace(value as Workspace)}>
         <TabList label="운영 정책 업무 선택">{workspaceItems.map(({ id, label, icon: Icon }) => <Tab key={id} value={id}><Icon size={17} aria-hidden="true" /> {label}</Tab>)}</TabList>
-        <TabPanel value="points"><PointPolicyWorkspace /></TabPanel>
+        <TabPanel value="points"><PointPolicyWorkspace /><PointPolicyHistory /></TabPanel>
+        <TabPanel value="store-points"><StorePointPolicyDirectory /></TabPanel>
         <TabPanel value="restoration"><RestorationPolicyWorkspace /></TabPanel>
         <TabPanel value="brands"><BrandWorkspace /></TabPanel>
         <TabPanel value="search"><SearchIndexWorkspace /></TabPanel>
@@ -57,21 +68,21 @@ function PointPolicyWorkspace() {
   const intent = useRef(new SubmissionIntent());
 
   function fillForm(next: PointPolicy) {
-    setRate(((next.accrualRateBps ?? 0) / 100).toString());
-    setRoundingMode(next.roundingMode ?? "FLOOR");
-    setIssuerType(next.issuerType ?? "PLATFORM");
-    setIssuerReference(next.issuerReference ?? "platform:beanflow");
-    setExpiryRule(next.expiryRule ?? "SEOUL_CALENDAR_DAYS_FROM_COMPLETION");
-    setValidityDays(String(next.validityDays ?? 365));
+    setRate((next.accrualRateBps / 100).toString());
+    setRoundingMode(next.roundingMode);
+    setIssuerType(next.issuerType);
+    setIssuerReference(next.issuerReference);
+    setExpiryRule(next.expiryRule);
+    setValidityDays(String(next.validityDays));
   }
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const next = unwrap(await operationsApi.GET("/operations/policies/ordinary-point-accrual/global", {
+      const next = completeGlobalPolicy(unwrap(await operationsApi.GET("/operations/policies/ordinary-point-accrual/global", {
         params: { header: { "X-Access-Reason": accessReason } },
-      }));
+      })));
       setPolicy(next);
       fillForm(next);
     } catch (nextError) {
@@ -99,10 +110,10 @@ function PointPolicyWorkspace() {
     setSaving(true);
     setSaveError(null);
     try {
-      const next = unwrap(await operationsApi.PATCH("/operations/policies/ordinary-point-accrual/global", {
+      const next = completeGlobalPolicy(unwrap(await operationsApi.PATCH("/operations/policies/ordinary-point-accrual/global", {
         params: { header: { "Idempotency-Key": intent.current.keyFor(fingerprint) } },
-        body: body as never,
-      }));
+        body,
+      })));
       setPolicy(next);
       fillForm(next);
       setReason("");
@@ -136,11 +147,11 @@ function PointPolicyWorkspace() {
           <section className="surface-card order-panel">
             <div className="panel-heading"><div><span className="context-label">현재 버전</span><h2>버전 {policy.policyVersionId} 적용 중</h2></div><StatusText state={policy.state} /></div>
             <dl className="detail-list">
-              <div><dt>적립률</dt><dd>{((policy.accrualRateBps ?? 0) / 100).toFixed(2)}%</dd></div>
+              <div><dt>적립률</dt><dd>{(policy.accrualRateBps / 100).toFixed(2)}%</dd></div>
               <div><dt>반올림</dt><dd>{policy.roundingMode === "FLOOR" ? "버림" : "반올림"}</dd></div>
               <div><dt>비용 주체</dt><dd>{policy.issuerType} · {policy.issuerReference}</dd></div>
               <div><dt>유효기간</dt><dd>{policy.validityDays}일</dd></div>
-              <div><dt>적용 시각</dt><dd>{shortDateTime.format(new Date(policy.effectiveAt))}</dd></div>
+              <div><dt>적용 시각</dt><dd>{fullDateTime.format(new Date(policy.effectiveAt))}</dd></div>
             </dl>
           </section>
           <form className="surface-card policy-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
