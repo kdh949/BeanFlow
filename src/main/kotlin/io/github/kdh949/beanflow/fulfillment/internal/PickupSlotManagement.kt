@@ -288,7 +288,7 @@ internal class PickupSlotManagementService(
                     ManagedPickupSlot::class.java,
                 )
             }
-        val now = clock.instant()
+        var now = clock.instant()
         if (!c.startsAt.isAfter(now)) invalid("Pickup slot must start in the future")
         val slot: PickupSlotEntity
         val previous: ManagedPickupSlot?
@@ -312,6 +312,8 @@ internal class PickupSlotManagementService(
                     true,
                 )
             if (slot.version != c.expectedVersion) conflict("Pickup slot version is stale")
+            // 잠금 대기 중 슬롯이 시작될 수 있으므로 owner lock 아래에서 시간을 다시 확인한다.
+            now = clock.instant()
             previous = slot.snapshot()
             slot.replaceSchedule(
                 c.startsAt,

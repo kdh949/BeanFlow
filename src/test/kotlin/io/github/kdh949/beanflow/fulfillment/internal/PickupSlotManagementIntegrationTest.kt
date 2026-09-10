@@ -10,12 +10,16 @@ import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.web.servlet.MockMvc
@@ -28,14 +32,21 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.ObjectMapper
 import java.sql.Timestamp
+import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, PickupManagementClockConfiguration::class)
 @AutoConfigureMockMvc
 @BeanflowIsolatedSpringContext("verifies pickup management with real sessions and concurrent reservation transactions")
 @SpringBootTest
@@ -46,11 +57,13 @@ internal class PickupSlotManagementIntegrationTest(
     @Autowired private val mvc: MockMvc,
     @Autowired private val mapper: ObjectMapper,
     @Autowired private val passwords: CustomerPasswordSecurity,
+    @Autowired private val clock: PickupManagementTestClock,
     @Autowired transactionManager: PlatformTransactionManager,
 ) {
     private val transactions = TransactionTemplate(transactionManager)
 
     @BeforeEach fun clean() {
+        clock.set(Instant.now())
         jdbc.execute(
             "TRUNCATE fulfillment_pickup_slot, identity_store_membership, identity_merchant_account, " +
                 "merchant_store, operations_audit_record, spring_session CASCADE",
@@ -489,6 +502,54 @@ internal class PickupSlotManagementIntegrationTest(
         }
     }
 
+    @Test fun `slot that starts while waiting for its row lock cannot be changed`() {
+        val c = fixture()
+        val slot = service.change(c)
+        val locked = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val writerPid = AtomicInteger()
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val holder =
+                pool.submit {
+                    transactions.execute {
+                        jdbc.queryForObject("SELECT id FROM fulfillment_pickup_slot WHERE id = ? FOR UPDATE", UUID::class.java, slot.slotId)
+                        locked.countDown()
+                        check(release.await(10, TimeUnit.SECONDS))
+                    }
+                }
+            check(locked.await(5, TimeUnit.SECONDS))
+            val writer =
+                pool.submit<FailureCode?> {
+                    try {
+                        transactions.execute {
+                            writerPid.set(jdbc.queryForObject("SELECT pg_backend_pid()", Int::class.java)!!)
+                            service.change(
+                                c.copy(slotId = slot.slotId, key = "pickup-waited-key", expectedVersion = slot.version, capacity = 6),
+                            )
+                        }
+                        null
+                    } catch (failure: DomainFailure) {
+                        failure.code
+                    }
+                }
+            await().atMost(Duration.ofSeconds(5)).until {
+                writerPid.get() != 0 &&
+                    jdbc.queryForObject("SELECT cardinality(pg_blocking_pids(?)) > 0", Boolean::class.java, writerPid.get()) == true
+            }
+            clock.set(c.startsAt.plusSeconds(1))
+            release.countDown()
+            holder.get(5, TimeUnit.SECONDS)
+            assertThat(writer.get(5, TimeUnit.SECONDS)).isEqualTo(FailureCode.RESOURCE_STATE_CONFLICT)
+            assertThat(service.get(c.actorId, c.storeId, slot.slotId)).isEqualTo(slot)
+            assertThat(service.change(c)).isEqualTo(slot)
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
+            check(pool.awaitTermination(10, TimeUnit.SECONDS))
+        }
+    }
+
     private fun fixture(role: String = "OWNER"): PickupSlotManagementCommand {
         val store = UUID.randomUUID()
         val actor = UUID.randomUUID()
@@ -529,4 +590,24 @@ internal class PickupSlotManagementIntegrationTest(
             assertThat(it.code).isEqualTo(FailureCode.RESOURCE_STATE_CONFLICT)
         }
     }
+}
+
+@TestConfiguration(proxyBeanMethods = false)
+internal class PickupManagementClockConfiguration {
+    @Bean @Primary
+    fun pickupManagementClock() = PickupManagementTestClock()
+}
+
+internal class PickupManagementTestClock : Clock() {
+    private val now = AtomicReference(Instant.now())
+
+    fun set(value: Instant) {
+        now.set(value)
+    }
+
+    override fun instant(): Instant = now.get()
+
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId): Clock = this
 }

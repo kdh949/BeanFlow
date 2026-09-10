@@ -9,12 +9,16 @@ import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
@@ -28,14 +32,20 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.ObjectMapper
 import java.sql.Timestamp
+import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, TermsManagementClockConfiguration::class)
 @AutoConfigureMockMvc
 @BeanflowIsolatedSpringContext("verifies immutable terms registration, operator HTTP, and committed Store lock races")
 @SpringBootTest
@@ -45,11 +55,13 @@ internal class StoreSettlementTermsManagementIntegrationTest(
     @Autowired private val jdbc: JdbcTemplate,
     @Autowired private val mvc: MockMvc,
     @Autowired private val mapper: ObjectMapper,
+    @Autowired private val clock: TermsManagementTestClock,
     @Autowired transactionManager: PlatformTransactionManager,
 ) {
     private val tx = TransactionTemplate(transactionManager)
 
     @BeforeEach fun clean() {
+        clock.set(Instant.now())
         jdbc.execute("TRUNCATE merchant_store, operations_operator_permission_grant, operations_audit_record CASCADE")
     }
 
@@ -269,6 +281,58 @@ internal class StoreSettlementTermsManagementIntegrationTest(
         }
     }
 
+    @Test fun `terms cannot become effective while registration waits for the Store lock`() {
+        val c = command()
+        val locked = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val writerPid = AtomicInteger()
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val holder =
+                pool.submit {
+                    tx.execute {
+                        jdbc.queryForObject("SELECT id FROM merchant_store WHERE id = ? FOR SHARE", UUID::class.java, c.storeId)
+                        locked.countDown()
+                        check(release.await(10, TimeUnit.SECONDS))
+                    }
+                }
+            check(locked.await(5, TimeUnit.SECONDS))
+            val writer =
+                pool.submit<FailureCode?> {
+                    try {
+                        tx.execute {
+                            writerPid.set(jdbc.queryForObject("SELECT pg_backend_pid()", Int::class.java)!!)
+                            service.register(c)
+                        }
+                        null
+                    } catch (failure: DomainFailure) {
+                        failure.code
+                    }
+                }
+            await().atMost(Duration.ofSeconds(5)).until {
+                writerPid.get() != 0 &&
+                    jdbc.queryForObject("SELECT cardinality(pg_blocking_pids(?)) > 0", Boolean::class.java, writerPid.get()) == true
+            }
+            clock.set(c.effectiveFrom.plusSeconds(1))
+            release.countDown()
+            holder.get(5, TimeUnit.SECONDS)
+            assertThat(writer.get(5, TimeUnit.SECONDS)).isEqualTo(FailureCode.INVALID_REQUEST)
+            assertThat(
+                jdbc.queryForObject("SELECT count(*) FROM merchant_store_settlement_terms WHERE store_id = ?", Long::class.java, c.storeId),
+            ).isZero()
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_terms_command", Long::class.java)).isZero()
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java)).isZero()
+            clock.set(c.now)
+            val registered = service.register(c)
+            clock.set(c.effectiveFrom.plusSeconds(1))
+            assertThat(service.register(c)).isEqualTo(registered)
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
+            check(pool.awaitTermination(10, TimeUnit.SECONDS))
+        }
+    }
+
     @Test fun `concurrent registration has one winner and final order Store lock delays a writer`() {
         val c = command()
         val executor = Executors.newFixedThreadPool(2)
@@ -433,4 +497,24 @@ internal class StoreSettlementTermsManagementIntegrationTest(
             assertThat(it.code).isEqualTo(code)
         }
     }
+}
+
+@TestConfiguration(proxyBeanMethods = false)
+internal class TermsManagementClockConfiguration {
+    @Bean @Primary
+    fun termsManagementClock() = TermsManagementTestClock()
+}
+
+internal class TermsManagementTestClock : Clock() {
+    private val now = AtomicReference(Instant.now())
+
+    fun set(value: Instant) {
+        now.set(value)
+    }
+
+    override fun instant(): Instant = now.get()
+
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId): Clock = this
 }
