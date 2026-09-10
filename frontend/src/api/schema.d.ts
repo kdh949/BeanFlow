@@ -5254,10 +5254,226 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/compensations/{compensationRequestId}/workflow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * (고객센터) 보상 검토 및 실행 업무 조회
+         * @description 현재 Case·대상 연결과 별도 승인 권한을 검사한 뒤 보상에 고정된 조건과 가능한 명령을 조회합니다. 조회는 발급하지 않으며 원문 개인정보를 포함하지 않습니다.
+         */
+        get: operations["getSupportCompensationWorkflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/compensation-coupon-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * (고객센터) 불변 보상 쿠폰 템플릿 목록
+         * @description 상담 보상 요청 권한으로 불변 템플릿의 정액·유효기간·최소 사용 금액을 1~50개씩 조회합니다. 선택 후 실제 평가·발급 시 조건을 다시 검증합니다.
+         */
+        get: operations["listSupportCompensationCouponTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description 현재 계정과 승인 상태에서 가능한 보상 명령입니다. 실행 시 모든 조건을 다시 검증합니다.
+         * @example EXECUTE
+         * @enum {string}
+         */
+        SupportCompensationWorkflowAction: "EXECUTE" | "RETRY_NOTIFICATION" | "DECIDE_SUPPORT_MANAGER" | "REASSIGN";
+        /**
+         * @description 보상 요청에 고정된 비용 책임과 증빙 해시입니다. 원문과 고객 개인정보는 반환하지 않습니다.
+         * @example {
+         *       "responsibility": "PLATFORM",
+         *       "evidenceBasis": null,
+         *       "costEvidenceDigest": null,
+         *       "platformShareBps": 10000,
+         *       "storeShareBps": 0,
+         *       "evidenceDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+         *       "targetVersion": 4
+         *     }
+         */
+        SupportCompensationTermsResource: {
+            responsibility: components["schemas"]["SupportCompensationResponsibility"];
+            evidenceBasis: components["schemas"]["SupportCompensationEvidenceBasis"] | null;
+            /** @description 비용 근거의 해시입니다. */
+            costEvidenceDigest: string | null;
+            /** @description 플랫폼 부담 비율입니다. 10000이 100%입니다. */
+            platformShareBps: number;
+            /** @description 매장 부담 비율입니다. 10000이 100%입니다. */
+            storeShareBps: number;
+            /** @description 보상 요청 증빙의 해시입니다. */
+            evidenceDigest: string;
+            /**
+             * Format: int64
+             * @description 요청에 고정된 주문 버전이며 주문 없는 요청은 0입니다.
+             */
+            targetVersion: number;
+        };
+        /**
+         * @description 보상 명령에 연결된 현재 승인안과 재배정에 필요한 상담 버전입니다.
+         * @example {
+         *       "requestId": "1124ff76-72c2-54be-a3f4-6ac8a8a982e4",
+         *       "revisionNumber": 1,
+         *       "requestVersion": 0,
+         *       "state": "AWAITING_SUPPORT_MANAGER",
+         *       "caseVersion": 2,
+         *       "executorActorId": "75000000-0000-4000-8000-000000000001"
+         *     }
+         */
+        SupportCompensationApprovalResource: {
+            requestId: components["schemas"]["Identifier"];
+            /** @description 현재 승인안 번호입니다. */
+            revisionNumber: number;
+            /**
+             * Format: int64
+             * @description 현재 승인 요청 버전입니다.
+             */
+            requestVersion: number;
+            state: components["schemas"]["SupportActionRequestState"];
+            /**
+             * Format: int64
+             * @description 현재 상담 건 버전입니다.
+             */
+            caseVersion: number;
+            executorActorId: components["schemas"]["Identifier"];
+        };
+        /**
+         * @description 보상 검토·실행·알림 재시도를 위한 현재 조회입니다. 기존 관계와 현재 대기 중인 별도 승인자의 권한을 검사합니다.
+         * @example {
+         *       "request": {
+         *         "compensationRequestId": "0b4d4945-83a6-5143-bc9d-dbe9d6e95c17",
+         *         "supportCaseId": "1dd90c33-a153-5c9c-895b-1ae00f028d1b",
+         *         "incidentId": "31edc1c3-4c2d-57b2-abd1-dd7badf9b274",
+         *         "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *         "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
+         *         "benefitType": "POINT",
+         *         "amountKrw": 3000,
+         *         "couponTemplateId": null,
+         *         "policyVersionId": "00af5133-9c81-55d9-9fc7-b8a2db4d5c84",
+         *         "band": "MEDIUM",
+         *         "approvalRoute": "SUPPORT_MANAGER",
+         *         "actionRequestId": "1124ff76-72c2-54be-a3f4-6ac8a8a982e4",
+         *         "state": "AWAITING_APPROVAL",
+         *         "payloadDigest": "c5f3e1d9b7a5c3e2f0d8b6a4c2e1f9d7b5a3c1e0f8d6b4a2c9e7f5d3b1a0c8e6",
+         *         "terminalBenefitId": null,
+         *         "benefitIssuedAt": null,
+         *         "notificationDeliveryId": null,
+         *         "notificationState": null,
+         *         "notificationFailureCode": null,
+         *         "version": 0,
+         *         "createdAt": "2026-08-15T15:20:00+09:00",
+         *         "updatedAt": "2026-08-15T15:41:00+09:00"
+         *       },
+         *       "terms": {
+         *         "responsibility": "PLATFORM",
+         *         "evidenceBasis": null,
+         *         "costEvidenceDigest": null,
+         *         "platformShareBps": 10000,
+         *         "storeShareBps": 0,
+         *         "evidenceDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+         *         "targetVersion": 4
+         *       },
+         *       "approval": {
+         *         "requestId": "1124ff76-72c2-54be-a3f4-6ac8a8a982e4",
+         *         "revisionNumber": 1,
+         *         "requestVersion": 0,
+         *         "state": "AWAITING_SUPPORT_MANAGER",
+         *         "caseVersion": 2,
+         *         "executorActorId": "75000000-0000-4000-8000-000000000001"
+         *       },
+         *       "currentTargetVersion": 4,
+         *       "verificationExpiresAt": "2026-09-11T09:15:00Z",
+         *       "allowedActions": [
+         *         "DECIDE_SUPPORT_MANAGER"
+         *       ],
+         *       "couponTemplate": null
+         *     }
+         */
+        SupportCompensationWorkflowResource: {
+            request: components["schemas"]["SupportCompensationResource"];
+            terms: components["schemas"]["SupportCompensationTermsResource"];
+            approval: components["schemas"]["SupportCompensationApprovalResource"] | null;
+            /**
+             * Format: int64
+             * @description 현재 주문 버전입니다. 주문 없는 요청은 0이며 조회 불가능한 주문은 null입니다.
+             */
+            currentTargetVersion: number | null;
+            verificationExpiresAt: components["schemas"]["DateTime"];
+            /** @description 현재 계정에서 가능한 명령입니다. */
+            allowedActions: components["schemas"]["SupportCompensationWorkflowAction"][];
+            /** @description 쿠폰 보상에 고정된 할인·유효기간·최소 사용 금액입니다. 포인트 보상은 null입니다. */
+            couponTemplate: components["schemas"]["GoodwillCouponTemplateView"] | null;
+        };
+        /**
+         * @description Promotion이 소유한 불변 정액 보상 쿠폰의 사용 조건입니다.
+         * @example {
+         *       "templateId": "90000000-0000-4000-8000-000000000001",
+         *       "amountKrw": 3000,
+         *       "validityDays": 30,
+         *       "minimumEligibleSubtotalKrw": 0
+         *     }
+         */
+        GoodwillCouponTemplateView: {
+            templateId: components["schemas"]["Identifier"];
+            /**
+             * Format: int64
+             * @description 정액 할인 금액입니다.
+             */
+            amountKrw: number;
+            /** @description 발급 후 유효한 일수입니다. */
+            validityDays: number;
+            /**
+             * Format: int64
+             * @description 쿠폰 사용에 필요한 최소 적격 주문 금액입니다.
+             */
+            minimumEligibleSubtotalKrw: number;
+        };
+        /**
+         * @description 템플릿 ID 오름차순으로 조회하는 보상 쿠폰 목록입니다. 마지막 항목 ID가 다음 커서입니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "templateId": "90000000-0000-4000-8000-000000000001",
+         *           "amountKrw": 3000,
+         *           "validityDays": 30,
+         *           "minimumEligibleSubtotalKrw": 0
+         *         }
+         *       ],
+         *       "nextCursor": null
+         *     }
+         */
+        SupportCompensationCouponTemplatePage: {
+            items: components["schemas"]["GoodwillCouponTemplateView"][];
+            /**
+             * Format: uuid
+             * @description 다음 페이지 커서입니다. null이면 마지막 페이지입니다.
+             */
+            nextCursor: string | null;
+        };
         /**
          * @description 상담에 연결된 주문의 현재 상태와 버전입니다. 개인정보는 포함하지 않습니다.
          * @example {
@@ -10533,7 +10749,7 @@ export interface components {
          * @example READY_FOR_EXECUTION
          * @enum {string}
          */
-        SupportCompensationRequestState: "AWAITING_APPROVAL" | "READY_FOR_EXECUTION" | "BENEFIT_ISSUED" | "NOTIFICATION_RETRY" | "NOTIFICATION_ACCEPTED";
+        SupportCompensationRequestState: "AWAITING_APPROVAL" | "READY_FOR_EXECUTION" | "BENEFIT_ISSUED" | "NOTIFICATION_RETRY" | "NOTIFICATION_ACCEPTED" | "NOTIFICATION_SKIPPED";
         /**
          * @description 고객 불편 보상 요청과 포인트·쿠폰 지급, 고객 알림의 현재 상태입니다. 개인정보와 증거 원문, 외부 시스템에 보낸 원문 요청은 포함하지 않습니다.
          * @example {
@@ -10624,7 +10840,7 @@ export interface components {
              * @description 혜택 발급 후 독립 알림 전달 상태이며 아직 요청되지 않았으면 null입니다.
              * @enum {string|null}
              */
-            notificationState: "PENDING" | "PROCESSING" | "SUCCEEDED" | "RETRY_SCHEDULED" | "MANUAL_REVIEW" | null;
+            notificationState: "PENDING" | "PROCESSING" | "SUCCEEDED" | "RETRY_SCHEDULED" | "MANUAL_REVIEW" | "NOTIFICATION_SKIPPED" | null;
             /** @description 최근 고객 알림 실패를 나타내는 API에 미리 정의된 오류 코드입니다. 실패가 없으면 null입니다. */
             notificationFailureCode: string | null;
             /**
@@ -20221,6 +20437,63 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportCompensationWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                compensationRequestId: components["parameters"]["SupportCompensationRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 고객 보상 요청 조회 결과 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCompensationWorkflowResource"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportCompensationCouponTemplates: {
+        parameters: {
+            query?: {
+                /** @description 직전 페이지의 nextCursor입니다. */
+                cursor?: string;
+                /** @description 페이지당 항목 수입니다. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 고객 보상 요청 조회 결과 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCompensationCouponTemplatePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

@@ -37,9 +37,16 @@ data class GoodwillCouponTemplateView(
     val templateId: UUID,
     val amountKrw: Long,
     val validityDays: Int,
+    val minimumEligibleSubtotalKrw: Long,
 )
 
 interface GoodwillCouponOperations {
+    /** Bounded immutable template catalog, ordered by template id. */
+    fun listTemplates(
+        afterId: UUID?,
+        limit: Int,
+    ): List<GoodwillCouponTemplateView>
+
     fun findTemplate(templateId: UUID): GoodwillCouponTemplateView?
 
     /** Must join the caller's local DB transaction; terms are selected by immutable template id. */

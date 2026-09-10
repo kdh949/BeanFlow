@@ -2,11 +2,11 @@ import {
   FilePlus2,
   Link2,
   Search,
-  Sparkles,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { caseCategoryLabels, casePriorityLabels } from "./supportCaseLabels";
+import { SupportCompensationWorkspace } from "./SupportCompensationWorkspace";
 import { SupportVerificationPanel } from "./SupportVerificationPanel";
 import { SupportDataAccessWorkspace } from "./SupportDataAccessWorkspace";
 import { SupportTimelinePanel } from "./SupportTimelinePanel";
@@ -15,15 +15,13 @@ import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
 import { Button, ButtonLink, EmptyState, LoadingState, PageHeading, SelectField, TextField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
-import { compactId, shortDateTime, won } from "../../lib/format";
+import { compactId, shortDateTime } from "../../lib/format";
 
 type SearchResult = components["schemas"]["SupportSubjectSearchResult"];
 type Candidate = components["schemas"]["SupportSubjectSearchCandidate"];
 type SupportCase = components["schemas"]["SupportCase"];
 type VerificationSession = components["schemas"]["VerificationSessionResource"];
 type Timeline = components["schemas"]["SupportTimelinePage"];
-type CompensationEvaluation = components["schemas"]["SupportCompensationEvaluationResource"];
-type Compensation = components["schemas"]["SupportCompensationResource"];
 
 /**
  * One bounded Support workspace: exact masked search, Case binding, staged
@@ -223,82 +221,9 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
             {timeline?.nextCursor ? <ButtonLink variant="secondary" to={`/support/follow-up?caseId=${encodeURIComponent(supportCase.caseId)}`}>이력 더 보기</ButtonLink> : null}
           </div>
 
-          <SupportCompensationPanel caseId={supportCase.caseId} verificationSessionId={verification?.state === "VERIFIED" && verification.actionScope === "SUPPORT_ACTION" ? verification.sessionId : ""} disabled={terminal} />
+          <SupportCompensationWorkspace key={`${supportCase.caseId}:${securityGeneration}`} supportCase={supportCase} verification={verification} />
         </>
       ) : null}
     </div>
-  );
-}
-
-function SupportCompensationPanel({ caseId, verificationSessionId, disabled }: { caseId: string; verificationSessionId: string; disabled: boolean }) {
-  const [incidentId, setIncidentId] = useState("");
-  const [orderId, setOrderId] = useState("");
-  const [targetVersion, setTargetVersion] = useState("1");
-  const [amountKrw, setAmountKrw] = useState("3000");
-  const [evidenceDigest, setEvidenceDigest] = useState("");
-  const [evaluation, setEvaluation] = useState<CompensationEvaluation | null>(null);
-  const [compensation, setCompensation] = useState<Compensation | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [busy, setBusy] = useState(false);
-  const createIntent = useRef(new SubmissionIntent());
-
-  const baseBody = {
-    incidentId: incidentId.trim(),
-    orderId: orderId.trim() || null,
-    expectedTargetVersion: Number(targetVersion),
-    benefitType: "POINT" as const,
-    amountKrw: Number(amountKrw),
-    couponTemplateId: null,
-    responsibility: "PLATFORM" as const,
-    evidenceBasis: null,
-    costEvidenceDigest: null,
-    platformShareBps: 10_000,
-    storeShareBps: 0,
-    verificationSessionId,
-  };
-
-  async function evaluate() {
-    setBusy(true); setError(null); setEvaluation(null); setCompensation(null);
-    try {
-      setEvaluation(unwrap(await operationsApi.POST("/support/cases/{caseId}/compensation-evaluations", {
-        params: { path: { caseId } }, body: baseBody,
-      })));
-    } catch (failure) { setError(failure); } finally { setBusy(false); }
-  }
-
-  async function create() {
-    const body = { ...baseBody, evidenceDigest: evidenceDigest.trim() };
-    setBusy(true); setError(null); setCompensation(null);
-    try {
-      setCompensation(unwrap(await operationsApi.POST("/support/cases/{caseId}/compensations", {
-        params: {
-          path: { caseId },
-          header: { "Idempotency-Key": createIntent.current.keyFor(JSON.stringify(body)) },
-        },
-        body,
-      })));
-      createIntent.current.complete();
-    } catch (failure) {
-      if (failure instanceof ApiRequestError && failure.code === "IDEMPOTENCY_KEY_REUSED") createIntent.current.rotate();
-      setError(failure);
-    } finally { setBusy(false); }
-  }
-
-  return (
-    <section className="surface-card support-compensation-panel">
-      <div className="operation-heading"><Sparkles aria-hidden="true" /><div><strong>고객 불편 보상</strong><small>평가 결과와 실제 요청 상태를 분리합니다. 요청 접수는 지급 완료가 아닙니다.</small></div></div>
-      <div className="support-compensation-grid">
-        <TextField label="사고 ID" value={incidentId} required onValueChange={(value) => { setIncidentId(value); setEvaluation(null); }} />
-        <TextField label="주문 ID (선택)" value={orderId} onValueChange={(value) => { setOrderId(value); setEvaluation(null); }} />
-        <TextField label="대상 버전" type="number" min="0" value={targetVersion} onValueChange={(value) => { setTargetVersion(value); setEvaluation(null); }} />
-        <TextField label="포인트 금액" type="number" min="1" value={amountKrw} onValueChange={(value) => { setAmountKrw(value); setEvaluation(null); }} />
-      </div>
-      {!verificationSessionId ? <p className="operation-warning">보상 평가는 완료된 본인확인 세션이 필요합니다.</p> : null}
-      <Button variant="secondary" loading={busy} disabled={disabled || !incidentId.trim() || !verificationSessionId} onClick={() => void evaluate()}>보상 가능 여부 평가</Button>
-      {evaluation ? <div className="support-compensation-result"><StatusText state={evaluation.decision} /><strong>{evaluation.band} · {evaluation.approvalRoute}</strong><span>{evaluation.executable ? "현재 평가상 실행 가능" : "승인·조사 또는 추가 조건 필요"}</span><small>{evaluation.reasonCodes.join(", ") || "정책 제한 사유 없음"}</small></div> : null}
-      {evaluation && evaluation.decision !== "DENIED" ? <><TextField label="증빙 파일 해시 (SHA-256)" id="support-evidence-digest" value={evidenceDigest} pattern="[a-f0-9]{64}" placeholder="소문자 64자리 해시" onValueChange={setEvidenceDigest} /><Button loading={busy} disabled={!/^[a-f0-9]{64}$/.test(evidenceDigest)} onClick={() => void create()}>보상 요청 생성</Button></> : null}
-      {compensation ? <div className="support-compensation-result"><StatusText state={compensation.state} /><strong>{won.format(compensation.amountKrw)} 포인트 보상 요청</strong><code>{compensation.compensationRequestId}</code><small>혜택 지급 또는 알림 접수 상태가 확인되기 전에는 완료로 표시하지 않습니다.</small></div> : null}
-      {error ? <ErrorState error={error} /> : null}
-    </section>
   );
 }

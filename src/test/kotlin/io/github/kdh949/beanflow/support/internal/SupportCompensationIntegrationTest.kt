@@ -38,6 +38,7 @@ import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -110,6 +111,96 @@ internal class SupportCompensationIntegrationTest
             }
             listOf("SUPPORT_CASE_READ", "SUPPORT_COMPENSATION_APPROVE").forEach { grant(managerId, it) }
             grant(operationsId, "OPERATIONS_SUPPORT_INVESTIGATION")
+        }
+
+        @Test
+        fun `workflow exposes exact non personal terms to pending separate approver without expanding legacy reads`() {
+            val created = compensations.create(command(UUID.randomUUID(), 3_001, "workflow-medium-create"))
+            val path = "/api/v1/support/compensations/${created.compensationRequestId}"
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isForbidden)
+            mockMvc
+                .perform(get("$path/workflow").with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.terms.responsibility").value("PLATFORM"))
+                .andExpect(jsonPath("$.terms.platformShareBps").value(10000))
+                .andExpect(jsonPath("$.terms.targetVersion").value(orderVersion))
+                .andExpect(jsonPath("$.allowedActions[0]").value("DECIDE_SUPPORT_MANAGER"))
+                .andExpect(jsonPath("$.request.customerId").doesNotExist())
+                .andExpect(jsonPath("$.terms.verificationSessionId").doesNotExist())
+                .andExpect(jsonPath("$.terms.rawPayload").doesNotExist())
+            grant(requesterId, "SUPPORT_COMPENSATION_APPROVE")
+            mockMvc
+                .perform(get("$path/workflow").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+            approveManager(requireNotNull(created.actionRequestId), managerId, "workflow-medium-approve")
+            mockMvc
+                .perform(get("$path/workflow").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions[0]").value("EXECUTE"))
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
+                    "WHERE actor_id = ? AND permission = 'SUPPORT_COMPENSATION_EXECUTE'",
+                requesterId,
+            )
+            mockMvc
+                .perform(get("$path/workflow").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+            assertThat(count("support_compensation_terminal_benefit", "request_id", created.compensationRequestId)).isZero()
+        }
+
+        @Test
+        fun `workflow rejects unrelated reader and removed customer relationship`() {
+            val created = compensations.create(command(UUID.randomUUID(), 100, "workflow-scope-create"))
+            val path = "/api/v1/support/compensations/${created.compensationRequestId}/workflow"
+            grant(replacementId, "SUPPORT_CASE_READ")
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(replacementId.toString()) }))
+                .andExpect(status().isForbidden)
+            jdbcTemplate.update(
+                "UPDATE support_case_subject_link SET unlinked_at = now(), unlinked_by_actor_id = linked_by_actor_id, " +
+                    "unlink_case_version = 1, unlink_reason = 'INCORRECT_LINK' WHERE support_case_id = ? AND subject_type = 'CUSTOMER'",
+                caseId,
+            )
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isForbidden)
+        }
+
+        @Test
+        fun `coupon template catalog is bounded permission checked and cursor ordered`() {
+            val path = "/api/v1/support/compensation-coupon-templates"
+            val firstResult =
+                mockMvc
+                    .perform(get(path).param("limit", "1").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andExpect(jsonPath("$.items[0].minimumEligibleSubtotalKrw").isNumber)
+                    .andReturn()
+            val first = objectMapper.readValue(firstResult.response.contentAsString, SupportCompensationCouponTemplatePage::class.java)
+            assertThat(first.nextCursor).isNotNull()
+            val nextResult =
+                mockMvc
+                    .perform(
+                        get(path)
+                            .param("limit", "1")
+                            .param("cursor", first.nextCursor.toString())
+                            .with(jwt().jwt { it.subject(requesterId.toString()) }),
+                    ).andExpect(status().isOk)
+                    .andReturn()
+            val next = objectMapper.readValue(nextResult.response.contentAsString, SupportCompensationCouponTemplatePage::class.java)
+            assertThat(next.items.single().templateId).isNotEqualTo(first.items.single().templateId)
+            mockMvc
+                .perform(get(path).param("limit", "0").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isBadRequest)
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isForbidden)
         }
 
         @Test
@@ -354,6 +445,18 @@ internal class SupportCompensationIntegrationTest
                     ),
                 )
             assertThat(created.band.name).isEqualTo("HIGH")
+            mockMvc
+                .perform(
+                    get("/api/v1/support/compensations/${created.compensationRequestId}/workflow").with(
+                        jwt().jwt {
+                            it.subject(requesterId.toString())
+                        },
+                    ),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.couponTemplate.templateId").value(GOODWILL_COUPON_TEMPLATE_ID.toString()))
+                .andExpect(jsonPath("$.couponTemplate.amountKrw").value(created.amountKrw))
+                .andExpect(jsonPath("$.couponTemplate.validityDays").value(30))
+                .andExpect(jsonPath("$.couponTemplate.minimumEligibleSubtotalKrw").isNumber)
             approveOperations(created)
 
             val issued = execute(created, "shared-coupon-execute-001")

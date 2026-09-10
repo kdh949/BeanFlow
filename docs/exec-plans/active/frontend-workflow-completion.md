@@ -51,7 +51,7 @@ Storybook HTTP MCP는 `frontend/`에서 실행하는 `http://localhost:6006/mcp`
 | H2 | 주문 조치 평가/요청/수정/승인/배정/실행 및 점주 동의(M14) | 상담 업무 관리 |
 | H3 | 수락 후 해결·보상 실행/결과/알림 재시도(M15) | 상담 후속 처리 |
 | H5 | 고객의 앱 내 문의 접수·목록/상세·고객 공개 답변과 상담 Case 연결(F15) | 고객 문의 연결 |
-| H4 | 고객/매장/배송 정보 정정·운영 결정·실행/알림과 긴급 열람(M16,M17) | 상담 후속 처리 |
+| H4 | 고객/매장/배송 정보 정정·운영 결정·실행/알림과 긴급 열람(M16,M17) | 상담 정보 정정·긴급 열람 |
 
 ### Non-goals
 
@@ -156,7 +156,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] H1b: 대상·목적·두 인증 수단/현재 조회/철회와 필드별 열람 요청·별도 승인자 검토·한시 열람 구현. 기존 권한의 Grant 메타데이터 GET을 추가했다. 관련 Storybook 24개, PostgreSQL 인증/권한·PII 비노출/Runtime parity 17개, frontend 단위 228개 및 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. 창 이탈·늦은 원문 응답·권한 회수·만료를 검증했고 390px 검토 화면 넘침 없음 확인.
 - [x] H2: 현재 주문/요청 권한/매장 동의 대상 조회와 주문 조치 평가·생성·수정·별도 승인·재배정·실행, 점주 건별 동의·한시 위임 구현. typed 선택값과 canonical digest를 대조하고 기존 트랜잭션·정책 버전을 유지한다. PostgreSQL 평가·승인·실행/Runtime parity 20개 및 서버 digest 1개, frontend 단위 229개와 boundary/copy 21개 Passed. 전체 Storybook MCP 488개, typecheck/check:design/build/build-storybook/docs smoke(93 docs/47 states)/sites(4개), 문서 검증 18개 Passed. 상담·매장 동의의 모바일 렌더링과 가로 넘침 없음 확인. 상담 관리 PR 생성은 아래 이력에 기록한다.
 - [x] H3a: 수락 후 해결 승인안·현재 승인·실행 계획·5단계 상태/결과·환불 LOOKUP 재조정 구현. 생성된 Resolution ID를 다시 조회하고 소비된 승인안의 만료와 후속 처리를 구분한다. 실제 실행 권한과 달랐던 S60 재검사를 SUPPORT_RESOLUTION_EXECUTE로 맞췄다. PostgreSQL/도메인/승인/Runtime parity 및 서버 digest 34개, frontend 단위 231개와 boundary/copy 21개 Passed. 전체 실행 로그에서 497개 interaction 통과 후 최종 변경의 MCP 29개 interaction/a11y Passed. typecheck/check:design/build/sites(4개)/문서(18개) Passed. 390px 단계 화면 넘침 없음 확인. static Storybook과 문서 화면 전체 검사는 H3b–H4 후 PR 검증에서 실행한다.
-- [ ] H3b–H4 보상·정보 정정·운영 결정·긴급 열람 구현·검증·커밋·PR.
+- [x] H3b: 고정 보상 폼을 혜택·비용 책임·분담·증빙 선택과 현재 승인/지급/알림 재시도로 교체했다. 현재 대기 중인 별도 승인자에게 비개인정보 검토 자료와 불변 쿠폰 조건을 제공하고 기존 GET 열람 범위를 유지한다. 새 요청은 같은 사고 ID를 유지한다. PostgreSQL/API/Runtime parity 18개, frontend 단위 231개와 boundary/copy 21개, 전체 511개 MCP interaction/a11y(8개 순차 묶음의 모든 응답) Passed. typecheck/check:design/build/sites 4개/문서 18개 Passed. 390px 보상 화면 넘침 없음 확인. 정적 Storybook·98개 Docs/47개 상태 화면도 통과했으며 마지막 story fixture에 맞춰 최종 산출물을 재검사 중이다.
+- [ ] H4 정보 정정·운영 결정·긴급 열람 구현·검증·커밋·PR.
 - [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.
 - [ ] 전체 로컬 검증, 원격 CI 확인, 최종 diff/PR topology 검토.
 
@@ -198,7 +199,7 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - 2026-09-11: 보고된 결함과 현재 API의 미연결 업무를 구현하고 수직 슬라이스 커밋/업무 단위 PR로 분할한다.
 - 2026-09-11: 토큰·기존 컴포넌트 재사용을 우선하며 단순 시각 개선은 기존 정책 범위 안에서 진행한다.
 - 2026-09-11: C3 구성 조회는 메뉴 펼침 시 단일 메뉴 endpoint로 연결한다. 기존 메뉴별 500개 상한을 재사용하며 매장 전체 구성 전송과 N+1 초기 조회를 피한다.
-- 2026-09-11: 고객 도움말은 내장 Support 시스템에 연결한다. 고객 소유 문의 접수/진행 조회와 상담 Case 연결을 별도 H5/일곱 번째 PR로 구현한다. 내부 노트/본인 확인 자료는 공개하지 않는다. 관련 persistence 변경 필요성은 H5 계약 검토에서 결정한다.
+- 2026-09-11: 고객 도움말은 내장 Support 시스템에 연결한다. 고객 소유 문의 접수/진행 조회와 상담 Case 연결을 H4 다음 별도 H5 PR로 구현한다. 내부 노트/본인 확인 자료는 공개하지 않는다. 관련 persistence 변경 필요성은 H5 계약 검토에서 결정한다.
 
 ## Outcomes & Retrospective
 
@@ -207,3 +208,7 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 ## Revision Notes
 
 - 2026-09-11: 초기 실행 범위와 단계·검증 경계 작성.
+
+- 2026-09-11: H3 금융 후속 처리와 H4 정보 정정·긴급 열람은 각자의 권한/민감정보 검증을 명확히 하기 위해 별도 PR로 분리한다. PR #164 head `33122ac`의 preflight/frontend/backend-build/6개 shard/집계 build 원격 CI가 모두 통과했다.
+
+- H3 전체 MCP 단일 호출에서 511개 통과 로그 이후 완료 이벤트 응답이 정지했다. 소유한 서버를 재시작하고 같은 511개 Storybook index를 70개 이하의 8개 묶음으로 순차 실행해 모든 interaction/a11y 통과 응답을 검증했다. 테스트 또는 접근성 검사를 생략하지 않았다.

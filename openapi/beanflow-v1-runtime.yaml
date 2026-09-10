@@ -1108,6 +1108,11 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1workflow"
   /stores/{storeId}/support-order-change-requests/{requestId}:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1support-order-change-requests~1{requestId}"
+  /support/compensations/{compensationRequestId}/workflow:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1compensations~1{compensationRequestId}~1workflow"
+  /support/compensation-coupon-templates:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1compensation-coupon-templates"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1123,6 +1128,18 @@ components:
       in: cookie
       name: BEANFLOW_MERCHANT_SESSION
   schemas:
+    SupportCompensationWorkflowAction:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportCompensationWorkflowAction"
+    SupportCompensationTermsResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportCompensationTermsResource"
+    SupportCompensationApprovalResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportCompensationApprovalResource"
+    SupportCompensationWorkflowResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportCompensationWorkflowResource"
+    GoodwillCouponTemplateView:
+      $ref: "./beanflow-v1.yaml#/components/schemas/GoodwillCouponTemplateView"
+    SupportCompensationCouponTemplatePage:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportCompensationCouponTemplatePage"
     SupportOrderContextResource:
       $ref: "./beanflow-v1.yaml#/components/schemas/SupportOrderContextResource"
     SupportOrderWorkflowAction:

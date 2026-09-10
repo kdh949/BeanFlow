@@ -618,6 +618,80 @@ internal class SupportCompensationTransactionService(
         return resource(entity)
     }
 
+    @Transactional
+    fun workflow(
+        actorId: UUID,
+        compensationRequestId: UUID,
+        order: GoodwillCompensationOrderFact?,
+    ): SupportCompensationWorkflowResource {
+        permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
+        val entity = requests.findLockedById(compensationRequestId) ?: notFound()
+        val action = exactActionRequest(entity)
+        val supportCase = requireActiveObjectScope(entity)
+        val session = sessions.findLockedById(entity.verificationSessionId) ?: verificationRequired()
+        val effectiveExecutor = action?.executorActorId ?: entity.executorActorId
+        val current = now().isBefore(session.expiresAt) && session.state == VerificationState.VERIFIED
+        val separate = actorId != entity.requesterActorId && actorId != effectiveExecutor && actorId != action?.supportApproverActorId
+        val managerReview =
+            current && action?.state == SupportActionRequestState.AWAITING_SUPPORT_MANAGER && separate &&
+                permissions.hasActive(actorId, OperatorPermission.SUPPORT_COMPENSATION_APPROVE)
+        val operationsReview =
+            current && action?.state == SupportActionRequestState.AWAITING_OPERATIONS && separate &&
+                permissions.hasActive(actorId, OperatorPermission.OPERATIONS_SUPPORT_INVESTIGATION)
+        val existingViewer =
+            actorId == entity.requesterActorId ||
+                (actorId == effectiveExecutor && actorId == supportCase.currentAssigneeId) ||
+                actorId == action?.supportApproverActorId || actorId == action?.operationsApproverActorId
+        if (!existingViewer && !managerReview && !operationsReview) denied()
+        val currentVersion = if (entity.orderId == null) 0L else order?.version
+        val executor =
+            actorId == effectiveExecutor && actorId == supportCase.currentAssigneeId &&
+                actorId != action?.supportApproverActorId && actorId != action?.operationsApproverActorId &&
+                permissions.hasActive(actorId, OperatorPermission.SUPPORT_COMPENSATION_EXECUTE)
+        val allowed = mutableListOf<SupportCompensationWorkflowAction>()
+        if (managerReview) allowed += SupportCompensationWorkflowAction.DECIDE_SUPPORT_MANAGER
+        if (executor && current && currentVersion == entity.targetVersion &&
+            entity.state in setOf(SupportCompensationRequestState.READY_FOR_EXECUTION, SupportCompensationRequestState.AWAITING_APPROVAL) &&
+            (action == null || action.state == SupportActionRequestState.READY_FOR_EXECUTION)
+        ) {
+            allowed += SupportCompensationWorkflowAction.EXECUTE
+        }
+        if (executor && entity.state == SupportCompensationRequestState.NOTIFICATION_RETRY) {
+            allowed += SupportCompensationWorkflowAction.RETRY_NOTIFICATION
+        }
+        if (current &&
+            action?.state in setOf(SupportActionRequestState.READY_FOR_EXECUTION, SupportActionRequestState.REASSIGNMENT_REQUIRED) &&
+            permissions.hasActive(actorId, OperatorPermission.SUPPORT_CASE_ASSIGN)
+        ) {
+            allowed += SupportCompensationWorkflowAction.REASSIGN
+        }
+        return SupportCompensationWorkflowResource(
+            resource(entity),
+            SupportCompensationTermsResource(
+                entity.responsibility,
+                entity.evidenceBasis,
+                entity.costEvidenceDigest,
+                entity.platformShareBps,
+                entity.storeShareBps,
+                entity.evidenceDigest,
+                entity.targetVersion,
+            ),
+            action?.let {
+                SupportCompensationApprovalResource(
+                    it.id,
+                    it.currentRevisionNumber,
+                    it.version,
+                    it.state,
+                    supportCase.version,
+                    effectiveExecutor,
+                )
+            },
+            currentVersion,
+            session.expiresAt,
+            allowed,
+        )
+    }
+
     private fun evaluateCurrent(
         command: EvaluateSupportCompensationCommand,
         order: GoodwillCompensationOrderFact?,

@@ -8743,6 +8743,78 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /support/compensations/{compensationRequestId}/workflow:
+    get:
+      tags:
+      - Support
+      operationId: getSupportCompensationWorkflow
+      summary: (고객센터) 보상 검토 및 실행 업무 조회
+      description: 현재 Case·대상 연결과 별도 승인 권한을 검사한 뒤 보상에 고정된 조건과 가능한 명령을 조회합니다. 조회는 발급하지
+        않으며 원문 개인정보를 포함하지 않습니다.
+      parameters:
+      - $ref: '#/components/parameters/SupportCompensationRequestId'
+      responses:
+        '200':
+          description: 고객 보상 요청 조회 결과
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCompensationWorkflowResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /support/compensation-coupon-templates:
+    get:
+      tags:
+      - Support
+      operationId: listSupportCompensationCouponTemplates
+      summary: (고객센터) 불변 보상 쿠폰 템플릿 목록
+      description: 상담 보상 요청 권한으로 불변 템플릿의 정액·유효기간·최소 사용 금액을 1~50개씩 조회합니다. 선택 후 실제 평가·발급
+        시 조건을 다시 검증합니다.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        description: 직전 페이지의 nextCursor입니다.
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        required: false
+        description: 페이지당 항목 수입니다.
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
+      responses:
+        '200':
+          description: 고객 보상 요청 조회 결과
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCompensationCouponTemplatePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -9280,6 +9352,244 @@ components:
         type: string
         const: no-store
   schemas:
+    SupportCompensationWorkflowAction:
+      type: string
+      description: 현재 계정과 승인 상태에서 가능한 보상 명령입니다. 실행 시 모든 조건을 다시 검증합니다.
+      enum:
+      - EXECUTE
+      - RETRY_NOTIFICATION
+      - DECIDE_SUPPORT_MANAGER
+      - REASSIGN
+      example: EXECUTE
+    SupportCompensationTermsResource:
+      type: object
+      additionalProperties: false
+      description: 보상 요청에 고정된 비용 책임과 증빙 해시입니다. 원문과 고객 개인정보는 반환하지 않습니다.
+      required:
+      - responsibility
+      - evidenceBasis
+      - costEvidenceDigest
+      - platformShareBps
+      - storeShareBps
+      - evidenceDigest
+      - targetVersion
+      properties:
+        responsibility:
+          $ref: '#/components/schemas/SupportCompensationResponsibility'
+        evidenceBasis:
+          oneOf:
+          - $ref: '#/components/schemas/SupportCompensationEvidenceBasis'
+          - type: 'null'
+        costEvidenceDigest:
+          type:
+          - string
+          - 'null'
+          pattern: ^[0-9a-f]{64}$
+          description: 비용 근거의 해시입니다.
+        platformShareBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: 플랫폼 부담 비율입니다. 10000이 100%입니다.
+        storeShareBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: 매장 부담 비율입니다. 10000이 100%입니다.
+        evidenceDigest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: 보상 요청 증빙의 해시입니다.
+        targetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 요청에 고정된 주문 버전이며 주문 없는 요청은 0입니다.
+      example: &id001
+        responsibility: PLATFORM
+        evidenceBasis: null
+        costEvidenceDigest: null
+        platformShareBps: 10000
+        storeShareBps: 0
+        evidenceDigest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        targetVersion: 4
+    SupportCompensationApprovalResource:
+      type: object
+      additionalProperties: false
+      description: 보상 명령에 연결된 현재 승인안과 재배정에 필요한 상담 버전입니다.
+      required:
+      - requestId
+      - revisionNumber
+      - requestVersion
+      - state
+      - caseVersion
+      - executorActorId
+      properties:
+        requestId:
+          $ref: '#/components/schemas/Identifier'
+        revisionNumber:
+          type: integer
+          minimum: 1
+          description: 현재 승인안 번호입니다.
+        requestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 승인 요청 버전입니다.
+        state:
+          $ref: '#/components/schemas/SupportActionRequestState'
+        caseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 상담 건 버전입니다.
+        executorActorId:
+          $ref: '#/components/schemas/Identifier'
+      example: &id002
+        requestId: 1124ff76-72c2-54be-a3f4-6ac8a8a982e4
+        revisionNumber: 1
+        requestVersion: 0
+        state: AWAITING_SUPPORT_MANAGER
+        caseVersion: 2
+        executorActorId: 75000000-0000-4000-8000-000000000001
+    SupportCompensationWorkflowResource:
+      type: object
+      additionalProperties: false
+      description: 보상 검토·실행·알림 재시도를 위한 현재 조회입니다. 기존 관계와 현재 대기 중인 별도 승인자의 권한을 검사합니다.
+      required:
+      - request
+      - terms
+      - approval
+      - currentTargetVersion
+      - verificationExpiresAt
+      - allowedActions
+      - couponTemplate
+      properties:
+        request:
+          $ref: '#/components/schemas/SupportCompensationResource'
+        terms:
+          $ref: '#/components/schemas/SupportCompensationTermsResource'
+        approval:
+          oneOf:
+          - $ref: '#/components/schemas/SupportCompensationApprovalResource'
+          - type: 'null'
+        currentTargetVersion:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+          description: 현재 주문 버전입니다. 주문 없는 요청은 0이며 조회 불가능한 주문은 null입니다.
+        verificationExpiresAt:
+          $ref: '#/components/schemas/DateTime'
+        allowedActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportCompensationWorkflowAction'
+          description: 현재 계정에서 가능한 명령입니다.
+        couponTemplate:
+          description: 쿠폰 보상에 고정된 할인·유효기간·최소 사용 금액입니다. 포인트 보상은 null입니다.
+          oneOf:
+          - $ref: '#/components/schemas/GoodwillCouponTemplateView'
+          - type: 'null'
+      example:
+        request:
+          compensationRequestId: 0b4d4945-83a6-5143-bc9d-dbe9d6e95c17
+          supportCaseId: 1dd90c33-a153-5c9c-895b-1ae00f028d1b
+          incidentId: 31edc1c3-4c2d-57b2-abd1-dd7badf9b274
+          orderId: 74131bb9-688f-5370-8042-21015b3cd43a
+          storeId: 5273704d-f924-59e0-8883-827535fb86ad
+          benefitType: POINT
+          amountKrw: 3000
+          couponTemplateId: null
+          policyVersionId: 00af5133-9c81-55d9-9fc7-b8a2db4d5c84
+          band: MEDIUM
+          approvalRoute: SUPPORT_MANAGER
+          actionRequestId: 1124ff76-72c2-54be-a3f4-6ac8a8a982e4
+          state: AWAITING_APPROVAL
+          payloadDigest: c5f3e1d9b7a5c3e2f0d8b6a4c2e1f9d7b5a3c1e0f8d6b4a2c9e7f5d3b1a0c8e6
+          terminalBenefitId: null
+          benefitIssuedAt: null
+          notificationDeliveryId: null
+          notificationState: null
+          notificationFailureCode: null
+          version: 0
+          createdAt: '2026-08-15T15:20:00+09:00'
+          updatedAt: '2026-08-15T15:41:00+09:00'
+        terms:
+          responsibility: PLATFORM
+          evidenceBasis: null
+          costEvidenceDigest: null
+          platformShareBps: 10000
+          storeShareBps: 0
+          evidenceDigest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          targetVersion: 4
+        approval:
+          requestId: 1124ff76-72c2-54be-a3f4-6ac8a8a982e4
+          revisionNumber: 1
+          requestVersion: 0
+          state: AWAITING_SUPPORT_MANAGER
+          caseVersion: 2
+          executorActorId: 75000000-0000-4000-8000-000000000001
+        currentTargetVersion: 4
+        verificationExpiresAt: '2026-09-11T09:15:00Z'
+        allowedActions:
+        - DECIDE_SUPPORT_MANAGER
+        couponTemplate: null
+    GoodwillCouponTemplateView:
+      type: object
+      additionalProperties: false
+      description: Promotion이 소유한 불변 정액 보상 쿠폰의 사용 조건입니다.
+      required:
+      - templateId
+      - amountKrw
+      - validityDays
+      - minimumEligibleSubtotalKrw
+      properties:
+        templateId:
+          $ref: '#/components/schemas/Identifier'
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 정액 할인 금액입니다.
+        validityDays:
+          type: integer
+          minimum: 1
+          description: 발급 후 유효한 일수입니다.
+        minimumEligibleSubtotalKrw:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 쿠폰 사용에 필요한 최소 적격 주문 금액입니다.
+      example: &id003
+        templateId: 90000000-0000-4000-8000-000000000001
+        amountKrw: 3000
+        validityDays: 30
+        minimumEligibleSubtotalKrw: 0
+    SupportCompensationCouponTemplatePage:
+      type: object
+      additionalProperties: false
+      description: 템플릿 ID 오름차순으로 조회하는 보상 쿠폰 목록입니다. 마지막 항목 ID가 다음 커서입니다.
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/GoodwillCouponTemplateView'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: 다음 페이지 커서입니다. null이면 마지막 페이지입니다.
+      example:
+        items:
+        - *id003
+        nextCursor: null
     SupportOrderContextResource:
       type: object
       additionalProperties: false
@@ -17498,6 +17808,7 @@ components:
         - BENEFIT_ISSUED
         - NOTIFICATION_RETRY
         - NOTIFICATION_ACCEPTED
+        - NOTIFICATION_SKIPPED
     PostAcceptanceResolutionStepResource:
       type: object
       additionalProperties: false
@@ -19000,6 +19311,7 @@ components:
             - SUCCEEDED
             - RETRY_SCHEDULED
             - MANUAL_REVIEW
+            - NOTIFICATION_SKIPPED
             - null
           description: 혜택 발급 후 독립 알림 전달 상태이며 아직 요청되지 않았으면 null입니다.
         notificationFailureCode:
