@@ -7441,6 +7441,213 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DisputeManagementRequest'
+  /operations/stores:
+    get:
+      tags:
+      - Operations
+      operationId: listManagedStores
+      summary: 운영자 매장 목록 조회
+      description: STORE_IDENTITY_READ grant가 필요하다. 매장명의 대소문자 무관 부분 검색과 actor/filter에 묶인 signed cursor를 사용한다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: query
+        schema:
+          type: string
+          maxLength: 200
+      - in: query
+        name: cursor
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 운영자 매장 목록 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorStoreIdentityPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    post:
+      tags:
+      - Operations
+      operationId: createManagedStore
+      summary: 매장 개설
+      description: STORE_IDENTITY_WRITE grant가 필요하다. 확인된 지역 코드와 이름·좌표를 저장하고 검색어를 같은 transaction에서 생성한다. 초기 acceptingOrders와
+        pickupEnabled는 false다. Idempotency-Key는 최초 응답을 재생하며 다른 payload는 409다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: 매장 개설
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreIdentitySnapshot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStoreIdentityRequest'
+  /operations/stores/{storeId}/identity:
+    get:
+      tags:
+      - Operations
+      operationId: getManagedStoreIdentity
+      summary: 매장 검색 식별 정보 조회
+      description: STORE_IDENTITY_READ grant가 필요하다. 변경에 사용할 identity version을 반환한다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: storeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: 매장 검색 식별 정보 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreIdentitySnapshot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    put:
+      tags:
+      - Operations
+      operationId: replaceManagedStoreIdentity
+      summary: 매장명과 좌표 교체
+      description: STORE_IDENTITY_WRITE grant가 필요하다. expectedVersion을 확인하고 이름·좌표·검색어를 원자적으로 교체한다. 지역은 기존 지역 지정 API가 관리하며
+        이 요청으로 변경하지 않는다. 재시도는 최초 응답을 재생한다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: storeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 매장명과 좌표 교체
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreIdentitySnapshot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceStoreIdentityRequest'
+  /operations/store-regions:
+    get:
+      tags:
+      - Operations
+      operationId: listManagedStoreRegions
+      summary: 매장 개설용 지역 코드 조회
+      description: STORE_IDENTITY_READ grant가 필요하다. 법정동 어휘를 검색하며 actor/filter에 묶인 signed cursor를 사용한다. 빈 검색은 전체 어휘를 순회한다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: query
+        schema:
+          type: string
+          maxLength: 200
+      - in: query
+        name: cursor
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 매장 개설용 지역 코드 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorStoreRegionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 components:
   securitySchemes:
     bearerAuth:
@@ -7978,6 +8185,154 @@ components:
         type: string
         const: no-store
   schemas:
+    StoreIdentitySnapshot:
+      type: object
+      additionalProperties: false
+      required:
+      - storeId
+      - name
+      - latitude
+      - longitude
+      - regionCode
+      - version
+      - acceptingOrders
+      - pickupEnabled
+      properties:
+        storeId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        regionCode:
+          type: string
+          pattern: ^[0-9]{10}$
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        acceptingOrders:
+          type: boolean
+        pickupEnabled:
+          type: boolean
+    CreateStoreIdentityRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - latitude
+      - longitude
+      - regionCode
+      - reason
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        regionCode:
+          type: string
+          pattern: ^[0-9]{10}$
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    ReplaceStoreIdentityRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - latitude
+      - longitude
+      - expectedVersion
+      - reason
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    OperatorStoreIdentityPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreIdentitySnapshot'
+        nextCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+    OperatorStoreRegion:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      - sido
+      - sigungu
+      - eupmyeondong
+      - ri
+      - fullName
+      properties:
+        code:
+          type: string
+        sido:
+          type: string
+        sigungu:
+          type: string
+        eupmyeondong:
+          type: string
+        ri:
+          type: string
+        fullName:
+          type: string
+    OperatorStoreRegionPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorStoreRegion'
+        nextCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
     DisputeManagementRequest:
       type: object
       additionalProperties: false

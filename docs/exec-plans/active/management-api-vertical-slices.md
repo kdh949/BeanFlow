@@ -213,6 +213,19 @@ Provider credential 또는 개인 정보를 metric label/log에 추가하지 않
 
 ## Progress
 
+### Slice 2 — 매장 개설·식별 정보
+
+- 선행 commit `0bfcc6f`, PR #151 뒤의 `feature/store-identity-management-api`에서 작업.
+- V75, 개설/식별 정보 교체/목록/상세/지역 어휘 조회 구현. 초기 주문 차단과 확인된 지역 필수.
+- Merchant public port가 매장·profile·검색어·원장을 소유하고 Operations가 grant/Audit를 같은 transaction에 조정.
+- 원장 90일 bounded retention, identity 전용 version 및 actor/filter-bound signed cursor 사용.
+- Passed: 매장 통합 7 tests + runtime parity/Modulith 2 tests, spotlessCheck, bootJar.
+- Passed: 문서 verifier 18 tests, target 217/runtime 207 operations, 397 schemas.
+- 기존 Audit raw PII 검사에 따라 이름·좌표·지역 값은 감사에 복사하지 않고 version/profile digest로 기록.
+- 최초 포맷/감사 payload 실패를 수정하고 최종 suite 통과. 실패 중 남은 concurrent test task는 종료 대기를 추가.
+- #151의 원격 preflight는 V74 끝 빈 줄을 발견하여 해당 branch에 `0bfcc6f`로 수정 후 child에 fast-forward.
+  최종 PR compare 범위의 `git diff --check`를 staged/committed 변경까지 확인한다.
+
 ### Slice 1 — 이의 판정
 
 - V74, 6개 endpoint, 현재 grant/OWNER 권한, signed 목록, durable 판정 intent와 response 원장 구현.

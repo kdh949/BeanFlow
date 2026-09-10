@@ -26,3 +26,23 @@ commit되므로 Adjustment 이후 event/Audit 실패가 반대 판정으로 바�
 
 완료 command response는 90일 후 최대 100행씩 삭제하며 pending command는 삭제하지 않는다.
 판정 intent와 감사 이력은 command cleanup과 함께 삭제하지 않는다. 원래 이의 접수·재이의·보류액 정책은 유지한다.
+
+## 매장 개설과 식별 정보
+
+1. `STORE_IDENTITY_READ`로 `GET /api/v1/operations/store-regions?query=...`에서 확인된 법정동 코드를 조회한다.
+   빈 query는 전체 어휘를 순회한다. 지역과 매장 목록은 actor/filter에 묶인 signed cursor와 limit 1~100을 사용한다.
+2. `STORE_IDENTITY_WRITE`로 `POST /api/v1/operations/stores`에 Idempotency-Key와
+   `{name, latitude, longitude, regionCode, reason}`을 보낸다. 좌표 범위와 유한수, 지역 존재를 검증한다.
+3. 응답의 acceptingOrders와 pickupEnabled는 false다. 실제 계약·메뉴·픽업·소속과 운영 설정을 별도로 구성한다.
+   이름·좌표·지역 검색어는 개설 트랜잭션에서 함께 저장하며 기본 계약이나 슬롯은 생성하지 않는다.
+4. `GET /api/v1/operations/stores?query=...` 또는 `GET /api/v1/operations/stores/{storeId}/identity`로 확인한다.
+5. 이름·좌표 변경은 `PUT /api/v1/operations/stores/{storeId}/identity`에
+   `{name, latitude, longitude, expectedVersion, reason}`을 보낸다. 여기의 version은 식별 정보 전용 버전이다.
+   이미지·주문 정책 변경과 독립이며 지역 코드는 기존 점주 지역 지정 경로가 관리한다.
+
+매장 root와 profile을 잠근 뒤 변경하므로 카탈로그/주문 및 지역 writer와 직렬화된다. 검색어 또는 Audit 저장이
+실패하면 profile·매장·응답 원장도 rollback한다. 동일 키/payload는 최초 응답을 재생하고, 다른 payload 또는
+오래된 identity version은 409다. 완료 응답 원장은 90일 후 최대 100행씩 정리한다.
+
+매장 개설/식별 정보 감사에는 전후 identity version과 profile digest를 기록한다. 실제 좌표와 지역 코드, 이름을
+Audit에 복사하지 않으며 권한이 필요한 매장 상세에서 조회한다. 사용자 입력 사유에도 기존 raw PII 금지 규칙이 적용된다.

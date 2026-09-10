@@ -53,6 +53,8 @@ enum class OperatorPermission {
     PROMOTION_CAMPAIGN_WRITE,
     SETTLEMENT_DISPUTE_READ,
     SETTLEMENT_DISPUTE_DECIDE,
+    STORE_IDENTITY_READ,
+    STORE_IDENTITY_WRITE,
 }
 
 interface OperatorPermissionAuthorization {

@@ -5,6 +5,8 @@
 | 이의 판정 목록·상세 (`/operations/settlement-disputes/**`) | No | No | No | Active `SETTLEMENT_DISPUTE_READ` grant | No |
 | 이의 검토·승인·기각 | No | No | No | Active `SETTLEMENT_DISPUTE_DECIDE` grant + reason + idempotency + expectedVersion + Audit | No |
 | 매장 이의 상세·철회 (`/stores/{storeId}/disputes/{disputeId}/**`) | No | ACTIVE same-store OWNER + CSRF(철회) | No | No | No |
+| 매장 목록·식별 정보·지역 코드 (`/operations/stores`, `/operations/stores/{id}/identity`, `/operations/store-regions`) | No | No | No | Active `STORE_IDENTITY_READ` grant | No |
+| 매장 개설·이름·좌표 교체 | No | No | No | Active `STORE_IDENTITY_WRITE` grant + reason + idempotency + expectedVersion(교체) + Audit | No |
 | 고객 가입·로그인 | Self | No | No | No | No |
 | 점주 로그인·비밀번호 변경 | No | Self | Self | No | No |
 | 점주 계정 발급·exact 조회·초기화·잠금 해제 | No | No | No | Active `MERCHANT_CREDENTIAL_MANAGE` grant + reason + idempotency + Audit | No |
