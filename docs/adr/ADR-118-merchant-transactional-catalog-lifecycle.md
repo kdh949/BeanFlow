@@ -134,6 +134,8 @@ prefix version을 올리고 quote와 final Order를 같은 PR에서 바꾼다.
 
 ### 6. 모든 mutation은 command-transaction 멱등성을 사용한다
 
+Menu와 Store ordering-policy Audit의 `sourceReference`는 원장에 저장한 command ID를 사용한다. 보존 기간 안의 재전송은 같은 command를 재생하고 Audit을 추가하지 않는다. 원장 정리 후 재사용한 키는 새 command ID를 받아 과거 Audit과 충돌하지 않는다. Audit을 장기간 유지하기 위해 원장의 만료된 행을 유지하거나 별도 실행 원장을 추가하지 않는다.
+
 모든 Store/Menu mutation은 `Idempotency-Key`, canonical payload hash와 최초 terminal response를 사용한다.
 Store commerce root가 이미 존재하고, 검색 색인과 Audit를 포함한 모든 부수효과가 하나의 local DB
 transaction 안에 있으며 Provider 호출이 없으므로 ADR-064의 command-transaction 모델이다.
@@ -165,6 +167,18 @@ ADR-076의 Store당 active Menu 1,000개, active Option 5,000개 상한을 write
 상한 초과는 400 validation failure이며 partial catalogue, 잘린 성공 또는 503으로 저장하지 않는다.
 DB constraint가 표현 가능한 positivity/uniqueness/lifecycle tuple은 DB에서도 보호하고, Store 전체 count와
 cross-row 의미는 Store exclusive lock 아래 Application Service가 보호한다.
+
+### 9. 구성 key의 저장·인덱스 표현
+
+정규화된 UUID 문자열은 API/조회 표현을 유지하고 최대 100개 선택을 위해 4000자로 저장한다.
+활성 구성의 유일성 인덱스는 같은 문자열을 PostgreSQL `uuid[]`로 변환한 expression을 사용한다.
+100 UUID는 binary array payload 1600바이트로 제한되므로 긴 문자열 자체를 B-tree key로 저장하지 않는다.
+옵션은 UUID 문자열 오름차순으로 정규화한 뒤 저장하며 empty string은 빈 UUID 배열과 대응한다.
+해시 충돌 처리나 별도 mapping table은 추가하지 않는다.
+
+### 10. 카탈로그 조회는 활성 child와 DB 집계로 범위를 제한한다
+
+거래 내용 조회·교체는 ACTIVE 옵션·구성만 읽는다. 관리 목록은 페이지에 포함된 메뉴 ID와 lifecycle로 DB에서 count를 집계하며, 보관 목록도 과거 child 엔티티를 메모리에 적재하지 않는다. 매장 옵션 상한은 ACTIVE 메뉴·옵션의 DB count로 확인하고, 새 옵션·구성 ID의 충돌 검사는 두 번의 집합 조회로 제한한다. `(menu_id, lifecycle)` 인덱스는 활성·보관 목록의 집계를 지원한다. 이 변경은 쿼리 수와 엔티티 적재량을 제한하며 응답 지연 개선의 실측 주장은 포함하지 않는다.
 
 ## Alternatives Considered
 

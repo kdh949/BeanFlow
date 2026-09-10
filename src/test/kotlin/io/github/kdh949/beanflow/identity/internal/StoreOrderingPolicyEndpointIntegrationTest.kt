@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.identity.internal
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryQueryOperations
+import io.github.kdh949.beanflow.merchant.internal.StoreOrderingPolicyCommandRetentionCleanup
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import jakarta.servlet.http.Cookie
@@ -44,6 +45,7 @@ internal class StoreOrderingPolicyEndpointIntegrationTest(
     @Autowired private val mockMvc: MockMvc,
     @Autowired private val jdbc: JdbcTemplate,
     @Autowired private val passwords: CustomerPasswordSecurity,
+    @Autowired private val commandCleanup: StoreOrderingPolicyCommandRetentionCleanup,
     @Autowired private val applicationService: StoreOrderingPolicyApplicationService,
     @Autowired private val discoveryQueries: StoreDiscoveryQueryOperations,
     @Autowired transactionManager: PlatformTransactionManager,
@@ -59,6 +61,47 @@ internal class StoreOrderingPolicyEndpointIntegrationTest(
                 operations_audit_record, merchant_store CASCADE
             """.trimIndent(),
         )
+    }
+
+    @Test
+    fun `reused key after command retention cleanup records a new policy audit and still replays`() {
+        val storeId = seedStore()
+        val session = signIn("policy.retention", storeId, "OWNER")
+        val key = "policy-retention-key-001"
+        putPolicy(session, storeId, key, expectedVersion = 0, acceptingOrders = false)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.version").value(1))
+        val expiry =
+            jdbc.queryForObject(
+                "SELECT max(retention_expires_at) FROM merchant_store_ordering_policy_command",
+                Timestamp::class.java,
+            )!!
+        assertThat(commandCleanup.deleteExpired(expiry.toInstant(), 1_000)).isOne()
+        val result =
+            putPolicy(session, storeId, key, expectedVersion = 1, acceptingOrders = true)
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.version").value(2))
+                .andReturn()
+                .response.contentAsString
+        putPolicy(session, storeId, key, expectedVersion = 1, acceptingOrders = true)
+            .andExpect(status().isOk)
+            .andExpect { assertThat(it.response.contentAsString).isEqualTo(result) }
+        assertThat(commandCount()).isOne()
+        assertThat(auditActorTypes(storeId)).containsExactly("STORE_OWNER", "STORE_OWNER")
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT count(DISTINCT source_reference) FROM operations_audit_record WHERE target_id = ?",
+                Long::class.java,
+                storeId,
+            ),
+        ).isEqualTo(2)
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM operations_audit_record a JOIN merchant_store_ordering_policy_command c ON a.source_reference = 'store-ordering-policy:' || c.id::text WHERE a.target_id = ?",
+                Long::class.java,
+                storeId,
+            ),
+        ).isEqualTo(1)
     }
 
     @Test
