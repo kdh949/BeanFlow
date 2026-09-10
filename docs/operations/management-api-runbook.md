@@ -61,3 +61,20 @@ Audit에 복사하지 않으며 권한이 필요한 매장 상세에서 조회�
   관리를 거절한다. 정원 0 변경이 먼저 commit하면 신규 예약이 PICKUP_SLOT_FULL로 실패한다.
 - 동일 key/payload는 최초 응답을 재생하며 replay 전 현재 membership을 다시 확인한다. 예약/확정 수량은
   관리 요청에서 받지 않는다. Audit/response 실패는 변경을 rollback하며 response 원장은 90일 후 bounded cleanup한다.
+
+## 수수료 계약 버전
+
+1. `STORE_SETTLEMENT_TERMS_READ`로 `GET /api/v1/operations/stores/{storeId}/settlement-terms`를 조회한다.
+   revision은 기존 데이터를 포함한 해당 매장 불변 계약 수다. actor/store-bound signed cursor와 limit 1~100을 사용한다.
+2. `GET .../{termsVersionId}`로 계약 근거 reference, bps 수수료율과 적용 구간을 확인한다.
+3. `STORE_SETTLEMENT_TERMS_WRITE`로 `POST .../settlement-terms`에 Idempotency-Key와
+   `{sourceReference, feeRateBps, effectiveFrom, effectiveTo, expectedRevision, reason}`을 보낸다.
+   수수료는 0~10000 bps, 시작은 미래이며 종료는 시작 이후 또는 null이다. 시각은 microsecond로 정규화한다.
+4. 기존 계약은 수정/삭제하지 않는다. 반개구간이 겹치거나 sourceReference가 중복되거나 revision이 오래되면 409다.
+   종료일이 없는 기존 계약과 겹치는 새 계약도 등록할 수 없다. 강제 종료·과거 계약 정정은 별도 정책 결정 대상이다.
+5. 오류나 응답 유실은 같은 키/payload로 재시도한다. 현재 grant 확인 뒤 최초 응답을 재생한다.
+   완료 응답은 90일 후 최대 100행씩 정리한다. 계약과 과거 주문 snapshot은 이 정리에서 삭제하지 않는다.
+
+계약 writer는 Store 배타 잠금으로 최종 주문 quote와 직렬화한다. 기존 주문의 수수료 snapshot은 바뀌지 않는다.
+계약이 없는 구간에는 기존 `SETTLEMENT_INPUT_UNAVAILABLE` 정책을 유지하며 기본 수수료를 채우지 않는다.
+Audit에는 revision, feeRateBps, 근거 reference digest를 기록하며 원문 근거 reference를 복사하지 않는다.

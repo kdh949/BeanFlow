@@ -7842,6 +7842,137 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ReplacePickupSlotRequest'
+  /operations/stores/{storeId}/settlement-terms:
+    get:
+      tags:
+      - Operations
+      operationId: listStoreSettlementTerms
+      summary: 매장 수수료 계약 버전 목록 조회
+      description: STORE_SETTLEMENT_TERMS_READ grant. revision은 기존 데이터를 포함한 불변 계약 수다. actor와 store에 묶인 signed cursor로 조회한다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: storeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: cursor
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 매장 수수료 계약 버전 목록 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedStoreSettlementTermsPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    post:
+      tags:
+      - Operations
+      operationId: registerStoreSettlementTerms
+      summary: 미래 적용 수수료 계약 버전 등록
+      description: STORE_SETTLEMENT_TERMS_WRITE grant. 미래의 반개구간만 추가한다. 기존 계약은 수정하지 않으며 중첩 구간, 중복 sourceReference, stale
+        revision은 409다. 종료일 없는 계약과 겹치는 등록도 409다. 최초 응답은 90일 보관하며 현재 권한 검증 후 동일 키로 재생한다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: storeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: 미래 적용 수수료 계약 버전 등록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedStoreSettlementTerms'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterStoreSettlementTermsRequest'
+  /operations/stores/{storeId}/settlement-terms/{termsVersionId}:
+    get:
+      tags:
+      - Operations
+      operationId: getStoreSettlementTerms
+      summary: 매장 수수료 계약 상세 조회
+      description: STORE_SETTLEMENT_TERMS_READ grant. 다른 매장의 계약은 404다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: storeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: termsVersionId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: 매장 수수료 계약 상세 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedStoreSettlementTerms'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 components:
   securitySchemes:
     bearerAuth:
@@ -8379,6 +8510,106 @@ components:
         type: string
         const: no-store
   schemas:
+    ManagedSettlementTermsSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+      - termsVersionId
+      - storeId
+      - sourceReference
+      - feeRateBps
+      - effectiveFrom
+      - effectiveTo
+      properties:
+        termsVersionId:
+          type: string
+          format: uuid
+        storeId:
+          type: string
+          format: uuid
+        sourceReference:
+          type: string
+          maxLength: 240
+        feeRateBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        effectiveFrom:
+          type: string
+          format: date-time
+        effectiveTo:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+    ManagedStoreSettlementTerms:
+      type: object
+      additionalProperties: false
+      required:
+      - terms
+      - revision
+      properties:
+        terms:
+          $ref: '#/components/schemas/ManagedSettlementTermsSnapshot'
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+    ManagedStoreSettlementTermsPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      - revision
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagedSettlementTermsSnapshot'
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+        nextCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+    RegisterStoreSettlementTermsRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - sourceReference
+      - feeRateBps
+      - effectiveFrom
+      - effectiveTo
+      - expectedRevision
+      - reason
+      properties:
+        sourceReference:
+          type: string
+          minLength: 1
+          maxLength: 240
+        feeRateBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        effectiveFrom:
+          type: string
+          format: date-time
+        effectiveTo:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        expectedRevision:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
     CreatePickupSlotRequest:
       type: object
       additionalProperties: false

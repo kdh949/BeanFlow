@@ -55,6 +55,8 @@ enum class OperatorPermission {
     SETTLEMENT_DISPUTE_DECIDE,
     STORE_IDENTITY_READ,
     STORE_IDENTITY_WRITE,
+    STORE_SETTLEMENT_TERMS_READ,
+    STORE_SETTLEMENT_TERMS_WRITE,
 }
 
 interface OperatorPermissionAuthorization {

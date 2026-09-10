@@ -34,6 +34,14 @@ PickupSlot row를 잠근다. 기존 예약/변경은 같은 row lock과 version�
 호출한다. 새 슬롯과 시간 변경은 미래의 유효한 구간만 허용하며 시작한 슬롯은 변경하지 않는다. 정원 0은
 예약이 없는 미래 슬롯을 닫는 값으로 허용한다. 과거 슬롯·예약 snapshot·예약/확정 count를 관리 DTO로 덮어쓰지 않는다.
 
+### 수수료 계약 추가 경계
+
+ADR-071과 V18의 immutable version을 유지한다. 미래 적용 구간만 추가하고 과거 계약의 종료일을 변경하지 않는다.
+새 구간은 반개구간 `[effectiveFrom, effectiveTo)`이며 종료가 없으면 무한대로 해석한다. 겹치면 409다.
+Store row의 배타 잠금으로 최종 주문 quote의 shared lock과 직렬화한다. 등록 revision은 해당 매장의 불변
+계약 row 수이며 초기 데이터도 포함한다. 명시적 expectedRevision으로 동시 작성 충돌을 확인한다.
+현재 구간의 강제 종료, 과거 적용과 주문 snapshot 재계산은 제공하지 않는다.
+
 ## Alternatives Considered
 
 단순 Controller wrapper는 권한·감사 actor·부분 commit 실패를 해결하지 못한다. 독립 sibling migration은

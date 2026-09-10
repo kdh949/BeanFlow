@@ -88,7 +88,8 @@ DB 제약·테스트·OpenAPI를 함께 제공하는 수직 슬라이스로 검�
 6. PickupSlot 정원은 `reservedCount + confirmedCount`보다 작아질 수 없다. 예약/확정이 있는 슬롯의
    시간 변경은 거절하고, 슬롯 변경과 신규 예약은 같은 slot row lock으로 직렬화한다.
 7. 수수료 계약 구간은 store별 중첩되지 않는다. 새 버전은 과거 OrderSettlementInputSnapshot을 바꾸지 않는다.
-   현재 계약 교체가 필요하면 Store lock 아래 적용 경계를 닫고 새 버전을 추가하는 명시적 command를 사용한다.
+   ADR-071과 V18에 따라 기존 구간은 수정하지 않는다. 새 구간은 Store lock 아래 중첩 없이 추가한다.
+   종료일이 없는 계약과 겹치는 등록은 409이며 계약 종료/정정 정책은 별도 결정이 필요하다.
 8. membership의 `(actorId,storeId)` 유일성과 현재 상태 검증을 유지한다. 철회와 authoring의 lock 순서를
    고정하여 이미 철회된 권한으로 새 명령이 commit되지 않도록 한다.
 9. 수동 복구는 동일 owner source만 재개하며 source payload·정산액·Provider key를 새로 추정하지 않는다.
@@ -278,3 +279,15 @@ Provider credential 또는 개인 정보를 metric label/log에 추가하지 않
 ## Revision Notes
 
 - 2026-09-10: 일곱 관리 기능 조사 결과를 구현 계획으로 정리하고 최신 #150과의 충돌을 기록했다.
+
+### 수수료 계약 슬라이스 검증 (2026-09-10)
+
+- 선행 픽업 PR #153 head `523bb7c`에서 구현. PR #151의 packaged migration 최종 버전 검증 수정을
+  #152와 #153에 merge하고 ancestry를 유지했다. 새로운 version은 V77이다.
+- 기존 ADR-071/V18의 update/delete 금지와 무기한 계약을 보존하며 미래의 비중첩 구간만 추가한다.
+- Passed: 계약 관리 5, 기존 계약 repository 3, 기존 주문 정산 입력 snapshot 8, Runtime API parity 1,
+  Modulith 1, Flyway smoke 1 = 19 tests. SpotlessCheck, bootJar, 문서 검증도 통과했다.
+- 문서 검증: target 199 paths/224 operations, runtime 189 paths/214 operations, 405 schemas.
+- 동시 writer 1회 성공, Store shared lock과 등록 직렬화, Audit rollback, 현재 grant와 signed cursor,
+  immutable version/과거 snapshot을 검증했다. 최초 포맷 실패를 수정한 후 최종 suite가 통과했다.
+- 전체 backend suite 및 원격 CI는 별도 gate다. 재고와 UI 구현은 포함하지 않았다.
