@@ -22,6 +22,10 @@
    첫 predecessor branch는 `feature/merchant-menu-catalog-lifecycle`이고 이후 각 child는 직전 feature head다.
    원본 dirty checkout은 보존하고 한 isolated worktree에서 한 writer만 V74부터 순차 DDL을 작성한다.
    ADR-072의 독립 writer 병렬 실행을 허용하지 않는다. 선행 branch 변경은 자동 합치지 않고 다시 검증한다.
+   2026-09-10 최종 통합 전 선행 PR의 갱신 head `88828060a2a762a479cebdcf2dbdebc1ca1d63be`를 확인했다.
+   메뉴 옵션 인덱스·감사 원장 식별자·조회 범위·기존 테스트 수정은 새 API 정책과 충돌하지 않는다.
+   V73 수정은 미병합 부모의 변경으로 상속하며 V74~V80은 유지한다. 검증된 부모를 첫 PR에 merge하고
+   순서대로 전파하여 이력을 보존한다. 새 부모를 포함한 최종 stack으로 전체 backend 검증을 다시 수행한다.
 5. 각 PR은 직전 branch를 base로 하고 증분 테스트·계약·문서를 포함한다. Draft 동안에도 개별 slice의 검증과
    전체 stack completion을 구분한다. 전체 완료는 여섯 구현·검증·PR 및 exact ancestry 확인이며 merge/deploy와 다르다.
 6. 재고 관리와 UI는 범위 밖이다. 신규 production dependency와 초기 DDL 재작성은 하지 않는다.

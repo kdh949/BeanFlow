@@ -65,6 +65,87 @@ afterEach(() => {
 });
 
 describe("StoreCatalogPage", () => {
+  it("keeps the selected menu when detail responses arrive in reverse order", async () => {
+    const first = deferred<never>();
+    const second = deferred<never>();
+    const secondMenuId = "30000000-0000-4000-8000-000000000099";
+    const original = vi.mocked(merchantApi.GET).getMockImplementation() as (path: string, options: unknown) => Promise<never>;
+    vi.mocked(merchantApi.GET).mockImplementation(((path: string, options: { params: { path: { menuId: string } } }) => {
+      if (path === "/stores/{storeId}/menu-catalog") return Promise.resolve(response({ items: [menuSummary, { ...menuSummary, menuId: secondMenuId, name: "콜드브루" }] }));
+      if (path === "/stores/{storeId}/menus/{menuId}/trade-content") return options.params.path.menuId === menuId ? first.promise : second.promise;
+      return original(path, options);
+    }) as never);
+    const put = vi.spyOn(merchantApi, "PUT").mockResolvedValue(response({ ...menuContent, menuId: secondMenuId, name: "콜드브루", version: 8 }));
+    render(<MemoryRouter><StoreCatalogPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole("button", { name: "카페 라테 편집" }));
+    await userEvent.click(screen.getByRole("button", { name: "콜드브루 편집" }));
+    await act(async () => { second.resolve(response({ ...menuContent, menuId: secondMenuId, name: "콜드브루", version: 7 })); });
+    expect(await screen.findByLabelText("메뉴 이름")).toHaveValue("콜드브루");
+    await act(async () => { first.resolve(response(menuContent)); });
+    expect(screen.getByLabelText("메뉴 이름")).toHaveValue("콜드브루");
+    await userEvent.click(screen.getByRole("button", { name: "거래 내용 저장" }));
+    await waitFor(() => expect(put).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      params: expect.objectContaining({ path: { storeId, menuId: secondMenuId } }),
+      body: expect.objectContaining({ menuId: secondMenuId, expectedVersion: 7 }),
+    })));
+  });
+
+  it.each(["create", "close", "archive filter"])("ignores a late menu detail after %s", async (action) => {
+    const pending = deferred<never>();
+    const original = vi.mocked(merchantApi.GET).getMockImplementation() as (path: string, options: unknown) => Promise<never>;
+    let reads = 0;
+    vi.mocked(merchantApi.GET).mockImplementation(((path: string, options: never) => {
+      if (path === "/stores/{storeId}/menus/{menuId}/trade-content" && ++reads > 1) return pending.promise;
+      return original(path, options);
+    }) as never);
+    render(<MemoryRouter><StoreCatalogPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole("button", { name: "카페 라테 편집" }));
+    await screen.findByLabelText("메뉴 이름");
+    await userEvent.click(screen.getByRole("button", { name: "카페 라테 편집" }));
+    const label = action === "create" ? /새 메뉴/ : action === "close" ? "편집 닫기" : "보관된 메뉴";
+    await userEvent.click(screen.getByRole("button", { name: label }));
+    await act(async () => { pending.resolve(response(menuContent)); });
+    if (action === "create") expect(screen.getByLabelText("메뉴 이름")).toHaveValue("");
+    else expect(screen.queryByLabelText("메뉴 이름")).not.toBeInTheDocument();
+  });
+
+  it("locks the draft during save and allows another save while list refresh is pending", async () => {
+    const pendingSave = deferred<never>();
+    const pendingList = deferred<never>();
+    const original = vi.mocked(merchantApi.GET).getMockImplementation() as (path: string, options: unknown) => Promise<never>;
+    let lists = 0;
+    vi.mocked(merchantApi.GET).mockImplementation(((path: string, options: never) => {
+      if (path === "/stores/{storeId}/menu-catalog" && ++lists > 1) return pendingList.promise;
+      return original(path, options);
+    }) as never);
+    const put = vi.spyOn(merchantApi, "PUT").mockReturnValueOnce(pendingSave.promise)
+      .mockResolvedValueOnce(response({ ...menuContent, name: "다음 이름", version: 4 }));
+    render(<MemoryRouter><StoreCatalogPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole("button", { name: "카페 라테 편집" }));
+    const name = await screen.findByLabelText("메뉴 이름");
+    await userEvent.clear(name);
+    await userEvent.type(name, "저장할 이름");
+    await userEvent.click(screen.getByRole("button", { name: "거래 내용 저장" }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(name).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: /고객에게 판매 가능/ })).toBeDisabled();
+    for (const label of ["새 메뉴", "편집 닫기", "카페 라테 편집", "보관된 메뉴", "옵션 추가", "판매 구성 추가"]) {
+      expect(screen.getByRole("button", { name: label })).toBeDisabled();
+    }
+    await userEvent.type(name, "덮어쓰면 안 됨");
+    expect(name).toHaveValue("저장할 이름");
+    await act(async () => { pendingSave.resolve(response({ ...menuContent, name: "저장할 이름", version: 3 })); });
+    expect(await screen.findByText("3번째 저장")).toBeVisible();
+    expect(screen.getByText("메뉴를 불러오는 중")).toBeVisible();
+    expect(screen.getByRole("button", { name: "거래 내용 저장" })).toBeEnabled();
+    await userEvent.clear(name);
+    await userEvent.type(name, "다음 이름");
+    await userEvent.click(screen.getByRole("button", { name: "거래 내용 저장" }));
+    expect(await screen.findByText("4번째 저장")).toBeVisible();
+    const [, options] = put.mock.calls[1] as unknown as [string, { body: Record<string, unknown> }];
+    expect(options.body).toMatchObject({ name: "다음 이름", expectedVersion: 3 });
+  });
+
   it("lets the owner mark a menu sold out and resume sales with successive versions", async () => {
     const put = vi.spyOn(merchantApi, "PUT")
       .mockResolvedValueOnce(response({ ...menuContent, available: false, version: 3 }))

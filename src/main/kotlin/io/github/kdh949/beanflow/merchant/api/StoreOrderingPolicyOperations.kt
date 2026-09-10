@@ -22,6 +22,7 @@ data class ReplaceStoreOrderingPolicyCommand(
 )
 
 data class StoreOrderingPolicyReplacement(
+    val commandId: UUID,
     val policy: StoreOrderingPolicySnapshot,
     val previous: StoreOrderingPolicySnapshot,
     val changed: Boolean,

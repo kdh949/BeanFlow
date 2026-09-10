@@ -9,6 +9,7 @@ import java.time.Instant
 import java.util.UUID
 
 internal data class StoreOrderingPolicyCommandRecord(
+    val id: UUID,
     val payloadHash: String,
     val responseJson: String,
 )
@@ -37,11 +38,20 @@ internal class StoreOrderingPolicyCommandRepository(
         jdbc
             .query(
                 """
-                SELECT payload_hash, response_json
+                SELECT id, payload_hash, response_json
                   FROM merchant_store_ordering_policy_command
                  WHERE actor_id = ? AND operation = ? AND idempotency_key = ?
                 """.trimIndent(),
-                { row, _ -> StoreOrderingPolicyCommandRecord(row.getString("payload_hash"), row.getString("response_json")) },
+                {
+                    row,
+                    _,
+                    ->
+                    StoreOrderingPolicyCommandRecord(
+                        row.getObject("id", UUID::class.java),
+                        row.getString("payload_hash"),
+                        row.getString("response_json"),
+                    )
+                },
                 actorId,
                 operation,
                 idempotencyKey,

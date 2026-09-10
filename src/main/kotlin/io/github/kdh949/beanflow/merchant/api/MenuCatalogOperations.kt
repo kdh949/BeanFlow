@@ -88,6 +88,7 @@ data class ArchiveMenuCatalogCommand(
 )
 
 data class MenuCatalogMutation(
+    val commandId: UUID,
     val content: MenuTradeContent,
     val previous: MenuTradeContent?,
     val changed: Boolean,

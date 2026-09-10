@@ -49,7 +49,7 @@ internal class StoreOrderingPolicyService(
                 )
             }
             val replay = objectMapper.readValue(existing.responseJson, StoreOrderingPolicySnapshot::class.java)
-            return StoreOrderingPolicyReplacement(replay, replay, changed = false, replayed = true)
+            return StoreOrderingPolicyReplacement(existing.id, replay, replay, changed = false, replayed = true)
         }
         val store =
             stores.findByIdForUpdate(command.storeId)
@@ -71,8 +71,9 @@ internal class StoreOrderingPolicyService(
             stores.flush()
         }
         val policy = store.snapshot()
+        val commandId = identifiers.next()
         commands.insertCommand(
-            id = identifiers.next(),
+            id = commandId,
             actorId = command.actorId,
             idempotencyKey = command.idempotencyKey,
             payloadHash = payloadHash,
@@ -80,7 +81,7 @@ internal class StoreOrderingPolicyService(
             responseJson = objectMapper.writeValueAsString(policy),
             now = command.now,
         )
-        return StoreOrderingPolicyReplacement(policy, previous, changed, replayed = false)
+        return StoreOrderingPolicyReplacement(commandId, policy, previous, changed, replayed = false)
     }
 
     private fun validate(command: ReplaceStoreOrderingPolicyCommand) {
