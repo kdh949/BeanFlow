@@ -12,11 +12,11 @@ type Session = components["schemas"]["VerificationSessionResource"];
 type Channel = components["schemas"]["VerificationChannel"];
 const challengeLabels: Record<components["schemas"]["VerificationChallengeState"], string> = { PENDING_ISSUE: "발급 접수", ISSUED: "인증 입력 대기", ISSUE_UNKNOWN: "발급 결과 확인 중", VERIFYING: "인증 확인 중", VERIFIED: "인증 수단 확인됨", INVALID: "인증 불일치", VERIFICATION_UNKNOWN: "인증 결과 확인 중", EXPIRED: "기한 만료", REVOKED: "철회됨" };
 /** Purpose-bound verification; proofs are transient and never retained for command retries. */
-export function SupportVerificationPanel({ caseId, links, disabled, onChange }: { caseId: string; links: components["schemas"]["SupportSubjectLink"][]; disabled: boolean; onChange: (session: Session | null) => void }) {
+export function SupportVerificationPanel({ caseId, links, disabled, onChange, initialActionScope = "PERSONAL_DATA_REVEAL" }: { initialActionScope?: Session["actionScope"]; caseId: string; links: components["schemas"]["SupportSubjectLink"][]; disabled: boolean; onChange: (session: Session | null) => void }) {
   const eligible = links.filter(link => link.subjectType !== "ORDER");
   const [linkId, setLinkId] = useState("");
   const [level, setLevel] = useState<"BASIC" | "ENHANCED">("ENHANCED");
-  const [scope, setScope] = useState<Session["actionScope"]>("PERSONAL_DATA_REVEAL");
+  const [scope, setScope] = useState<Session["actionScope"]>(initialActionScope);
   const [purpose, setPurpose] = useState<Session["purpose"]>("CONTACT_CONFIRMATION");
   const [lookup, setLookup] = useState("");
   const [request, setRequest] = useState<{ id: string } | null>(null);

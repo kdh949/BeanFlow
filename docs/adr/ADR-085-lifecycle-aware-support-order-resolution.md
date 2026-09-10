@@ -18,6 +18,13 @@ RETRY_SCHEDULED | SUCCEEDED | NOT_REQUIRED | UNKNOWN | RECONCILING | MANUAL_REVI
 `UNDETERMINED`에서도 승인된 고객 Refund와 원혜택 restoration은 진행할 수 있지만 cost-attribution/
 Settlement step은 `BLOCKED`로 남는다. Store/Platform cost owner를 자동 추정하지 않는다.
 
+### Store confirmation query amendment (2026-09-11)
+
+매장 점주·직원은 자신의 ACCEPTED 주문에 대한 요청 ID로 현재 승인안의 작업·주문·버전·digest·만료만
+조회할 수 있다. 상담 내용, 본인확인 세션, 증거와 상담원 식별자는 이 조회에 포함하지 않는다.
+조회는 동의를 생성하거나 budget을 소비하지 않으며, 건별 동의 명령은 현재 binding과 서로 다른 actor를
+다시 검증한다. 화면에서 STORE 비용 책임을 명시 수락한 경우에만 동의 또는 한시 위임을 제출한다.
+
 ## Alternatives Considered
 
 - 기존 customer endpoint impersonation: actor/audit/permission 오류로 기각.

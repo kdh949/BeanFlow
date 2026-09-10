@@ -79,6 +79,39 @@ internal class SupportActionRequestIntegrationTest
         }
 
         @Test
+        fun `workflow exposes only current separated actor commands and hides them after permission revoke`() {
+            val id = requestId(createRequest("workflow-create-001").andReturn().response.contentAsString)
+            val path = "/api/v1/support/action-requests/$id/workflow"
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.allowedActions[0]").value("REVISE"))
+                .andExpect(jsonPath("$.allowedActions.length()").value(1))
+                .andExpect(jsonPath("$.caseVersion").value(0))
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions[0]").value("DECIDE_SUPPORT_MANAGER"))
+                .andExpect(jsonPath("$.allowedActions.length()").value(1))
+            decideManager(id, managerId, "workflow-approve-001").andExpect(status().isOk)
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.hasItem("EXECUTE")))
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_ACTION_EXECUTE'",
+                requesterId,
+            )
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.request.state").value("REASSIGNMENT_REQUIRED"))
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("EXECUTE"))))
+            mockMvc.perform(get(path).with(jwt().jwt { it.subject(UUID.randomUUID().toString()) })).andExpect(status().isForbidden)
+        }
+
+        @Test
         fun `create exact replay and separated manager approval produce ready lineage`() {
             val first =
                 createRequest("create-action-001")

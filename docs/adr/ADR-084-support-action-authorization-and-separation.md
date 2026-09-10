@@ -51,6 +51,15 @@ S70/S80/S90/S100의 typed command가 최신 permission/verification/policy/targe
 원 executor가 execute/capability grant를 잃으면 자동 대체하지 않고 `REASSIGNMENT_REQUIRED`로 남기며, 권한 있는 actor가
 적격 상담원으로 Case와 request를 함께 감사 가능한 방식으로 재배정한다. Support/Operations approver는 executor가 될 수 없다.
 
+### Console query boundary amendment (2026-09-11)
+
+상담에 연결된 주문의 현재 상태·매장·버전은 assigned Case와 활성 ORDER link 및
+`SUPPORT_CASE_READ`/`SUPPORT_ORDER_READ`를 재검증하는 최소 조회로 제공한다. 승인 요청의 workflow 조회는
+기존 요청 조회 권한을 유지하고 현재 actor에게 허용되는 명령과 Case version을 함께 반환한다.
+이는 화면 안내이며 명령 시 기존 권한·본인확인·승인·버전 검증을 대체하지 않는다.
+raw action/evidence는 저장하지 않는다. 화면은 typed 입력으로 canonical digest를 계산하고 승인안의 digest와
+일치하는 내용을 확인한 뒤 명령한다. 조회 실패 시 이전 요청의 명령을 숨긴다.
+
 ## Alternatives Considered
 
 - UI/role boolean: every-request/object authorization을 만족하지 못해 기각.

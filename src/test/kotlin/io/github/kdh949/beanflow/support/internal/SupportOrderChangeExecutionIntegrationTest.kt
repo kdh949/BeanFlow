@@ -26,6 +26,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.MvcResult
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -85,6 +86,38 @@ internal class SupportOrderChangeExecutionIntegrationTest
             seedSupportScope()
             grantExecutionPermissions()
             insertActionRequest(SupportActionType.ORDER_CANCELLATION, cancellationDigest())
+        }
+
+        @Test
+        fun `store confirmation inspection contains only current own store binding without consuming authority`() {
+            val newSlotId = UUID.randomUUID()
+            makeAccepted(newSlotId)
+            resetRequest(SupportActionType.PICKUP_RESCHEDULE, pickupDigest(newSlotId))
+            insertStoreMembership()
+            val actor =
+                jwt()
+                    .jwt {
+                        it.subject(storeActorId.toString()).claim("roles", listOf("STORE_STAFF"))
+                    }.authorities(SimpleGrantedAuthority("ROLE_MERCHANT"))
+            val path = "/api/v1/stores/${fixture.storeId}/support-order-change-requests/$requestId"
+            val body =
+                mockMvc
+                    .perform(get(path).with(actor))
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.requestId").value(requestId.toString()))
+                    .andExpect(jsonPath("$.action").value("PICKUP_RESCHEDULE"))
+                    .andExpect(jsonPath("$.requestVersion").value(0))
+                    .andReturn()
+                    .response.contentAsString
+            assertThat(body).doesNotContain("verificationSessionId", "evidenceDigest", "requesterActorId", "customerId")
+            assertThat(count("support_order_change_authorization")).isZero()
+            mockMvc
+                .perform(
+                    get("/api/v1/stores/${UUID.randomUUID()}/support-order-change-requests/$requestId").with(actor),
+                ).andExpect(status().isForbidden)
+            jdbcTemplate.update("UPDATE support_action_revision SET expires_at = now() - interval '1 second' WHERE id = ?", revisionId)
+            mockMvc.perform(get(path).with(actor)).andExpect(status().isConflict)
         }
 
         @Test

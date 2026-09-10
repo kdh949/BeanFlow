@@ -1102,6 +1102,12 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1event-publication-recoveries~1{publicationId}"
   /operations/event-publication-recoveries/{publicationId}/retries:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1event-publication-recoveries~1{publicationId}~1retries"
+  /support/cases/{caseId}/orders/{orderId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1orders~1{orderId}"
+  /support/action-requests/{requestId}/workflow:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1workflow"
+  /stores/{storeId}/support-order-change-requests/{requestId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1support-order-change-requests~1{requestId}"
 components:
   securitySchemes:
     bearerAuth:
@@ -1117,6 +1123,14 @@ components:
       in: cookie
       name: BEANFLOW_MERCHANT_SESSION
   schemas:
+    SupportOrderContextResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportOrderContextResource"
+    SupportOrderWorkflowAction:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportOrderWorkflowAction"
+    StoreSupportOrderChangeRequestResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/StoreSupportOrderChangeRequestResource"
+    SupportOrderWorkflowResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportOrderWorkflowResource"
     RuntimeStoreOrderTransitionRequest:
       type: object
       additionalProperties: false

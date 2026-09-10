@@ -112,6 +112,7 @@ export const router = createBrowserRouter([
       { lazy: async () => { const { OperationsSessionGate: Component } = await import("./features/auth/operations/OperationsSessionGate"); return { Component }; }, children: [
         { index: true, lazy: async () => { const { SupportWorkspacePage: Component } = await import("./features/support/SupportWorkspacePage"); return { Component }; } },
         { path: "cases", lazy: async () => { const { SupportCaseDirectoryPage: Component } = await import("./features/support/SupportCaseDirectoryPage"); return { Component }; } },
+        { path: "action-requests/:requestId", lazy: async () => { const { SupportOrderActionPage: Component } = await import("./features/support/SupportOrderActionWorkspace"); return { Component }; } },
         { path: "data-access/:grantId", lazy: async () => { const { SupportDataAccessPage: Component } = await import("./features/support/SupportDataAccessWorkspace"); return { Component }; } },
         { path: "cases/:caseId", lazy: async () => { const { SupportCaseManagementPage: Component } = await import("./features/support/SupportCaseManagementPage"); return { Component }; } },
         { path: "follow-up", lazy: async () => { const { SupportFollowUpRoute: Component } = await import("./features/support/SupportFollowUpRoute"); return { Component }; } },

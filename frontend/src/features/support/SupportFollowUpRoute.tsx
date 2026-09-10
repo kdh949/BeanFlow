@@ -3,10 +3,12 @@ import { useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { operationsApi } from "../../api/consoleClient";
 import { unwrap } from "../../api/client";
-import { Button, ButtonLink, EmptyState, InlineNotice, LoadingState, PageHeading } from "../../design-system";
+import { Button, ButtonLink, EmptyState, LoadingState, PageHeading, Tab, TabList, TabPanel, Tabs } from "../../design-system";
 import { compactId } from "../../lib/format";
 import { ErrorState, StatusText } from "../../presentation/shared";
 import { useResource } from "../shared/useResource";
+import { SupportOrderActionWorkspace } from "./SupportOrderActionWorkspace";
+import { SupportVerificationPanel } from "./SupportVerificationPanel";
 import { SupportTimelinePanel } from "./SupportTimelinePanel";
 
 type Timeline = components["schemas"]["SupportTimelinePage"];
@@ -17,11 +19,13 @@ export function SupportFollowUpRoute() {
   const caseId = params.get("caseId")?.trim();
   return <div className="console-page support-follow-up-page">
     <PageHeading title="상담 후속 업무" action={caseId ? <ButtonLink to={`/support?caseId=${encodeURIComponent(caseId)}`} variant="secondary">상담 처리로 돌아가기</ButtonLink> : undefined} />
-    {caseId ? <CaseHistory key={caseId} caseId={caseId} /> : <EmptyState title="상담 건을 먼저 열어 주세요" description="고객지원에서 상담 건을 열고 상담 후속 업무를 선택해 주세요." action={<ButtonLink to="/support">상담 건 열기</ButtonLink>} />}
+    {caseId ? <CaseHistory key={caseId} caseId={caseId} requestId={params.get("requestId") ?? undefined} /> : <EmptyState title="상담 건을 먼저 열어 주세요" description="고객지원에서 상담 건을 열고 상담 후속 업무를 선택해 주세요." action={<ButtonLink to="/support">상담 건 열기</ButtonLink>} />}
   </div>;
 }
 
-function CaseHistory({ caseId }: { caseId: string }) {
+function CaseHistory({ caseId, requestId }: { caseId: string; requestId?: string }) {
+  const [workspace, setWorkspace] = useState(requestId ? "orders" : "history");
+  const [verification, setVerification] = useState<components["schemas"]["VerificationSessionResource"] | null>(null);
   const { state, reload } = useResource(useCallback(async () => {
     const [caseResponse, timelineResponse] = await Promise.all([
       operationsApi.GET("/support/cases/{caseId}", { params: { path: { caseId } } }),
@@ -53,9 +57,11 @@ function CaseHistory({ caseId }: { caseId: string }) {
       <div><span className="context-label">담당자</span><strong>{compactId(supportCase.assigneeId)}</strong></div>
       <StatusText state={supportCase.state} />
     </section>
-    <InlineNotice tone="info" title="관련 이력을 확인할 수 있습니다" description="주문 처리·해결 현황·정보 변경·긴급 열람의 후속 업무 화면은 준비 중입니다. 상담 상태 변경과 본인 확인·보상 처리는 상담 처리 화면에서 이어갈 수 있습니다." />
+    <Tabs value={workspace} onValueChange={setWorkspace}><TabList label="상담 후속 업무 선택"><Tab value="history">상담 이력</Tab><Tab value="orders">주문 변경</Tab></TabList>
+    <TabPanel value="history"><ButtonLink variant="secondary" to={`/support/cases/${caseId}`}>상담 상태·담당자·기록 관리</ButtonLink>
     <SupportTimelinePanel timeline={timeline} />
     {moreError ? <ErrorState error={moreError} retry={() => void loadMore()} /> : null}
     {timeline?.nextCursor ? <Button variant="secondary" loading={loadingMore} onClick={() => void loadMore()}>이력 더 보기</Button> : null}
+    </TabPanel><TabPanel value="orders"><div className="management-workspace"><SupportVerificationPanel initialActionScope="SUPPORT_ACTION" caseId={caseId} links={supportCase.subjectLinks} disabled={["RESOLVED", "CLOSED"].includes(supportCase.state)} onChange={setVerification} /><SupportOrderActionWorkspace supportCase={supportCase} verification={verification} initialRequestId={requestId} /></div></TabPanel></Tabs>
   </>;
 }

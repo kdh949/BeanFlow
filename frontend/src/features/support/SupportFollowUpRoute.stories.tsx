@@ -57,3 +57,4 @@ export const EmptyTimeline: Story = {
   parameters: { msw: { handlers: [caseHandler, http.get("/api/v1/support/cases/:caseId/timeline", () => HttpResponse.json({ items: [], nextCursor: null }))] } },
   play: async ({ canvas }) => { await expect(await canvas.findByText("표시할 이력이 없습니다")).toBeVisible(); },
 };
+export const OrderWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "주문 변경" })); await expect(await canvas.findByLabelText("기존 주문 변경 요청 ID")).toBeVisible(); await expect(canvas.getByText("업무 처리 목적의 본인확인이 필요합니다")).toBeVisible(); } };

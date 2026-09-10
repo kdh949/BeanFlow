@@ -13,3 +13,5 @@ type Story = StoryObj<typeof meta>;
 export const MenuAndPricing: Story = { play: async ({ canvas }) => { await expect(canvas.getByText("현재 메뉴 카탈로그")).toBeVisible(); await expect(canvas.getByRole("link", { name: "정산 내역" })).toHaveAttribute("href", "/store/settlements"); } };
 export const HoursAndPickup: Story = { args: { initialWorkspace: "hours" }, play: async ({ canvas }) => { await expect(await canvas.findByRole("button", { name: "새 픽업 시간" })).toBeVisible(); } };
 export const KeyboardWorkspaceChange: Story = { play: async ({ canvas }) => { canvas.getByRole("tab", { name: "영업시간과 픽업" }).focus(); await userEvent.keyboard("{Enter}"); await expect(await canvas.findByRole("button", { name: "새 픽업 시간" })).toBeVisible(); } };
+
+export const SupportOrderConsent: Story = { args: { initialWorkspace: "support" }, play: async ({ canvas }) => { await expect(await canvas.findByLabelText("상담 주문 변경 요청 ID")).toBeVisible(); } };

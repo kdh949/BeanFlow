@@ -5194,10 +5194,167 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/cases/{caseId}/orders/{orderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 상담에 연결된 주문의 현재 상태와 버전입니다
+         * @description 담당 상담 건의 활성 주문 연결과 SUPPORT_CASE_READ, SUPPORT_ORDER_READ를 확인하고 소유 시스템에서 현재 주문 상태와 버전을 조회합니다.
+         */
+        get: operations["getSupportOrderContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/action-requests/{requestId}/workflow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다
+         * @description 기존 요청 조회 권한으로 현재 승인안과 실행 담당 권한을 재검증합니다. 개인정보나 action 원문은 반환하지 않습니다.
+         */
+        get: operations["getSupportOrderWorkflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/support-order-change-requests/{requestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 소속 매장의 수락된 주문에 대한 건별 동의 대상입니다
+         * @description 활성 점주 또는 직원이 소속 매장의 ACCEPTED 주문에 대한 유효 승인안만 조회합니다. 동의 생성이나 사용 횟수 소비는 없습니다.
+         */
+        get: operations["getStoreSupportOrderChangeRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description 상담에 연결된 주문의 현재 상태와 버전입니다. 개인정보는 포함하지 않습니다.
+         * @example {
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "storeId": "f33f27d6-8e6c-5712-8567-154b01cbb087",
+         *       "state": "PAID",
+         *       "version": 2
+         *     }
+         */
+        SupportOrderContextResource: {
+            orderId: components["schemas"]["Identifier"];
+            storeId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            state: "PENDING_PAYMENT" | "PAID" | "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED" | "EXPIRED" | "CANCELLED";
+            /** Format: int64 */
+            version: number;
+        };
+        /**
+         * @description 현재 권한과 상태에서 사용할 수 있는 상담 주문 명령입니다. 실행 시 다시 검증합니다.
+         * @example EXECUTE
+         * @enum {string}
+         */
+        SupportOrderWorkflowAction: "REVISE" | "DECIDE_SUPPORT_MANAGER" | "REASSIGN" | "EXECUTE";
+        /**
+         * @description 소속 매장의 수락된 주문에 대한 건별 동의 대상입니다. 상담원과 본인확인 식별자 및 증거를 제외합니다.
+         * @example {
+         *       "requestId": "47fb7c92-195e-51a5-929c-6a6b891f764b",
+         *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *       "action": "ORDER_CANCELLATION",
+         *       "revisionNumber": 1,
+         *       "requestVersion": 2,
+         *       "targetVersion": 3,
+         *       "actionPayloadDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+         *       "expiresAt": "2026-09-11T09:15:00Z",
+         *       "policyVersion": "support-order-change-policy/2026-08-12/v1"
+         *     }
+         */
+        StoreSupportOrderChangeRequestResource: {
+            requestId: components["schemas"]["Identifier"];
+            orderId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            action: "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE";
+            revisionNumber: number;
+            /** Format: int64 */
+            requestVersion: number;
+            /** Format: int64 */
+            targetVersion: number;
+            actionPayloadDigest: string;
+            expiresAt: components["schemas"]["DateTime"];
+            policyVersion: components["schemas"]["SupportOrderChangePolicyVersion"];
+        };
+        /**
+         * @description 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다.
+         * @example {
+         *       "request": {
+         *         "requestId": "47fb7c92-195e-51a5-929c-6a6b891f764b",
+         *         "caseId": "f33f27d6-8e6c-5712-8567-154b01cbb087",
+         *         "action": "ORDER_CANCELLATION",
+         *         "targetId": "74131bb9-688f-5370-8042-21015b3cd43a",
+         *         "requesterActorId": "ada402dd-641a-56cd-813b-6cdb4e480aba",
+         *         "executorActorId": "da65f7ad-15b2-5ed0-a6b8-c6d24b0340b1",
+         *         "revisionNumber": 2,
+         *         "state": "READY_FOR_EXECUTION",
+         *         "approvalRoute": "SUPPORT_MANAGER",
+         *         "actionPayloadDigest": "b4e2d0c8a6f4b2d1e9c7a5f3d1b0e8c6a4f2d0b8e6c4a2f1d9b7e5c3a1f0d8b6",
+         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *         "policyVersion": "support-action-policy/2026-08-12/v1",
+         *         "targetVersion": 7,
+         *         "amountKrw": 9000,
+         *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3",
+         *         "expiresAt": "2026-08-15T15:30:00+09:00",
+         *         "requestVersion": 4,
+         *         "approvalSteps": [
+         *           {
+         *             "stepType": "SUPPORT_MANAGER",
+         *             "state": "APPROVED",
+         *             "decidedByActorId": "2aea279d-0121-5ff0-a3c5-981e7074bfbd",
+         *             "decidedAt": "2026-08-15T15:10:00+09:00"
+         *           }
+         *         ],
+         *         "terminalExecutionId": null,
+         *         "terminalResolutionId": null
+         *       },
+         *       "order": null,
+         *       "caseVersion": 2,
+         *       "allowedActions": [
+         *         "EXECUTE"
+         *       ]
+         *     }
+         */
+        SupportOrderWorkflowResource: {
+            request: components["schemas"]["SupportActionRequestResource"];
+            /** Format: int64 */
+            caseVersion: number;
+            allowedActions: components["schemas"]["SupportOrderWorkflowAction"][];
+            order: components["schemas"]["SupportOrderContextResource"] | null;
+        };
         /**
          * @description 스토어가 주문을 다음 처리 단계로 변경하는 요청입니다. 목표 상태와 선택 사유를 보내며, 이미 수락한 주문을 다시 거절할 수는 없습니다.
          * @example {
@@ -17205,6 +17362,8 @@ export interface operations {
                  * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description `BEANFLOW_MERCHANT_XSRF` 쿠키 값을 복사해 보내는 요청 위조 방지 토큰입니다. */
+                "X-BEANFLOW-CSRF": components["parameters"]["MerchantCsrfToken"];
             };
             path: {
                 storeId: components["parameters"]["StoreId"];
@@ -19946,6 +20105,95 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManualRecoveryAcceptance"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportOrderContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+                orderId: components["parameters"]["OrderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 상담에 연결된 주문의 현재 상태와 버전입니다. 개인정보는 포함하지 않습니다. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportOrderContextResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportOrderWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportOrderWorkflowResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getStoreSupportOrderChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 소속 매장의 수락된 주문에 대한 건별 동의 대상입니다. 상담원과 본인확인 식별자 및 증거를 제외합니다. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreSupportOrderChangeRequestResource"];
                 };
             };
             400: components["responses"]["BadRequest"];

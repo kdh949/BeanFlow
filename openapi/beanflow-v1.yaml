@@ -6893,6 +6893,7 @@ paths:
     post:
       tags:
         - Support
+      security: [{ merchantSession: [] }]
       operationId: createSupportOrderChangeAuthorization
       summary: (스토어) 고객센터 주문 변경 승인·권한 부여
       description: |
@@ -6909,6 +6910,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/StoreId'
         - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/MerchantCsrfToken'
       requestBody:
         required: true
         content:
@@ -8645,6 +8647,102 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RetryPublicationRequest'
+  /support/cases/{caseId}/orders/{orderId}:
+    get:
+      tags:
+      - Support
+      operationId: getSupportOrderContext
+      summary: 상담에 연결된 주문의 현재 상태와 버전입니다
+      description: 담당 상담 건의 활성 주문 연결과 SUPPORT_CASE_READ, SUPPORT_ORDER_READ를 확인하고 소유 시스템에서 현재 주문 상태와 버전을 조회합니다.
+      parameters:
+      - $ref: '#/components/parameters/SupportCaseId'
+      - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: 상담에 연결된 주문의 현재 상태와 버전입니다. 개인정보는 포함하지 않습니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportOrderContextResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /support/action-requests/{requestId}/workflow:
+    get:
+      tags:
+      - Support
+      operationId: getSupportOrderWorkflow
+      summary: 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다
+      description: 기존 요청 조회 권한으로 현재 승인안과 실행 담당 권한을 재검증합니다. 개인정보나 action 원문은 반환하지 않습니다.
+      parameters:
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      responses:
+        '200':
+          description: 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportOrderWorkflowResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /stores/{storeId}/support-order-change-requests/{requestId}:
+    get:
+      tags:
+      - Support
+      security: [{ merchantSession: [] }]
+      operationId: getStoreSupportOrderChangeRequest
+      summary: 소속 매장의 수락된 주문에 대한 건별 동의 대상입니다
+      description: 활성 점주 또는 직원이 소속 매장의 ACCEPTED 주문에 대한 유효 승인안만 조회합니다. 동의 생성이나 사용 횟수 소비는 없습니다.
+      parameters:
+      - $ref: '#/components/parameters/StoreId'
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      responses:
+        '200':
+          description: 소속 매장의 수락된 주문에 대한 건별 동의 대상입니다. 상담원과 본인확인 식별자 및 증거를 제외합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreSupportOrderChangeRequestResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 components:
   securitySchemes:
     bearerAuth:
@@ -9182,6 +9280,156 @@ components:
         type: string
         const: no-store
   schemas:
+    SupportOrderContextResource:
+      type: object
+      additionalProperties: false
+      description: 상담에 연결된 주문의 현재 상태와 버전입니다. 개인정보는 포함하지 않습니다.
+      required:
+      - orderId
+      - storeId
+      - state
+      - version
+      properties:
+        orderId:
+          $ref: '#/components/schemas/Identifier'
+        storeId:
+          $ref: '#/components/schemas/Identifier'
+        state:
+          type: string
+          enum:
+          - PENDING_PAYMENT
+          - PAID
+          - ACCEPTED
+          - PREPARING
+          - READY
+          - COMPLETED
+          - REJECTED
+          - EXPIRED
+          - CANCELLED
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+      example:
+        orderId: 74131bb9-688f-5370-8042-21015b3cd43a
+        storeId: f33f27d6-8e6c-5712-8567-154b01cbb087
+        state: PAID
+        version: 2
+    SupportOrderWorkflowAction:
+      type: string
+      description: 현재 권한과 상태에서 사용할 수 있는 상담 주문 명령입니다. 실행 시 다시 검증합니다.
+      enum:
+      - REVISE
+      - DECIDE_SUPPORT_MANAGER
+      - REASSIGN
+      - EXECUTE
+      example: EXECUTE
+    StoreSupportOrderChangeRequestResource:
+      type: object
+      additionalProperties: false
+      description: 소속 매장의 수락된 주문에 대한 건별 동의 대상입니다. 상담원과 본인확인 식별자 및 증거를 제외합니다.
+      required:
+      - requestId
+      - orderId
+      - action
+      - revisionNumber
+      - requestVersion
+      - targetVersion
+      - actionPayloadDigest
+      - expiresAt
+      - policyVersion
+      properties:
+        requestId:
+          $ref: '#/components/schemas/Identifier'
+        orderId:
+          $ref: '#/components/schemas/Identifier'
+        action:
+          type: string
+          enum:
+          - ORDER_CANCELLATION
+          - PICKUP_RESCHEDULE
+        revisionNumber:
+          type: integer
+          minimum: 1
+        requestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        targetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        actionPayloadDigest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        expiresAt:
+          $ref: '#/components/schemas/DateTime'
+        policyVersion:
+          $ref: '#/components/schemas/SupportOrderChangePolicyVersion'
+      example:
+        requestId: 47fb7c92-195e-51a5-929c-6a6b891f764b
+        orderId: 74131bb9-688f-5370-8042-21015b3cd43a
+        action: ORDER_CANCELLATION
+        revisionNumber: 1
+        requestVersion: 2
+        targetVersion: 3
+        actionPayloadDigest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        expiresAt: '2026-09-11T09:15:00Z'
+        policyVersion: support-order-change-policy/2026-08-12/v1
+    SupportOrderWorkflowResource:
+      type: object
+      additionalProperties: false
+      description: 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다.
+      required:
+      - request
+      - caseVersion
+      - order
+      - allowedActions
+      properties:
+        request:
+          $ref: '#/components/schemas/SupportActionRequestResource'
+        caseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        allowedActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportOrderWorkflowAction'
+        order:
+          oneOf:
+          - $ref: '#/components/schemas/SupportOrderContextResource'
+          - type: 'null'
+      example:
+        request:
+          requestId: 47fb7c92-195e-51a5-929c-6a6b891f764b
+          caseId: f33f27d6-8e6c-5712-8567-154b01cbb087
+          action: ORDER_CANCELLATION
+          targetId: 74131bb9-688f-5370-8042-21015b3cd43a
+          requesterActorId: ada402dd-641a-56cd-813b-6cdb4e480aba
+          executorActorId: da65f7ad-15b2-5ed0-a6b8-c6d24b0340b1
+          revisionNumber: 2
+          state: READY_FOR_EXECUTION
+          approvalRoute: SUPPORT_MANAGER
+          actionPayloadDigest: b4e2d0c8a6f4b2d1e9c7a5f3d1b0e8c6a4f2d0b8e6c4a2f1d9b7e5c3a1f0d8b6
+          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
+          policyVersion: support-action-policy/2026-08-12/v1
+          targetVersion: 7
+          amountKrw: 9000
+          evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
+          expiresAt: '2026-08-15T15:30:00+09:00'
+          requestVersion: 4
+          approvalSteps:
+          - stepType: SUPPORT_MANAGER
+            state: APPROVED
+            decidedByActorId: 2aea279d-0121-5ff0-a3c5-981e7074bfbd
+            decidedAt: '2026-08-15T15:10:00+09:00'
+          terminalExecutionId: null
+          terminalResolutionId: null
+        order: null
+        caseVersion: 2
+        allowedActions:
+        - EXECUTE
     ManualRecoveryCaseView:
       type: object
       additionalProperties: false
