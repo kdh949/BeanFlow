@@ -97,6 +97,11 @@ V33 → V34의 `merchant_store_discovery_profile` 커버리지 gate 선례를 �
 `STORE_STAFF`는 지역을 바꿀 수 없다. 매장 식별 정보 변경은 소유자 권한이다.
 모든 명령은 AuditRecord를 남긴다.
 
+현재 소속을 확인한 뒤 지정·해제할 수 있도록 운영자는 `GET /operations/stores/{storeId}/brand`로
+매장 ID와 현재 브랜드 ID·이름을 조회한다. 기존 `STORE_BRAND_MANAGE` 활성 grant를 요구하며,
+브랜드 미지정은 null, 없는 매장은 404로 구분한다. 조회는 단일 DTO projection이며 검색 색인·감사
+기록·멱등성 원장을 변경하지 않는다. 조회를 이유로 점주의 브랜드 변경 권한을 확대하지 않는다.
+
 ### 5. 검색 색인 갱신 인터페이스는 `shared/api`에 둔다
 
 `merchant`의 브랜드·지역 커맨드는 색인을 갱신해야 하고, `discovery`의 검색은 매장 상태를

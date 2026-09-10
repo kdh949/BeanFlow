@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.merchant.internal
 
 import io.github.kdh949.beanflow.merchant.api.BrandStatus
+import io.github.kdh949.beanflow.merchant.api.StoreBrandAssignment
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Propagation
@@ -144,6 +145,23 @@ internal class BrandRepository(
             brandId,
             limit,
         )
+
+    fun findAssignment(storeId: UUID): StoreBrandAssignment? =
+        jdbc
+            .query(
+                "SELECT s.id, s.brand_id, b.name FROM merchant_store s LEFT JOIN merchant_brand b ON b.id = s.brand_id WHERE s.id = ?",
+                {
+                    row,
+                    _,
+                    ->
+                    StoreBrandAssignment(
+                        row.getObject("id", UUID::class.java),
+                        row.getObject("brand_id", UUID::class.java),
+                        row.getString("name"),
+                    )
+                },
+                storeId,
+            ).firstOrNull()
 
     /** Locks the store row and returns its current brand, or null when the store does not exist. */
     fun findStoreBrandLocked(storeId: UUID): StoreBrandRow? =

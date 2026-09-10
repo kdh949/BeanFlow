@@ -41,6 +41,7 @@ export function ConsoleFrame({ kind, access, actorLabel, ownsAnyStore = false, m
     { to: "/ops", label: "운영 홈", icon: BarChart3, end: true },
     { to: "/ops/orders", label: "주문 보상 조회", icon: Search, end: false },
     { to: "/ops/merchant-accounts", label: "점주 계정", icon: UserRound, end: false },
+    { to: "/ops/stores", label: "매장 관리", icon: Store, end: false },
     { to: "/ops/recovery", label: "문제 확인 및 복구", icon: LifeBuoy, end: false },
     { to: "/ops/control", label: "운영 업무", icon: CircleDotDashed, end: false },
     { to: "/ops/policies", label: "정책 관리", icon: Settings2, end: false },

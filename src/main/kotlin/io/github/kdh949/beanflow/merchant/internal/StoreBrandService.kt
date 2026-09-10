@@ -158,6 +158,9 @@ internal class StoreBrandService(
         }
 
     @Transactional(readOnly = true)
+    override fun findAssignment(storeId: UUID): StoreBrandAssignment? = repository.findAssignment(storeId)
+
+    @Transactional(readOnly = true)
     override fun find(brandId: UUID): BrandSnapshot? =
         repository.find(brandId)?.let { brand ->
             brand.toSnapshot(repository.countAssignedStores(brandId), brand.version)

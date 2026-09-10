@@ -85,6 +85,11 @@ internal class OperatorBrandControllerTest
 
             val storeId = insertStore()
             mockMvc
+                .perform(get("$BASE/stores/$storeId/brand").with(operatorJwt()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.storeId").value(storeId))
+                .andExpect(jsonPath("$.brandId").doesNotExist())
+            mockMvc
                 .perform(
                     put("$BASE/stores/$storeId/brand")
                         .with(operatorJwt())
@@ -105,6 +110,10 @@ internal class OperatorBrandControllerTest
                 .andExpect(jsonPath("$.name").value("스타벅스코리아"))
                 .andExpect(jsonPath("$.assignedStoreCount").value(1))
             assertThat(brandTerms(UUID.fromString(storeId))).containsExactly("스타벅스코리아")
+            mockMvc
+                .perform(get("$BASE/stores/$storeId/brand").with(operatorJwt()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.brandName").value("스타벅스코리아"))
 
             mockMvc
                 .perform(
@@ -124,6 +133,18 @@ internal class OperatorBrandControllerTest
                 "STORE_BRAND_ASSIGNED",
                 "STORE_BRAND_CLEARED",
             )
+        }
+
+        @Test
+        fun `assignment reads require operator role and grant and distinguish missing stores`() {
+            val storeId = insertStore()
+            mockMvc.perform(get("$BASE/stores/$storeId/brand")).andExpect(status().isUnauthorized)
+            mockMvc.perform(get("$BASE/stores/$storeId/brand").with(storeOwnerJwt())).andExpect(status().isForbidden)
+            mockMvc.perform(get("$BASE/stores/${UUID.randomUUID()}/brand").with(operatorJwt())).andExpect(status().isNotFound)
+            jdbcTemplate.update("DELETE FROM operations_operator_permission_grant")
+            mockMvc.perform(get("$BASE/stores/$storeId/brand").with(operatorJwt())).andExpect(status().isForbidden)
+            assertThat(auditActions()).isEmpty()
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM merchant_brand_command", Long::class.java)).isZero()
         }
 
         @Test

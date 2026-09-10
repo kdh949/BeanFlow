@@ -2320,7 +2320,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * (운영팀) 매장 현재 브랜드 조회
+         * @description 활성 STORE_BRAND_MANAGE 권한이 필요합니다. 미지정은 null, 없는 매장은 404이며 조회는 감사·검색 색인·명령 원장을 변경하지 않습니다.
+         */
+        get: operations["getStoreBrand"];
         /**
          * (운영팀) 매장 브랜드 지정
          * @description 운영팀이 매장을 브랜드에 소속시키는 API입니다.
@@ -8261,19 +8265,6 @@ export interface components {
             complete: boolean;
         };
         /**
-         * @description 플랫폼 운영자가 매장에 브랜드를 지정하는 요청입니다. 대상 브랜드와 감사 기록에 남길 운영 사유를 포함합니다.
-         * @example {
-         *       "brandId": "15199b3a-1294-5fd2-a127-761b899b74b8",
-         *       "reason": "신규 가맹 계약에 따라 브랜드를 지정함"
-         *     }
-         */
-        AssignStoreBrandRequest: {
-            /** @description 해당 브랜드 자원을 가리키는 UUID 식별자입니다. */
-            brandId: components["schemas"]["Identifier"];
-            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
-            reason: components["schemas"]["OperationReason"];
-        };
-        /**
          * @description 매장에 현재 연결된 브랜드 정보입니다. 연결된 브랜드가 없으면 브랜드 정보는 `null`입니다.
          * @example {
          *       "storeId": "5273704d-f924-59e0-8883-827535fb86ad",
@@ -8287,6 +8278,19 @@ export interface components {
             /** @description 해당 브랜드 자원을 가리키는 UUID 식별자입니다. */
             brandId: components["schemas"]["Identifier"] | null;
             brandName: string | null;
+        };
+        /**
+         * @description 플랫폼 운영자가 매장에 브랜드를 지정하는 요청입니다. 대상 브랜드와 감사 기록에 남길 운영 사유를 포함합니다.
+         * @example {
+         *       "brandId": "15199b3a-1294-5fd2-a127-761b899b74b8",
+         *       "reason": "신규 가맹 계약에 따라 브랜드를 지정함"
+         *     }
+         */
+        AssignStoreBrandRequest: {
+            /** @description 해당 브랜드 자원을 가리키는 UUID 식별자입니다. */
+            brandId: components["schemas"]["Identifier"];
+            /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
+            reason: components["schemas"]["OperationReason"];
         };
         /**
          * @description 매장의 브랜드 지정을 해제하는 운영자 요청입니다. 감사 기록에 남길 사유를 포함합니다.
@@ -15545,6 +15549,33 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["SearchIndexRebuildConflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getStoreBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 매장 현재 브랜드 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreBrand"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

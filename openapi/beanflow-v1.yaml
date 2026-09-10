@@ -3127,6 +3127,30 @@ paths:
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
   /operations/stores/{storeId}/brand:
+    get:
+      tags: [Operations]
+      operationId: getStoreBrand
+      summary: (운영팀) 매장 현재 브랜드 조회
+      description: 활성 STORE_BRAND_MANAGE 권한이 필요합니다. 미지정은 null, 없는 매장은 404이며 조회는 감사·검색 색인·명령 원장을 변경하지 않습니다.
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+      responses:
+        '200':
+          description: 매장 현재 브랜드
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreBrand'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
     put:
       tags:
         - Operations

@@ -143,7 +143,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] C5: 쿠폰 진입을 실제 이벤트로 통합하고 기존 주소 redirect, 점주/운영/상담 route lazy loading 구현. 전체 Storybook MCP 338개 Passed, 단위 221개 및 boundary/copy 21개 Passed. typecheck/check:design/build/build-storybook/docs smoke(70 docs/47 states)/sites(4개) Passed. Storybook docs 브라우저 검사는 sandbox 실행 제한 후 권한을 받아 재실행했다. 고객 PR 생성은 아래 이력에 기록한다.
 - [x] S1: 점주 공개 주소/길찾기/7일 운영시간 및 점주·직원 픽업 목록/상세/생성/수정 구현. 기존 준비 중/예시 수치 탭을 실제 관리·정산 진입으로 교체. 관련 Storybook 13개(공통 시간 필드/기존 카탈로그 포함) Passed, 단위 223개 및 boundary/copy 21개, typecheck/check:design Passed. 390px 브라우저에서 필드 넘침 없음 확인.
 - [x] S2: 메뉴 카테고리/설명 편집과 매장·메뉴 이미지 조회/업로드/삭제/만료 갱신 구현. 현재 이미지 조회를 권한 있는 기존 authoring 경로에 추가했다. PostgreSQL 이미지 endpoint/Runtime parity 11개, 전체 Storybook MCP 353개, 단위 223개 및 boundary/copy 21개 Passed. typecheck/check:design/build/build-storybook/docs smoke(73 docs/47 states)/sites(4개), 문서 검증(18개) Passed. 이미지 관리 화면 렌더링 확인. 점주 PR 생성은 아래 이력에 기록한다.
-- [ ] O1–O3 운영 매장/정책 구현·검증·커밋·PR.
+- [x] O1: 운영 매장 목록/이전·다음 커서/생성/현재 식별정보 수정/등록 지역 선택 및 브랜드 조회·지정·해제 구현. 브랜드 현재 소속 GET은 기존 grant와 단일 projection을 재사용했다. 관련 Storybook 17개, backend 29개, frontend 단위 223개와 boundary/copy 21개, typecheck/check:design/docs Passed. 390px 브라우저의 필드/목록 넘침 없음 확인. 전체 빌드/Storybook은 O2–O3 후 PR 검증에서 실행한다.
+- [ ] O2–O3 정산 조건·소속·포인트 정책 구현 및 운영 PR 검증·생성.
 - [ ] R1–R3 이의/복구 구현·검증·커밋·PR.
 - [ ] H1–H2 상담 관리 구현·검증·커밋·PR.
 - [ ] H3–H4 상담 후속 처리 구현·검증·커밋·PR.
@@ -151,6 +152,7 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 
 - 고객 PR: https://github.com/kdh949/BeanFlow/pull/160 (`feature/frontend-customer-consistency`, head `d777992`, base `main`). 후속 점주 branch: `feature/frontend-store-management`.
 - 고객 PR #160의 preflight/frontend/backend-build/6개 backend test shard/CodeQL 및 집계 build 원격 CI가 모두 통과했다.
+- 점주 PR: https://github.com/kdh949/BeanFlow/pull/161 (`feature/frontend-store-management`, head `753d28a`, base `feature/frontend-customer-consistency`). 운영 branch: `feature/frontend-operations-management`.
 
 ## Surprises & Discoveries
 

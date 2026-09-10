@@ -98,6 +98,7 @@ export const router = createBrowserRouter([
           { index: true, lazy: async () => { const { OpsDashboardPage: Component } = await import("./pages/console/ConsolePages"); return { Component }; } },
           { path: "orders", lazy: async () => { const { OpsOrderPage: Component } = await import("./pages/console/ConsolePages"); return { Component }; } },
           { path: "merchant-accounts", lazy: async () => { const { MerchantAccountsPage: Component } = await import("./features/operations/MerchantAccountsPage"); return { Component }; } },
+          { path: "stores", lazy: async () => { const { OperationsStoresPage: Component } = await import("./features/operations/OperationsStoresPage"); return { Component }; } },
           { path: "recovery", lazy: async () => { const { OperationsRecoveryPage: Component } = await import("./features/operations/OperationsRecoveryPage"); return { Component }; } },
           { path: "control", lazy: async () => { const { OperationsControlPage: Component } = await import("./features/operations/OperationsControlPage"); return { Component }; } },
           { path: "policies", lazy: async () => { const { OperationsPolicyPage: Component } = await import("./features/operations/OperationsPolicyPage"); return { Component }; } },
