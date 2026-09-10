@@ -270,8 +270,13 @@ function RestorationPolicyWorkspace() {
 }
 
 function BrandWorkspace() {
+  const [cursors, setCursors] = useState<Array<string | undefined>>([undefined]);
+  const cursor = cursors.at(-1);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const readGeneration = useRef(0);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [selected, setSelected] = useState<Brand | null>(null);
+  const [notice, setNotice] = useState("");
   const [newName, setNewName] = useState("");
   const [createReason, setCreateReason] = useState("");
   const [editName, setEditName] = useState("");
@@ -285,22 +290,26 @@ function BrandWorkspace() {
   const createIntent = useRef(new SubmissionIntent());
   const editIntent = useRef(new SubmissionIntent());
 
-  async function load() {
+  async function load(pageCursor = cursor) {
+    const generation = ++readGeneration.current;
+    setBrands([]); setSelected(null); setNextCursor(null);
     setLoading(true);
     setError(null);
     try {
-      const page = unwrap(await operationsApi.GET("/operations/brands", { params: { query: { limit: 100 } } }));
-      setBrands(page.items);
+      const page = unwrap(await operationsApi.GET("/operations/brands", { params: { query: { limit: 20, cursor: pageCursor } } }));
+      if (generation !== readGeneration.current) return;
+      setBrands(page.items); setNextCursor(page.page.nextCursor);
     } catch (nextError) {
-      setError(nextError);
-      setBrands([]);
+      if (generation === readGeneration.current) { setError(nextError); setBrands([]); }
     } finally {
-      setLoading(false);
+      if (generation === readGeneration.current) setLoading(false);
     }
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(cursor); return () => { ++readGeneration.current; }; }, [cursor]);
 
   async function create() {
+    if (creating || saving) return;
+    setNotice("");
     const body = { name: newName.trim(), reason: createReason.trim() };
     const fingerprint = JSON.stringify(body);
     setCreating(true);
@@ -310,7 +319,8 @@ function BrandWorkspace() {
         params: { header: { "Idempotency-Key": createIntent.current.keyFor(fingerprint) } },
         body,
       }));
-      setBrands((current) => [...current.filter((item) => item.brandId !== created.brandId), created]);
+      setNotice(`브랜드를 등록했습니다: ${created.name}`);
+      if (cursor) setCursors([undefined]); else await load(undefined);
       setNewName("");
       setCreateReason("");
       createIntent.current.complete();
@@ -332,7 +342,8 @@ function BrandWorkspace() {
   }
 
   async function save() {
-    if (!selected) return;
+    if (!selected || saving || creating) return;
+    setNotice("");
     const body = { name: editName.trim(), status: editStatus, expectedVersion: selected.version, reason: editReason.trim() };
     const fingerprint = JSON.stringify({ brandId: selected.brandId, ...body });
     setSaving(true);
@@ -342,8 +353,8 @@ function BrandWorkspace() {
         params: { path: { brandId: selected.brandId }, header: { "Idempotency-Key": editIntent.current.keyFor(fingerprint) } },
         body,
       }));
-      setBrands((current) => current.map((item) => item.brandId === next.brandId ? next : item));
-      setSelected(next);
+      setNotice(`브랜드를 변경했습니다: ${next.name}`);
+      if (cursor) setCursors([undefined]); else await load(undefined);
       setEditReason("");
       editIntent.current.complete();
     } catch (nextError) {
@@ -356,12 +367,13 @@ function BrandWorkspace() {
 
   return (
     <section className="policy-workspace" aria-labelledby="brand-title">
-      <div className="surface-card policy-intro-card"><div><span className="context-label">브랜드 목록</span><h2 id="brand-title">브랜드 관리</h2><p>같은 이름이 있거나 매장에 연결된 브랜드는 변경할 수 없습니다.</p></div><Button variant="secondary" onClick={() => void load()}><RefreshCw size={16} /> 목록 새로고침</Button></div>
+      <div className="surface-card policy-intro-card"><div><span className="context-label">브랜드 목록</span><h2 id="brand-title">브랜드 관리</h2><p>활성 브랜드 이름은 중복될 수 없습니다. 소속 매장이 있는 브랜드는 이름을 바꿀 수 있지만 보관할 수 없습니다.</p></div><Button variant="secondary" disabled={creating || saving || loading} onClick={() => void load()}><RefreshCw size={16} /> 목록 새로고침</Button></div>
       <form className="surface-card inline-policy-form" onSubmit={(event) => { event.preventDefault(); void create(); }}>
         <TextField label="새 브랜드 이름" value={newName} maxLength={120} onValueChange={(value) => { setNewName(value); createIntent.current.rotate(); }} required />
-        <TextField label="브랜드 등록 사유" value={createReason} maxLength={500} onValueChange={(value) => { setCreateReason(value); createIntent.current.rotate(); }} required />
+        <TextField label="브랜드 등록 사유" value={createReason} maxLength={200} onValueChange={(value) => { setCreateReason(value); createIntent.current.rotate(); }} required />
         <Button type="submit" loading={creating} disabled={!newName.trim() || !createReason.trim()}>브랜드 등록</Button>
       </form>
+      {notice ? <p role="status">{notice}</p> : null}
       {loading ? <LoadingState label="브랜드 목록을 조회하는 중" /> : null}
       {error ? <ErrorState error={error} retry={() => void load()} /> : null}
       {!loading && !error && brands.length === 0 ? <EmptyState title="등록된 브랜드가 없습니다" description="첫 브랜드를 등록하면 여기에 표시됩니다." /> : null}
@@ -372,7 +384,7 @@ function BrandWorkspace() {
               <article className={selected?.brandId === brand.brandId ? "surface-card compact-policy-card is-selected" : "surface-card compact-policy-card"} key={brand.brandId}>
                 <div><span className="context-label">브랜드</span><h3>{brand.name}</h3></div><StatusText domain="brand" state={brand.status} />
                 <p>소속 매장 {brand.assignedStoreCount}개</p><small>버전 {brand.version}</small>
-                <Button size="sm" variant="secondary" onClick={() => edit(brand)}>브랜드 편집</Button>
+                <Button size="sm" variant="secondary" disabled={saving || creating} onClick={() => edit(brand)}>브랜드 편집</Button>
               </article>
             ))}
           </section>
@@ -382,12 +394,13 @@ function BrandWorkspace() {
               <TextField label="브랜드 이름" value={editName} maxLength={120} onValueChange={setEditName} required />
               <SelectField label="운영 상태" value={editStatus} onValueChange={(value) => setEditStatus(value as Brand["status"])}><option value="ACTIVE">활성</option><option value="ARCHIVED" disabled={selected.assignedStoreCount > 0}>보관</option></SelectField>
               {selected.assignedStoreCount > 0 ? <p className="policy-caution">소속 매장이 남아 있어 보관할 수 없습니다.</p> : null}
-              <TextAreaField label="브랜드 변경 사유" value={editReason} maxLength={500} onValueChange={(value) => { setEditReason(value); setMutationFailure(null); editIntent.current.rotate(); }} required />
+              <TextAreaField label="브랜드 변경 사유" value={editReason} maxLength={200} onValueChange={(value) => { setEditReason(value); setMutationFailure(null); editIntent.current.rotate(); }} required />
               <Button type="submit" loading={saving} disabled={!editReason.trim()}>브랜드 변경 적용</Button>
             </form>
           ) : <EmptyState title="편집할 브랜드를 선택하세요" description="이름 변경과 보관은 현재 버전·소속 매장 수를 기준으로 검증됩니다." />}
         </div>
       ) : null}
+      <div className="button-row"><Button variant="ghost" disabled={loading || saving || creating || cursors.length < 2} onClick={() => setCursors(value => value.slice(0, -1))}>이전 브랜드 목록</Button><Button variant="secondary" disabled={loading || saving || creating || !nextCursor} onClick={() => { if (nextCursor) setCursors(value => [...value, nextCursor]); }}>다음 브랜드 목록</Button></div>
       {mutationFailure ? <ErrorState error={mutationFailure} /> : null}
     </section>
   );

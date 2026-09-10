@@ -145,7 +145,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] S2: 메뉴 카테고리/설명 편집과 매장·메뉴 이미지 조회/업로드/삭제/만료 갱신 구현. 현재 이미지 조회를 권한 있는 기존 authoring 경로에 추가했다. PostgreSQL 이미지 endpoint/Runtime parity 11개, 전체 Storybook MCP 353개, 단위 223개 및 boundary/copy 21개 Passed. typecheck/check:design/build/build-storybook/docs smoke(73 docs/47 states)/sites(4개), 문서 검증(18개) Passed. 이미지 관리 화면 렌더링 확인. 점주 PR 생성은 아래 이력에 기록한다.
 - [x] O1: 운영 매장 목록/이전·다음 커서/생성/현재 식별정보 수정/등록 지역 선택 및 브랜드 조회·지정·해제 구현. 브랜드 현재 소속 GET은 기존 grant와 단일 projection을 재사용했다. 관련 Storybook 17개, backend 29개, frontend 단위 223개와 boundary/copy 21개, typecheck/check:design/docs Passed. 390px 브라우저의 필드/목록 넘침 없음 확인. 전체 빌드/Storybook은 O2–O3 후 PR 검증에서 실행한다.
 - [x] O2: 선택한 매장의 불변 정산 계약 목록/상세/미래 구간 등록과 기존 계정 소속 추가/역할 변경/철회/재활성화 구현. 조회 권한과 소속 변경 권한을 구분해 계정 exact 조회 또는 확인된 기존 ID를 사용한다. 연도를 포함한 계약 날짜, RESOURCE_STATE_CONFLICT 안내를 보완했다. 관련 Storybook 16개, 기존 PostgreSQL 계약 12개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 계약 폼·오류 상태와 가로 넘침 없음 확인.
-- [ ] O3 포인트 정책 및 브랜드 페이지 이동 구현, 운영 PR 검증·생성.
+- [x] O3/F16: 브랜드 관리에 20개씩 이전/다음 커서를 연결하고 페이지 조회 실패 시 이전 결과를 제거했다. 생성·이름 변경 후 서버 정렬 목록을 다시 조회하며 결과를 별도 안내한다. 소속 매장이 있으면 이름도 바꿀 수 없다는 잘못된 설명과 사유 200자 제한을 수정했다. 관련 Storybook 4개, typecheck/check:design, 단위 224개와 boundary/copy 21개 Passed.
+- [ ] O3/M12 포인트 정책·이력 구현, 운영 PR 검증·생성.
 - [ ] R1–R3 이의/복구 구현·검증·커밋·PR.
 - [ ] H1–H2 상담 관리 구현·검증·커밋·PR.
 - [ ] H3–H4 상담 후속 처리 구현·검증·커밋·PR.

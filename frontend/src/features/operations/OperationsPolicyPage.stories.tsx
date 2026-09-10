@@ -49,6 +49,7 @@ const meta = {
   component: OperationsPolicyPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: {
         component: "기존 Button, FeedbackState, StatusText와 콘솔 카드 패턴을 조합해 포인트·만료 혜택 정책, 브랜드, 검색 색인을 관리합니다. 모든 변경은 현재 버전과 멱등성 키를 사용합니다.",
@@ -107,6 +108,16 @@ export const BrandCatalog: Story = {
     await expect(canvas.getByText("소속 매장 12개")).toBeVisible();
   },
 };
+
+export const BrandPagination: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/operations/brands", ({ request }) => new URL(request.url).searchParams.has("cursor") ? HttpResponse.json({ items: [{ ...brands.items[1], name: "다음 페이지 브랜드" }], page: { nextCursor: null } }) : HttpResponse.json({ ...brands, page: { nextCursor: "brand-next" } }))] } },
+  play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("tab", { name: "브랜드" })); await expect(await canvas.findByText("빈플로우 커피")).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "다음 브랜드 목록" })); await expect(await canvas.findByText("다음 페이지 브랜드")).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "이전 브랜드 목록" })); await expect(await canvas.findByText("빈플로우 커피")).toBeVisible(); },
+};
+export const BrandPageUnavailable: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/operations/brands", ({ request }) => new URL(request.url).searchParams.has("cursor") ? HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE", correlationId: "BRAND-PAGE-503" }, { status: 503 }) : HttpResponse.json({ ...brands, page: { nextCursor: "brand-next" } }))] } },
+  play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("tab", { name: "브랜드" })); await expect(await canvas.findByText("빈플로우 커피")).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "다음 브랜드 목록" })); await expect(await canvas.findByText("문의 코드 BRAND-PAGE-503")).toBeVisible(); await expect(canvas.queryByText("빈플로우 커피")).not.toBeInTheDocument(); },
+};
+export const CreateBrandResult: Story = { play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("tab", { name: "브랜드" })); await expect(await canvas.findByText("빈플로우 커피")).toBeVisible(); await userEvent.type(canvas.getByLabelText("새 브랜드 이름"), "빈플로우 로스터스"); await userEvent.type(canvas.getByLabelText("브랜드 등록 사유"), "브랜드 계약 확인"); await userEvent.click(canvas.getByRole("button", { name: "브랜드 등록" })); await expect(await canvas.findByText("브랜드를 등록했습니다: 빈플로우 로스터스")).toBeVisible(); } };
 
 export const SearchIndexComplete: Story = {
   parameters: { msw: { handlers: [http.post("/api/v1/operations/search-index/rebuild", () => HttpResponse.json({ indexedStoreCount: 128, skippedStoreCount: 2, failedStoreIds: [], complete: true }))] } },

@@ -98,7 +98,7 @@ describe("OperationsPolicyPage", () => {
     await userEvent.type(screen.getByLabelText("새 브랜드 이름"), "빈플로우 로스터스");
     await userEvent.type(screen.getByLabelText("브랜드 등록 사유"), "신규 브랜드 계약 승인");
     await userEvent.click(screen.getByRole("button", { name: "브랜드 등록" }));
-    expect(await screen.findByText("빈플로우 로스터스")).toBeVisible();
+    expect(await screen.findByText("브랜드를 등록했습니다: 빈플로우 로스터스")).toBeVisible();
 
     await userEvent.click(screen.getByRole("tab", { name: "검색 색인" }));
     await userEvent.type(screen.getByLabelText("재생성 사유"), "브랜드 변경 후 검색 정합성 복구");
