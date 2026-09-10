@@ -78,3 +78,20 @@ Audit에 복사하지 않으며 권한이 필요한 매장 상세에서 조회�
 계약 writer는 Store 배타 잠금으로 최종 주문 quote와 직렬화한다. 기존 주문의 수수료 snapshot은 바뀌지 않는다.
 계약이 없는 구간에는 기존 `SETTLEMENT_INPUT_UNAVAILABLE` 정책을 유지하며 기본 수수료를 채우지 않는다.
 Audit에는 revision, feeRateBps, 근거 reference digest를 기록하며 원문 근거 reference를 복사하지 않는다.
+
+## 기존 계정의 매장 소속
+
+- `STORE_MEMBERSHIP_READ`로 `GET /api/v1/operations/stores/{storeId}/memberships`와 `GET .../{accountId}`를
+  조회한다. 목록은 ACTIVE/REVOKED를 함께 보여 주며 actor/store-bound signed cursor와 limit 1~100을 사용한다.
+- 추가 대상은 기존 MerchantAccount UUID다. 계정 발급 응답 또는 별도 `MERCHANT_CREDENTIAL_MANAGE` 권한의
+  기존 계정 조회 경로에서 확인한다. 이 API는 계정을 생성하거나 password/credential 상태를 바꾸지 않는다.
+- `STORE_MEMBERSHIP_WRITE`로 `POST .../memberships`에 Idempotency-Key와 `{accountId, role, reason}`을 보낸다.
+  role은 OWNER/STAFF이며 최초 상태는 ACTIVE다. 이미 소속이 있으면 REVOKED라도 409다.
+- `PUT .../{accountId}`는 `{role, status, expectedVersion, reason}`을 받는다. ACTIVE에서 역할을 바꾸거나
+  기존 role을 유지하고 REVOKED로 철회할 수 있다. 재활성화는 ACTIVE와 원하는 role을 명시한다.
+  같은 상태/역할로 변화 없는 새 요청과 오래된 version은 409다. 마지막 OWNER를 자동 승계하지 않는다.
+- 회원권 부여는 만료/초기 비밀번호를 활성화하지 않는다. 실제 매장 접근은 기존 credential 정책을 함께 적용한다.
+- 카탈로그·픽업·이의 철회는 소속 shared lock을 보유하므로 해당 요청이 끝난 뒤 역할 변경/철회가 commit된다.
+  기존 읽기 요청은 이미 시작한 응답을 마칠 수 있으며 철회 후 새 접근은 거절된다.
+- 현재 운영 grant 확인 뒤 같은 key/payload를 replay한다. 다른 payload는 409이고 Audit 실패는 소속과 원장을
+  rollback한다. 완료 응답은 90일 후 최대 100행씩 정리하며 소속 자체를 삭제하지 않는다.

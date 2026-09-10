@@ -42,6 +42,15 @@ Store row의 배타 잠금으로 최종 주문 quote의 shared lock과 직렬화
 계약 row 수이며 초기 데이터도 포함한다. 명시적 expectedRevision으로 동시 작성 충돌을 확인한다.
 현재 구간의 강제 종료, 과거 적용과 주문 snapshot 재계산은 제공하지 않는다.
 
+### 기존 계정의 소속 관리
+
+Identity가 Operations public grant/Audit port와 Merchant Store 존재 확인 port를 호출한다. Operations에서
+Identity API로 역의존성을 추가하지 않는다. 추가는 기존 MerchantAccount의 UUID를 대상으로 하고 기존
+credential 상태를 변경하지 않는다. 비밀번호 미설정/만료 상태는 소속을 부여해도 매장 접근을 허용하지 않는다.
+기존 소속은 expectedVersion을 가진 역할 변경·철회·재활성화만 허용한다. 계정과 소속을 잠근 뒤 변경하여
+카탈로그·픽업·이의 철회의 membership shared lock과 직렬화한다. 요청 시작 시만 읽는 기존 조회 경로는
+현재 요청을 마칠 수 있지만 철회 이후 새 접근은 거절한다. 마지막 OWNER 자동 승계/계정 삭제는 제공하지 않는다.
+
 ## Alternatives Considered
 
 단순 Controller wrapper는 권한·감사 actor·부분 commit 실패를 해결하지 못한다. 독립 sibling migration은

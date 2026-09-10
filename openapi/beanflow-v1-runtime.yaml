@@ -1072,6 +1072,10 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1settlement-terms"
   /operations/stores/{storeId}/settlement-terms/{termsVersionId}:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1settlement-terms~1{termsVersionId}"
+  /operations/stores/{storeId}/memberships:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1memberships"
+  /operations/stores/{storeId}/memberships/{accountId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1memberships~1{accountId}"
 components:
   securitySchemes:
     bearerAuth:

@@ -1,0 +1,87 @@
+SET LOCAL lock_timeout = '5s';
+
+ALTER TABLE operations_operator_permission_grant DROP CONSTRAINT chk_operator_permission_vocabulary,
+ ADD CONSTRAINT chk_operator_permission_vocabulary CHECK (permission IN (
+    'EXPIRED_BENEFIT_POLICY_READ',
+    'EXPIRED_BENEFIT_POLICY_WRITE',
+    'POINT_ACCOUNT_READ',
+    'POINT_ADJUSTMENT',
+    'POINT_ACCRUAL_POLICY_READ',
+    'POINT_ACCRUAL_POLICY_WRITE',
+    'ORDER_COMPENSATION_READ',
+    'PAYMENT_CANCELLATION_SETUP_REPAIR',
+    'CUSTOMER_CANCELLATION_REFUND_RECONCILE',
+    'SUPPORT_CASE_READ',
+    'SUPPORT_CASE_WRITE',
+    'SUPPORT_CASE_ASSIGN',
+    'SUPPORT_SUBJECT_SEARCH',
+    'SUPPORT_VERIFICATION_MANAGE',
+    'SUPPORT_PII_REVEAL_REQUEST',
+    'SUPPORT_PII_REVEAL_APPROVE',
+    'SUPPORT_PII_REVEAL_BASIC',
+    'SUPPORT_PII_REVEAL_SENSITIVE',
+    'SUPPORT_BREAK_GLASS_REQUEST',
+    'SUPPORT_ACTION_REQUEST',
+    'SUPPORT_ACTION_APPROVE',
+    'SUPPORT_ACTION_EXECUTE',
+    'SUPPORT_ORDER_READ',
+    'SUPPORT_ORDER_CANCEL',
+    'SUPPORT_PICKUP_RESCHEDULE',
+    'SUPPORT_RESOLUTION_REQUEST',
+    'SUPPORT_RESOLUTION_APPROVE',
+    'SUPPORT_RESOLUTION_EXECUTE',
+    'SUPPORT_COMPENSATION_REQUEST',
+    'SUPPORT_COMPENSATION_APPROVE',
+    'SUPPORT_COMPENSATION_EXECUTE',
+    'SUPPORT_PROFILE_R1_CHANGE',
+    'SUPPORT_PROFILE_R2_CHANGE',
+    'SUPPORT_PROFILE_R3_REQUEST',
+    'SUPPORT_PROFILE_R3_APPROVE',
+    'SUPPORT_DELIVERY_READ',
+    'SUPPORT_DELIVERY_INCIDENT_WRITE',
+    'SUPPORT_DELIVERY_CHANGE',
+    'OPERATIONS_SUPPORT_INVESTIGATION',
+    'OPERATIONS_LEGAL_HOLD_MANAGE',
+    'OPERATIONS_RETENTION_MANAGE',
+    'PRIVACY_AUDIT_READ',
+    'PRIVACY_BREAK_GLASS_REVIEW',
+    'MERCHANT_CREDENTIAL_MANAGE',
+    'STORE_BRAND_MANAGE',
+    'STORE_MEDIA_MANAGE',
+    'PROMOTION_CAMPAIGN_READ',
+    'PROMOTION_CAMPAIGN_WRITE',
+    'SETTLEMENT_DISPUTE_READ',
+    'SETTLEMENT_DISPUTE_DECIDE',
+    'STORE_IDENTITY_READ',
+    'STORE_IDENTITY_WRITE',
+    'STORE_SETTLEMENT_TERMS_READ',
+    'STORE_SETTLEMENT_TERMS_WRITE',
+    'STORE_MEMBERSHIP_READ',
+    'STORE_MEMBERSHIP_WRITE'
+));
+
+INSERT INTO operations_audit_action_category (action, audit_category) VALUES
+ ('STORE_MEMBERSHIP_ADDED', 'OPERATIONS_POLICY'), ('STORE_MEMBERSHIP_REPLACED', 'OPERATIONS_POLICY');
+CREATE INDEX idx_membership_store_actor ON identity_store_membership(store_id, actor_id);
+CREATE TABLE identity_membership_command (
+ id uuid PRIMARY KEY,
+ actor_id uuid NOT NULL,
+ store_id uuid NOT NULL REFERENCES merchant_store(id),
+ operation varchar(16) NOT NULL CHECK (operation IN ('ADD', 'REPLACE')),
+ idempotency_key varchar(128) NOT NULL CHECK (length(btrim(idempotency_key)) BETWEEN 8 AND 128),
+ payload_hash varchar(64) NOT NULL CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
+ response_json text NOT NULL,
+ created_at timestamptz NOT NULL,
+ UNIQUE(actor_id, operation, idempotency_key)
+);
+CREATE INDEX idx_membership_command_retention ON identity_membership_command(created_at, id);
+CREATE FUNCTION guard_membership_identity() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.actor_id <> OLD.actor_id OR NEW.store_id <> OLD.store_id OR NEW.created_at <> OLD.created_at THEN
+  RAISE EXCEPTION 'Membership identity is immutable' USING ERRCODE = '23514';
+ END IF;
+ RETURN NEW;
+END;
+$$;
+CREATE TRIGGER membership_identity_immutable BEFORE UPDATE ON identity_store_membership
+ FOR EACH ROW EXECUTE FUNCTION guard_membership_identity();

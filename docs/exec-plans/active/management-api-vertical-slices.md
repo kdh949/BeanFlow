@@ -291,3 +291,14 @@ Provider credential 또는 개인 정보를 metric label/log에 추가하지 않
 - 동시 writer 1회 성공, Store shared lock과 등록 직렬화, Audit rollback, 현재 grant와 signed cursor,
   immutable version/과거 snapshot을 검증했다. 최초 포맷 실패를 수정한 후 최종 suite가 통과했다.
 - 전체 backend suite 및 원격 CI는 별도 gate다. 재고와 UI 구현은 포함하지 않았다.
+
+### 소속 관리 슬라이스 검증 (2026-09-10)
+
+- 선행 계약 PR #154 head `310b587`에서 Identity 소속 목록·상세·추가·역할/상태 교체와 V78을 구현했다.
+- Passed: 새 소속 관리 6, 기존 계정 발급 9, 픽업 관리 6, 이의제기 통합 15, Runtime API parity 1,
+  Modulith 1, Flyway smoke 1 = 39 tests. SpotlessCheck, bootJar, 문서 검증도 통과했다.
+- 문서 검증: target 201 paths/228 operations, runtime 191 paths/218 operations, 409 schemas.
+- 역할/철회/재활성화의 실제 권한 반영, 회원권과 credential 분리, 동시 추가 및 authoring shared lock 대기,
+  Audit rollback, 현재 운영 grant와 signed cursor를 확인했다. 테스트 정리 누락과 만료 계정 시각 fixture를
+  수정한 후 최종 전체 대상 suite가 통과했다.
+- 전체 backend suite와 원격 CI는 별도 gate이며 재고 및 UI 변경은 없다.
