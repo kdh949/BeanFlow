@@ -37,6 +37,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get as httpGet
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
@@ -82,6 +83,54 @@ internal class DataAccessGrantIntegrationTest
         @AfterEach
         fun cleanupTrigger() {
             removeAuditFailure()
+        }
+
+        @Test
+        fun `inspection restricts requester and approver without decrypting or consuming budget`() {
+            val binding = seedVerifiedBinding(requesterId, "ENHANCED")
+            val grantId = requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "grant-inspect-sensitive", "APPROVAL_PENDING")
+            mockMvc
+                .perform(httpGet("/api/v1/support/data-access-grants/$grantId").with(operatorJwt(requesterId)))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.viewerRole").value("REQUESTER"))
+                .andExpect(jsonPath("$.grant.state").value("APPROVAL_PENDING"))
+                .andExpect(jsonPath("$.grant.reservedReveals").value(0))
+                .andExpect(jsonPath("$.values").doesNotExist())
+            mockMvc
+                .perform(httpGet("/api/v1/support/data-access-grants/$grantId").with(operatorJwt(approverId)))
+                .andExpect(status().isForbidden)
+            grant(approverId, "SUPPORT_PII_REVEAL_APPROVE")
+            mockMvc
+                .perform(httpGet("/api/v1/support/data-access-grants/$grantId").with(operatorJwt(approverId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.viewerRole").value("APPROVER"))
+            jdbcTemplate.update("UPDATE support_case SET current_assignee_id = ? WHERE id = ?", approverId, binding.caseId)
+            mockMvc
+                .perform(httpGet("/api/v1/support/data-access-grants/$grantId").with(operatorJwt(requesterId)))
+                .andExpect(status().isForbidden)
+            assertThat(decryptCalls.get()).isZero()
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM support_reveal_attempt", Long::class.java)).isZero()
+        }
+
+        @Test
+        fun `inspection projects expired grant and rejects terminal case`() {
+            val binding = seedVerifiedBinding(requesterId, "BASIC")
+            val grantId = requestGrant(binding, "CUSTOMER_DISPLAY_NAME", "grant-inspect-expired", "ACTIVE")
+            jdbcTemplate.update(
+                "UPDATE support_data_access_grant SET expires_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().minusSeconds(1)),
+                grantId,
+            )
+            mockMvc
+                .perform(httpGet("/api/v1/support/data-access-grants/$grantId").with(operatorJwt(requesterId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.grant.state").value("EXPIRED"))
+            jdbcTemplate.update("UPDATE support_case SET state = 'RESOLVED' WHERE id = ?", binding.caseId)
+            mockMvc
+                .perform(httpGet("/api/v1/support/data-access-grants/$grantId").with(operatorJwt(requesterId)))
+                .andExpect(status().isConflict)
+            assertThat(decryptCalls.get()).isZero()
         }
 
         @Test

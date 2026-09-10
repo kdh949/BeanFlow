@@ -1,15 +1,14 @@
 import {
-  Eye,
-  EyeOff,
   FilePlus2,
   Link2,
   Search,
-  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { caseCategoryLabels, casePriorityLabels } from "./supportCaseLabels";
+import { SupportVerificationPanel } from "./SupportVerificationPanel";
+import { SupportDataAccessWorkspace } from "./SupportDataAccessWorkspace";
 import { SupportTimelinePanel } from "./SupportTimelinePanel";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
@@ -21,23 +20,10 @@ import { compactId, shortDateTime, won } from "../../lib/format";
 type SearchResult = components["schemas"]["SupportSubjectSearchResult"];
 type Candidate = components["schemas"]["SupportSubjectSearchCandidate"];
 type SupportCase = components["schemas"]["SupportCase"];
-type SubjectLink = components["schemas"]["SupportSubjectLink"];
 type VerificationSession = components["schemas"]["VerificationSessionResource"];
-type VerificationChallenge = components["schemas"]["VerificationChallengeResource"];
-type Grant = components["schemas"]["DataAccessGrantResource"];
-type Reveal = components["schemas"]["RevealedPersonalDataResource"];
 type Timeline = components["schemas"]["SupportTimelinePage"];
-type PersonalField = components["schemas"]["SupportPersonalDataField"];
 type CompensationEvaluation = components["schemas"]["SupportCompensationEvaluationResource"];
 type Compensation = components["schemas"]["SupportCompensationResource"];
-
-const personalFieldLabels: Record<string, string> = { CUSTOMER_PRIMARY_PHONE: "고객 등록 전화번호", STORE_SUPPORT_PHONE: "매장 상담 전화번호", COURIER_RELAY_PHONE: "배달원 안심 전화번호" };
-const fieldBySubject: Record<SubjectLink["subjectType"], PersonalField | null> = {
-  CUSTOMER: "CUSTOMER_PRIMARY_PHONE",
-  STORE: "STORE_SUPPORT_PHONE",
-  DELIVERY: "COURIER_RELAY_PHONE",
-  ORDER: null,
-};
 
 /**
  * One bounded Support workspace: exact masked search, Case binding, staged
@@ -75,36 +61,9 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
   const [creatingCase, setCreatingCase] = useState(false);
 
   const [verification, setVerification] = useState<VerificationSession | null>(null);
-  const [challenge, setChallenge] = useState<VerificationChallenge | null>(null);
-  const [proof, setProof] = useState("");
-  const [verificationBusy, setVerificationBusy] = useState(false);
-  const [verificationError, setVerificationError] = useState<unknown>(null);
-  const verificationIntent = useRef(new SubmissionIntent());
-  const challengeIntent = useRef(new SubmissionIntent());
-  const proofIntent = useRef(new SubmissionIntent());
-
-  const [grant, setGrant] = useState<Grant | null>(null);
-  const [reveal, setReveal] = useState<Reveal | null>(null);
-  const [grantBusy, setGrantBusy] = useState(false);
-  const [grantError, setGrantError] = useState<unknown>(null);
-  const grantIntent = useRef(new SubmissionIntent());
-  const approvalIntent = useRef(new SubmissionIntent());
-  const revealIntent = useRef(new SubmissionIntent());
-
-  const activeLink = supportCase?.subjectLinks.find((link) => fieldBySubject[link.subjectType] !== null) ?? null;
-  const revealField = activeLink ? fieldBySubject[activeLink.subjectType] : null;
+  const [securityGeneration, setSecurityGeneration] = useState(0);
   const terminal = supportCase?.state === "RESOLVED" || supportCase?.state === "CLOSED";
-
-  useEffect(() => {
-    if (!reveal) return;
-    const timeout = window.setTimeout(() => setReveal(null), 60_000);
-    return () => window.clearTimeout(timeout);
-  }, [reveal]);
-
-  function clearSensitiveState() {
-    setProof("");
-    setReveal(null);
-  }
+  function clearSensitiveState() { setVerification(null); setSecurityGeneration(value => value + 1); }
 
   async function searchSubjects() {
     const body = {
@@ -135,8 +94,6 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
     setSupportCase(null);
     setTimeline(null);
     setVerification(null);
-    setChallenge(null);
-    setGrant(null);
     clearSensitiveState();
     try {
       const [caseResponse, timelineResponse] = await Promise.all([
@@ -199,158 +156,6 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
     }
   }
 
-  async function startVerification() {
-    if (!supportCase || !activeLink || terminal) return;
-    const body = {
-      subjectLinkId: activeLink.linkId,
-      requestedLevel: "ENHANCED" as const,
-      purpose: "CONTACT_CONFIRMATION" as const,
-      actionScope: "PERSONAL_DATA_REVEAL" as const,
-    };
-    setVerificationBusy(true);
-    setVerificationError(null);
-    setChallenge(null);
-    setGrant(null);
-    clearSensitiveState();
-    try {
-      setVerification(unwrap(await operationsApi.POST("/support/cases/{caseId}/verification-sessions", {
-        params: {
-          path: { caseId: supportCase.caseId },
-          header: { "Idempotency-Key": verificationIntent.current.keyFor(JSON.stringify(body)) },
-        },
-        body,
-      })));
-      verificationIntent.current.complete();
-    } catch (error) {
-      setVerificationError(error);
-    } finally {
-      setVerificationBusy(false);
-    }
-  }
-
-  async function issueChallenge() {
-    if (!verification) return;
-    const body = { channel: "REGISTERED_PHONE" as const };
-    setVerificationBusy(true);
-    setVerificationError(null);
-    clearSensitiveState();
-    try {
-      setChallenge(unwrap(await operationsApi.POST("/support/verification-sessions/{sessionId}/challenges", {
-        params: {
-          path: { sessionId: verification.sessionId },
-          header: { "Idempotency-Key": challengeIntent.current.keyFor(JSON.stringify(body)) },
-        },
-        body,
-      })));
-      challengeIntent.current.complete();
-    } catch (error) {
-      setVerificationError(error);
-    } finally {
-      setVerificationBusy(false);
-    }
-  }
-
-  async function verifyProof() {
-    if (!challenge || !verification) return;
-    const body = { proof };
-    setVerificationBusy(true);
-    setVerificationError(null);
-    try {
-      const result = unwrap(await operationsApi.POST("/support/verification-challenges/{challengeId}/verifications", {
-        params: {
-          path: { challengeId: challenge.challengeId },
-          header: { "Idempotency-Key": proofIntent.current.keyFor(JSON.stringify(body)) },
-        },
-        body,
-      }));
-      setChallenge(result.challenge);
-      setVerification({
-        ...verification,
-        state: result.sessionState,
-        achievedLevel: result.achievedLevel,
-        invalidAttempts: result.invalidAttempts,
-        challenges: [result.challenge],
-      });
-      proofIntent.current.complete();
-    } catch (error) {
-      setVerificationError(error);
-    } finally {
-      setProof("");
-      setVerificationBusy(false);
-    }
-  }
-
-  async function requestGrant() {
-    if (!supportCase || !verification || !revealField || terminal) return;
-    const body = {
-      verificationSessionId: verification.sessionId,
-      purpose: "CONTACT_CONFIRMATION" as const,
-      fields: [revealField],
-      reasonCode: "CONTACT_CONFIRMATION" as const,
-    };
-    setGrantBusy(true);
-    setGrantError(null);
-    clearSensitiveState();
-    try {
-      setGrant(unwrap(await operationsApi.POST("/support/cases/{caseId}/data-access-grants", {
-        params: {
-          path: { caseId: supportCase.caseId },
-          header: { "Idempotency-Key": grantIntent.current.keyFor(JSON.stringify(body)) },
-        },
-        body,
-      })));
-      grantIntent.current.complete();
-    } catch (error) {
-      setGrantError(error);
-    } finally {
-      setGrantBusy(false);
-    }
-  }
-
-  async function approveGrant() {
-    if (!grant) return;
-    const body = { decision: "APPROVE" as const, expectedVersion: grant.version, reasonCode: "CASE_HANDLING" as const };
-    setGrantBusy(true);
-    setGrantError(null);
-    clearSensitiveState();
-    try {
-      setGrant(unwrap(await operationsApi.POST("/support/data-access-grants/{grantId}/approvals", {
-        params: {
-          path: { grantId: grant.grantId },
-          header: { "Idempotency-Key": approvalIntent.current.keyFor(JSON.stringify(body)) },
-        },
-        body,
-      })));
-      approvalIntent.current.complete();
-    } catch (error) {
-      setGrantError(error);
-    } finally {
-      setGrantBusy(false);
-    }
-  }
-
-  async function revealPersonalData() {
-    if (!grant || !revealField || grant.state !== "ACTIVE") return;
-    const body = { fields: [revealField] };
-    setGrantBusy(true);
-    setGrantError(null);
-    setReveal(null);
-    try {
-      setReveal(unwrap(await operationsApi.POST("/support/data-access-grants/{grantId}/reveals", {
-        params: {
-          path: { grantId: grant.grantId },
-          header: { "Idempotency-Key": revealIntent.current.keyFor(JSON.stringify(body)) },
-        },
-        body,
-      })));
-      revealIntent.current.complete();
-    } catch (error) {
-      setGrantError(error);
-    } finally {
-      setGrantBusy(false);
-    }
-  }
-
   return (
     <div className="console-page support-workspace">
       <PageHeading title="고객지원 콘솔" action={<ButtonLink variant="secondary" to="/support/cases">상담 목록</ButtonLink>} />
@@ -409,53 +214,21 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
         <>
           {caseError ? <ErrorState error={caseError} retry={() => void openCase(supportCase.caseId)} /> : null}
           <div className="support-control-grid">
-            <section className="surface-card support-access-panel">
-              <div className="operation-heading"><ShieldCheck aria-hidden="true" /><div><strong>본인확인과 제한형 열람</strong><small>본인확인을 마쳐도 개인정보 열람 권한은 별도로 승인해야 합니다.</small></div></div>
-              {activeLink ? <p className="support-subject-binding"><StatusText state={activeLink.subjectType} /><code>{activeLink.subjectId}</code><span>{revealField ? personalFieldLabels[revealField] : ""}</span></p> : <EmptyState title="본인확인 가능한 대상이 없습니다" description="고객, 매장 또는 배송 대상을 상담 건에 연결해 주세요." />}
-              {terminal ? <p className="operation-warning">종료된 상담 건에서는 본인확인이나 개인정보 열람을 시작할 수 없습니다.</p> : null}
-              {activeLink && !verification && !terminal ? <Button block loading={verificationBusy} onClick={() => void startVerification()}>강화 본인확인 시작</Button> : null}
-              {verification ? (
-                <div className="support-step-stack">
-                  <div className="support-step-summary"><span>본인확인</span><StatusText state={verification.state} /><StatusText state={verification.achievedLevel} /><small>만료 {shortDateTime.format(new Date(verification.expiresAt))}</small></div>
-                  {!challenge && verification.state === "PENDING" ? <Button variant="secondary" block loading={verificationBusy} onClick={() => void issueChallenge()}>등록 전화로 인증 코드 발급</Button> : null}
-                  {challenge ? <div className="challenge-proof"><p><StatusText state={challenge.state} /> 인증 요청 {compactId(challenge.challengeId)}</p>{challenge.state === "ISSUED" ? <><TextField label="일회성 인증 코드" id="support-proof" type="password" autoComplete="one-time-code" value={proof} onValueChange={setProof} /><Button block loading={verificationBusy} disabled={!proof} onClick={() => void verifyProof()}>인증 코드 확인</Button></> : null}</div> : null}
-                  {verification.achievedLevel === "ENHANCED" && !grant ? <Button block loading={grantBusy} onClick={() => void requestGrant()}>전화번호 열람 권한 요청</Button> : null}
-                </div>
-              ) : null}
-              {verificationError ? <ErrorState error={verificationError} /> : null}
-              {grant ? (
-                <div className="support-grant-card">
-                  <div><span className="context-label">데이터 접근 승인</span><StatusText domain="grant" state={grant.state} /></div>
-                  <code>{grant.grantId}</code><p><StatusText state={grant.risk} /> · 사용 {grant.reservedReveals}/{grant.maxReveals}</p>
-                  {grant.state === "APPROVAL_PENDING" ? <Button variant="secondary" block loading={grantBusy} onClick={() => void approveGrant()}>별도 승인자로 열람 승인</Button> : null}
-                  {grant.state === "ACTIVE" ? <Button block loading={grantBusy} onClick={() => void revealPersonalData()}><Eye size={16} /> 승인된 전화번호 열람</Button> : null}
-                </div>
-              ) : null}
-              {grantError ? <ErrorState error={grantError} /> : null}
-              {reveal ? <RevealPanel reveal={reveal} onClear={() => setReveal(null)} /> : null}
-            </section>
+            <div className="management-workspace">
+              <SupportVerificationPanel key={`${supportCase.caseId}:${securityGeneration}`} caseId={supportCase.caseId} links={supportCase.subjectLinks} disabled={terminal} onChange={setVerification} />
+              {!terminal ? <SupportDataAccessWorkspace key={verification?.sessionId ?? "unverified"} session={verification} /> : null}
+            </div>
 
             <SupportTimelinePanel timeline={timeline} />
             {timeline?.nextCursor ? <ButtonLink variant="secondary" to={`/support/follow-up?caseId=${encodeURIComponent(supportCase.caseId)}`}>이력 더 보기</ButtonLink> : null}
           </div>
 
-          <SupportCompensationPanel caseId={supportCase.caseId} verificationSessionId={verification?.sessionId ?? ""} disabled={terminal} />
+          <SupportCompensationPanel caseId={supportCase.caseId} verificationSessionId={verification?.state === "VERIFIED" && verification.actionScope === "SUPPORT_ACTION" ? verification.sessionId : ""} disabled={terminal} />
         </>
       ) : null}
     </div>
   );
 }
-
-function RevealPanel({ reveal, onClear }: { reveal: Reveal; onClear: () => void }) {
-  return (
-    <section className="support-reveal" aria-labelledby="support-reveal-title">
-      <div><EyeOff aria-hidden="true" /><div><strong id="support-reveal-title">60초 뒤 자동으로 숨겨지는 정보</strong></div></div>
-      {Object.entries(reveal.values).map(([field, value]) => <p key={field}><span>{personalFieldLabels[field] ?? field}</span><strong>{value}</strong></p>)}
-      <Button variant="ghost" block onClick={onClear}>지금 지우기</Button>
-    </section>
-  );
-}
-
 
 function SupportCompensationPanel({ caseId, verificationSessionId, disabled }: { caseId: string; verificationSessionId: string; disabled: boolean }) {
   const [incidentId, setIncidentId] = useState("");

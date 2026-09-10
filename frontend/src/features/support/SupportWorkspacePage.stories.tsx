@@ -6,9 +6,6 @@ import { SupportWorkspacePage } from "./SupportWorkspacePage";
 const caseId = "a1000000-0000-4000-8000-000000000001";
 const customerId = "a2000000-0000-4000-8000-000000000001";
 const linkId = "a3000000-0000-4000-8000-000000000001";
-const sessionId = "a4000000-0000-4000-8000-000000000001";
-const challengeId = "a5000000-0000-4000-8000-000000000001";
-const grantId = "a6000000-0000-4000-8000-000000000001";
 
 const activeCase = {
   caseId,
@@ -113,67 +110,7 @@ export const ActiveCaseTimeline: Story = {
   },
 };
 
-export const VerifiedGrantReveal: Story = {
-  parameters: {
-    msw: { handlers: [
-      ...caseHandlers,
-      http.post("/api/v1/support/cases/:caseId/verification-sessions", () => HttpResponse.json({
-        sessionId, caseId, subjectLinkId: linkId, subjectType: "CUSTOMER", subjectId: customerId,
-        purpose: "CONTACT_CONFIRMATION", actionScope: "PERSONAL_DATA_REVEAL", requestedLevel: "ENHANCED",
-        achievedLevel: "UNVERIFIED", state: "PENDING", invalidAttempts: 0,
-        startedAt: "2026-08-23T09:00:00Z", expiresAt: "2026-08-23T09:15:00Z", version: 1, challenges: [],
-      }, { status: 201 })),
-      http.post("/api/v1/support/verification-sessions/:sessionId/challenges", () => HttpResponse.json({
-        challengeId, sessionId, channel: "REGISTERED_PHONE", state: "ISSUED",
-        requestedAt: "2026-08-23T09:01:00Z", expiresAt: "2026-08-23T09:06:00Z",
-      }, { status: 201 })),
-      http.post("/api/v1/support/verification-challenges/:challengeId/verifications", () => HttpResponse.json({
-        challenge: { challengeId, sessionId, channel: "REGISTERED_PHONE", state: "VERIFIED", requestedAt: "2026-08-23T09:01:00Z", expiresAt: "2026-08-23T09:06:00Z" },
-        sessionState: "VERIFIED", achievedLevel: "ENHANCED", invalidAttempts: 0, lockedUntil: null,
-      })),
-      http.post("/api/v1/support/cases/:caseId/data-access-grants", () => HttpResponse.json({
-        grantId, caseId, subjectLinkId: linkId, subjectType: "CUSTOMER", subjectId: customerId,
-        purpose: "CONTACT_CONFIRMATION", fields: ["CUSTOMER_PRIMARY_PHONE"], risk: "SENSITIVE", state: "ACTIVE",
-        maxReveals: 1, reservedReveals: 0, requestedAt: "2026-08-23T09:03:00Z", expiresAt: "2026-08-23T09:08:00Z", version: 1,
-      }, { status: 201 })),
-      http.post("/api/v1/support/data-access-grants/:grantId/reveals", () => HttpResponse.json({
-        revealAttemptId: "a9000000-0000-4000-8000-000000000001", grantId, caseId, subjectId: customerId,
-        values: { CUSTOMER_PRIMARY_PHONE: "010-1234-5678" }, revealedAt: "2026-08-23T09:04:00Z",
-      })),
-    ] },
-  },
-  play: async ({ canvas }) => {
-    await openCase(canvas);
-    await userEvent.click(canvas.getByRole("button", { name: "강화 본인확인 시작" }));
-    await userEvent.click(await canvas.findByRole("button", { name: "등록 전화로 인증 코드 발급" }));
-    await userEvent.type(await canvas.findByLabelText("일회성 인증 코드"), "123456");
-    await userEvent.click(canvas.getByRole("button", { name: "인증 코드 확인" }));
-    await userEvent.click(await canvas.findByRole("button", { name: "전화번호 열람 권한 요청" }));
-    await userEvent.click(await canvas.findByRole("button", { name: "승인된 전화번호 열람" }));
-    await expect(await canvas.findByText("010-1234-5678")).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "지금 지우기" })).toBeVisible();
-  },
-};
-
-export const VerificationLocked: Story = {
-  parameters: {
-    msw: { handlers: [
-      ...caseHandlers,
-      http.post("/api/v1/support/cases/:caseId/verification-sessions", () => HttpResponse.json({
-        sessionId, caseId, subjectLinkId: linkId, subjectType: "CUSTOMER", subjectId: customerId,
-        purpose: "CONTACT_CONFIRMATION", actionScope: "PERSONAL_DATA_REVEAL", requestedLevel: "ENHANCED",
-        achievedLevel: "UNVERIFIED", state: "LOCKED", invalidAttempts: 5,
-        startedAt: "2026-08-23T09:00:00Z", expiresAt: "2026-08-23T09:15:00Z", version: 6, challenges: [],
-      }, { status: 201 })),
-    ] },
-  },
-  play: async ({ canvas }) => {
-    await openCase(canvas);
-    await userEvent.click(canvas.getByRole("button", { name: "강화 본인확인 시작" }));
-    await expect(await canvas.findByText("잠김")).toBeVisible();
-    await expect(canvas.queryByRole("button", { name: "등록 전화로 인증 코드 발급" })).not.toBeInTheDocument();
-  },
-};
+export const VerificationEntry: Story = { parameters: { msw: { handlers: caseHandlers } }, play: async ({ canvas }) => { await openCase(canvas); await expect(canvas.getByLabelText("본인확인 대상")).toBeVisible(); await expect(canvas.getByLabelText("인증 사용 업무")).toBeVisible(); await expect(canvas.getByLabelText("기존 열람 요청 ID")).toBeVisible(); } };
 
 export const TerminalCase: Story = {
   parameters: {
@@ -185,7 +122,7 @@ export const TerminalCase: Story = {
   play: async ({ canvas }) => {
     await openCase(canvas);
     await expect(canvas.getByText(/종료된 상담 건에서는/)).toBeVisible();
-    await expect(canvas.queryByRole("button", { name: "강화 본인확인 시작" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("button", { name: "본인확인 시작" })).not.toBeInTheDocument();
   },
 };
 

@@ -1046,6 +1046,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1verification-sessions~1{sessionId}~1revocations"
   /support/cases/{caseId}/data-access-grants:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1data-access-grants"
+  /support/data-access-grants/{grantId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1data-access-grants~1{grantId}"
   /support/data-access-grants/{grantId}/approvals:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1data-access-grants~1{grantId}~1approvals"
   /support/data-access-grants/{grantId}/reveals:

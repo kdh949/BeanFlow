@@ -153,7 +153,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] R3b: 감사 사유가 있는 포인트 계정/거래 커서 조회와 부호 있는 조정 구현. 양수 비용 주체·미래 만료를 추정하지 않고 직접 선택하며 음수 요청에서는 제거한다. 관련 Storybook 10개, PostgreSQL 조정/투영 18개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 조정 폼과 만료 오류 화면 넘침 없음 확인.
 - [x] R3c: 운영 공개 주문 환불 미리보기/실행과 공통 품목 환불 화면 구현. 관련 Storybook 24개, PostgreSQL 환불 계약 17개와 Runtime parity 1개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. 390px 결과 불명 화면 넘침 없음 확인. 전체 Storybook MCP 434개, build/sites(4개) Passed. build-storybook 및 문서 화면 검사(85 docs/47 states) Passed. 기능별 커밋 완료. 이의·복구 PR 생성은 아래 이력에 기록한다.
 - [x] H1a: 상담 목록/필터/커서/모든 요청 유형 접수와 상태·배정·접촉·내부 노트·대상 연결 관리 구현. 명령 후 현재 상태를 재조회하고 응답 유실은 같은 요청으로 확인한다. 부분 접수 뒤 연결 실패도 생성된 Case 진입을 남긴다. 관련 Storybook 26개, PostgreSQL/도메인 14개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 기존 토큰의 카드 여백을 재사용했으며 390px 화면에서 가로 넘침 없음 확인.
-- [ ] H1b–H2 본인 확인/제한형 열람 및 상담 승인 업무 구현·검증·커밋·PR.
+- [x] H1b: 대상·목적·두 인증 수단/현재 조회/철회와 필드별 열람 요청·별도 승인자 검토·한시 열람 구현. 기존 권한의 Grant 메타데이터 GET을 추가했다. 관련 Storybook 24개, PostgreSQL 인증/권한·PII 비노출/Runtime parity 17개, frontend 단위 228개 및 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. 창 이탈·늦은 원문 응답·권한 회수·만료를 검증했고 390px 검토 화면 넘침 없음 확인.
+- [ ] H2 상담 승인 업무 구현·검증·커밋·PR.
 - [ ] H3–H4 상담 후속 처리 구현·검증·커밋·PR.
 - [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.
 - [ ] 전체 로컬 검증, 원격 CI 확인, 최종 diff/PR topology 검토.
@@ -167,7 +168,7 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 
 - 운영 PR #162의 preflight/frontend/backend-build/6개 backend test shard 및 집계 build 원격 CI가 모두 통과했다.
 
-- 이의·복구 PR: https://github.com/kdh949/BeanFlow/pull/163 (`feature/frontend-dispute-recovery`, head `e22a3c5`, base `feature/frontend-operations-management`). 상담 관리 branch: `feature/frontend-support-management`. 원격 CI 대기 중.
+- 이의·복구 PR: https://github.com/kdh949/BeanFlow/pull/163 (`feature/frontend-dispute-recovery`, head `e22a3c5`, base `feature/frontend-operations-management`). 상담 관리 branch: `feature/frontend-support-management`. 원격 frontend와 backend-build 및 테스트 shard 5개 통과, shard 0/6 실패 원인 확인 중.
 
 ## Surprises & Discoveries
 

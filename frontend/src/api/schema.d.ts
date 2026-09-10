@@ -4586,6 +4586,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/data-access-grants/{grantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 제한형 열람 요청의 현재 범위와 승인 상태 조회
+         * @description 원문 없이 현재 Grant와 요청자/별도 승인자 역할을 반환합니다. 활성 Case와 연결 및 기존 요청자 또는 승인자 권한을 재확인합니다.
+         */
+        get: operations["inspectSupportDataAccessGrant"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support/data-access-grants/{grantId}/approvals": {
         parameters: {
             query?: never;
@@ -11387,6 +11407,12 @@ export interface components {
             expiresAt: string | null;
             /** Format: int64 */
             version: number;
+        };
+        /** @description 활성 권한을 확인한 열람 승인 메타데이터이며 개인정보 원문을 포함하지 않습니다. */
+        DataAccessGrantInspectionResource: {
+            grant: components["schemas"]["DataAccessGrantResource"];
+            /** @enum {string} */
+            viewerRole: "REQUESTER" | "APPROVER";
         };
         /**
          * @description SENSITIVE 등급 DataAccessGrant에 대한 승인 또는 거부 결정을 담은 요청입니다.
@@ -18726,6 +18752,34 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    inspectSupportDataAccessGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grantId: components["parameters"]["DataAccessGrantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current grant metadata; no reveal budget is consumed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataAccessGrantInspectionResource"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
