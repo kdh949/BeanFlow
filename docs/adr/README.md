@@ -125,3 +125,4 @@
 | [ADR-121](ADR-121-performance-observability-and-trace-profile-correlation.md) | Accepted | 성능 관측성과 trace-profile 상관 경계 |
 | [ADR-122](ADR-122-external-keycloak-deployment.md) | Accepted | 외부 Keycloak을 사용하는 배포 모드 |
 | [ADR-123](ADR-123-order-quote-trade-terms-and-shared-availability.md) | Accepted | 주문 견적의 거래 조건과 공유 자원 잔여량 검증 분리 |
+| [ADR-124](ADR-124-management-api-vertical-slices.md) | Accepted | 관리 API의 소유권과 순차 수직 슬라이스 |

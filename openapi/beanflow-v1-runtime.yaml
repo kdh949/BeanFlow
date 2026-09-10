@@ -1046,6 +1046,18 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1break-glass-requests~1{requestId}~1reveals"
   /support/break-glass-requests/{requestId}/reviews:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1break-glass-requests~1{requestId}~1reviews"
+  /operations/settlement-disputes:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1settlement-disputes"
+  /operations/settlement-disputes/{disputeId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1settlement-disputes~1{disputeId}"
+  /operations/settlement-disputes/{disputeId}/reviews:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1settlement-disputes~1{disputeId}~1reviews"
+  /operations/settlement-disputes/{disputeId}/decisions:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1settlement-disputes~1{disputeId}~1decisions"
+  /stores/{storeId}/disputes/{disputeId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1disputes~1{disputeId}"
+  /stores/{storeId}/disputes/{disputeId}/withdrawals:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1disputes~1{disputeId}~1withdrawals"
 components:
   securitySchemes:
     bearerAuth:

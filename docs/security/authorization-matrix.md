@@ -2,6 +2,9 @@
 
 | Resource / Action | Customer | Store Owner | Store Staff | Platform Operator | Settlement Operator |
 |---|---:|---:|---:|---:|---:|
+| 이의 판정 목록·상세 (`/operations/settlement-disputes/**`) | No | No | No | Active `SETTLEMENT_DISPUTE_READ` grant | No |
+| 이의 검토·승인·기각 | No | No | No | Active `SETTLEMENT_DISPUTE_DECIDE` grant + reason + idempotency + expectedVersion + Audit | No |
+| 매장 이의 상세·철회 (`/stores/{storeId}/disputes/{disputeId}/**`) | No | ACTIVE same-store OWNER + CSRF(철회) | No | No | No |
 | 고객 가입·로그인 | Self | No | No | No | No |
 | 점주 로그인·비밀번호 변경 | No | Self | Self | No | No |
 | 점주 계정 발급·exact 조회·초기화·잠금 해제 | No | No | No | Active `MERCHANT_CREDENTIAL_MANAGE` grant + reason + idempotency + Audit | No |

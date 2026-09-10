@@ -70,6 +70,19 @@ internal class SettlementDisputeEntity(
     val filedAt: Instant,
     @Column(name = "decided_at")
     var decidedAt: Instant? = null,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "decision_intent", length = 24)
+    var decisionIntent: SettlementDisputeState? = null,
+    @Column(name = "decision_actor_id")
+    var decisionActorId: UUID? = null,
+    @Column(name = "decision_actor_type", length = 24)
+    var decisionActorType: String? = null,
+    @Column(name = "decision_reason", length = 500)
+    var decisionReason: String? = null,
+    @Column(name = "decision_requested_at")
+    var decisionRequestedAt: Instant? = null,
+    @Column(name = "decision_correlation_id", length = 240)
+    var decisionCorrelationId: String? = null,
     @Version
     var version: Long = 0,
 ) {
@@ -94,6 +107,26 @@ internal class SettlementDisputeEntity(
             "SettlementDispute correlation is invalid"
         }
         validateState()
+    }
+
+    fun requestDecision(
+        outcome: SettlementDisputeState,
+        actorId: UUID,
+        actorType: String,
+        reason: String,
+        now: Instant,
+        correlationId: String,
+    ) {
+        check(state == SettlementDisputeState.UNDER_REVIEW)
+        require(outcome in setOf(SettlementDisputeState.ACCEPTED, SettlementDisputeState.REJECTED, SettlementDisputeState.WITHDRAWN))
+        check(decisionIntent == null || decisionIntent == outcome)
+        if (decisionIntent != null) return
+        decisionIntent = outcome
+        decisionActorId = actorId
+        decisionActorType = actorType
+        decisionReason = reason
+        decisionRequestedAt = now
+        decisionCorrelationId = correlationId
     }
 
     fun startReview() {
@@ -124,6 +157,7 @@ internal class SettlementDisputeEntity(
     ) {
         check(state == SettlementDisputeState.UNDER_REVIEW) { "SettlementDispute is not under review" }
         require(!decidedAt.isBefore(filedAt)) { "SettlementDispute decision cannot precede filing" }
+        check(decisionIntent == null || decisionIntent == target) { "SettlementDispute decision intent conflicts" }
         state = target
         heldAmountKrw = 0
         settlementAdjustmentId = adjustmentId

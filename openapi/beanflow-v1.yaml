@@ -7172,6 +7172,275 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /operations/settlement-disputes:
+    get:
+      tags:
+      - Dispute
+      operationId: listOperationsSettlementDisputes
+      summary: 매장별 정산 이의 목록 조회
+      description: SETTLEMENT_DISPUTE_READ grant가 필요하다. 매장·상태 필터에 묶인 signed cursor를 사용한다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: storeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: state
+        schema:
+          type: string
+          enum:
+          - FILED
+          - UNDER_REVIEW
+          - ACCEPTED
+          - REJECTED
+          - WITHDRAWN
+      - in: query
+        name: cursor
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 매장별 정산 이의 목록 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantDisputePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/settlement-disputes/{disputeId}:
+    get:
+      tags:
+      - Dispute
+      operationId: getOperationsSettlementDispute
+      summary: 정산 이의 상세와 pending 판정 조회
+      description: SETTLEMENT_DISPUTE_READ grant가 필요하다. pendingDecision이 있으면 같은 판정만 재개할 수 있다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: disputeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: 정산 이의 상세와 pending 판정 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputeManagementResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/settlement-disputes/{disputeId}/reviews:
+    post:
+      tags:
+      - Dispute
+      operationId: startSettlementDisputeReview
+      summary: 정산 이의 검토 시작
+      description: SETTLEMENT_DISPUTE_DECIDE grant, expectedVersion 및 사유가 필요하다. FILED에서 UNDER_REVIEW로 전환한다. 동일 키는 최초 응답을
+        재생한다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: disputeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 정산 이의 검토 시작
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputeManagementResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisputeManagementRequest'
+  /operations/settlement-disputes/{disputeId}/decisions:
+    post:
+      tags:
+      - Dispute
+      operationId: decideSettlementDispute
+      summary: 정산 이의 승인 또는 기각
+      description: SETTLEMENT_DISPUTE_DECIDE grant가 필요하다. UNDER_REVIEW에서 판정 의도를 먼저 저장한다. 실패 시 같은 키로 재개하며 반대 판정은 409다. 새
+        키로 같은 pending 판정을 재개할 때는 최신 version을 요구하고 최초 판정 actor와 사유를 보존한다. 승인 조정액은 동일 source로 한 번만 저장된다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: disputeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 정산 이의 승인 또는 기각
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputeManagementResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisputeDecisionRequest'
+  /stores/{storeId}/disputes/{disputeId}:
+    get:
+      tags:
+      - Dispute
+      operationId: getOwnerSettlementDispute
+      summary: 점주 정산 이의 상세 조회
+      description: ACTIVE same-store OWNER membership이 필요하다.
+      security:
+      - merchantSession: []
+      parameters:
+      - in: path
+        name: storeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: disputeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: 점주 정산 이의 상세 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputeManagementResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /stores/{storeId}/disputes/{disputeId}/withdrawals:
+    post:
+      tags:
+      - Dispute
+      operationId: withdrawSettlementDispute
+      summary: 점주 정산 이의 철회
+      description: ACTIVE same-store OWNER와 Session CSRF가 필요하다. UNDER_REVIEW에서 철회하며 다른 pending 판정이 있으면 409다.
+      security:
+      - merchantSession: []
+      parameters:
+      - in: path
+        name: storeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: disputeId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/MerchantCsrfToken'
+      responses:
+        '200':
+          description: 점주 정산 이의 철회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputeManagementResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisputeManagementRequest'
 components:
   securitySchemes:
     bearerAuth:
@@ -7709,6 +7978,116 @@ components:
         type: string
         const: no-store
   schemas:
+    DisputeManagementRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - expectedVersion
+      - reason
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    DisputeDecisionRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - outcome
+      - expectedVersion
+      - reason
+      properties:
+        outcome:
+          type: string
+          enum:
+          - ACCEPTED
+          - REJECTED
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    DisputeManagementResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - disputeId
+      - storeId
+      - settlementItemId
+      - state
+      - version
+      - expectedAdjustmentKrw
+      - heldAmountKrw
+      - reason
+      - evidenceReferences
+      - filedAt
+      - decidedAt
+      - settlementAdjustmentId
+      - pendingDecision
+      properties:
+        disputeId:
+          type: string
+          format: uuid
+        storeId:
+          type: string
+          format: uuid
+        settlementItemId:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum:
+          - FILED
+          - UNDER_REVIEW
+          - ACCEPTED
+          - REJECTED
+          - WITHDRAWN
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedAdjustmentKrw:
+          type: integer
+          format: int64
+        heldAmountKrw:
+          type: integer
+          format: int64
+        reason:
+          type: string
+        evidenceReferences:
+          type: array
+          items:
+            type: string
+        filedAt:
+          type: string
+          format: date-time
+        decidedAt:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        settlementAdjustmentId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        pendingDecision:
+          anyOf:
+          - type: string
+            enum:
+            - FILED
+            - UNDER_REVIEW
+            - ACCEPTED
+            - REJECTED
+            - WITHDRAWN
+          - type: 'null'
     BrandStatus:
       type: string
       enum:

@@ -2552,6 +2552,25 @@
 
 ---
 
+## BR-54 운영 관리 API의 권한과 변경 경계
+
+- **Status:** Accepted
+- **Decision Date:** 2026-09-10
+- **Decision:** 픽업 슬롯 관리는 ACTIVE same-store OWNER/STAFF, 이의 철회는 OWNER에게 허용한다.
+  매장 개설·검색 식별 정보, 계약 버전, 기존 계정 소속, 이의 판정, 일반 알림/publication 복구는
+  Platform Operator의 목적별 persistent grant가 필요하다. 조회와 명령 grant를 분리한다.
+- **Rules:** 명령은 사유·멱등 키를 요구하며 replay 전에도 현재 권한을 검증한다. 변경은 expected version으로
+  보호한다. 이의 철회는 UNDER_REVIEW에서만 허용하며 FILED는 먼저 검토 전환한다. 승인 의도가 내구 저장된
+  이의는 승인 재개만 가능하고 반대 판정·철회는 거절한다. 승인 의도는 별도 Adjustment commit보다 먼저 저장한다.
+  새 매장은 주문 차단 상태로 생성한다. 슬롯 정원은 예약+확정 수량 이상이며 소비 중 시간 변경을 금지한다.
+  계약 구간은 중첩될 수 없고 과거 주문 스냅샷은 불변이다. 복구 접수는 원래 source/key의 재개일 뿐 성공 확정이 아니다.
+- **Scope:** 재고 authoring은 제외한다. UI, 외부 지급, 자동 병합·배포는 포함하지 않는다.
+- **Revisit Conditions:** 별도 승인자 분리, 매장 self-service 개설 또는 관리 grant 운영 정책이 필요해질 때.
+- **Related:** [ADR-124](../adr/ADR-124-management-api-vertical-slices.md)
+
+
+---
+
 # 정책 간 의존성과 우선 적용 순서
 
 1. `BR-01`, `BR-02`를 모든 시간·금액 Value Object의 기준으로 사용한다.
@@ -2642,6 +2661,7 @@
 - [ ] 모든 정책에 Revisit Conditions가 존재하는가
 
 ---
+
 
 # Support Policy Decision Register (2026-08-10)
 
