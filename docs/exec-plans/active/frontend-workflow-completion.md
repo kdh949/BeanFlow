@@ -159,6 +159,7 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] H3b: 고정 보상 폼을 혜택·비용 책임·분담·증빙 선택과 현재 승인/지급/알림 재시도로 교체했다. 현재 대기 중인 별도 승인자에게 비개인정보 검토 자료와 불변 쿠폰 조건을 제공하고 기존 GET 열람 범위를 유지한다. 새 요청은 같은 사고 ID를 유지한다. PostgreSQL/API/Runtime parity 18개, frontend 단위 231개와 boundary/copy 21개, 전체 511개 MCP interaction/a11y(8개 순차 묶음의 모든 응답) Passed. typecheck/check:design/build/sites 4개/문서 18개 Passed. 390px 보상 화면 넘침 없음 확인. 최종 정적 Storybook·98개 Docs/47개 상태 화면도 Passed.
 - [x] H4: 정보 정정·운영 결정·긴급 열람을 구현했다. 로컬 전체 Storybook MCP 546개, 단위 233개 및 boundary/copy 21개, build/design/docs/sites, 관련 backend/계약 검증 Passed. PR #166 (`feature/frontend-support-profile-access`, `fed14d7`)의 원격 CI 전체 Passed.
 - [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.
+- [x] O4: 운영자 매장·메뉴 이미지 조회/메뉴 선택/교체/삭제와 감사 사유를 구현했다. 공유 편집 뷰에 인증별 어댑터를 연결하고 204 삭제를 성공으로 처리했다. backend 10개, frontend 233개 및 boundary/copy 21개, design/typecheck, 실제 MCP 전체 575개, 390px 가로 넘침 없음 Passed. 제품/정적 Storybook 빌드, sites 4개와 108개 Docs/47개 상태 화면도 Passed. 별도 PR을 생성한다.
 - [ ] 전체 로컬 검증, 원격 CI 확인, 최종 diff/PR topology 검토.
 
 - 상담 관리 PR: https://github.com/kdh949/BeanFlow/pull/164 (`feature/frontend-support-management`, head `33122ac`, base `feature/frontend-dispute-recovery`). 세 커밋으로 접수·본인확인·주문 변경을 나눴다. 상담 노트 저장 뒤 재조회 완료를 기다리도록 CI 테스트를 별도 수정했다. 정확한 head의 원격 CI 전체가 통과했다.
@@ -226,3 +227,21 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - H4 마지막 검토에서 원 요청자의 실행 권한을 승인 요청 행 잠금 전에 확인하도록 순서를 맞췄다. 정정 통합 16개를 다시 실행해 Passed를 확인했다.
 
 - PR #165 (`feature/frontend-support-follow-up`, `fcaa4cf`)와 #166 (`feature/frontend-support-profile-access`, `fed14d7`) 원격 CI 전체 Passed. #166은 #165를 base로 한다.
+
+
+### O4 execution details
+
+운영 매장 관리에 기존 이미지 편집기(EXTEND)와 Tabs/SelectField/Button/FileField( REUSE),
+메뉴 선택 목록(COMPOSE)을 연결한다. Operations가 STORE_MEDIA_MANAGE와 사유를 확인하고
+Merchant public catalog/image port를 사용한다. 읽기는 grant lock을 포함하는 짧은 local transaction,
+서명은 기존 local 연산이며 외부 업로드/cleanup/동시 교체 정책은 ADR-115 그대로다.
+현재 이미지 GET 두 개와 최소 메뉴 목록 GET 하나를 target/runtime 계약에 추가한다.
+영향 파일: OperatorStore/MenuImage controller/service, 새 OperatorMediaMenuDirectory,
+StorefrontImageEditor, StoreMediaWorkspace, OperationsStoresPage와 각 story/계약 테스트.
+권한 회수·다른 매장 메뉴·필터/actor cursor·현재 이미지 없음·서명 실패·잘못된 파일·응답 유실을 검증한다.
+제품 정책 변경, schema migration, 새 dependency는 없다. 별도 이미지 UI 복제보다 기존 편집기 확장이
+유지보수와 디자인 준수에 유리하다. 점주 기본 모드에 대한 회귀 검증을 함께 수행한다.
+
+- H5 PR: https://github.com/kdh949/BeanFlow/pull/167 (`feature/frontend-customer-support`, `bfb717c`, base #166).
+  로컬 최종 문의/기존 상담/Runtime parity 22개 및 spotless Passed. 전체 565개 MCP/105개 Docs/47개 상태
+  화면과 frontend 전체 검증 Passed. 원격 CI 진행 중.

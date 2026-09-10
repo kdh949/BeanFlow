@@ -1137,6 +1137,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1inquiries~1{inquiryId}~1claims"
   /support/inquiries/{inquiryId}/messages:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1inquiries~1{inquiryId}~1messages"
+  /operations/stores/{storeId}/media-menus:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1media-menus"
 components:
   securitySchemes:
     bearerAuth:
@@ -1152,6 +1154,10 @@ components:
       in: cookie
       name: BEANFLOW_MERCHANT_SESSION
   schemas:
+    OperatorMediaMenu:
+      $ref: "./beanflow-v1.yaml#/components/schemas/OperatorMediaMenu"
+    OperatorMediaMenuPage:
+      $ref: "./beanflow-v1.yaml#/components/schemas/OperatorMediaMenuPage"
     CustomerInquiryCategory:
       $ref: "./beanflow-v1.yaml#/components/schemas/CustomerInquiryCategory"
     CustomerInquiryState:

@@ -62,3 +62,7 @@ export const StoreBusinessTabs: Story = {
   play: async ({ canvas }) => { await open(canvas); await userEvent.click(canvas.getByRole("tab", { name: "정산 계약" })); await expect(await canvas.findByText("등록된 정산 계약이 없습니다")).toBeVisible(); await userEvent.click(canvas.getByRole("tab", { name: "점주·직원 소속" })); await expect(await canvas.findByText("등록된 소속이 없습니다")).toBeVisible(); },
 };
 export const StorePointPolicyTab: Story = { play: async ({ canvas }) => { await open(canvas); await userEvent.click(canvas.getByRole("tab", { name: "포인트 정책" })); await expect(canvas.getByRole("button", { name: "현재 매장 포인트 정책 조회" })).toBeVisible(); } };
+export const StoreMediaTab: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/operations/stores/:storeId/image", () => HttpResponse.json({})), http.get("/api/v1/operations/stores/:storeId/media-menus", () => HttpResponse.json({ items: [], nextCursor: null })), ...handlers] } },
+  play: async ({ canvas }) => { await open(canvas); await userEvent.click(canvas.getByRole("tab", { name: "매장·메뉴 이미지" })); await expect(await canvas.findByRole("heading", { name: "매장 대표 이미지" })).toBeVisible(); await expect(await canvas.findByText("해당 범위의 메뉴가 없습니다")).toBeVisible(); },
+};

@@ -97,6 +97,12 @@ Menu OWNER/STAFF 권한과 메뉴 소속을 검증한다. 이미지가 원래 �
 조회/서명 실패는 503으로 유지한다. 조회는 pointer·Audit를 변경하거나 object storage에 probe하지 않는다.
 편집 화면은 URL을 저장하지 않고 expiresAt이 지나면 이 경로를 다시 읽는다.
 
+운영팀의 동일 Store/Menu image 경로도 GET으로 현재 이미지를 조회한다. PLATFORM_OPERATOR,
+활성 STORE_MEDIA_MANAGE와 X-Access-Reason을 같은 transaction에서 확인하고 no-store로 반환한다.
+메뉴 선택은 `/operations/stores/{storeId}/media-menus`의 최소 목록(menuId/name/lifecycle)으로 제공한다.
+기존 Merchant catalog port의 ACTIVE/ARCHIVED 분리와 20개 keyset 페이지를 재사용하며 cursor는
+actor/store/lifecycle에 바인딩한다. 가격·옵션을 확장하거나 Merchant 편집 권한을 대체하지 않는다.
+
 ### 6. media 장애는 거래·텍스트 조회 readiness와 분리한다
 
 endpoint, credential, bucket과 signing endpoint는 필수 설정이다. 누락·형식 오류 또는 AIStor가 명시적으로

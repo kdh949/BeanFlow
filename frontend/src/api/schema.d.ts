@@ -2419,7 +2419,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * (운영팀) 매장 대표 이미지 조회
+         * @description PLATFORM_OPERATOR, 활성 STORE_MEDIA_MANAGE와 X-Access-Reason을 확인합니다. no-store이며 이미지 부재와 서명 실패를 구분합니다.
+         */
+        get: operations["getStoreImageByOperator"];
         /**
          * (운영팀) 매장 대표 이미지 교체
          * @description PLATFORM_OPERATOR 역할, 활성 STORE_MEDIA_MANAGE grant와 X-Access-Reason이 필요합니다.
@@ -2443,7 +2447,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * (운영팀) 메뉴 이미지 조회
+         * @description PLATFORM_OPERATOR, 활성 STORE_MEDIA_MANAGE와 X-Access-Reason을 확인합니다. no-store이며 이미지 부재와 서명 실패를 구분합니다.
+         */
+        get: operations["getMenuImageByOperator"];
         /**
          * (운영팀) 메뉴 이미지 교체
          * @description PLATFORM_OPERATOR 역할, 활성 STORE_MEDIA_MANAGE grant와 X-Access-Reason이 필요합니다.
@@ -5518,10 +5526,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/stores/{storeId}/media-menus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * (운영팀) 이미지 관리용 메뉴 목록
+         * @description STORE_MEDIA_MANAGE와 X-Access-Reason으로 같은 매장의 ACTIVE/ARCHIVED 메뉴를 20개씩 조회합니다. cursor는 actor/store/lifecycle에 바인딩되며 응답은 no-store입니다.
+         */
+        get: operations["listOperatorMediaMenus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OperatorMediaMenu: {
+            /** Format: uuid */
+            menuId: string;
+            name: string;
+            lifecycle: components["schemas"]["MenuCatalogLifecycle"];
+        };
+        OperatorMediaMenuPage: {
+            items: components["schemas"]["OperatorMediaMenu"][];
+            nextCursor?: string | null;
+        };
         /** @enum {string} */
         CustomerInquiryCategory: "ORDER_STATUS" | "PICKUP_RESCHEDULE" | "ORDER_CANCELLATION" | "PAYMENT_OR_REFUND" | "COUPON_OR_POINT" | "CUSTOMER_PROFILE" | "DELIVERY_STATUS" | "ACCOUNT_RECOVERY" | "PRIVACY" | "SAFETY" | "OTHER";
         /** @enum {string} */
@@ -16776,6 +16814,36 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    getStoreImageByOperator: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
+                "X-Access-Reason": components["parameters"]["AccessReason"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 이미지 또는 이미지 없음 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorefrontImageAuthoring"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     replaceStoreImageByOperator: {
         parameters: {
             query?: never;
@@ -16830,6 +16898,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getMenuImageByOperator: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
+                "X-Access-Reason": components["parameters"]["AccessReason"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                menuId: components["parameters"]["MenuId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 이미지 또는 이미지 없음 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorefrontImageAuthoring"];
+                };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
@@ -21474,6 +21573,39 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    listOperatorMediaMenus: {
+        parameters: {
+            query?: {
+                lifecycle?: components["schemas"]["MenuCatalogLifecycle"];
+                cursor?: string;
+            };
+            header: {
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
+                "X-Access-Reason": components["parameters"]["AccessReason"];
+            };
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 메뉴 선택 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorMediaMenuPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
 }
