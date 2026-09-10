@@ -125,7 +125,10 @@ internal interface BreakGlassRequestJpaRepository : JpaRepository<BreakGlassRequ
 }
 
 internal interface BreakGlassDecisionJpaRepository : JpaRepository<BreakGlassDecisionEntity, UUID> {
-    fun findByRequestIdAndDecisionType(requestId: UUID, decisionType: String): BreakGlassDecisionEntity?
+    fun findByRequestIdAndDecisionType(
+        requestId: UUID,
+        decisionType: String,
+    ): BreakGlassDecisionEntity?
 }
 
 internal interface SecurityNotificationIntentJpaRepository : JpaRepository<SecurityNotificationIntentEntity, UUID> {

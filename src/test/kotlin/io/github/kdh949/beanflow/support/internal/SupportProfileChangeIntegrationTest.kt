@@ -166,21 +166,39 @@ internal class SupportProfileChangeIntegrationTest
             )
             jdbcTemplate.execute("TRUNCATE TABLE support_case CASCADE")
             seedSupportScope("REGISTERED_PHONE", "DELIVERY")
-            val linkId = jdbcTemplate.queryForObject("SELECT id FROM support_case_subject_link WHERE support_case_id = ?", UUID::class.java, caseId)!!
+            val linkId =
+                jdbcTemplate.queryForObject(
+                    "SELECT id FROM support_case_subject_link WHERE support_case_id = ?",
+                    UUID::class.java,
+                    caseId,
+                )!!
             mockMvc
-                .perform(get("/api/v1/support/cases/$caseId/profile-contexts/$linkId")
-                    .param("purpose", "COURIER_PROVIDER_IDENTITY").with(jwt().jwt { it.subject(requesterId.toString()) }))
-                .andExpect(status().isOk)
+                .perform(
+                    get("/api/v1/support/cases/$caseId/profile-contexts/$linkId")
+                        .param("purpose", "COURIER_PROVIDER_IDENTITY")
+                        .with(jwt().jwt { it.subject(requesterId.toString()) }),
+                ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.subjectType").value("RIDER"))
                 .andExpect(jsonPath("$.currentProfileVersion").value(0))
-            val created = profiles.submit(SubmitSupportProfileChangeCommand(
-                requesterId, caseId, customerId, 0, sessionId, "Correct provider reference", EVIDENCE_DIGEST,
-                "courier-workflow-request", SupportProfileChangePayload.CourierProviderIdentity("provider:corrected"),
-            ))
+            val created =
+                profiles.submit(
+                    SubmitSupportProfileChangeCommand(
+                        requesterId,
+                        caseId,
+                        customerId,
+                        0,
+                        sessionId,
+                        "Correct provider reference",
+                        EVIDENCE_DIGEST,
+                        "courier-workflow-request",
+                        SupportProfileChangePayload.CourierProviderIdentity("provider:corrected"),
+                    ),
+                )
             mockMvc
-                .perform(get("/api/v1/support/profile-changes/${created.profileChangeId}/workflow")
-                    .with(jwt().jwt { it.subject(managerId.toString()) }))
-                .andExpect(status().isOk)
+                .perform(
+                    get("/api/v1/support/profile-changes/${created.profileChangeId}/workflow")
+                        .with(jwt().jwt { it.subject(managerId.toString()) }),
+                ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.allowedActions[0]").value("DECIDE_SUPPORT_MANAGER"))
         }
 
@@ -737,7 +755,10 @@ internal class SupportProfileChangeIntegrationTest
             )
         }
 
-        private fun seedSupportScope(challengeChannel: String, subjectType: String = "CUSTOMER") {
+        private fun seedSupportScope(
+            challengeChannel: String,
+            subjectType: String = "CUSTOMER",
+        ) {
             val now = Instant.now().minusSeconds(30)
             caseId = UUID.randomUUID()
             sessionId = UUID.randomUUID()

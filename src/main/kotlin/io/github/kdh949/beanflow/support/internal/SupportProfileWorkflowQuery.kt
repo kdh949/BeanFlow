@@ -98,12 +98,14 @@ internal class SupportProfileWorkflowQuery(
     ): SupportProfileWorkflowResource {
         val profile = transactions.get(actorId, profileChangeId)
         // Authorize requester grants before the approval row, matching profile revision writers.
-        val requesterCanExecute = profile.executorActorId == actorId && listOf(
-            OperatorPermission.SUPPORT_CASE_READ,
-            OperatorPermission.SUPPORT_CASE_WRITE,
-            OperatorPermission.SUPPORT_ACTION_REQUEST,
-            OperatorPermission.SUPPORT_PROFILE_R3_REQUEST,
-        ).all { permissions.hasActive(profile.requesterActorId, it) }
+        val requesterCanExecute =
+            profile.executorActorId == actorId &&
+                listOf(
+                    OperatorPermission.SUPPORT_CASE_READ,
+                    OperatorPermission.SUPPORT_CASE_WRITE,
+                    OperatorPermission.SUPPORT_ACTION_REQUEST,
+                    OperatorPermission.SUPPORT_PROFILE_R3_REQUEST,
+                ).all { permissions.hasActive(profile.requesterActorId, it) }
         val request = profile.actionRequestId?.let { actions.get(actorId, it) }
         if (request != null && (
                 request.action != SupportActionType.PROFILE_CHANGE || request.targetId != profileChangeId ||
@@ -116,7 +118,12 @@ internal class SupportProfileWorkflowQuery(
         val session = sessions.findById(profile.verificationSessionId).orElse(null) ?: missing()
         val linked =
             links.findBySupportCaseIdAndUnlinkedAtIsNullOrderByLinkedAtAsc(profile.caseId).any {
-                it.subjectId == profile.subjectId && it.subjectType == profile.purpose.descriptor().owner.caseSubjectType() && it.id == session.subjectLinkId
+                it.subjectId == profile.subjectId && it.subjectType ==
+                    profile.purpose
+                        .descriptor()
+                        .owner
+                        .caseSubjectType() &&
+                    it.id == session.subjectLinkId
             }
         val active = supportCase.state in ACTIVE_CASE_STATES && linked
         val current = active && session.state == VerificationState.VERIFIED && clock.instant().isBefore(session.expiresAt)
