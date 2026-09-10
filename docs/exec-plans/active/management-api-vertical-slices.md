@@ -309,3 +309,13 @@ Provider credential 또는 개인 정보를 metric label/log에 추가하지 않
   Audit rollback, 현재 운영 grant와 signed cursor를 확인했다. 테스트 정리 누락과 만료 계정 시각 fixture를
   수정한 후 최종 전체 대상 suite가 통과했다.
 - 전체 backend suite와 원격 CI는 별도 gate이며 재고 및 UI 변경은 없다.
+
+### 픽업 목록 인덱스 중복 제거 (2026-09-10)
+
+최종 stack 전체 검증에서 V35 조회 계획 회귀가 실패했다. V76의 목록 index는 V35 covering index와
+동일한 `(store_id, starts_at, id)` key를 중복 생성했다. 새 관리 query의 store/시간 범위/keyset 정렬은
+기존 V35 index로 지원되므로 아직 미병합인 V76에서 중복 DDL만 제거한다. 기존 V35와 데이터·상태
+제약 및 조회 계획 테스트 기준은 변경하지 않는다. 픽업 기능/기존 조회 계획 및 전체 검증을 다시 수행한다.
+
+- Passed: StoreCatalogQueryMigrationTest 1 + PickupSlotManagementIntegrationTest 6 + FlywayMigrationSmokeTest 1
+  + RuntimeOpenApiParityTest 1 = 9 tests, spotlessCheck, bootJar. 기존 조회 계획 테스트 기준은 유지했다.
