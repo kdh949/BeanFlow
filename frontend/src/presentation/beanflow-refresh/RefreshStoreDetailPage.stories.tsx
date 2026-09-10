@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, waitFor } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { catalogHandlers, customerStore, favoriteHandlers, ids, signedInHandlers, storeIdentityHandlers } from "../../../.storybook/fixtures";
 import { cart } from "../../features/ordering/cart";
@@ -27,6 +27,7 @@ export const Orderable: Story = {
     await expect(await canvas.findByRole("button", { name: "시청점 즐겨찾기 추가" })).toBeVisible();
     await expect(canvas.getByText("장바구니에서 시간을 선택해 주세요.")).toBeVisible();
     await userEvent.click(await canvas.findByRole("button", { name: /오트 라떼/ }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: /6,400.*담기/ })).toBeEnabled());
     await userEvent.click(canvas.getByRole("button", { name: /6,400.*담기/ }));
     await expect(await canvas.findByText("장바구니에 담았어요.")).toBeVisible();
     await expect(await canvas.findByRole("link", { name: /장바구니 1개 보기/ })).toBeVisible();
