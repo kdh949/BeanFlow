@@ -5,4 +5,3 @@ export function useExpired(expiresAt?: string) {
   useEffect(() => { if (!expiresAt) return; const timer = window.setTimeout(() => setClock(Date.now()), Math.max(0, new Date(expiresAt).getTime() - Date.now()) + 1); return () => window.clearTimeout(timer); }, [expiresAt]);
   return !!expiresAt && new Date(expiresAt).getTime() <= Math.max(clock, Date.now());
 }
-
