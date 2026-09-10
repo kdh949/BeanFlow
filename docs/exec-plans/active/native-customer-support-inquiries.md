@@ -99,7 +99,7 @@ BR-55, ADR-126, API surface, OpenAPI, frontend workflow plan과 이 계획 결�
 - [x] 정책과 migration inventory 확인.
 - [x] 구현과 focused validation. Inquiry integration 11개, 실제 고객 cookie/CSRF 1개, Ordering 소유권 포함 10개, domain 2개, Support architecture 3개, Modulith 1개, runtime parity 1개 Passed.
 - [x] 전체 frontend/contract/architecture 검증. 565개 실제 MCP interaction/a11y, 233개 unit 및 boundary/copy 21개, typecheck/design/build/static Storybook/105개 Docs/47개 상태/sites 4개, 문서 18개 Passed.
-- [ ] vertical commits, PR, terminal CI.
+- [x] vertical commit `bfb717c`, PR #167, 해당 head의 원격 CI 전체 Passed.
 
 ## Surprises & Discoveries
 
@@ -113,7 +113,7 @@ ktlint 자동 정렬이 긴 중첩 테스트 호출을 한 번에 안정화하�
 
 ## Outcomes & Retrospective
 
-고객 접수와 상담원 인수/공개 답변을 구현했다. 390px 긴 문의 화면에서 가로 넘침 없고 본문 15px 토큰을 확인했다. 최종 spotless와 문의/기존 상담/Runtime parity 회귀 검증까지 통과했다. PR/원격 CI를 확인 중이다.
+고객 접수와 상담원 인수/공개 답변을 구현했다. 390px 긴 문의 화면에서 가로 넘침 없고 본문 15px 토큰을 확인했다. 최종 spotless와 문의/기존 상담/Runtime parity 회귀 검증까지 통과했다. PR #167의 원격 CI 전체가 통과했다. V82 migration-writer lease는 해당 PR merge까지 유지한다.
 
 ## Revision Notes
 

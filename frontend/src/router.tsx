@@ -62,6 +62,7 @@ export const router = createBrowserRouter([
             { path: "refunds", loader: () => redirect("/app/orders?status=PAST") },
             { path: "coupon-claims", loader: () => redirect("/app/events") },
             { path: "favorites", element: <FavoriteStoresPage /> },
+            { path: "recent-stores", lazy: async () => { const { RecentStoresPage: Component } = await import("./features/customer/RecentStoresPage"); return { Component }; } },
             { path: "notifications", element: <NotificationInboxPage /> },
             { path: "me", element: <CustomerMyPage /> },
           ] },

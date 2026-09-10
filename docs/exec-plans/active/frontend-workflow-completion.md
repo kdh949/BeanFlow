@@ -70,7 +70,8 @@ Support 목적별 검증·distinct approval 정책을 보존한다. 날짜는 As
 
 React route는 기존 typed API client와 feature controller를 통해 command/query를 호출하고 canonical
 디자인 시스템으로 표현한다. 서버 변경은 기존 application service/public port에서 조정하고 Controller가
-Repository를 직접 사용하지 않는다. 신규 DB schema는 계획하지 않는다. 승인·명령 접수와 비동기 외부 실행은
+Repository를 직접 사용하지 않는다. 공통 UI 수정에는 DB schema 변경이 없으며 H5의 V82는 별도
+[native inquiry plan](native-customer-support-inquiries.md)의 migration lease로 관리한다. 승인·명령 접수와 비동기 외부 실행은
 기존 별도 transaction을 유지한다. 조회 실패를 stale success/empty/0으로 대체하지 않는다.
 
 ## Alternatives Considered
@@ -158,8 +159,9 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] H3a: 수락 후 해결 승인안·현재 승인·실행 계획·5단계 상태/결과·환불 LOOKUP 재조정 구현. 생성된 Resolution ID를 다시 조회하고 소비된 승인안의 만료와 후속 처리를 구분한다. 실제 실행 권한과 달랐던 S60 재검사를 SUPPORT_RESOLUTION_EXECUTE로 맞췄다. PostgreSQL/도메인/승인/Runtime parity 및 서버 digest 34개, frontend 단위 231개와 boundary/copy 21개 Passed. 전체 실행 로그에서 497개 interaction 통과 후 최종 변경의 MCP 29개 interaction/a11y Passed. typecheck/check:design/build/sites(4개)/문서(18개) Passed. 390px 단계 화면 넘침 없음 확인. static Storybook과 문서 화면 전체 검사는 H3b–H4 후 PR 검증에서 실행한다.
 - [x] H3b: 고정 보상 폼을 혜택·비용 책임·분담·증빙 선택과 현재 승인/지급/알림 재시도로 교체했다. 현재 대기 중인 별도 승인자에게 비개인정보 검토 자료와 불변 쿠폰 조건을 제공하고 기존 GET 열람 범위를 유지한다. 새 요청은 같은 사고 ID를 유지한다. PostgreSQL/API/Runtime parity 18개, frontend 단위 231개와 boundary/copy 21개, 전체 511개 MCP interaction/a11y(8개 순차 묶음의 모든 응답) Passed. typecheck/check:design/build/sites 4개/문서 18개 Passed. 390px 보상 화면 넘침 없음 확인. 최종 정적 Storybook·98개 Docs/47개 상태 화면도 Passed.
 - [x] H4: 정보 정정·운영 결정·긴급 열람을 구현했다. 로컬 전체 Storybook MCP 546개, 단위 233개 및 boundary/copy 21개, build/design/docs/sites, 관련 backend/계약 검증 Passed. PR #166 (`feature/frontend-support-profile-access`, `fed14d7`)의 원격 CI 전체 Passed.
-- [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.
+- [x] H5: 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결을 구현했다. #167 `bfb717c`의 로컬 검증과 원격 CI 전체 Passed. V82는 별도 inquiry plan의 migration lease를 유지한다.
 - [x] O4: 운영자 매장·메뉴 이미지 조회/메뉴 선택/교체/삭제와 감사 사유를 구현했다. 공유 편집 뷰에 인증별 어댑터를 연결하고 204 삭제를 성공으로 처리했다. backend 10개, frontend 233개 및 boundary/copy 21개, design/typecheck, 실제 MCP 전체 575개, 390px 가로 넘침 없음 Passed. 제품/정적 Storybook 빌드, sites 4개와 108개 Docs/47개 상태 화면도 Passed. 별도 PR을 생성한다.
+- [x] C6: recent-stores 조회를 고객 내 정보에 연결했다. 관련 Storybook 8개 및 최종 전체 MCP 582개, 기존 API integration 5개, frontend 233개와 boundary/copy 21개, typecheck/design Passed. 390px에서 이름 폭 220px, 핵심 상태 14px 및 가로 넘침 없음 확인. 최종 build/static Storybook/sites 4개/109개 Docs/47개 상태, 문서 18개도 Passed.
 - [ ] 전체 로컬 검증, 원격 CI 확인, 최종 diff/PR topology 검토.
 
 - 상담 관리 PR: https://github.com/kdh949/BeanFlow/pull/164 (`feature/frontend-support-management`, head `33122ac`, base `feature/frontend-dispute-recovery`). 세 커밋으로 접수·본인확인·주문 변경을 나눴다. 상담 노트 저장 뒤 재조회 완료를 기다리도록 CI 테스트를 별도 수정했다. 정확한 head의 원격 CI 전체가 통과했다.
@@ -204,7 +206,9 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 
 ## Outcomes & Retrospective
 
-구현/검증 미완료. 이 문서는 완료 증거가 아니라 실행 계획이다.
+확인한 F01–F18, M01–M17과 추가 recent-stores/204 삭제 문제의 구현 및 로컬 검증을 완료했다.
+[최종 범위 대조](../../testing/frontend-workflow-coverage.md)에 대응 경로와 의도적 제외를 기록했다.
+원격 CI의 최신 결과는 각 PR head checks로 확인한다. merge/deploy와 실거래는 수행하지 않는다.
 
 ## Revision Notes
 
@@ -245,3 +249,22 @@ StorefrontImageEditor, StoreMediaWorkspace, OperationsStoresPage와 각 story/�
 - H5 PR: https://github.com/kdh949/BeanFlow/pull/167 (`feature/frontend-customer-support`, `bfb717c`, base #166).
   로컬 최종 문의/기존 상담/Runtime parity 22개 및 spotless Passed. 전체 565개 MCP/105개 Docs/47개 상태
   화면과 frontend 전체 검증 Passed. 원격 CI 진행 중.
+
+
+### C6 final API inventory gap
+
+최종 runtime 254개 operation 대조에서 recent-stores의 직접 조회 동선 누락을 추가로 확인했다.
+BR-40의 결제 이후 eligible 주문, 중복 제거/현재 노출/정렬을 서버가 소유한다. `/app/recent-stores`를
+고객 인증 아래 lazy route로 연결하고 MyPage에서 진입한다. FavoriteStoresPage에서 확인한
+StoreCard/기존 목록 CSS(REUSE), PageHeading/Button/EmptyState/LoadingState/ErrorState(REUSE)를
+COMPOSE한다. 서버 계약·Aggregate·transaction·보존 정책은 변경하지 않는다. 반환된 현재 목록만
+표시하며 20개까지의 API 상한을 명시하고 조회 실패를 빈 목록으로 대체하지 않는다.
+영향 파일은 RecentStoresPage/story, MyPage/story, router와 이 계획이다. 새 design token/dependency와
+ADR 변경은 없다. story-first로 empty/loading/failure/refresh/long-name 및 390px를 검증하고 기존
+RecentStoreEndpointIntegrationTest도 실행한다. 기존 추천 목록만 사용하는 대안은 최근 순서 목록을
+직접 열 수 없으므로 별도 읽기 화면을 선택한다.
+
+- O4 PR: https://github.com/kdh949/BeanFlow/pull/168 (`feature/frontend-operations-media`, `5ab7cd0`, base #167).
+  로컬 전체 검증 Passed, 원격 CI 진행 중.
+
+- H5 PR #167 `bfb717c`: preflight/frontend/backend-build/6개 backend shard/집계 build 원격 CI 전체 Passed.
