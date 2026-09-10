@@ -141,12 +141,15 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] C3: 메뉴별 공개 구성 조회, 인증 경로, bounded owner projection, 구성 선택/품절/조회 실패 구현. PostgreSQL·쿼리 수·인증·Runtime parity 36개 Passed; 관련 Storybook 6개 Passed; frontend 단위 217개 및 boundary/copy 21개 Passed, typecheck/check:design Passed. 생성 타입 21개 누락 경로도 동기화(F17).
 - [x] C4: 공개 주문번호 checkout/기존 READY 시도 재개, UNKNOWN 차단, 예약 만료·주문 갱신 실패·종료 타임라인·화면 복귀 갱신 구현. 관련 PostgreSQL/계약 21개, Storybook 10개, frontend 단위 221개와 boundary/copy 21개, typecheck/check:design/docs Passed. 결제 SDK는 테스트에서 명시적으로 대체했으며 실결제는 실행하지 않았다.
 - [x] C5: 쿠폰 진입을 실제 이벤트로 통합하고 기존 주소 redirect, 점주/운영/상담 route lazy loading 구현. 전체 Storybook MCP 338개 Passed, 단위 221개 및 boundary/copy 21개 Passed. typecheck/check:design/build/build-storybook/docs smoke(70 docs/47 states)/sites(4개) Passed. Storybook docs 브라우저 검사는 sandbox 실행 제한 후 권한을 받아 재실행했다. 고객 PR 생성은 아래 이력에 기록한다.
-- [ ] S1–S2 점주 매장 관리 구현·검증·커밋·PR.
+- [x] S1: 점주 공개 주소/길찾기/7일 운영시간 및 점주·직원 픽업 목록/상세/생성/수정 구현. 기존 준비 중/예시 수치 탭을 실제 관리·정산 진입으로 교체. 관련 Storybook 13개(공통 시간 필드/기존 카탈로그 포함) Passed, 단위 223개 및 boundary/copy 21개, typecheck/check:design Passed. 390px 브라우저에서 필드 넘침 없음 확인.
+- [ ] S2 메뉴 표시/이미지 관리 및 점주 PR 검증·생성.
 - [ ] O1–O3 운영 매장/정책 구현·검증·커밋·PR.
 - [ ] R1–R3 이의/복구 구현·검증·커밋·PR.
 - [ ] H1–H2 상담 관리 구현·검증·커밋·PR.
 - [ ] H3–H4 상담 후속 처리 구현·검증·커밋·PR.
 - [ ] 전체 로컬 검증, 원격 CI 확인, 최종 diff/PR topology 검토.
+
+- 고객 PR: https://github.com/kdh949/BeanFlow/pull/160 (`feature/frontend-customer-consistency`, head `d777992`, base `main`). 후속 점주 branch: `feature/frontend-store-management`.
 
 ## Surprises & Discoveries
 

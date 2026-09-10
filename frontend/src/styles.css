@@ -367,7 +367,7 @@
 .filter-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 
 .store-management-page, .management-workspace { display: flex; flex-direction: column; gap: var(--sp-5); }
-.management-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--sp-5); }
+.management-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: var(--sp-5); }
 .management-card { padding: var(--sp-6); }
 .management-card > h3 { margin-top: var(--sp-2); color: var(--text-strong); font-size: var(--fs-title-3); }
 .management-card > p { margin-top: var(--sp-3); color: var(--text-muted); font-size: var(--fs-caption); line-height: 1.6; }
