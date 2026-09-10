@@ -19,6 +19,10 @@ const knownErrors: Record<string, Omit<RequestErrorPresentation, "reference">> =
     title: "현재 상태와 요청이 맞지 않습니다",
     description: "대상의 현재 상태를 다시 조회하고, 변경할 내용과 적용 조건을 확인해 주세요.",
   },
+  POINT_ADJUSTMENT_INSUFFICIENT_AVAILABLE: {
+    title: "차감할 수 있는 포인트가 부족합니다",
+    description: "일부만 차감하지 않았습니다. 현재 사용 가능한 포인트와 조정 금액을 다시 확인해 주세요.",
+  },
   REPROCESSING_PROPOSAL_STALE: {
     title: "복구 제안 이후 상태가 바뀌었습니다",
     description: "현재 복구 건을 다시 확인하고 필요한 경우 새 제안을 준비해 주세요.",

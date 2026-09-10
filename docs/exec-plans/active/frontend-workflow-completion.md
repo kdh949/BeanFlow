@@ -150,7 +150,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] R1: 점주 상세/철회/새 증빙 재접수와 운영 매장별 목록/검토/판정 구현. 명령 실패 후 현재 pending 판정을 다시 확인하며 상충 판정을 숨긴다. BR-22의 14개 달력 날짜 및 BR-24의 종결 건 재접수에 맞춰 예시 설명을 수정했다. 관련 Storybook 23개, PostgreSQL/도메인 19개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 판정 일부 처리 화면 넘침 없음 확인.
 - [x] R2: 알림/이벤트 수동 복구 목록·커서·원본 상세·1회 재시도·결과 확인 구현. 202 접수와 완료를 분리하고 UNKNOWN 재실행은 recoverable/차단 사유를 따른다. 관련 Storybook 13개, PostgreSQL 복구/동시성/부분 실패 19개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 결과 불명 화면 넘침 없음 확인.
 - [x] R3a: 주문 후속 처리 5단계·고객 취소 환불 LOOKUP 예약 및 복구 제안 생성/현재 조회/2인 판정 구현. 제안 조회 GET은 기존 grant와 DTO를 재사용하며 만료·자기 판정을 차단한다. 관련 Storybook 14개, PostgreSQL 복구 계약 14개와 Runtime parity 1개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. PaymentSetupIssue JSON Schema 6개 사례 및 390px 제안 화면 넘침 없음 확인.
-- [ ] R3b–R3c 포인트 조사·조정 및 운영 환불 구현·검증·커밋·PR.
+- [x] R3b: 감사 사유가 있는 포인트 계정/거래 커서 조회와 부호 있는 조정 구현. 양수 비용 주체·미래 만료를 추정하지 않고 직접 선택하며 음수 요청에서는 제거한다. 관련 Storybook 10개, PostgreSQL 조정/투영 18개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 조정 폼과 만료 오류 화면 넘침 없음 확인.
+- [ ] R3c 운영 환불 구현·검증·커밋·PR.
 - [ ] H1–H2 상담 관리 구현·검증·커밋·PR.
 - [ ] H3–H4 상담 후속 처리 구현·검증·커밋·PR.
 - [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.

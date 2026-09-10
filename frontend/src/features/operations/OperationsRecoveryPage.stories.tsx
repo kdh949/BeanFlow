@@ -7,3 +7,5 @@ export default meta; type Story = StoryObj<typeof meta>;
 export const RecoveryTabs: Story = { play: async ({ canvas }) => { await expect(await canvas.findByRole("heading", { name: "알림 전달 복구" })).toBeVisible(); await userEvent.click(canvas.getByRole("tab", { name: "이벤트 전달" })); await expect(await canvas.findByRole("heading", { name: "이벤트 전달 복구" })).toBeVisible(); await expect(await canvas.findByText("복구 내역이 없습니다")).toBeVisible(); } };
 
 export const OrderAndRepairTabs: Story = { play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("tab", { name: "주문 후속 처리" })); await expect(await canvas.findByLabelText("후속 처리 주문 ID")).toBeVisible(); await userEvent.click(canvas.getByRole("tab", { name: "환불 복구 승인" })); await expect(await canvas.findByLabelText("복구 제안 ID")).toBeVisible(); } };
+
+export const PointInvestigation: Story = { play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("tab", { name: "포인트 조사" })); await expect(await canvas.findByLabelText("포인트 계정 ID")).toBeVisible(); } };
