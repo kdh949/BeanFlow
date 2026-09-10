@@ -308,6 +308,9 @@ OpenAPI 원본과 runtime parity, generated TypeScript는 각 계약 PR의 같�
 
 ### PR #150 review remediation — 2026-09-10
 
+- [x] Slice 4: 최신 편집 요청만 반영하고 새 메뉴/닫기/보관 필터 전환 시 이전 응답을 무효화. mutation 중 입력·타깃 변경을 비활성화하고 저장 완료를 목록 refresh와 분리. 응답 역전·늦은 응답·저장 중 입력·refresh 대기 중 연속 저장의 단위 테스트 추가. typecheck, unit 217 tests, presentation/copy/design, Storybook·제품 build, Sites 4 tests, Docs 69 entries, MCP interaction/a11y 322 stories passed.
+- 원격 반영 후 최종 head의 CI 상태를 별도 확인하고 리뷰 9개 각각에 수정·검증 근거를 답변한 뒤 resolve한다.
+
 - [x] Slice 3: 최대 100 옵션·500 구성 생성/전체 교체의 HQL·criteria query execution이 각각 20회 이내임을 검증(INSERT 및 merge PK load는 별도). 보관 child 2,000건에서 활성/보관 목록·상세·교체는 엔티티 20개 미만 적재. 최대 교체 테스트가 발견한 기존 활성 key의 INSERT/UPDATE 순서 충돌도 수정. Endpoint·migration·quote query count: 17 tests passed.
 
 - [x] Slice 2: Menu·Store policy command ID를 Audit source로 연결. 두 원장 cleanup을 실제 실행한 뒤 같은 키로 새 변경·재전송해 감사 기록이 각각 한 번 남는 회귀 테스트 포함. 두 EndpointIntegrationTest: 21 tests passed.

@@ -196,6 +196,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
   const archiveDialog = useRef<HTMLDivElement | null>(null);
   const intent = useRef(new SubmissionIntent());
   const listRequest = useRef(0);
+  const editRequest = useRef(0);
   const activeListScope = useRef({ storeId, lifecycle });
   activeListScope.current = { storeId, lifecycle };
 
@@ -231,6 +232,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
 
   useEffect(() => {
     listRequest.current += 1;
+    editRequest.current += 1;
     setDraft(null);
     setCurrent(null);
     setEditing(false);
@@ -238,6 +240,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
     setNextCursor(null);
     setLoadingMore(false);
     void loadList();
+    return () => { editRequest.current += 1; listRequest.current += 1; };
   }, [loadList]);
 
   useEffect(() => {
@@ -249,22 +252,30 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
   }
 
   async function editById(menuId: string) {
+    if (saving) return;
+    const requestId = ++editRequest.current;
+    const requestedLifecycle = lifecycle;
+    const isCurrent = () => editRequest.current === requestId &&
+      activeListScope.current.storeId === storeId && activeListScope.current.lifecycle === requestedLifecycle;
     setSaveError(null);
     setSaved(false);
     try {
       const content = unwrap(await merchantApi.GET("/stores/{storeId}/menus/{menuId}/trade-content", {
         params: { path: { storeId, menuId } },
       }));
+      if (!isCurrent()) return;
       setCurrent(content);
       setDraft(toDefinition(content));
       setEditing(true);
       intent.current.rotate();
     } catch (failure) {
-      setSaveError(failure);
+      if (isCurrent()) setSaveError(failure);
     }
   }
 
   function createDraft() {
+    if (saving) return;
+    editRequest.current += 1;
     setCurrent(null);
     setDraft({
       menuId: crypto.randomUUID(),
@@ -280,7 +291,17 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
     intent.current.rotate();
   }
 
+  function closeEditor() {
+    if (saving) return;
+    editRequest.current += 1;
+    setEditing(false);
+    setDraft(null);
+    setCurrent(null);
+    setSaveError(null);
+  }
+
   function change(next: MenuTradeDefinition) {
+    if (saving) return;
     setDraft(next);
     setSaved(false);
     setSaveError(null);
@@ -288,7 +309,8 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
   }
 
   async function saveMenu() {
-    if (!draft) return;
+    if (!draft || saving) return;
+    editRequest.current += 1;
     const fingerprint = JSON.stringify({ storeId, currentVersion: current?.version ?? null, draft });
     setSaving(true);
     setSaved(false);
@@ -311,7 +333,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
       setDraft(toDefinition(next));
       setSaved(true);
       intent.current.complete();
-      await loadList();
+      void loadList();
     } catch (failure) {
       if (failure instanceof ApiRequestError && failure.code === "IDEMPOTENCY_KEY_REUSED") intent.current.rotate();
       setSaveError(failure);
@@ -321,7 +343,8 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
   }
 
   async function confirmArchive() {
-    if (!archiveTarget) return;
+    if (!archiveTarget || saving) return;
+    editRequest.current += 1;
     const target = archiveTarget;
     setSaving(true);
     setSaveError(null);
@@ -362,12 +385,12 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
           <h2 id="menu-catalog-title">메뉴 거래 내용</h2>
           <p>가격·판매 상태·옵션·판매 구성을 한 번에 저장합니다.</p>
         </div>
-        <Button type="button" variant="secondary" onClick={createDraft}><Plus aria-hidden="true" /> 새 메뉴</Button>
+        <Button type="button" variant="secondary" disabled={saving} onClick={createDraft}><Plus aria-hidden="true" /> 새 메뉴</Button>
       </div>
 
       <div className="catalog-lifecycle-tabs" role="group" aria-label="메뉴 보관 상태">
         {(["ACTIVE", "ARCHIVED"] as const).map((value) => (
-          <ChipButton key={value} aria-pressed={lifecycle === value} onClick={() => setLifecycle(value)}>
+          <ChipButton disabled={saving} key={value} aria-pressed={lifecycle === value} onClick={() => setLifecycle(value)}>
             {value === "ACTIVE" ? "판매 카탈로그" : "보관된 메뉴"}
           </ChipButton>
         ))}
@@ -386,7 +409,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
               {item.lifecycle === "ACTIVE" ? (
                 <div className="menu-authoring-summary">
                   <MenuCatalogItemSummary item={item} />
-                  <Button variant="secondary" onClick={() => void edit(item)} aria-label={`${item.name} 편집`}>편집</Button>
+                  <Button variant="secondary" disabled={saving} onClick={() => void edit(item)} aria-label={`${item.name} 편집`}>편집</Button>
                 </div>
               ) : (
                 <div className="menu-authoring-summary" aria-label={`${item.name} 보관 요약`}>
@@ -394,7 +417,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
                 </div>
               )}
               {item.lifecycle === "ACTIVE" ? (
-                <Button type="button" variant="danger" size="sm" onClick={() => { archiveTrigger.current = document.activeElement as HTMLButtonElement; setArchiveTarget(item); }}>
+                <Button type="button" variant="danger" size="sm" disabled={saving} onClick={() => { editRequest.current += 1; archiveTrigger.current = document.activeElement as HTMLButtonElement; setArchiveTarget(item); }}>
                   <Archive aria-hidden="true" /> 보관
                 </Button>
               ) : null}
@@ -422,7 +445,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
           onChange={change}
           onSave={() => void saveMenu()}
           onReload={current ? () => void editById(current.menuId) : undefined}
-          onClose={() => { setEditing(false); setDraft(null); setCurrent(null); }}
+          onClose={closeEditor}
         />
       ) : null}
 
@@ -432,7 +455,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
             <h3 id="archive-menu-title">‘{archiveTarget.name}’ 메뉴를 보관할까요?</h3>
             <p>고객 메뉴와 검색에서 제외되며 다시 판매할 수 없습니다. 잠시 품절이라면 판매 가능 설정을 꺼 주세요.</p>
             <div className="button-row">
-              <Button variant="secondary" onClick={() => { setArchiveTarget(null); archiveTrigger.current?.focus(); }}>취소</Button>
+              <Button variant="secondary" disabled={saving} onClick={() => { setArchiveTarget(null); archiveTrigger.current?.focus(); }}>취소</Button>
               <Button variant="danger" loading={saving} onClick={() => void confirmArchive()}>메뉴 보관</Button>
             </div>
           </div>
@@ -481,40 +504,40 @@ function MenuTradeEditor({
     <form className="menu-trade-editor" onSubmit={(event) => { event.preventDefault(); onSave(); }}>
       <div className="panel-heading">
         <div><span className="context-label">{current ? `${current.version}번째 저장` : "새 메뉴"}</span><h3>{current ? "거래 내용 편집" : "새 메뉴 만들기"}</h3></div>
-        <Button type="button" variant="ghost" onClick={onClose}>편집 닫기</Button>
+        <Button type="button" variant="ghost" disabled={saving} onClick={onClose}>편집 닫기</Button>
       </div>
       <div className="form-grid">
-        <TextField label="메뉴 이름" required maxLength={200} value={draft.name} onValueChange={(name) => onChange({ ...draft, name })} />
-        <TextField label="기본 가격(KRW)" required min={0} type="number" value={String(draft.basePriceKrw)} onValueChange={(value) => onChange({ ...draft, basePriceKrw: Number(value) })} />
+        <TextField disabled={saving} label="메뉴 이름" required maxLength={200} value={draft.name} onValueChange={(name) => onChange({ ...draft, name })} />
+        <TextField disabled={saving} label="기본 가격(KRW)" required min={0} type="number" value={String(draft.basePriceKrw)} onValueChange={(value) => onChange({ ...draft, basePriceKrw: Number(value) })} />
       </div>
-      <Checkbox label="고객에게 판매 가능" description="품절이면 끄고, 다시 팔 수 있을 때 켜 주세요. 판매하려면 사용 가능한 구성이 하나 이상 필요합니다." checked={draft.available} onCheckedChange={(available) => onChange({ ...draft, available })} />
+      <Checkbox disabled={saving} label="고객에게 판매 가능" description="품절이면 끄고, 다시 팔 수 있을 때 켜 주세요. 판매하려면 사용 가능한 구성이 하나 이상 필요합니다." checked={draft.available} onCheckedChange={(available) => onChange({ ...draft, available })} />
 
       <fieldset className="catalog-fieldset">
         <legend>옵션 ({draft.options.length}/100)</legend>
         {draft.options.map((option, index) => (
           <div className="catalog-child-row" key={option.optionId}>
-            <TextField label="옵션 이름" required maxLength={200} value={option.name} onValueChange={(name) => onChange({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, name } : item) })} />
-            <TextField label="추가 금액" required type="number" min={0} value={String(option.additionalPriceKrw)} onValueChange={(value) => onChange({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, additionalPriceKrw: Number(value) } : item) })} />
-            <Checkbox label="판매 가능" checked={option.available} onCheckedChange={(available) => onChange({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, available } : item) })} />
-            <Button type="button" variant="ghost" size="sm" onClick={() => onChange({ ...draft, options: draft.options.filter((_, itemIndex) => itemIndex !== index), configurations: draft.configurations.map((configuration) => ({ ...configuration, selectedOptionIds: configuration.selectedOptionIds.filter((id) => id !== option.optionId) })) })}>옵션 제거</Button>
+            <TextField disabled={saving} label="옵션 이름" required maxLength={200} value={option.name} onValueChange={(name) => onChange({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, name } : item) })} />
+            <TextField disabled={saving} label="추가 금액" required type="number" min={0} value={String(option.additionalPriceKrw)} onValueChange={(value) => onChange({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, additionalPriceKrw: Number(value) } : item) })} />
+            <Checkbox disabled={saving} label="판매 가능" checked={option.available} onCheckedChange={(available) => onChange({ ...draft, options: draft.options.map((item, itemIndex) => itemIndex === index ? { ...item, available } : item) })} />
+            <Button type="button" variant="ghost" size="sm" disabled={saving} onClick={() => onChange({ ...draft, options: draft.options.filter((_, itemIndex) => itemIndex !== index), configurations: draft.configurations.map((configuration) => ({ ...configuration, selectedOptionIds: configuration.selectedOptionIds.filter((id) => id !== option.optionId) })) })}>옵션 제거</Button>
           </div>
         ))}
-        <Button type="button" variant="secondary" size="sm" disabled={draft.options.length >= 100} onClick={addOption}>옵션 추가</Button>
+        <Button type="button" variant="secondary" size="sm" disabled={saving || draft.options.length >= 100} onClick={addOption}>옵션 추가</Button>
       </fieldset>
 
       <fieldset className="catalog-fieldset">
         <legend>판매 구성 ({draft.configurations.length}/500)</legend>
         {draft.configurations.map((configuration, index) => (
           <div className="catalog-configuration" key={configuration.configurationId}>
-            <fieldset><legend>선택 옵션</legend>{draft.options.length === 0 ? <p>옵션 없는 기본 구성입니다.</p> : draft.options.map((option) => <Checkbox key={option.optionId} label={option.name || "이름 없는 옵션"} checked={configuration.selectedOptionIds.includes(option.optionId)} onCheckedChange={(checked) => onChange({ ...draft, configurations: draft.configurations.map((item, itemIndex) => itemIndex === index ? { ...item, selectedOptionIds: checked ? [...item.selectedOptionIds, option.optionId] : item.selectedOptionIds.filter((id) => id !== option.optionId) } : item) })} />)}</fieldset>
-            <Checkbox label="이 구성 판매 가능" checked={configuration.available} onCheckedChange={(available) => onChange({ ...draft, configurations: draft.configurations.map((item, itemIndex) => itemIndex === index ? { ...item, available } : item) })} />
-            <Button type="button" variant="ghost" size="sm" onClick={() => onChange({ ...draft, configurations: draft.configurations.filter((_, itemIndex) => itemIndex !== index) })}>구성 제거</Button>
+            <fieldset><legend>선택 옵션</legend>{draft.options.length === 0 ? <p>옵션 없는 기본 구성입니다.</p> : draft.options.map((option) => <Checkbox disabled={saving} key={option.optionId} label={option.name || "이름 없는 옵션"} checked={configuration.selectedOptionIds.includes(option.optionId)} onCheckedChange={(checked) => onChange({ ...draft, configurations: draft.configurations.map((item, itemIndex) => itemIndex === index ? { ...item, selectedOptionIds: checked ? [...item.selectedOptionIds, option.optionId] : item.selectedOptionIds.filter((id) => id !== option.optionId) } : item) })} />)}</fieldset>
+            <Checkbox disabled={saving} label="이 구성 판매 가능" checked={configuration.available} onCheckedChange={(available) => onChange({ ...draft, configurations: draft.configurations.map((item, itemIndex) => itemIndex === index ? { ...item, available } : item) })} />
+            <Button type="button" variant="ghost" size="sm" disabled={saving} onClick={() => onChange({ ...draft, configurations: draft.configurations.filter((_, itemIndex) => itemIndex !== index) })}>구성 제거</Button>
           </div>
         ))}
-        <Button type="button" variant="secondary" size="sm" disabled={draft.configurations.length >= 500} onClick={addConfiguration}>판매 구성 추가</Button>
+        <Button type="button" variant="secondary" size="sm" disabled={saving || draft.configurations.length >= 500} onClick={addConfiguration}>판매 구성 추가</Button>
       </fieldset>
 
-      <div className="button-row"><Button type="submit" loading={saving}>{saving ? "저장 중" : current ? "거래 내용 저장" : "메뉴 생성"}</Button><Button type="button" variant="secondary" onClick={onClose}>취소</Button></div>
+      <div className="button-row"><Button type="submit" loading={saving}>{saving ? "저장 중" : current ? "거래 내용 저장" : "메뉴 생성"}</Button><Button type="button" variant="secondary" disabled={saving} onClick={onClose}>취소</Button></div>
       {saved ? <p className="form-success" role="status">메뉴 거래 내용을 저장했습니다.</p> : null}
       {stale ? <FeedbackState kind="error" title="다른 변경이 먼저 저장되었습니다" description="다른 사람이 저장한 최신 내용을 불러와 확인한 뒤 다시 수정해 주세요." reference={error instanceof ApiRequestError ? error.correlationId : undefined} action={onReload ? <Button variant="secondary" onClick={onReload}>최신 내용 불러오기</Button> : undefined} /> : error ? <ErrorState error={error} retry={onSave} /> : null}
     </form>
