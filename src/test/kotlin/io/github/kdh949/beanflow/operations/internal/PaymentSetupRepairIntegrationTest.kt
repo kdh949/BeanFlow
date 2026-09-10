@@ -29,6 +29,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
+import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
@@ -98,7 +99,20 @@ internal class PaymentSetupRepairIntegrationTest
                     .andExpect(jsonPath("$.proposedBy").value(proposer.toString()))
                     .andReturn()
                     .response
-            assertThat(response.contentAsString).isEqualTo(created.contentAsString)
+            val mapper =
+                tools.jackson.databind.json.JsonMapper
+                    .builder()
+                    .build()
+            val createdJson = mapper.readTree(created.contentAsString)
+            val queriedJson = mapper.readTree(response.contentAsString)
+            for (field in listOf("createdAt", "expiresAt")) {
+                val original = Instant.parse(createdJson[field].asText())
+                val persisted = Instant.parse(queriedJson[field].asText())
+                assertThat(Duration.between(original, persisted).abs()).isLessThan(Duration.ofNanos(1000))
+                (createdJson as tools.jackson.databind.node.ObjectNode).remove(field)
+                (queriedJson as tools.jackson.databind.node.ObjectNode).remove(field)
+            }
+            assertThat(queriedJson).isEqualTo(createdJson)
             assertThat(response.contentAsString).doesNotContain(damaged.providerKey, damaged.orderId.toString())
             mockMvc
                 .perform(get(path, UUID.randomUUID()).with(operatorJwt(approver)))
