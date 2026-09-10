@@ -186,11 +186,14 @@ internal class OperatorStoreIdentityService(
         mapOf(
             "version" to version.toString(),
             "identityDigest" to
-                HexFormat.of().formatHex(
-                    MessageDigest.getInstance("SHA-256").digest(
-                        listOf(name, latitude.toString(), longitude.toString(), regionCode).joinToString("\u0000").toByteArray(),
-                    ),
-                ),
+                HexFormat
+                    .of()
+                    .formatHex(
+                        MessageDigest.getInstance("SHA-256").digest(
+                            listOf(name, latitude.toString(), longitude.toString(), regionCode).joinToString("\u0000").toByteArray(),
+                        ),
+                    ).chunked(2)
+                    .joinToString(":"),
         )
 
     private fun validateList(

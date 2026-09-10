@@ -272,6 +272,20 @@ internal class StoreIdentityManagementIntegrationTest(
         }
     }
 
+    @Test
+    fun `digest containing a phone-like digit run remains an opaque audit fingerprint`() {
+        val created = service.change(create(operator()).copy(name = "감사 검증 9"))
+        val fingerprint =
+            jdbc.queryForObject(
+                "SELECT after_summary::jsonb ->> 'identityDigest' FROM operations_audit_record WHERE target_id = ?",
+                String::class.java,
+                created.storeId,
+            )
+        assertThat(fingerprint).matches("[0-9a-f]{2}(:[0-9a-f]{2}){31}")
+        assertThat(fingerprint?.replace(":", ""))
+            .isEqualTo("000297ce0088a7a74c5ccb88b1ddd472fb04858a6d1347304790c58f64b58ba0")
+    }
+
     private fun create(actor: UUID) =
         StoreIdentityCommand(actor, "store-creation-key", null, "새 매장", 37.5, 127.03, REGION, null, "개설 근거 확인", Instant.now())
 
