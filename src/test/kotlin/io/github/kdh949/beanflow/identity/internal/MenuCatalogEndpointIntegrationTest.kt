@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.identity.internal
 import com.jayway.jsonpath.JsonPath
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.merchant.internal.MenuCatalogCommandRetentionCleanup
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -38,6 +39,7 @@ internal class MenuCatalogEndpointIntegrationTest(
     @Autowired private val mockMvc: MockMvc,
     @Autowired private val jdbc: JdbcTemplate,
     @Autowired private val passwords: CustomerPasswordSecurity,
+    @Autowired private val commandCleanup: MenuCatalogCommandRetentionCleanup,
 ) {
     @BeforeEach
     fun cleanDatabase() {
@@ -51,6 +53,53 @@ internal class MenuCatalogEndpointIntegrationTest(
                 merchant_store CASCADE
             """.trimIndent(),
         )
+    }
+
+    @Test
+    fun `reused key after command retention cleanup records a new Menu audit and still replays`() {
+        val storeId = seedStore()
+        val actor = signIn("catalog.retention", storeId, "OWNER")
+        val menuId = UUID.randomUUID()
+        val optionId = UUID.randomUUID()
+        val configurationId = UUID.randomUUID()
+        mutate(
+            post("/api/v1/stores/$storeId/menus"),
+            actor,
+            "retention-create-0001",
+            content(menuId, optionId, configurationId, "라테", 4_500),
+        ).andExpect(status().isCreated)
+        val path = "/api/v1/stores/$storeId/menus/$menuId/trade-content"
+        val key = "retention-replace-0001"
+        mutate(put(path), actor, key, content(menuId, optionId, configurationId, "라테", 5_000, expectedVersion = 0))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.version").value(1))
+        val expiry = jdbc.queryForObject("SELECT max(retention_expires_at) FROM merchant_menu_catalog_command", Timestamp::class.java)!!
+        assertThat(commandCleanup.deleteExpired(expiry.toInstant(), 1_000)).isEqualTo(2)
+        val replacement = content(menuId, optionId, configurationId, "라테", 5_500, expectedVersion = 1)
+        val result =
+            mutate(put(path), actor, key, replacement)
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.version").value(2))
+                .andReturn()
+                .response.contentAsString
+        mutate(put(path), actor, key, replacement)
+            .andExpect(status().isOk)
+            .andExpect { assertThat(it.response.contentAsString).isEqualTo(result) }
+        assertThat(auditActions(menuId)).containsExactly("MENU_CATALOG_CREATED", "MENU_CATALOG_UPDATED", "MENU_CATALOG_UPDATED")
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT count(DISTINCT source_reference) FROM operations_audit_record WHERE target_id = ?",
+                Long::class.java,
+                menuId,
+            ),
+        ).isEqualTo(3)
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM operations_audit_record a JOIN merchant_menu_catalog_command c ON a.source_reference = 'menu-catalog:' || c.id::text WHERE a.target_id = ?",
+                Long::class.java,
+                menuId,
+            ),
+        ).isEqualTo(1)
     }
 
     @Test

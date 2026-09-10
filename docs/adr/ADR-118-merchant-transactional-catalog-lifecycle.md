@@ -134,6 +134,8 @@ prefix version을 올리고 quote와 final Order를 같은 PR에서 바꾼다.
 
 ### 6. 모든 mutation은 command-transaction 멱등성을 사용한다
 
+Menu와 Store ordering-policy Audit의 `sourceReference`는 원장에 저장한 command ID를 사용한다. 보존 기간 안의 재전송은 같은 command를 재생하고 Audit을 추가하지 않는다. 원장 정리 후 재사용한 키는 새 command ID를 받아 과거 Audit과 충돌하지 않는다. Audit을 장기간 유지하기 위해 원장의 만료된 행을 유지하거나 별도 실행 원장을 추가하지 않는다.
+
 모든 Store/Menu mutation은 `Idempotency-Key`, canonical payload hash와 최초 terminal response를 사용한다.
 Store commerce root가 이미 존재하고, 검색 색인과 Audit를 포함한 모든 부수효과가 하나의 local DB
 transaction 안에 있으며 Provider 호출이 없으므로 ADR-064의 command-transaction 모델이다.

@@ -308,6 +308,8 @@ OpenAPI 원본과 runtime parity, generated TypeScript는 각 계약 PR의 같�
 
 ### PR #150 review remediation — 2026-09-10
 
+- [x] Slice 2: Menu·Store policy command ID를 Audit source로 연결. 두 원장 cleanup을 실제 실행한 뒤 같은 키로 새 변경·재전송해 감사 기록이 각각 한 번 남는 회귀 테스트 포함. 두 EndpointIntegrationTest: 21 tests passed.
+
 - [x] Slice 1: 옵션 100개 구성의 생성·교체, UUID 배열 유일 인덱스의 중복 차단·보관 후 재사용, 잘못된 참조의 400 응답 검증 완료. `MenuCatalogEndpointIntegrationTest`, `MenuCatalogMigrationTest`, `FlywayMigrationSmokeTest`: 14 tests passed. 기존 V73 수정이며, 별도 PR #151의 V74와 번호가 겹치지 않는다.
 
 Baseline은 `8e77826`, main은 `7ba84ea`다. 이 계획이 PR #150의 미병합 V73 migration writer를 계속 소유한다.
