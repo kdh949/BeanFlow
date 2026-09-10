@@ -48,15 +48,18 @@ internal class CustomerCancellationRefundExclusionService(
     ) {
         validateEventShape(event)
         try {
+            // 이벤트의 주문 ID로 취소 여부를 확인할 주문 근거를 찾을 수 없는 경우
             val order =
                 orders.find(event.orderId)
                     ?: conflict("ORDER_MISSING", "Customer-cancellation Order evidence is missing")
             validateOrder(event, order)
+            // 이벤트의 환불 ID로 성공 여부를 확인할 환불 근거를 찾을 수 없는 경우
             val refund =
                 refunds.find(event.refundId)
                     ?: conflict("REFUND_MISSING", "Customer-cancellation Refund evidence is missing")
             validateRefund(event, refund)
             if (items.findByOrderId(event.orderId) != null) {
+                // 정산 대상이 아닌 매장 수락 전 취소 주문에 정산 항목이 이미 존재하는 경우
                 conflict("SETTLEMENT_ITEM_EXISTS", "Cancelled Order unexpectedly has a SettlementItem")
             }
         } catch (failure: DomainFailure) {
@@ -76,6 +79,7 @@ internal class CustomerCancellationRefundExclusionService(
                 ),
             )
         if (setupIssue != null) {
+            // 고객 취소에 필요한 결제·환불 처리 구성이 완전하지 않은 경우
             conflict("PAYMENT_SETUP_INCOMPLETE", "Customer-cancellation payment setup is incomplete")
         }
 
@@ -118,6 +122,7 @@ internal class CustomerCancellationRefundExclusionService(
 
     private fun validateEventShape(event: PaymentRefundedV1) {
         if (event.completionDisposition != RefundCompletionDisposition.PRE_ACCEPTANCE_CANCELLATION) {
+            // 매장 수락 전 취소에 따른 환불이 아닌 경우
             conflict("UNSUPPORTED_DISPOSITION", "Refund is not a pre-acceptance cancellation")
         }
         val envelope = event.envelope
@@ -128,6 +133,7 @@ internal class CustomerCancellationRefundExclusionService(
             event.settlementDate != null || event.settlementItemSource != null ||
             event.settlementRefundEffect != null || event.refundSource.isBlank()
         ) {
+            // 이벤트 식별·추적 정보, 통화·금액 또는 정산 관련 필드가 취소 환불 계약에 맞지 않는 경우
             conflict("EVENT_CONTRACT", "PaymentRefundedV1 cancellation payload is inconsistent")
         }
     }
@@ -137,22 +143,28 @@ internal class CustomerCancellationRefundExclusionService(
         order: OrderCancellationSettlementEvidence,
     ) {
         if (order.state != CANCELLED || order.cancelledAt == null) {
+            // 저장된 주문이 취소 상태가 아니거나 취소 시각이 없는 경우
             conflict("ORDER_NOT_CANCELLED", "Refund Order is not durably cancelled")
         }
         if (order.cancellationCause != OrderCancellationCause.CUSTOMER_REQUEST) {
+            // 주문 취소 원인이 고객 요청이 아닌 경우
             conflict("ORDER_CAUSE", "Refund Order is not a customer-request cancellation")
         }
         if (order.customerId != event.customerId) {
+            // 주문 고객과 환불 이벤트의 고객이 다른 경우
             conflict("ORDER_CUSTOMER", "Refund customer does not match its Order")
         }
         if (listOf(order.acceptedAt, order.preparingAt, order.readyAt, order.completedAt).any { it != null }) {
+            // 매장 수락·제조·준비 완료·픽업 완료 이력이 있어 수락 전 취소로 볼 수 없는 경우
             conflict("ORDER_LIFECYCLE", "Refund Order passed the pre-acceptance boundary")
         }
         if (order.cancelledAt.isAfter(event.refundSucceededAt)) {
+            // 환불 성공 시각이 주문 취소 시각보다 앞서는 경우
             conflict("ORDER_REFUND_CHRONOLOGY", "Refund succeeded before Order cancellation")
         }
         val expectedSource = "order:${event.orderId}:customer-cancellation:${order.aggregateVersion}:payment"
         if (event.refundSource != expectedSource) {
+            // 환불 출처가 해당 주문의 최종 취소 버전으로 만든 출처와 다른 경우
             conflict("ORDER_SOURCE", "Refund source does not match the terminal Order version")
         }
     }
@@ -162,23 +174,29 @@ internal class CustomerCancellationRefundExclusionService(
         refund: CustomerCancellationRefundEvidence,
     ) {
         if (refund.orderId != event.orderId) {
+            // 저장된 환불이 이벤트에 명시된 주문의 환불이 아닌 경우
             conflict("REFUND_ORDER", "Refund does not belong to the event Order")
         }
         if (!refund.succeeded || refund.succeededAt != event.refundSucceededAt) {
+            // 저장된 환불이 성공 상태가 아니거나 성공 시각이 이벤트와 다른 경우
             conflict("REFUND_STATE", "Refund is not durably succeeded at the event time")
         }
         if (refund.reason != REFUND_REASON) {
+            // 저장된 환불 사유가 고객의 주문 취소가 아닌 경우
             conflict("REFUND_REASON", "Refund reason is not customer Order cancellation")
         }
         if (refund.sourceReference != event.refundSource) {
+            // 저장된 환불의 출처가 이벤트의 환불 출처와 다른 경우
             conflict("REFUND_SOURCE", "Refund source does not match the event")
         }
         if (refund.requestedAmountKrw != event.cashRefundedKrw ||
             refund.succeededAmountKrw != event.cashRefundedKrw
         ) {
+            // 환불 요청 금액 또는 실제 성공 금액이 이벤트의 환불 금액과 다른 경우
             conflict("REFUND_AMOUNT", "Refund amount does not match the event")
         }
         if (event.envelope.aggregateVersion != refund.aggregateVersion) {
+            // 이벤트의 환불 버전이 저장된 환불 버전과 다른 경우
             conflict("REFUND_VERSION", "Refund event version does not match durable Refund state")
         }
     }

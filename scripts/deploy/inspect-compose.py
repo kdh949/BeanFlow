@@ -5,6 +5,8 @@ from pathlib import Path
 import sys
 from urllib.parse import urlsplit
 
+from render_external_nginx import config_path, render
+
 
 def fail(message: str) -> None:
     raise SystemExit(f"compose contract failed: {message}")
@@ -131,13 +133,31 @@ if args.keycloak_mode == "external":
     if jwks != f"{issuer}/protocol/openid-connect/certs":
         fail("external Keycloak JWKS must belong to the configured issuer")
 
-    nginx_source = Path(__file__).resolve().parents[2] / "deploy/nginx/external-keycloak.conf"
+    nginx_settings = {
+        "BEANFLOW_PUBLIC_ORIGIN": api_environment.get("BEANFLOW_FRONTEND_BASE_URL", ""),
+        "BEANFLOW_SECRETS_DIR": str(Path(document["secrets"]["aistor_access_key"]["file"]).parent),
+        **{key: api_environment.get(key, "") for key in (
+            "BEANFLOW_AISTOR_ENDPOINT", "BEANFLOW_AISTOR_PUBLIC_ENDPOINT", "BEANFLOW_AISTOR_BUCKET",
+        )},
+    }
+    try:
+        expected_nginx = render(nginx_settings)
+    except ValueError as error:
+        fail(str(error))
+    nginx_source = config_path(nginx_settings)
     nginx_mounts = services["frontend"].get("volumes", [])
     if not any(
         mount.get("target") == "/etc/nginx/conf.d/default.conf"
-        and mount.get("source") == str(nginx_source) and mount.get("read_only") is True
+        and Path(mount.get("source", "")).resolve() == nginx_source.resolve()
+        and mount.get("read_only") is True
         for mount in nginx_mounts
     ):
         fail("external Keycloak requires the read-only external Nginx configuration")
+    if nginx_source.is_symlink() or not nginx_source.is_file():
+        fail("generated external-keycloak.conf is missing; prepare deployment files first")
+    if nginx_source.read_text() != expected_nginx:
+        fail("generated external-keycloak.conf differs from deployment settings; regenerate it first")
+    if nginx_source.stat().st_mode & 0o444 != 0o444:
+        fail("generated external-keycloak.conf must be readable by frontend UID 101")
 
 print("Compose contract passed.")

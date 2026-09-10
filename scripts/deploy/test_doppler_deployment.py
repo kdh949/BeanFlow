@@ -59,6 +59,24 @@ class DopplerDeploymentTest(unittest.TestCase):
             self.prepare()
         self.assertFalse(self.directory.exists())
 
+    def test_generated_nginx_tracks_same_origin_settings_without_touching_secrets(self):
+        self.prepare()
+        secret = self.directory / "BEANFLOW_POSTGRES_PASSWORD"
+        inode = secret.stat().st_ino
+        self.values["BEANFLOW_AISTOR_PUBLIC_ENDPOINT"] = self.values["BEANFLOW_PUBLIC_ORIGIN"]
+        self.prepare()
+        config = self.directory.parent / "external-keycloak.conf"
+        self.assertEqual(config.read_text(), prepare_deployment.render(self.values))
+        self.assertEqual(stat.S_IMODE(config.stat().st_mode), 0o644)
+        self.assertEqual(secret.stat().st_ino, inode)
+
+    def test_invalid_media_routing_writes_nothing(self):
+        self.values["BEANFLOW_AISTOR_PUBLIC_ENDPOINT"] = self.values["BEANFLOW_PUBLIC_ORIGIN"]
+        self.values["BEANFLOW_AISTOR_ENDPOINT"] = "https://aistor.example.test/path"
+        with self.assertRaisesRegex(SystemExit, "Nginx configuration rejected"):
+            self.prepare()
+        self.assertFalse(self.directory.exists())
+
     def test_missing_external_client_writes_nothing(self):
         del self.values["BEANFLOW_OPERATIONS_OIDC_CLIENT_ID"]
         with self.assertRaisesRegex(SystemExit, "BEANFLOW_OPERATIONS_OIDC_CLIENT_ID"):

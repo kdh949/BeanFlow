@@ -24,9 +24,15 @@ Keycloak 주소와 Nginx upstream이 남아 정상적으로 기동하거나 로�
 - 브라우저는 외부 Keycloak에 직접 Authorization Code + PKCE S256 요청을 한다. 외부 client의
   정확한 redirect URI, Web Origins, access-token audience와 `roles` mapper는 Keycloak 운영자가
   설정한다. SPA client secret, Keycloak 관리자 또는 DB credential을 BeanFlow에 주입하지 않는다.
-- 외부 모드의 Nginx는 BeanFlow `/api/`와 정적 파일만 제공하고 `/auth/`는 404로 닫는다.
+- 외부 모드의 Nginx는 BeanFlow `/api/`와 정적 파일을 제공하고 `/auth/`는 404로 닫는다.
   외부 Keycloak은 자신의 origin/TLS를 소유한다. HTTP redirect proxy나 내부 Keycloak fallback을
   추가하지 않는다.
+- 2026-09-09 보완: AIStor public signing endpoint가 BeanFlow origin과 같으면 설정된 private
+  bucket의 `stores/`, `menus/`, `campaigns/` GET/HEAD도 저장소로 전달한다. ADR-115와 ADR-120의
+  presigned URL·비공개 bucket 계약은 유지하며 Keycloak 프록시나 업로드 권한은 추가하지 않는다.
+  기존 배포 입력에서 Nginx 파일을 생성해 읽기 전용 mount하고 preflight에서 내용 일치를 검증한다.
+  별도 이미지 origin은 해당 host가 routing을 소유한다. 구현과 로컬 검증 범위는
+  [같은 출처 AIStor 프록시 계획](../exec-plans/completed/same-origin-aistor-proxy.md)에 기록한다.
 - Doppler는 배포 시 필요한 값을 공급하고 Compose config tree가 요구하는 secret 파일은 저장소
   밖에 0700 directory/0600 file로 준비한다. 비밀값을 출력하지 않고 모든 필수 입력을 확인한 뒤
   기록한다. 기존 DB/HMAC 값의 변경은 자동 credential rotation으로 처리하지 않는다.
@@ -58,6 +64,8 @@ config API와 JWT issuer/audience 검증을 그대로 사용하므로 제품 API
 - 외부 모드에서 Keycloak secret 파일 없이 preflight가 통과하고 최종 서비스가 세 개임을 검증한다.
 - 누락·잘못된 모드, issuer/base/realm/JWKS 불일치와 HTTP 주소를 거부한다.
 - bundled staging/prod 회귀 검사와 실제 Nginx syntax/HTTP smoke를 수행한다.
+- 같은 출처 이미지의 path/query/signing Host 보존, GET/HEAD 제한, 앱 credential 제거,
+  로그 비노출, upstream 실패 시 HTML 성공 응답 방지와 health 독립성을 검증한다.
 - Doppler 준비는 secret 누락, multiline PEM 보존, 0600 권한과 비밀값 비출력을 검사한다.
 - 실제 외부 로그인·로그아웃과 JWT issuer/audience/role은 배포된 환경에서 별도로 검증한다.
 

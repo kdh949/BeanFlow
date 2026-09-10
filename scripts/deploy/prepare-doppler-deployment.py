@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import tempfile
 
+from render_external_nginx import config_path, render
+
 ROOT = Path(__file__).resolve().parents[2]
 COMMON_SECRETS = (
     "BEANFLOW_POSTGRES_PASSWORD",
@@ -40,11 +42,12 @@ def required(values, name):
     return value
 
 
-def write_private(path, content):
+def write_private(path, content, mode=0o600):
     # Replacing the complete file avoids truncating a file currently mounted by a container.
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as output:
+            os.fchmod(output.fileno(), mode)
             output.write(content)
         os.replace(temporary, path)
     finally:
@@ -78,6 +81,16 @@ def prepare(environment, values):
     if resolved != directory or directory.parent == Path("/"):
         fail("BEANFLOW_SECRETS_DIR must be a canonical path under a dedicated deployment directory")
 
+    nginx_content = None
+    if mode == "external":
+        try:
+            nginx_content = render(settings)
+        except ValueError as error:
+            fail(f"Nginx configuration rejected: {error}")
+        nginx_file = config_path(settings)
+        if nginx_file.is_symlink() or (nginx_file.exists() and not nginx_file.is_file()):
+            fail("external-keycloak.conf must be a regular file")
+
     # Validate every value and existing file before writing any file. Credential rotation is separate.
     for name, value in secrets.items():
         path = directory / name
@@ -97,6 +110,9 @@ def prepare(environment, values):
             write_private(path, value)
         path.chmod(0o600)
     write_private(env_file, "".join(f"{name}={value}\n" for name, value in settings.items()))
+    if nginx_content is not None:
+        # Contains routing only, no secrets. The read-only frontend runs as UID 101.
+        write_private(nginx_file, nginx_content, mode=0o644)
     return env_file
 
 

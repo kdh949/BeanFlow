@@ -1,0 +1,39 @@
+    # Only private image object reads are exposed. AIStor validates the signature.
+    location ~ ^/${BUCKET_PATTERN}/(stores|menus|campaigns)/ {
+        limit_except GET { deny all; }
+        # Resolve only when media is requested: AIStor DNS failure must not stop the SPA/API.
+        resolver 127.0.0.11 valid=30s;
+        resolver_timeout 3s;
+        set $beanflow_aistor_upstream ${UPSTREAM};
+        proxy_pass $beanflow_aistor_upstream$request_uri;
+        proxy_http_version 1.1;
+        proxy_set_header Host ${PUBLIC_AUTHORITY};
+        proxy_set_header Cookie "";
+        proxy_set_header Authorization "";
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_ssl_server_name on;
+        proxy_ssl_name ${TLS_HOST};
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_verify_depth 3;
+        proxy_connect_timeout 3s;
+        proxy_send_timeout 15s;
+        proxy_read_timeout 30s;
+        proxy_intercept_errors off;
+        proxy_next_upstream off;
+        proxy_cache off;
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "private, no-store" always;
+        access_log /dev/stdout beanflow_media;
+        # Ordinary Nginx errors include the original URI and query credentials.
+        error_log /dev/stderr crit;
+    }
+
+    # Bucket listing and non-image prefixes must not fall through to the SPA.
+    location = /${BUCKET} { return 404; }
+    location /${BUCKET}/ {
+        access_log /dev/stdout beanflow_media;
+        error_log /dev/stderr crit;
+        return 404;
+    }
