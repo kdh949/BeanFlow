@@ -115,6 +115,31 @@ internal class MenuCatalogMigrationTest : IsolatedPostgresSupport() {
         ).containsExactly("MENU_CATALOG_ARCHIVED", "MENU_CATALOG_CREATED", "MENU_CATALOG_UPDATED")
     }
 
+    @Test
+    fun `100 random UUID options fit the active unique index and archived keys can be reused`() {
+        flyway().migrate()
+        val storeId = UUID.randomUUID()
+        val menuId = UUID.randomUUID()
+        val configurationId = UUID.randomUUID()
+        jdbc.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)", storeId)
+        jdbc.update(
+            "INSERT INTO merchant_menu (id, store_id, name, base_price_krw, available) VALUES (?, ?, '메뉴', 0, false)",
+            menuId,
+            storeId,
+        )
+        val key = List(100) { UUID.randomUUID().toString() }.sorted().joinToString(",")
+        assertThat(key).hasSize(3699)
+        val insert = "INSERT INTO merchant_menu_configuration (id, menu_id, normalized_option_key, available) VALUES (?, ?, ?, true)"
+        jdbc.update(insert, configurationId, menuId, key)
+        assertThatThrownBy { jdbc.update(insert, UUID.randomUUID(), menuId, key) }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
+        jdbc.update("UPDATE merchant_menu_configuration SET lifecycle = 'ARCHIVED', archived_at = now() WHERE id = ?", configurationId)
+        jdbc.update(insert, UUID.randomUUID(), menuId, key)
+        assertThat(
+            jdbc.queryForObject("SELECT count(*) FROM merchant_menu_configuration WHERE menu_id = ?", Long::class.java, menuId),
+        ).isEqualTo(2)
+    }
+
     private fun flyway(
         cleanDisabled: Boolean = true,
         target: String? = null,
