@@ -46,3 +46,18 @@ commit되므로 Adjustment 이후 event/Audit 실패가 반대 판정으로 바�
 
 매장 개설/식별 정보 감사에는 전후 identity version과 profile digest를 기록한다. 실제 좌표와 지역 코드, 이름을
 Audit에 복사하지 않으며 권한이 필요한 매장 상세에서 조회한다. 사용자 입력 사유에도 기존 raw PII 금지 규칙이 적용된다.
+
+## 픽업 슬롯
+
+- 같은 매장의 ACTIVE OWNER/STAFF는 `GET /api/v1/stores/{storeId}/pickup-slot-management?from=...&to=...`로
+  해당 구간 `[from, to)`에 시작하는 슬롯을 조회한다. limit 1~100, actor/store/interval-bound signed cursor를 사용한다.
+- `POST /api/v1/stores/{storeId}/pickup-slot-management`에 `{startsAt, endsAt, capacity, reason}`과
+  Idempotency-Key, Merchant Session/CSRF를 보내 슬롯을 만든다. 시각은 microsecond 정밀도로 정규화하고
+  미래 시작·유효한 종료·0 이상 정원을 요구한다. 서로 다른 명령으로 만든 슬롯은 독립된 정원을 가진다.
+- `GET .../{slotId}`에서 실제 예약/확정 수량과 version을 확인한다. `PUT .../{slotId}`는 생성 필드와
+  expectedVersion을 받는다. 현재 사용량보다 작은 정원, 사용 중인 슬롯의 시간 이동, 이미 시작한 슬롯의
+  변경을 거절한다. 미래의 미사용 슬롯은 capacity 0으로 닫을 수 있다.
+- 예약과 관리는 동일 PickupSlot row lock을 사용한다. 예약이 먼저 commit하면 version 또는 사용량 guard가
+  관리를 거절한다. 정원 0 변경이 먼저 commit하면 신규 예약이 PICKUP_SLOT_FULL로 실패한다.
+- 동일 key/payload는 최초 응답을 재생하며 replay 전 현재 membership을 다시 확인한다. 예약/확정 수량은
+  관리 요청에서 받지 않는다. Audit/response 실패는 변경을 rollback하며 response 원장은 90일 후 bounded cleanup한다.

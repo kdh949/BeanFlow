@@ -31,7 +31,7 @@ import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, PickupReservationClockConfiguration::class)
 @BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest
 internal class PickupReservationRepositoryTest
@@ -41,7 +41,7 @@ internal class PickupReservationRepositoryTest
         private val slotRepository: PickupSlotJpaRepository,
         private val reservationRepository: PickupReservationJpaRepository,
         private val rescheduleHistoryRepository: PickupRescheduleHistoryJpaRepository,
-        private val clock: Clock,
+        private val clock: PickupReservationTestClock,
         private val jdbcTemplate: JdbcTemplate,
         transactionManager: PlatformTransactionManager,
     ) {
@@ -49,6 +49,7 @@ internal class PickupReservationRepositoryTest
 
         @BeforeEach
         fun cleanDatabase() {
+            clock.set(Instant.now())
             transactions.executeWithoutResult {
                 jdbcTemplate.execute("TRUNCATE TABLE fulfillment_pickup_reschedule_history")
                 reservationRepository.deleteAllInBatch()
@@ -189,15 +190,8 @@ internal class PickupReservationRepositoryTest
                 )
             val first = transactions.execute { operations.reserve(command) }
 
-            // Move the slot into the past instead of sleeping: the retry now happens after the
-            // window closed, which is exactly the case a payment retry hits.
-            val startedAt = clock.instant().minus(Duration.ofMinutes(1))
-            jdbcTemplate.update(
-                "UPDATE fulfillment_pickup_slot SET starts_at = ?, ends_at = ? WHERE id = ?",
-                Timestamp.from(startedAt),
-                Timestamp.from(startedAt.plus(Duration.ofMinutes(10))),
-                slotId,
-            )
+            // Advance time without rewriting the now-immutable consumed slot window.
+            clock.set(clock.instant().plus(Duration.ofHours(1)).plusSeconds(1))
 
             val replay = transactions.execute { operations.reserve(command) }
             // The replay reads the reservation back from PostgreSQL, so this only holds if the
@@ -229,14 +223,12 @@ internal class PickupReservationRepositoryTest
                 )
             }
 
-            // Model a legacy/manual row whose slot start changed after reservation. Its stored
-            // reservation deadline is still in the future, so confirm must not rely on it alone.
-            val startedAt = clock.instant().minus(Duration.ofMinutes(1))
+            // A legacy deadline can outlive the slot; keep the window intact and advance time.
+            clock.set(clock.instant().plus(Duration.ofHours(1)).plusSeconds(1))
             jdbcTemplate.update(
-                "UPDATE fulfillment_pickup_slot SET starts_at = ?, ends_at = ? WHERE id = ?",
-                Timestamp.from(startedAt),
-                Timestamp.from(startedAt.plus(Duration.ofMinutes(10))),
-                slotId,
+                "UPDATE fulfillment_pickup_reservation SET expires_at = ? WHERE order_id = ?",
+                Timestamp.from(clock.instant().plus(Duration.ofHours(1))),
+                orderId,
             )
 
             val report = transactions.execute { operations.confirm(orderId, clock.instant(), source) }
@@ -644,3 +636,26 @@ internal class PickupReservationRepositoryTest
             }
         }
     }
+
+@org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)
+internal class PickupReservationClockConfiguration {
+    @org.springframework.context.annotation.Bean
+    @org.springframework.context.annotation.Primary
+    fun pickupReservationClock() = PickupReservationTestClock()
+}
+
+internal class PickupReservationTestClock : Clock() {
+    private val now =
+        java.util.concurrent.atomic
+            .AtomicReference(Instant.now())
+
+    fun set(value: Instant) {
+        now.set(value)
+    }
+
+    override fun instant(): Instant = now.get()
+
+    override fun getZone(): java.time.ZoneId = java.time.ZoneOffset.UTC
+
+    override fun withZone(zone: java.time.ZoneId): Clock = Clock.fixed(instant(), zone)
+}

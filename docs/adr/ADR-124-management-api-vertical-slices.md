@@ -26,6 +26,14 @@
    전체 stack completion을 구분한다. 전체 완료는 여섯 구현·검증·PR 및 exact ancestry 확인이며 merge/deploy와 다르다.
 6. 재고 관리와 UI는 범위 밖이다. 신규 production dependency와 초기 DDL 재작성은 하지 않는다.
 
+### 픽업 슬롯 authoring 경계
+
+Fulfillment의 관리 application service가 Identity public port로 ACTIVE membership shared lock을 획득한 뒤
+PickupSlot row를 잠근다. 기존 예약/변경은 같은 row lock과 version을 사용한다. Fulfillment의 명시적 module
+의존성에 Identity API를 추가하며 owner 데이터를 Identity로 이동하지 않는다. Controller는 Fulfillment service만
+호출한다. 새 슬롯과 시간 변경은 미래의 유효한 구간만 허용하며 시작한 슬롯은 변경하지 않는다. 정원 0은
+예약이 없는 미래 슬롯을 닫는 값으로 허용한다. 과거 슬롯·예약 snapshot·예약/확정 count를 관리 DTO로 덮어쓰지 않는다.
+
 ## Alternatives Considered
 
 단순 Controller wrapper는 권한·감사 actor·부분 commit 실패를 해결하지 못한다. 독립 sibling migration은

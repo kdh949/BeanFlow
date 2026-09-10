@@ -213,6 +213,18 @@ Provider credential 또는 개인 정보를 metric label/log에 추가하지 않
 
 ## Progress
 
+### Slice 3 — 픽업 슬롯
+
+- 선행 commit `c8b5b68`, PR #152 뒤의 `feature/pickup-slot-management-api`에서 작업.
+- V76, 관리 목록/상세/생성/교체 4개 endpoint. Identity authoring shared lock과 PickupSlot row lock을 결합.
+- 시작한 슬롯 변경, 소비 중 시간 이동, 사용량 미만 정원을 차단한다. 예약/확정 count를 DTO로 받지 않는다.
+- signed interval 목록, microsecond 시각 정규화, 멱등 response·Audit 및 90일 bounded retention 추가.
+- Passed: 관리 6 + 예약 회귀 11 + API parity/인증 경로/Modulith 3 = 20 tests, spotlessCheck, bootJar.
+- 기존 테스트는 consumed slot 시간을 변경하는 대신 테스트 Clock을 이동한다. confirm source fixture도 원본 reserve source로 수정.
+- opaque digest의 숫자열을 raw PII로 오인하지 않도록 byte-separated SHA-256 표현과 회귀 assertion 보강.
+- 최종 보강 및 부모 `c8b5b68` 반영 뒤 동일 20 tests, spotlessCheck, bootJar 재실행 Passed.
+- 문서 verifier Passed: target 221/runtime 211 operations, 401 schemas.
+
 ### Slice 2 — 매장 개설·식별 정보
 
 - 선행 commit `0bfcc6f`, PR #151 뒤의 `feature/store-identity-management-api`에서 작업.

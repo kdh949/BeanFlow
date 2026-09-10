@@ -1064,6 +1064,10 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1identity"
   /operations/store-regions:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1store-regions"
+  /stores/{storeId}/pickup-slot-management:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1pickup-slot-management"
+  /stores/{storeId}/pickup-slot-management/{slotId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1pickup-slot-management~1{slotId}"
 components:
   securitySchemes:
     bearerAuth:

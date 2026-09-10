@@ -63,5 +63,12 @@ internal class StoreAccessService(
         return StoreActor(actorId, storeId, membership.membershipRole)
     }
 
+    @Transactional
+    override fun requireStoreAuthoringAccess(
+        actorId: UUID,
+        storeId: UUID,
+        actorRoles: Set<StoreActorRole>,
+    ): StoreActor = requireCatalogAccess(actorId, storeId, actorRoles)
+
     private fun denied(message: String): Nothing = throw DomainFailure(FailureCode.ACCESS_DENIED, message)
 }

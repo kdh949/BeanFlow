@@ -33,6 +33,7 @@ internal class AuthenticationPathRegistry {
             // 법정동 어휘와 매장 지역 지정은 둘 다 매장주 화면의 것이다. 어휘 자체는 공개
             // 참조 데이터지만 그것을 고르는 사람이 매장주이므로 merchant chain에 둔다.
             registration(AuthenticationChain.MERCHANT, "/api/v1/regions"),
+            registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/pickup-slot-management/**"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/region"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/image"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/customer-display"),

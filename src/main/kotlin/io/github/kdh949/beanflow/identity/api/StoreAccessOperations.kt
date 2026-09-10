@@ -35,4 +35,11 @@ interface StoreAccessOperations {
         storeId: UUID,
         actorRoles: Set<StoreActorRole>,
     ): StoreActor
+
+    /** Holds the ACTIVE membership shared lock through a caller-owned authoring transaction. */
+    fun requireStoreAuthoringAccess(
+        actorId: UUID,
+        storeId: UUID,
+        actorRoles: Set<StoreActorRole>,
+    ): StoreActor
 }
