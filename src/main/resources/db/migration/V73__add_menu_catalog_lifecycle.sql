@@ -37,8 +37,12 @@ ALTER TABLE merchant_menu_configuration
 ALTER TABLE merchant_menu_configuration
     DROP CONSTRAINT merchant_menu_configuration_menu_id_normalized_option_key_key;
 
+ALTER TABLE merchant_menu_configuration
+    ALTER COLUMN normalized_option_key TYPE varchar(4000);
+
+-- Keep the canonical text for reads; index UUID values so 100 selected options fit a B-tree entry.
 CREATE UNIQUE INDEX uq_merchant_menu_configuration_active_option_key
-    ON merchant_menu_configuration (menu_id, normalized_option_key)
+    ON merchant_menu_configuration (menu_id, (string_to_array(normalized_option_key, ',')::uuid[]))
     WHERE lifecycle = 'ACTIVE';
 
 CREATE INDEX ix_merchant_menu_active_store_name_id

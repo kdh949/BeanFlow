@@ -195,8 +195,8 @@ internal class MenuCatalogEndpointIntegrationTest(
                 .replaceFirst(optionId.toString(), missingOptionId.toString())
 
         mutate(post("/api/v1/stores/$storeId/menus"), actor, "menu-invalid-key-001", invalid)
-            .andExpect(status().isConflict)
-            .andExpect(jsonPath("$.code").value("RESOURCE_STATE_CONFLICT"))
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_menu", Long::class.java)).isZero()
         assertThat(commandCount()).isZero()
     }
@@ -262,6 +262,35 @@ internal class MenuCatalogEndpointIntegrationTest(
                 .andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         }
+    }
+
+    @Test
+    fun `one configuration can select all 100 options on create and replace`() {
+        val storeId = seedStore()
+        val actor = signIn("catalog.full-options", storeId, "OWNER")
+        val menuId = UUID.randomUUID()
+        val optionIds = List(100) { UUID.randomUUID() }
+        val optionRows =
+            optionIds.joinToString(",") {
+                """{"optionId":"$it","name":"샷","additionalPriceKrw":0,"available":true}"""
+            }
+        val selected = optionIds.joinToString(",") { "\"$it\"" }
+        val body = """{
+            "menuId":"$menuId","name":"전체 옵션 메뉴","basePriceKrw":1000,"available":true,
+            "options":[$optionRows],
+            "configurations":[{"configurationId":"${UUID.randomUUID()}","selectedOptionIds":[$selected],"available":true}]
+        }"""
+        mutate(post("/api/v1/stores/$storeId/menus"), actor, "menu-all-options-create", body)
+            .andExpect(status().isCreated)
+            .andExpect(jsonPath("$.configurations[0].selectedOptionIds.length()").value(100))
+        mutate(
+            put("/api/v1/stores/$storeId/menus/$menuId/trade-content"),
+            actor,
+            "menu-all-options-replace",
+            body.replaceFirst("{", "{\"expectedVersion\":0,").replace("전체 옵션 메뉴", "전체 옵션 수정"),
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.version").value(1))
+            .andExpect(jsonPath("$.configurations[0].selectedOptionIds.length()").value(100))
     }
 
     @Test

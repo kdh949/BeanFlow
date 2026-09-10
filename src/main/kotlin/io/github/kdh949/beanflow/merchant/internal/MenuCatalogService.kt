@@ -438,7 +438,7 @@ internal class MenuCatalogService(
                         invalid("Selected Menu option IDs must be unique")
                     }
                     if (!optionIds.containsAll(configuration.selectedOptionIds)) {
-                        conflict("An active configuration must reference active options of the same Menu")
+                        invalid("An active configuration must reference active options of the same Menu")
                     }
                     configuration.copy(
                         selectedOptionIds = configuration.selectedOptionIds.distinct().sortedBy(UUID::toString),

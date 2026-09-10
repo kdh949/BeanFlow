@@ -166,6 +166,14 @@ ADR-076의 Store당 active Menu 1,000개, active Option 5,000개 상한을 write
 DB constraint가 표현 가능한 positivity/uniqueness/lifecycle tuple은 DB에서도 보호하고, Store 전체 count와
 cross-row 의미는 Store exclusive lock 아래 Application Service가 보호한다.
 
+### 9. 구성 key의 저장·인덱스 표현
+
+정규화된 UUID 문자열은 API/조회 표현을 유지하고 최대 100개 선택을 위해 4000자로 저장한다.
+활성 구성의 유일성 인덱스는 같은 문자열을 PostgreSQL `uuid[]`로 변환한 expression을 사용한다.
+100 UUID는 binary array payload 1600바이트로 제한되므로 긴 문자열 자체를 B-tree key로 저장하지 않는다.
+옵션은 UUID 문자열 오름차순으로 정규화한 뒤 저장하며 empty string은 빈 UUID 배열과 대응한다.
+해시 충돌 처리나 별도 mapping table은 추가하지 않는다.
+
 ## Alternatives Considered
 
 ### 기존 row 수정 command만 추가

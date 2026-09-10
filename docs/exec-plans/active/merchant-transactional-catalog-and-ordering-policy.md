@@ -306,6 +306,31 @@ OpenAPI 원본과 runtime parity, generated TypeScript는 각 계약 PR의 같�
 
 ## Milestones
 
+### PR #150 review remediation — 2026-09-10
+
+- [x] Slice 1: 옵션 100개 구성의 생성·교체, UUID 배열 유일 인덱스의 중복 차단·보관 후 재사용, 잘못된 참조의 400 응답 검증 완료. `MenuCatalogEndpointIntegrationTest`, `MenuCatalogMigrationTest`, `FlywayMigrationSmokeTest`: 14 tests passed. 기존 V73 수정이며, 별도 PR #151의 V74와 번호가 겹치지 않는다.
+
+Baseline은 `8e77826`, main은 `7ba84ea`다. 이 계획이 PR #150의 미병합 V73 migration writer를 계속 소유한다.
+권한/membership → command advisory → Store commerce lock과 owner/search/Audit의 단일 transaction을 유지한다.
+외부 Provider 호출이나 새 dependency는 추가하지 않는다.
+
+1. 메뉴 구성 저장과 validation: V73에서 option key 문자열을 4000자로 확장하고 UUID 배열 expression unique
+   index를 사용한다. 100 UUID의 문자열 3699자와 binary index 크기를 모두 지원한다. desired aggregate의
+   잘못된 Option 참조는 ADR-026의 400으로 맞춘다. API create/replace, DB duplicate/archived reuse를 검증한다.
+2. 멱등 원장과 Audit: Merchant command ID를 내부 mutation result로 Identity에 전달한다. Audit source는 그 ID를
+   사용하며 replay/no-op은 새 Audit를 만들지 않는다. 실제 cleanup 후 같은 key의 새 명령과 새 Audit를 검증한다.
+3. 카탈로그 조회: child ID는 bulk existence query, 목록은 lifecycle별 DB count, active aggregate는 DB predicate로
+   읽는다. 보관된 과거 child를 materialize하지 않으며 이력 삭제나 별도 cache는 도입하지 않는다. 최대 요청의
+   중복 조회 수와 많은 archived fixture에서 로딩 entity 수를 검증한다. latency 개선 수치는 주장하지 않는다.
+4. 편집 상태: GET sequence로 이전 메뉴 응답을 무시하고 create/close/filter 전환 시 무효화한다. 저장 중 입력과
+   대상 전환을 잠근다. mutation 완료와 목록 refresh 상태를 분리하고 명시적으로 버튼 활성화를 기다리는
+   Storybook/MSW 경합 test를 추가한다. 신규 콘솔과 공통 Button/TextField/Checkbox는 REUSE한다.
+
+각 항목은 구현·해당 test·ADR/계획을 함께 포함하는 수직 슬라이스 commit으로 기록한다.
+관련 backend integration/schema/architecture와 frontend type/unit/design/build/Storybook/Docs 검증 후 push한다.
+최종 head의 원격 CI를 확인하고 대응하는 review thread를 개별 resolve한다. PR merge/deploy는 범위 밖이다.
+
+
 ### Milestone 0 — docs-only 거래 카탈로그 결정 PR
 
 **Parent/base:** current reviewed customer/merchant combined head. main 또는 중간 PR head를 추측하지 않고
