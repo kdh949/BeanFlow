@@ -240,7 +240,15 @@ internal class SettlementDisputeManagementService(
                         String::class.java,
                         prepared,
                     )
-                if (replay != null) return@execute mapper.readValue(replay, DisputeManagementResponse::class.java)
+                if (replay != null) {
+                    // 최초 응답은 보존하되 판정 commit 이후 실패한 Case 완료는 다시 시도한다.
+                    when (command.operation) {
+                        "ACCEPTED" -> decisions.accept(command.disputeId, clock.instant())
+                        "REJECTED" -> decisions.reject(command.disputeId, clock.instant())
+                        "WITHDRAWN" -> decisions.withdraw(command.disputeId, clock.instant())
+                    }
+                    return@execute mapper.readValue(replay, DisputeManagementResponse::class.java)
+                }
                 val dispute = locked(command.disputeId)
                 requireStore(dispute, command.storeId)
                 when (command.operation) {
