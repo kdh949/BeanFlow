@@ -28,6 +28,7 @@ import java.util.UUID
 @Service
 @Transactional(propagation = Propagation.MANDATORY)
 internal class StoreSettlementTermsManagementService(
+    private val clock: Clock,
     private val stores: StoreJpaRepository,
     private val terms: StoreSettlementTermsJpaRepository,
     private val jdbc: JdbcTemplate,
@@ -177,6 +178,8 @@ internal class StoreSettlementTermsManagementService(
             c.storeId,
             true,
         )
+        // 주문 quote의 shared lock을 기다리는 동안 적용 시작 시각이 지날 수 있다.
+        if (!c.effectiveFrom.isAfter(clock.instant())) invalid()
         val revision = revision(c.storeId)
         if (revision != c.expectedRevision) conflict("Terms revision is stale")
         if (jdbc.queryForObject(
