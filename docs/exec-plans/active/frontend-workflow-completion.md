@@ -137,7 +137,8 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 
 - [x] 2026-09-11: clean main과 origin/main 일치, Storybook catalog와 컴포넌트 문서 확인.
 - [x] C1: 검색 버튼 겹침·즐겨찾기 긴 내용·중요 글자 토큰 수정. Storybook MCP 전체 324개 interaction/a11y Passed, tsc/check:design Passed. 320/390px 렌더링 확인.
-- [ ] C2–C5 고객 거래 정합성 구현·검증·커밋·PR.
+- [x] C2: 픽업 날짜/요일·주간 운영시간·현재 견적 이름·이미지 lease 재조회 구현. 관련 Storybook 11개 interaction/a11y와 날짜 단위 3개 Passed. 만료 응답은 명시적 실패.
+- [ ] C3–C5 고객 거래 정합성 구현·검증·커밋·PR.
 - [ ] S1–S2 점주 매장 관리 구현·검증·커밋·PR.
 - [ ] O1–O3 운영 매장/정책 구현·검증·커밋·PR.
 - [ ] R1–R3 이의/복구 구현·검증·커밋·PR.

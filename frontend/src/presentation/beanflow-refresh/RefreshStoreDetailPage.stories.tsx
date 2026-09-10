@@ -33,6 +33,16 @@ export const Orderable: Story = {
   },
 };
 
+export const WeeklyHours: Story = {
+  play: async ({ canvas }) => {
+    const hours = await canvas.findByRole("region", { name: "요일별 운영시간" });
+    await expect(hours).toHaveTextContent("월요일");
+    await expect(hours).toHaveTextContent("08:00–20:00");
+    await expect(hours).toHaveTextContent("토요일09:00–18:00");
+    await expect(hours).toHaveTextContent("일요일휴무");
+  },
+};
+
 export const PickupUnavailable: Story = {
   parameters: {
     msw: { handlers: [...signedInHandlers, ...favoriteHandlers, ...storeIdentityHandlers, http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [] })), http.get("/api/v1/stores/:storeId/pickup-slots", () => HttpResponse.json({ items: [] }))] },

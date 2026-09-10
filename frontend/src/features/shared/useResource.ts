@@ -27,7 +27,9 @@ export function useResource<T>(load: () => Promise<T>): { state: Resource<T>; re
 
   useEffect(() => {
     void run();
+    return () => { ++generation.current; };
   }, [run]);
 
-  return { state, reload: () => void run() };
+  const reload = useCallback(() => void run(), [run]);
+  return { state, reload };
 }

@@ -12,15 +12,16 @@ import { Link, useNavigate, useParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
+import { useCurrentMenuCatalog } from "../../features/discovery/useCurrentMenuCatalog";
 import { useStore } from "../../features/discovery/useStore";
-import { nextPickupLabel, operatingStatusLabel } from "../../features/discovery/storeDisplay";
+import { nextPickupLabel, operatingStatusLabel, operatingDayLabel, pickupDateTimeLabel } from "../../features/discovery/storeDisplay";
 import { couponSelection, useCouponSelection } from "../../features/customer/couponSelection";
 import { type CartLine, cart, cartItemCount, useCart } from "../../features/ordering/cart";
 import { orderConflictGuidance, shouldRotateIdempotencyKey } from "../../features/ordering/orderConflicts";
 import { useResource } from "../../features/shared/useResource";
 import { PointUseField, usePointUse } from "../../features/loyalty/PointUseField";
 import { FavoriteStoreButton } from "../../features/customer/FavoriteStoresPage";
-import { shortTime, won } from "../../lib/format";
+import { won } from "../../lib/format";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar } from "./RefreshShared";
 import { Button, ButtonLink, Checkbox, PageHeading, QuantityStepper, RadioCard, RadioGroup } from "../../design-system";
 
@@ -67,10 +68,11 @@ export function RefreshStoreDetailPage() {
         <div><span>운영시간</span><strong>{operatingStatusLabel(store.customerDisplay.operatingStatus)}</strong></div>
         <div><span>픽업</span><strong>{nextPickupLabel(store.nextPickupWindow)}</strong></div>
       </section>
+      {store.customerDisplay.operatingHours ? <section className="bfr-weekly-hours" aria-label="요일별 운영시간"><h2>요일별 운영시간</h2><dl>{store.customerDisplay.operatingHours.days.map((day) => { const label = operatingDayLabel(day); return <div key={day.dayOfWeek}><dt>{label.day}요일</dt><dd>{label.hours}</dd></div>; })}</dl></section> : null}
       {store.customerDisplay.directionsHint ? <p className="bfr-direction"><Navigation size={16} />{store.customerDisplay.directionsHint}</p> : null}
       {!store.orderingAvailable ? <p className="bfr-inline-status" role="status">운영시간과 별개로 이 매장은 현재 주문을 받지 않아요.</p> : !orderable ? <p className="bfr-inline-status" role="status">지금은 픽업 시간이 모두 마감됐어요.</p> : null}
 
-      {slots.length ? <section className="bfr-pickup-strip" aria-label="픽업 시간 안내"><header><h2>픽업 가능 시간</h2></header><p>장바구니에서 시간을 선택해 주세요.</p><div>{slots.filter((slot) => slot.remainingCapacity > 0).slice(0, 6).map((slot) => <span key={slot.pickupSlotId}>{shortTime.format(new Date(slot.startsAt))}</span>)}</div></section> : null}
+      {slots.length ? <section className="bfr-pickup-strip" aria-label="픽업 시간 안내"><header><h2>픽업 가능 시간</h2></header><p>장바구니에서 시간을 선택해 주세요.</p><div>{slots.filter((slot) => slot.remainingCapacity > 0).slice(0, 6).map((slot) => <span key={slot.pickupSlotId}>{pickupDateTimeLabel(slot.startsAt)}</span>)}</div></section> : null}
 
       <nav className="bfr-category-tabs" aria-label="메뉴 카테고리">{groups.map((group) => <a key={group.key} href={`#bfr-menu-${group.key}`}>{group.name}</a>)}</nav>
       <div className="bfr-menu-groups">
@@ -97,7 +99,7 @@ function RefreshMenuRow({ menu, storeId, storeName, orderable }: { menu: Menu; s
   const unitPrice = menu.basePriceKrw + optionPrice;
   const selectable = menu.available && orderable;
   function line(): CartLine {
-    return { menuId: menu.menuId, optionIds, quantity, display: { menuName: menu.name, optionNames: options.filter((option) => optionIds.includes(option.optionId)).map((option) => option.name), unitPriceKrw: unitPrice, imageUrl: menu.image?.url } };
+    return { menuId: menu.menuId, optionIds, quantity, display: { menuName: menu.name, optionNames: options.filter((option) => optionIds.includes(option.optionId)).map((option) => option.name), unitPriceKrw: unitPrice,  } };
   }
   function add() {
     const next = line();
@@ -144,7 +146,9 @@ function RefreshCartContents({ storeId, savedStoreName, lines }: { storeId: stri
   const intent = useRef(new SubmissionIntent());
   const store = useStore(storeId);
   const storeName = store.state.status === "ready" ? store.state.value.name : savedStoreName;
-  const storeAcceptsOrders = store.state.status !== "ready" || store.state.value.orderingAvailable;
+  const storeAcceptsOrders = store.state.status === "ready" && store.state.value.orderingAvailable && store.state.value.pickupAvailable;
+  const catalog = useCurrentMenuCatalog(storeId);
+  const [failedImages, setFailedImages] = useState<string[]>([]);
   const selectedCoupon = useCouponSelection(storeId);
   const slots = useResource<PickupSlot[]>(useCallback(async () => unwrap(await customerApi.GET("/stores/{storeId}/pickup-slots", { params: { path: { storeId } } })).items, [storeId]));
 
@@ -185,18 +189,21 @@ function RefreshCartContents({ storeId, savedStoreName, lines }: { storeId: stri
       <RefreshMobileTopbar title="BeanFlow" brand />
       <PageHeading title="장바구니" />
       {store.state.status !== "loading" ? <section className="bfr-cart-store"><div><MapPin size={16} /><span><strong>{storeName}</strong><small>{store.state.status === "ready" ? store.state.value.customerDisplay.addressLine ?? "주소 정보 없음" : "매장 안내를 불러오지 못했어요."}</small></span></div>{store.state.status === "ready" ? <span>{store.state.value.orderingAvailable ? "주문 가능" : "주문 쉬는 중"}</span> : null}</section> : null}
+      {store.state.status === "failed" ? <RefreshError error={store.state.error} retry={store.reload} /> : null}
       <section className="bfr-cart-lines" aria-label="담은 메뉴">
         <header><h2>주문 메뉴</h2><ButtonLink variant="ghost" to={`/app/stores/${storeId}`}>메뉴 더 담기</ButtonLink></header>
-        {lines.map((line, index) => <article className="bfr-cart-line" key={`${line.menuId}-${line.optionIds.join("-")}`}>
-          <div className="bfr-cart-line-summary"><span className="bfr-cart-line-media">{line.display.imageUrl ? <img src={line.display.imageUrl} alt="" /> : <Coffee size={21} aria-hidden="true" />}</span><span><strong>{line.display.menuName}</strong><small>{line.display.optionNames.join(" · ") || "기본 옵션"}</small><b>{quote?.lines[index] ? won.format(quote.lines[index]!.lineTotalKrw) : `예상 ${won.format(line.display.unitPriceKrw * line.quantity)}`}</b></span></div>
-          <div className="bfr-cart-line-actions"><QuantityStepper value={line.quantity} label={`${line.display.menuName} 수량`} disabled={submitting} onChange={(value) => cart.setQuantity(index, value)} /><Button variant="ghost" disabled={submitting} aria-label={`${line.display.menuName} 옵션 변경`} onClick={() => setEditingIndex(index)}>옵션 변경</Button><Button variant="ghost" disabled={submitting} aria-label={`${line.display.menuName} 삭제`} onClick={() => { setEditingIndex(null); cart.setQuantity(index, 0); }}><Trash2 size={16} aria-hidden="true" />삭제</Button></div>
+        {catalog.state.status === "failed" ? <RefreshError error={catalog.state.error} retry={catalog.reload} /> : null}
+        {failedImages.length ? <div role="alert"><p>메뉴 이미지를 표시하지 못했어요.</p><Button variant="secondary" onClick={() => { setFailedImages([]); catalog.reload(); }}>이미지 다시 불러오기</Button></div> : null}
+        {lines.map((line, index) => { const quotedLine = quote?.lines[index]; const menuName = quotedLine?.menuName ?? line.display.menuName; const optionNames = quotedLine?.optionNames ?? line.display.optionNames; const currentMenu = catalog.state.status === "ready" ? catalog.state.value.find((menu) => menu.menuId === line.menuId) : undefined; const image = currentMenu?.image; return <article className="bfr-cart-line" key={`${line.menuId}-${line.optionIds.join("-")}`}>
+          <div className="bfr-cart-line-summary"><span className="bfr-cart-line-media">{image && !failedImages.includes(image.url) ? <img src={image.url} alt="" onError={() => setFailedImages((current) => current.includes(image.url) ? current : [...current, image.url])} /> : <Coffee size={21} aria-hidden="true" />}</span><span><strong>{menuName}</strong><small>{optionNames.join(" · ") || "기본 옵션"}</small><b>{quote?.lines[index] ? won.format(quote.lines[index]!.lineTotalKrw) : `예상 ${won.format(line.display.unitPriceKrw * line.quantity)}`}</b></span></div>
+          <div className="bfr-cart-line-actions"><QuantityStepper value={line.quantity} label={`${menuName} 수량`} disabled={submitting} onChange={(value) => cart.setQuantity(index, value)} /><Button variant="ghost" disabled={submitting} aria-label={`${menuName} 옵션 변경`} onClick={() => setEditingIndex(index)}>옵션 변경</Button><Button variant="ghost" disabled={submitting} aria-label={`${menuName} 삭제`} onClick={() => { setEditingIndex(null); cart.setQuantity(index, 0); }}><Trash2 size={16} aria-hidden="true" />삭제</Button></div>
           {editingIndex === index ? <CartLineEditor storeId={storeId} line={line} onClose={() => setEditingIndex(null)} onSave={(updated) => { setEditingIndex(null); cart.updateLine(index, updated); }} /> : null}
-        </article>)}
+        </article>; })}
         {quoteState.status === "idle" ? <p>픽업 시간을 고르면 최종 금액과 혜택을 보여드릴게요.</p> : null}
         {quoteState.status === "loading" ? <RefreshLoading label="현재 주문 금액을 확인하는 중" /> : null}
         {quoteState.status === "failed" ? quoteGuidance ? <div className="bfr-decision" role="alert"><strong>{quoteGuidance.title}</strong><p>{quoteGuidance.description}</p><Button variant="secondary" onClick={() => setQuoteReload((value) => value + 1)}>견적 다시 확인</Button></div> : <RefreshError error={quoteState.error} retry={() => setQuoteReload((value) => value + 1)} /> : null}
       </section>
-      <section className="bfr-slot-section">{slots.state.status === "loading" ? <RefreshLoading label="픽업 시간을 불러오는 중" /> : null}{slots.state.status === "failed" ? <RefreshError error={slots.state.error} retry={slots.reload} /> : null}{slots.state.status === "ready" && availableSlots.length === 0 ? <RefreshEmpty title="고를 수 있는 픽업 시간이 없어요" description="잠시 뒤 다시 확인해 주세요." /> : null}{availableSlots.length ? <div className="bfr-slot-grid"><RadioGroup label="픽업 시간" value={selectedSlot} disabled={!storeAcceptsOrders} onValueChange={(value) => { if (selectedSlot !== value) intent.current.rotate(); setSelectedSlot(value); }}>{availableSlots.map((slot) => <RadioCard key={slot.pickupSlotId} value={slot.pickupSlotId} label={shortTime.format(new Date(slot.startsAt))} description={`${slot.remainingCapacity}잔 가능`} />)}</RadioGroup></div> : null}</section>
+      <section className="bfr-slot-section">{slots.state.status === "loading" ? <RefreshLoading label="픽업 시간을 불러오는 중" /> : null}{slots.state.status === "failed" ? <RefreshError error={slots.state.error} retry={slots.reload} /> : null}{slots.state.status === "ready" && availableSlots.length === 0 ? <RefreshEmpty title="고를 수 있는 픽업 시간이 없어요" description="잠시 뒤 다시 확인해 주세요." /> : null}{availableSlots.length ? <div className="bfr-slot-grid"><RadioGroup label="픽업 시간" value={selectedSlot} disabled={!storeAcceptsOrders} onValueChange={(value) => { if (selectedSlot !== value) intent.current.rotate(); setSelectedSlot(value); }}>{availableSlots.map((slot) => <RadioCard key={slot.pickupSlotId} value={slot.pickupSlotId} label={pickupDateTimeLabel(slot.startsAt)} description={`${slot.remainingCapacity}잔 가능`} />)}</RadioGroup></div> : null}</section>
       <section className="bfr-coupon-row"><span><small>쿠폰</small><strong>{selectedCoupon?.label ?? "선택하지 않음"}</strong></span>{selectedCoupon ? <Button variant="ghost" onClick={() => couponSelection.clear(storeId)}>선택 해제</Button> : <ButtonLink variant="ghost" to={`/app/coupons?storeId=${encodeURIComponent(storeId)}`}>쿠폰 보기</ButtonLink>}</section>
       <PointUseField selection={points} disabled={submitting} maximum={quoteState.status === "ready" ? quoteState.quote.pricing.subtotalKrw - quoteState.quote.pricing.couponDiscountKrw : undefined} />
       {quote ? <section className="bfr-transaction-card bfr-cart-pricing"><RefreshQuotePricing quote={quote} /></section> : null}
@@ -234,7 +241,7 @@ function BackLink({ to, children }: { to: string; children: string }) {
 }
 
 function CartLineEditor({ storeId, line, onClose, onSave }: { storeId: string; line: CartLine; onClose: () => void; onSave: (line: CartLine) => void }) {
-  const catalog = useResource<Menu[]>(useCallback(async () => unwrap(await customerApi.GET("/stores/{storeId}/menus", { params: { path: { storeId } } })).items, [storeId]));
+  const catalog = useCurrentMenuCatalog(storeId);
   const [optionIds, setOptionIds] = useState(line.optionIds);
   const menu = catalog.state.status === "ready" ? catalog.state.value.find((item) => item.menuId === line.menuId) : undefined;
   const options = menu?.options ?? [];
@@ -244,6 +251,6 @@ function CartLineEditor({ storeId, line, onClose, onSave }: { storeId: string; l
     {catalog.state.status === "failed" ? <RefreshError error={catalog.state.error} retry={catalog.reload} /> : null}
     {catalog.state.status === "ready" && (!menu || !menu.available) ? <p role="alert">현재 판매하지 않는 메뉴예요. 다른 메뉴를 담아 주세요.</p> : null}
     {menu?.available ? <><h3>추가 옵션 (선택)</h3>{options.length ? options.map((option) => <Checkbox key={option.optionId} label={`${option.name}${option.available ? "" : " · 품절"}`} trailing={`+${won.format(option.additionalPriceKrw)}`} checked={optionIds.includes(option.optionId)} disabled={!option.available && !optionIds.includes(option.optionId)} onCheckedChange={(checked) => setOptionIds((current) => checked ? [...current, option.optionId] : current.filter((id) => id !== option.optionId))} />) : <p>이 메뉴는 추가 옵션이 없어요.</p>}{unavailable ? <div role="alert"><p>판매가 끝난 옵션이 있어요. 옵션을 다시 골라 주세요.</p><Button variant="secondary" onClick={() => setOptionIds((current) => current.filter((id) => options.some((option) => option.optionId === id && option.available)))}>판매가 끝난 옵션 해제</Button></div> : null}</> : null}
-    <div className="bfr-config-actions"><Button variant="ghost" onClick={onClose}>닫기</Button><Button variant="brand" disabled={!menu?.available || unavailable} onClick={() => { if (!menu) return; const selected = options.filter((option) => optionIds.includes(option.optionId)); onSave({ ...line, optionIds, display: { menuName: menu.name, optionNames: selected.map((option) => option.name), unitPriceKrw: menu.basePriceKrw + selected.reduce((sum, option) => sum + option.additionalPriceKrw, 0), imageUrl: menu.image?.url } }); }}>옵션 적용</Button></div>
+    <div className="bfr-config-actions"><Button variant="ghost" onClick={onClose}>닫기</Button><Button variant="brand" disabled={!menu?.available || unavailable} onClick={() => { if (!menu) return; const selected = options.filter((option) => optionIds.includes(option.optionId)); onSave({ ...line, optionIds, display: { menuName: menu.name, optionNames: selected.map((option) => option.name), unitPriceKrw: menu.basePriceKrw + selected.reduce((sum, option) => sum + option.additionalPriceKrw, 0),  } }); }}>옵션 적용</Button></div>
   </section>;
 }

@@ -334,3 +334,9 @@ body:has(.bfr-customer-stage) { min-width: 0; }
 .bfr-preparation-lines strong { font-size: var(--fs-body-sm); overflow-wrap: anywhere; }
 .bfr-preparation-lines span { white-space: nowrap; font-size: var(--fs-body-sm); }
 .bfr-preparation-lines p { margin: var(--sp-2) 0 0; color: var(--text-muted); font-size: var(--fs-caption); overflow-wrap: anywhere; }
+
+.bfr-weekly-hours { margin-block: var(--sp-6); }
+.bfr-weekly-hours h2 { font-size: var(--fs-body); }
+.bfr-weekly-hours dl { display: grid; gap: var(--sp-3); font-size: var(--fs-caption); }
+.bfr-weekly-hours dl > div { display: flex; justify-content: space-between; gap: var(--sp-5); }
+.bfr-weekly-hours dd { margin: 0; }
