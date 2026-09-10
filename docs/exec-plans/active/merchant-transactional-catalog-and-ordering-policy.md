@@ -308,6 +308,8 @@ OpenAPI 원본과 runtime parity, generated TypeScript는 각 계약 PR의 같�
 
 ### PR #150 review remediation — 2026-09-10
 
+- CI follow-up: 원격 shard 4의 FastReorderServiceTest 손상 데이터 주입은 canonical CHECK만 해제하여 새 UUID 변환 유일 인덱스에 차단됨. 테스트 전용 DB에서 해당 인덱스도 잠시 해제하고 실제 정의를 finally에서 복원하도록 fixture 수정. 손상 데이터의 503·동일 응답 재생·주문/예약 무변경 검증은 유지한다. FastReorderServiceTest·MenuCatalogMigrationTest·FlywayMigrationSmokeTest: 16 tests passed. 문서·OpenAPI 검증도 통과.
+
 - [x] Slice 4: 최신 편집 요청만 반영하고 새 메뉴/닫기/보관 필터 전환 시 이전 응답을 무효화. mutation 중 입력·타깃 변경을 비활성화하고 저장 완료를 목록 refresh와 분리. 응답 역전·늦은 응답·저장 중 입력·refresh 대기 중 연속 저장의 단위 테스트 추가. typecheck, unit 217 tests, presentation/copy/design, Storybook·제품 build, Sites 4 tests, Docs 69 entries, MCP interaction/a11y 322 stories passed.
 - 원격 반영 후 최종 head의 CI 상태를 별도 확인하고 리뷰 9개 각각에 수정·검증 근거를 답변한 뒤 resolve한다.
 
