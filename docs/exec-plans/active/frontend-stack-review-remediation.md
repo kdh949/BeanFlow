@@ -131,6 +131,14 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - Docker가 중지돼 첫 DB 실행은 환경 오류였으며 Docker 시작 후 재실행했다.
 - 원격 CI와 reviewThreads 해결은 대기 중이다.
 
+### #161 로컬 검증
+
+- 내용·이미지·픽업 편집 및 저장 중 업무 탭과 매장·메뉴 전환을 제한하고 명시적 취소 경로를 제공한다.
+- 이미지 DELETE 204를 성공 처리하며 표시 정보의 새 편집은 이전 저장 안내를 지운다.
+- Passed: frontend unit 229개, presentation boundary 10개, product copy 11개,
+  영향 Storybook 52개(초기 포커스 실패 수정 후 해당 상태 재실행 포함), typecheck, check:design,
+  build-storybook, build, test:sites 4개. 원격 CI와 리뷰 해결은 대기 중이다.
+
 ## Surprises & Discoveries
 
 이미지 삭제는 후속 #168에서 코드가 보완돼 있으므로 #161 자체의 회귀와 함께 확인한다.
