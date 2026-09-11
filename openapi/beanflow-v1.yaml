@@ -5102,6 +5102,43 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/customer-searches:
+    post:
+      tags: [Operations, Identity]
+      operationId: searchOperationsCustomers
+      summary: (운영팀) 포인트 조사 대상 고객 검색
+      description: >-
+        CUSTOMER_ACCOUNT_SEARCH active grant와 POINT_ACCOUNT_INVESTIGATION 사유로 가입 고객 login ID를
+        BR-34 규칙에 따라 정확 검색한다. 결과는 0~1개이며 login ID와 표시 이름을 마스킹한다.
+        query parameter는 금지한다. 권한·검색·접근 감사 저장이 같은 transaction에서 성공한 경우에만
+        no-store 응답을 반환한다. 검색 권한은 포인트 읽기나 조정을 허용하지 않는다.
+      x-beanflow-contract-status: TARGET
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationsCustomerSearchRequest'
+      responses:
+        '200':
+          description: 정확 검색 결과. 일치하는 가입 고객이 없으면 items는 빈 배열이다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsCustomerSearchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /operations/merchant-accounts:
     get:
       tags:
@@ -10003,6 +10040,41 @@ components:
         type: string
         const: no-store
   schemas:
+    OperationsCustomerSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [loginId, reasonCode]
+      properties:
+        loginId:
+          type: string
+          maxLength: 100
+          description: 앞뒤 공백 제거와 ASCII 대문자 소문자 변환 후 BR-34의 5~32자 사용자명으로 정확 검색한다.
+        reasonCode:
+          type: string
+          enum: [POINT_ACCOUNT_INVESTIGATION]
+    OperationsCustomerSearchItem:
+      type: object
+      additionalProperties: false
+      required: [customerId, maskedLoginId, maskedDisplayName]
+      properties:
+        customerId:
+          $ref: '#/components/schemas/Identifier'
+        maskedLoginId:
+          type: string
+          description: 첫 글자와 고정 마스킹으로 표시한 login ID.
+        maskedDisplayName:
+          type: string
+          description: 기존 개인정보 표시 정책으로 마스킹한 가입 고객 표시 이름.
+    OperationsCustomerSearchResult:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 1
+          items:
+            $ref: '#/components/schemas/OperationsCustomerSearchItem'
     OperatorMediaMenu:
       type: object
       additionalProperties: false

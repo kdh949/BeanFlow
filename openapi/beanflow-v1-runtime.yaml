@@ -848,6 +848,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1point-accounts~1{accountId}"
   /point-accounts/{accountId}/transactions:
     $ref: "./beanflow-v1.yaml#/paths/~1point-accounts~1{accountId}~1transactions"
+  /operations/customer-searches:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1customer-searches"
   /operations/point-accounts/{accountId}:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-accounts~1{accountId}"
   /operations/point-accounts/{accountId}/transactions:
@@ -1154,6 +1156,12 @@ components:
       in: cookie
       name: BEANFLOW_MERCHANT_SESSION
   schemas:
+    OperationsCustomerSearchRequest:
+      $ref: ./beanflow-v1.yaml#/components/schemas/OperationsCustomerSearchRequest
+    OperationsCustomerSearchItem:
+      $ref: ./beanflow-v1.yaml#/components/schemas/OperationsCustomerSearchItem
+    OperationsCustomerSearchResult:
+      $ref: ./beanflow-v1.yaml#/components/schemas/OperationsCustomerSearchResult
     OperatorMediaMenu:
       $ref: "./beanflow-v1.yaml#/components/schemas/OperatorMediaMenu"
     OperatorMediaMenuPage:

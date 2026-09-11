@@ -1892,6 +1892,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/customer-searches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * (운영팀) 포인트 조사 대상 고객 검색
+         * @description CUSTOMER_ACCOUNT_SEARCH active grant와 POINT_ACCOUNT_INVESTIGATION 사유로 가입 고객 login ID를 BR-34 규칙에 따라 정확 검색한다. 결과는 0~1개이며 login ID와 표시 이름을 마스킹한다. query parameter는 금지한다. 권한·검색·접근 감사 저장이 같은 transaction에서 성공한 경우에만 no-store 응답을 반환한다. 검색 권한은 포인트 읽기나 조정을 허용하지 않는다.
+         */
+        post: operations["searchOperationsCustomers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/point-accounts/{accountId}": {
         parameters: {
             query?: never;
@@ -5550,6 +5570,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OperationsCustomerSearchRequest: {
+            /** @description 앞뒤 공백 제거와 ASCII 대문자 소문자 변환 후 BR-34의 5~32자 사용자명으로 정확 검색한다. */
+            loginId: string;
+            /** @enum {string} */
+            reasonCode: "POINT_ACCOUNT_INVESTIGATION";
+        };
+        OperationsCustomerSearchItem: {
+            customerId: components["schemas"]["Identifier"];
+            /** @description 첫 글자와 고정 마스킹으로 표시한 login ID. */
+            maskedLoginId: string;
+            /** @description 기존 개인정보 표시 정책으로 마스킹한 가입 고객 표시 이름. */
+            maskedDisplayName: string;
+        };
+        OperationsCustomerSearchResult: {
+            items: components["schemas"]["OperationsCustomerSearchItem"][];
+        };
         OperatorMediaMenu: {
             /** Format: uuid */
             menuId: string;
@@ -15980,6 +16016,35 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    searchOperationsCustomers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperationsCustomerSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description 정확 검색 결과. 일치하는 가입 고객이 없으면 items는 빈 배열이다. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsCustomerSearchResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

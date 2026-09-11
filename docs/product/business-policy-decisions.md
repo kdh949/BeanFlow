@@ -2594,6 +2594,22 @@
 
 ---
 
+## BR-56 운영 포인트 업무의 고객 선택
+
+- **Status:** Accepted
+- **Decision Date:** 2026-09-11
+- **Decision:** 운영자는 가입 고객 login ID 정확 검색 결과에서 고객을 선택하고 포인트 계정을
+  자동 연결한다. 내부 customer/account ID를 직접 입력하거나 브라우저에 영구 목록으로 저장하지 않는다.
+- **Rules:** 검색은 BR-34 정규화, CUSTOMER_ACCOUNT_SEARCH active grant, 고정 포인트 조사 사유와
+  감사 기록을 요구한다. 응답은 고객 ID와 마스킹한 login/display name으로 제한한다. 포인트 연결/조회는
+  POINT_ACCOUNT_READ, 조정은 기존 POINT_ADJUSTMENT를 별도로 요구한다. 검색어는 감사/log에 남기지 않는다.
+  검색 결과와 선택은 React 메모리에만 두며 고객 변경 때 이전 상태를 제거한다. 결과 불명 조정은
+  대상/내용/key를 보존하여 재확인한다. 계정 누락·DB·감사 실패는 503이고 0P로 위장하지 않는다.
+- **Related:** [ADR-127](../adr/ADR-127-customer-selection-for-point-operations.md)
+- **Revisit Conditions:** 이름 부분 검색, 계정 다중화 또는 고객 수명주기가 변경될 때.
+
+---
+
 # 정책 간 의존성과 우선 적용 순서
 
 1. `BR-01`, `BR-02`를 모든 시간·금액 Value Object의 기준으로 사용한다.
