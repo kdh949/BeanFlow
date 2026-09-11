@@ -8893,6 +8893,33 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RetryPublicationRequest'
+  /support/cases/{caseId}/order-candidates/{orderReference}:
+    get:
+      tags: [Support]
+      operationId: findSupportOrderCandidate
+      summary: 담당 상담의 연결 후보를 공개 주문번호로 정확 조회
+      description: 현재 담당자와 활성 Case, CASE_READ/WRITE, ORDER_READ, SUBJECT_SEARCH 권한 및 기존 검색 rate guard를 확인합니다. 최소 주문 표시와 감사가 같은 transaction이며 실행 권한을 부여하지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - name: orderReference
+          in: path
+          required: true
+          schema: { type: string, minLength: 12, maxLength: 12 }
+      responses:
+        "200":
+          description: 실제 주문의 최소 연결 후보
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportOrderDisplay" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/cases/{caseId}/orders/{orderId}:
     get:
       tags:
@@ -12569,7 +12596,7 @@ components:
         observedAt: { type: [string, 'null'], format: date-time }
     OperatorSelectionPurpose:
       type: string
-      enum: [CASE_FILTER, CASE_ASSIGNMENT, ORDER_CANCELLATION, PICKUP_RESCHEDULE, POST_ACCEPTANCE_RESOLUTION, COMPENSATION, PROFILE_CHANGE]
+      enum: [CASE_FILTER, INTERNAL_REQUESTER, CASE_ASSIGNMENT, ORDER_CANCELLATION, PICKUP_RESCHEDULE, POST_ACCEPTANCE_RESOLUTION, COMPENSATION, PROFILE_CHANGE]
       default: CASE_ASSIGNMENT
     OperatorCandidate:
       type: object
@@ -18443,6 +18470,22 @@ components:
           type: integer
           format: int64
           minimum: 0
+    SupportSubjectDisplay:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state: { type: string, enum: [AVAILABLE, MISSING_PROFILE, REQUIRES_PERMISSION] }
+        label: { type: [string, "null"] }
+    SupportOrderDisplay:
+      type: object
+      additionalProperties: false
+      required: [orderId, publicReference, storeName, state]
+      properties:
+        orderId: { $ref: "#/components/schemas/Identifier" }
+        publicReference: { type: string, minLength: 12, maxLength: 12 }
+        storeName: { type: string }
+        state: { $ref: "#/components/schemas/OrderState" }
     SupportSubjectLink:
       type: object
       additionalProperties: false
@@ -18456,6 +18499,7 @@ components:
         linkedAt: "2026-08-15T09:01:00Z"
         caseVersion: 2
       properties:
+        display: { $ref: "#/components/schemas/SupportSubjectDisplay" }
         linkId:
           $ref: "#/components/schemas/Identifier"
         subjectType:

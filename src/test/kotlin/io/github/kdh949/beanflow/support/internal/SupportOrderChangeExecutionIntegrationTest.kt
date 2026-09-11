@@ -89,6 +89,132 @@ internal class SupportOrderChangeExecutionIntegrationTest
         }
 
         @Test
+        fun `public order candidate requires current assignment and grants and commits minimal audit`() {
+            grantSelectionPermissions()
+            val reference =
+                jdbcTemplate.queryForObject(
+                    "SELECT public_reference FROM ordering_order WHERE id = ?",
+                    String::class.java,
+                    orderId,
+                )!!
+            val path = "/api/v1/support/cases/$caseId/order-candidates/${reference.lowercase()}"
+            val body =
+                mockMvc
+                    .perform(get(path).with(jwt().jwt { it.subject(supportActorId.toString()) }))
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.orderId").value(orderId.toString()))
+                    .andExpect(jsonPath("$.publicReference").value(reference))
+                    .andReturn()
+                    .response.contentAsString
+            assertThat(body).doesNotContain("customerId", "payableKrw", "evidenceDigest")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record WHERE target_id = ? AND reason = 'SUPPORT_SUBJECT_ORDER_CANDIDATE_MATCH'",
+                    Long::class.java,
+                    caseId,
+                ),
+            ).isEqualTo(1)
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_SUBJECT_SEARCH'",
+                supportActorId,
+            )
+            mockMvc.perform(get(path).with(jwt().jwt { it.subject(supportActorId.toString()) })).andExpect(status().isForbidden)
+            grantSelectionPermissions()
+            jdbcTemplate.update("UPDATE support_case SET current_assignee_id = ? WHERE id = ?", UUID.randomUUID(), caseId)
+            mockMvc.perform(get(path).with(jwt().jwt { it.subject(supportActorId.toString()) })).andExpect(status().isForbidden)
+        }
+
+        @Test
+        fun `order candidate absence remains audited and audit failure hides successful match`() {
+            grantSelectionPermissions()
+            val path = "/api/v1/support/cases/$caseId/order-candidates/"
+            mockMvc
+                .perform(
+                    get(path + "BF-2222-2222").with(jwt().jwt { it.subject(supportActorId.toString()) }),
+                ).andExpect(status().isNotFound)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record WHERE target_id = ? AND reason = 'SUPPORT_SUBJECT_ORDER_CANDIDATE_MISS'",
+                    Long::class.java,
+                    caseId,
+                ),
+            ).isEqualTo(1)
+            val reference =
+                jdbcTemplate.queryForObject(
+                    "SELECT public_reference FROM ordering_order WHERE id = ?",
+                    String::class.java,
+                    orderId,
+                )!!
+            installAuditFault()
+            mockMvc
+                .perform(
+                    get(path + reference).with(jwt().jwt { it.subject(supportActorId.toString()) }),
+                ).andExpect(status().isServiceUnavailable)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record WHERE target_id = ? AND reason = 'SUPPORT_SUBJECT_ORDER_CANDIDATE_MATCH'",
+                    Long::class.java,
+                    caseId,
+                ),
+            ).isZero()
+        }
+
+        @Test
+        fun `case subject labels distinguish permissions from missing owner profiles`() {
+            val path = "/api/v1/support/cases/$caseId"
+            val before =
+                mockMvc
+                    .perform(
+                        get(path).with(
+                            jwt().jwt {
+                                it.subject(supportActorId.toString())
+                            },
+                        ),
+                    ).andExpect(status().isOk)
+                    .andReturn()
+                    .response.contentAsString
+            assertThat(before).contains("REQUIRES_PERMISSION", "BF-")
+            grantSelectionPermissions()
+            val after =
+                mockMvc
+                    .perform(
+                        get(path).with(
+                            jwt().jwt {
+                                it.subject(supportActorId.toString())
+                            },
+                        ),
+                    ).andExpect(status().isOk)
+                    .andReturn()
+                    .response.contentAsString
+            assertThat(after).contains("MISSING_PROFILE", "AVAILABLE").doesNotContain("REQUIRES_PERMISSION")
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(supportActorId.toString()) }))
+                .andExpect(
+                    jsonPath("$.subjectLinks[?(@.subjectType == 'CUSTOMER')].display.state")
+                        .value(org.hamcrest.Matchers.contains("MISSING_PROFILE")),
+                ).andExpect(
+                    jsonPath("$.subjectLinks[?(@.subjectType == 'ORDER')].display.state")
+                        .value(org.hamcrest.Matchers.contains("AVAILABLE")),
+                )
+        }
+
+        private fun grantSelectionPermissions() {
+            listOf("SUPPORT_CASE_WRITE", "SUPPORT_SUBJECT_SEARCH").forEach { permission ->
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO operations_operator_permission_grant(actor_id, permission, state, granted_at, version, audit_source_reference)
+                    VALUES (?, ?, 'ACTIVE', now(), 1, ?)
+                    ON CONFLICT (actor_id, permission) DO UPDATE SET state = 'ACTIVE', revoked_at = NULL
+                    """.trimIndent(),
+                    supportActorId,
+                    permission,
+                    "selection:$permission",
+                )
+            }
+        }
+
+        @Test
         fun `store confirmation inspection contains only current own store binding without consuming authority`() {
             val newSlotId = UUID.randomUUID()
             makeAccepted(newSlotId)

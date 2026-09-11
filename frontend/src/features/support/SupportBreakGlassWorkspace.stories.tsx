@@ -5,7 +5,7 @@ import MockDate from "mockdate";
 import type { components } from "../../api/schema";
 import { SupportBreakGlassWorkspace } from "./SupportBreakGlassWorkspace";
 const id = "85000000-0000-4000-8000-000000000001";
-const supportCase = { caseId: id, state: "IN_PROGRESS", subjectLinks: [{ linkId: id, subjectType: "CUSTOMER", subjectId: id }] };
+const supportCase = { caseId: id, state: "IN_PROGRESS", subjectLinks: [{ linkId: id, subjectType: "CUSTOMER", display: { state: "AVAILABLE", label: "김*현" }, subjectId: id }] };
 const request: components["schemas"]["BreakGlassResource"] = { requestId: id, caseId: id, subjectLinkId: id, subjectType: "CUSTOMER", subjectId: id, field: "CUSTOMER_PRIMARY_EMAIL", purpose: "PRIVACY_INCIDENT", reasonCode: "PRIVACY_INCIDENT", state: "APPROVAL_PENDING", requestedAt: "2026-09-11T09:00:00Z", expiresAt: null, version: 0 };
 let current: components["schemas"]["BreakGlassWorkflowResource"];
 const meta = { title: "Patterns/Support/Break glass", component: SupportBreakGlassWorkspace, tags: ["autodocs"], args: { supportCase, initialRequestId: id }, beforeEach() { MockDate.set("2026-09-11T09:04:00Z"); current = { request: { ...request }, allowedActions: ["DECIDE"], canViewRevealedValue: false, postReview: null }; return () => MockDate.reset(); }, parameters: { a11y: { test: "error" }, docs: { description: { component: "긴급 목적에 필요한 한 필드의 별도 승인·1회 열람·독립 사후 검토를 연결합니다. 원문은 저장·재생하지 않으며 화면 이탈·만료·권한 변경 시 지웁니다." }, story: { inline: false, height: "1000px" } }, msw: { handlers: [http.get("/api/v1/support/break-glass-requests/:id/workflow", () => HttpResponse.json(current))] } } } satisfies Meta<typeof SupportBreakGlassWorkspace>;

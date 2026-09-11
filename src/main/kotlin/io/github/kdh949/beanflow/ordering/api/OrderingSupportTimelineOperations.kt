@@ -24,7 +24,18 @@ data class SupportOrderSnapshot(
     val version: Long,
 )
 
+data class SupportOrderDisplay(
+    val orderId: UUID,
+    val publicReference: String,
+    val storeName: String,
+    val state: SupportOrderState,
+)
+
 interface OrderingSupportTimelineOperations {
+    fun findOrderDisplays(orderIds: Set<UUID>): Map<UUID, SupportOrderDisplay>
+
+    fun findOrderByPublicReference(reference: String): SupportOrderDisplay?
+
     fun findTimelineFacts(query: SupportOwnerTimelineQuery): List<SupportOwnerTimelineFact>
 
     fun findOrderSnapshots(orderIds: Set<UUID>): List<SupportOrderSnapshot>

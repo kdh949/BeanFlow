@@ -35,6 +35,7 @@ import java.util.UUID
 
 internal enum class OperatorSelectionPurpose {
     CASE_FILTER,
+    INTERNAL_REQUESTER,
     CASE_ASSIGNMENT,
     ORDER_CANCELLATION,
     PICKUP_RESCHEDULE,
@@ -119,7 +120,9 @@ internal class OperatorDirectoryService(
         cursor: String?,
         limit: Int,
     ): OperatorDirectoryPage {
-        if (!permissions.hasActive(actorId, OperatorPermission.SUPPORT_CASE_READ)) {
+        if (purpose == OperatorSelectionPurpose.INTERNAL_REQUESTER) {
+            permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_WRITE)
+        } else if (!permissions.hasActive(actorId, OperatorPermission.SUPPORT_CASE_READ)) {
             permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_ASSIGN)
         }
         if (limit !in 1..100 || (query?.length ?: 0) > 100) {
@@ -127,15 +130,20 @@ internal class OperatorDirectoryService(
         }
         val normalized = query?.trim().orEmpty()
         val required = requiredPermissions(purpose)
+        val intake = purpose == OperatorSelectionPurpose.INTERNAL_REQUESTER
         val grantParameters = required.joinToString(",") { "?" }
         val stateFilter = if (purpose == OperatorSelectionPurpose.CASE_FILTER) "" else "AND state = 'ACTIVE'"
         val eligible =
-            """
-            SELECT actor_id FROM operations_operator_permission_grant
-            WHERE permission IN ($grantParameters) $stateFilter
-            GROUP BY actor_id HAVING count(*) = ?
-            """.trimIndent()
-        val grantArgs: List<Any> = required.map { it.name } + required.size
+            if (intake) {
+                "SELECT DISTINCT actor_id FROM operations_operator_permission_grant WHERE state = 'ACTIVE'"
+            } else {
+                """
+                SELECT actor_id FROM operations_operator_permission_grant
+                WHERE permission IN ($grantParameters) $stateFilter
+                GROUP BY actor_id HAVING count(*) = ?
+                """.trimIndent()
+            }
+        val grantArgs: List<Any> = if (intake) emptyList() else required.map { it.name } + required.size
         val binding = "$actorId|$purpose|$normalized".toByteArray()
         val hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(binding))
         val scope = SignedCursorScope("operator-directory", hash, SORT)
@@ -184,6 +192,7 @@ internal class OperatorDirectoryService(
     }
 
     private fun requiredPermissions(purpose: OperatorSelectionPurpose): Set<OperatorPermission> {
+        if (purpose == OperatorSelectionPurpose.INTERNAL_REQUESTER) return emptySet()
         val permissions = mutableSetOf(OperatorPermission.SUPPORT_CASE_WRITE)
         if (purpose == OperatorSelectionPurpose.COMPENSATION) {
             permissions += OperatorPermission.SUPPORT_COMPENSATION_EXECUTE

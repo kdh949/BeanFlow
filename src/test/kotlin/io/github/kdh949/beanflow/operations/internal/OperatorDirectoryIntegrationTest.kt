@@ -48,6 +48,19 @@ internal class OperatorDirectoryIntegrationTest
         }
 
         @Test
+        fun `internal requester discovery uses case intake permission and any current operator grant`() {
+            grant(first, "SUPPORT_CASE_WRITE")
+            grant(second, "ORDER_COMPENSATION_READ")
+            directory.observe(second, "operations.refunds", issuedAt)
+            mvc
+                .perform(get(PATH).with(actor(first)).param("purpose", "INTERNAL_REQUESTER"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].operatorId").value(second.toString()))
+            mvc.perform(get(PATH).with(actor(reader)).param("purpose", "INTERNAL_REQUESTER")).andExpect(status().isForbidden)
+            mvc.perform(get(PATH).with(actor(first)).param("purpose", "CASE_ASSIGNMENT")).andExpect(status().isForbidden)
+        }
+
+        @Test
         fun `signed actor login observations cannot relabel another actor or overwrite a newer observation`() {
             mvc
                 .perform(

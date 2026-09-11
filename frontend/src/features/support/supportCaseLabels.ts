@@ -3,5 +3,13 @@ export const caseStateLabels: Record<components["schemas"]["SupportCaseState"], 
 export const casePriorityLabels: Record<components["schemas"]["SupportCasePriority"], string> = { LOW: "낮음", NORMAL: "보통", HIGH: "높음", URGENT: "긴급" };
 export const caseCategoryLabels: Record<components["schemas"]["SupportInquiryCategory"], string> = { ORDER_STATUS: "주문 상태", PICKUP_RESCHEDULE: "픽업 시간 변경", ORDER_CANCELLATION: "주문 취소", PAYMENT_OR_REFUND: "결제·환불", COUPON_OR_POINT: "쿠폰·포인트", COMPENSATION: "보상", CUSTOMER_PROFILE: "고객 정보", STORE_PROFILE: "매장 정보", DELIVERY_STATUS: "배송 상태", DELIVERY_INCIDENT: "배송 사고", SETTLEMENT: "정산", DISPUTE: "이의제기", ACCOUNT_RECOVERY: "계정 복구", PRIVACY: "개인정보", SAFETY: "안전", OTHER: "기타" };
 export const caseRequesterLabels: Record<components["schemas"]["SupportRequesterType"], string> = { CUSTOMER: "고객", STORE_OWNER: "점주", STORE_MEMBER: "매장 직원", RIDER: "배달원", THIRD_PARTY: "제3자", INTERNAL_OPERATOR: "내부 운영자", SYSTEM: "시스템", UNKNOWN: "확인 전" };
-export const subjectLabels: Record<components["schemas"]["SupportSubjectType"], string> = { CUSTOMER: "고객", STORE: "매장", ORDER: "주문", DELIVERY: "배송" };
+export const subjectLabels: Record<components["schemas"]["SupportSubjectType"], string> = { CUSTOMER: "고객", STORE: "매장", ORDER: "주문", DELIVERY: "외부 배달원" };
 export const relationshipLabels: Record<components["schemas"]["SupportSubjectRelationship"], string> = { REQUESTER: "요청자", AFFECTED_CUSTOMER: "관련 고객", AFFECTED_STORE: "관련 매장", RELATED_ORDER: "관련 주문", RELATED_DELIVERY: "관련 배송", OTHER: "기타" };
+
+/** Display metadata never substitutes for the subject identifier used by an authorized command. */
+export function supportSubjectLabel(link: { subjectType: string; display?: components["schemas"]["SupportSubjectDisplay"] }): string {
+  const subjectName = subjectLabels[link.subjectType as components["schemas"]["SupportSubjectType"]];
+  if (link.display?.state === "AVAILABLE" && link.display.label) return `${subjectName} · ${link.display.label}`;
+  const state = link.display?.state === "REQUIRES_PERMISSION" ? "표시 정보 조회 권한 필요" : "등록된 표시 정보 없음";
+  return `${subjectName} · ${state}`;
+}

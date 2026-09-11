@@ -1,3 +1,4 @@
+import { supportSubjectLabel } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -96,7 +97,7 @@ function CreateProfileChange({ supportCase, verification, onCreated, onBusyChang
     } catch (failure) { setError(failure); } finally { raw.clear(); preparingRef.current = false; setPreparing(false); }
   }
   return <div className="surface-card management-card management-workspace"><h3>{revision ? "정정안 수정" : "새 정보 정정"}</h3>
-    <SelectField label="정보 정정 대상" value={linkId} disabled={frozen || !!revision} onValueChange={setLinkId}>{targets.map(target => <option key={target.linkId} value={target.linkId}>{target.subjectType === "CUSTOMER" ? "고객" : target.subjectType === "STORE" ? "매장" : "외부 배달원"} · {target.subjectId}</option>)}</SelectField>
+    <SelectField label="정보 정정 대상" value={linkId} disabled={frozen || !!revision} onValueChange={setLinkId}>{targets.map(target => <option key={target.linkId} value={target.linkId}>{supportSubjectLabel(target)}</option>)}</SelectField>
     <SelectField label="정보 정정 목적" value={purpose} disabled={frozen || !!revision} onValueChange={value => setPurpose(value as ProfilePurpose)}>{purposes.map(item => <option key={item} value={item}>{profilePurposes[item].label}</option>)}</SelectField>
     {!targets.length ? <EmptyState title="정정할 대상이 없습니다" description="상담에 고객·매장·외부 배달원을 연결해 주세요." /> : context.state.status === "loading" ? <LoadingState label="현재 프로필 조건을 읽는 중" /> : context.state.status === "failed" ? <ErrorState error={context.state.error} retry={context.reload} /> : current ? <p>현재 버전 {current.currentProfileVersion} · {current.requiredVerificationLevel === "ENHANCED" ? "강화" : "기본"} 본인확인 필요 · {descriptor.risk === "R3" || descriptor.risk === "R4" ? "상담 관리자와 운영 순차 승인" : "권한 확인 후 직접 정정"}</p> : null}
     {current && !enough && current.requiredVerificationLevel === "ENHANCED" ? <InlineNotice tone="info" title="이 정정에는 강화 본인확인이 필요합니다" description="같은 대상의 상담 해결 목적 본인확인을 완료해 주세요." /> : !verified ? <InlineNotice title="정정 대상의 업무 처리 본인확인이 필요합니다" description="상담 해결 목적·업무 처리 범위의 인증 세션을 선택해 주세요." /> : null}

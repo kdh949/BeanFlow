@@ -5322,6 +5322,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/cases/{caseId}/order-candidates/{orderReference}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 담당 상담의 연결 후보를 공개 주문번호로 정확 조회
+         * @description 현재 담당자와 활성 Case, CASE_READ/WRITE, ORDER_READ, SUBJECT_SEARCH 권한 및 기존 검색 rate guard를 확인합니다. 최소 주문 표시와 감사가 같은 transaction이며 실행 권한을 부여하지 않습니다.
+         */
+        get: operations["findSupportOrderCandidate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support/cases/{caseId}/orders/{orderId}": {
         parameters: {
             query?: never;
@@ -6159,6 +6179,17 @@ export interface components {
              */
             nextCursor: string | null;
         };
+        SupportOrderDisplay: {
+            orderId: components["schemas"]["Identifier"];
+            publicReference: string;
+            storeName: string;
+            state: components["schemas"]["OrderState"];
+        };
+        SupportSubjectDisplay: {
+            /** @enum {string} */
+            state: "AVAILABLE" | "MISSING_PROFILE" | "REQUIRES_PERMISSION";
+            label?: string | null;
+        };
         /**
          * @description 상담에 연결된 주문의 현재 상태와 버전입니다. 개인정보는 포함하지 않습니다.
          * @example {
@@ -6615,7 +6646,7 @@ export interface components {
          * @default CASE_ASSIGNMENT
          * @enum {string}
          */
-        OperatorSelectionPurpose: "CASE_FILTER" | "CASE_ASSIGNMENT" | "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE" | "POST_ACCEPTANCE_RESOLUTION" | "COMPENSATION" | "PROFILE_CHANGE";
+        OperatorSelectionPurpose: "CASE_FILTER" | "INTERNAL_REQUESTER" | "CASE_ASSIGNMENT" | "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE" | "POST_ACCEPTANCE_RESOLUTION" | "COMPENSATION" | "PROFILE_CHANGE";
         /**
          * Format: date-time
          * @description 오프셋 또는 UTC 지정자를 포함한 ISO-8601 시각입니다.
@@ -10134,6 +10165,7 @@ export interface components {
          *     }
          */
         SupportSubjectLink: {
+            display?: components["schemas"]["SupportSubjectDisplay"];
             linkId: components["schemas"]["Identifier"];
             subjectType: components["schemas"]["SupportSubjectType"];
             subjectId: components["schemas"]["Identifier"];
@@ -21356,6 +21388,37 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    findSupportOrderCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+                orderReference: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 실제 주문의 최소 연결 후보 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportOrderDisplay"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

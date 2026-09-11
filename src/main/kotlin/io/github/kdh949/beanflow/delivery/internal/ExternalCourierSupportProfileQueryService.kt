@@ -18,6 +18,19 @@ internal class ExternalCourierSupportProfileQueryService(
     private val repository: ExternalCourierSupportProfileQueryRepository,
 ) : ExternalCourierSupportProfileQueryOperations {
     @Transactional(readOnly = true)
+    override fun findMaskedNames(subjectIds: Set<UUID>): Map<UUID, String> {
+        require(subjectIds.size <= 100)
+        if (subjectIds.isEmpty()) return emptyMap()
+        return try {
+            repository.findMaskedNames(subjectIds).onEach { (_, name) ->
+                if ('*' !in name) throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Support profile name projection is invalid")
+            }
+        } catch (failure: DataAccessException) {
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Support profile names are unavailable").also { it.initCause(failure) }
+        }
+    }
+
+    @Transactional(readOnly = true)
     override fun findByExactIndexes(query: ProtectedProfileExactQuery): List<MaskedExternalCourierSupportProfile> =
         try {
             repository.findByExactIndexes(query).onEach(::requireMasked)
@@ -39,6 +52,16 @@ internal class ExternalCourierSupportProfileQueryService(
 internal class ExternalCourierSupportProfileQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
+    fun findMaskedNames(subjectIds: Set<UUID>): Map<UUID, String> {
+        val placeholders = subjectIds.joinToString(",") { "?" }
+        return jdbcTemplate
+            .query(
+                "SELECT external_courier_id, masked_display_name FROM delivery_external_courier_support_profile WHERE external_courier_id IN ($placeholders)",
+                { rs, _ -> rs.getObject("external_courier_id", UUID::class.java) to rs.getString("masked_display_name") },
+                *subjectIds.toTypedArray(),
+            ).toMap()
+    }
+
     fun findByExactIndexes(query: ProtectedProfileExactQuery): List<MaskedExternalCourierSupportProfile> {
         val requested = query.indexes.joinToString(",") { "(?, ?)" }
         val matchedColumn =

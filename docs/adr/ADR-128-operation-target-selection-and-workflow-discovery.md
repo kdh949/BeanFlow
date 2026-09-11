@@ -69,6 +69,26 @@ Bundled Keycloak realm에 access-token `preferred_username` mapper를 명시하�
 mapper를 설정한다. BeanFlow가 Keycloak 관리자 credential을 받거나 인증 서버의 사용자 원장을 복제하지 않는다.
 조회 모델은 실제 로그인 계정의 최신 관측 정보이며, 아직 로그인하지 않은 조직 계정 전체를 열거하는 API가 아니다.
 
+### Support subject selection and labels
+
+상담 접수/대상 연결은 기존 `POST /support/searches`의 전화번호·이메일 정확 검색과 마스킹 후보를
+조합한다. 고객 계정과 보호 프로필의 식별자를 추론하여 연결하지 않는다. CUSTOMER/STORE/RIDER 후보는
+해당 owner의 실제 보호 프로필 식별자이며 RIDER는 기존 DELIVERY 연결에 해당하는 외부 배달원이다.
+점주/매장 직원 문의는 기존 접수와 동일하게 선택한 매장을 요청자 참조로 사용한다. 내부 운영자는 조직
+로그인 계정을 선택한다. 접수 전용 INTERNAL_REQUESTER 목록은 CASE_WRITE 권한으로 현재 활성 grant가
+하나 이상 있는 관측 계정을 조회하며 담당자 배정 후보와 구분한다. 제3자/시스템/미확인 요청자의 업무 참조는 DB ID가 아닌 기존 비식별 접수 설명이며 유지한다.
+
+담당 상담의 주문 연결 후보는 공개 주문번호의 정확 조회로 찾는다. 현재 Case 읽기/쓰기, 현재 담당자,
+활성 Case, `SUPPORT_ORDER_READ`와 `SUPPORT_SUBJECT_SEARCH`를 확인한다. 기존 검색 rate guard를
+공유하며 조회 결과와 PII-free 감사는 같은 local transaction이다. 주문 후보는 공개 주문번호, 주문 시점
+매장명과 상태만 반환한다. 후보 선택은 주문 실행 권한이나 고객 관계의 증명이 아니며 기존 명령 검증을 유지한다.
+
+Case 상세의 연결 대상 표시에는 owner별 일괄 projection을 사용한다. 보호 프로필의 마스킹 이름은
+현재 `SUPPORT_SUBJECT_SEARCH`, 주문 표시에는 `SUPPORT_ORDER_READ`를 추가로 확인하며 허용되지 않으면
+`REQUIRES_PERMISSION`을 반환한다. 허용된 표시 조회는 감사와 같은 transaction이다. 실제 등록 정보가 없으면
+`MISSING_PROFILE`, 저장소/감사/잘못된 마스킹은 조회 실패로 구분한다. UUID를 이름으로 대신 표시하지 않는다.
+본인확인, 개인정보 열람, 정정과 금전 실행은 표시 정보를 권한 근거로 사용하지 않는다.
+
 ### Manual sequential migration scope
 
 이번 작업은 #170의 구현 제외를 명시한 수동 후속 요청이다. 정확한 기준은 #170

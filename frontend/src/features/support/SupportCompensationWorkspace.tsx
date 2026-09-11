@@ -1,3 +1,4 @@
+import { supportSubjectLabel } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -94,7 +95,7 @@ function CreateCompensation({ supportCase, verification, initialIncidentId, onCr
     <h3>새 보상 요청</h3>
     {!active ? <InlineNotice tone="info" title="종결된 상담에서는 새 보상을 요청할 수 없습니다" description="필요하면 새 상담을 접수해 주세요." /> : !verified ? <InlineNotice tone="info" title="고객 본인확인이 필요합니다" description="상담 해결·업무 처리 목적의 고객 본인확인을 완료하거나 기존 세션을 조회해 주세요." /> : null}
     <TextField label="사고 ID" value={incidentId} onValueChange={setIncidentId} disabled={busy} required description="같은 사고를 다시 검토할 때도 기존 사고 ID를 사용합니다." />
-    <SelectField label="보상 관련 주문" value={orderId} onValueChange={setOrderId} disabled={busy}><option value="">관련 주문 없음</option>{orders.map(link => <option key={link.subjectId} value={link.subjectId}>{link.subjectId}</option>)}</SelectField>
+    <SelectField label="보상 관련 주문" value={orderId} onValueChange={setOrderId} disabled={busy}><option value="">관련 주문 없음</option>{orders.map(link => <option key={link.subjectId} value={link.subjectId}>{supportSubjectLabel(link)}</option>)}</SelectField>
     {order.state.status === "loading" ? <LoadingState label="현재 주문 조건을 읽는 중" /> : order.state.status === "failed" ? <ErrorState error={order.state.error} retry={order.reload} /> : order.state.value ? <p>현재 주문 <StatusText state={order.state.value.state} /></p> : null}
     <SelectField label="보상 혜택" value={benefit} onValueChange={value => setBenefit(value as typeof benefit)} disabled={busy}><option value="POINT">포인트</option><option value="COUPON">쿠폰</option></SelectField>
     {benefit === "POINT" ? <TextField label="보상 금액" type="number" min="1" step="1" value={amount} onValueChange={setAmount} disabled={busy} description="정수 원 단위로 입력합니다." /> : <CouponPicker disabled={busy} selected={template} onSelect={setTemplate} />}

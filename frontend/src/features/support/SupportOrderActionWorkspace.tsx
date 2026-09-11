@@ -1,3 +1,4 @@
+import { supportSubjectLabel } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -94,7 +95,7 @@ function CreateOrderRequest({ supportCase, verification, onCreated, revision, on
   if (!orders.length) return <EmptyState title="연결된 주문이 없습니다" description="상담 관리에서 관련 주문을 연결한 뒤 요청해 주세요." action={<ButtonLink to={`/support/cases/${supportCase.caseId}`}>상담 대상 연결</ButtonLink>} />;
   return <div className="surface-card management-card management-workspace">
     <h3>{revision ? "새 승인안 작성" : "새 주문 변경 요청"}</h3>
-    <SelectField label="연결된 주문" value={orderId} disabled={!!revision || disabled} onValueChange={setOrderId}>{orders.map(link => <option key={link.subjectId} value={link.subjectId}>{link.subjectId}</option>)}</SelectField>
+    <SelectField label="연결된 주문" value={orderId} disabled={!!revision || disabled} onValueChange={setOrderId}>{orders.map(link => <option key={link.subjectId} value={link.subjectId}>{supportSubjectLabel(link)}</option>)}</SelectField>
     <SelectField label="주문 변경 업무" value={action} disabled={!!revision || disabled} onValueChange={value => { setAction(value as typeof action); setSlotId(""); }}>{Object.entries({ ...orderActionLabels, POST_ACCEPTANCE_RESOLUTION: " 수락 후 해결" }).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>
     {orderRead.state.status === "loading" ? <LoadingState label="현재 주문 정보를 읽는 중" /> : orderRead.state.status === "failed" ? <ErrorState error={orderRead.state.error} retry={orderRead.reload} /> : current ? <>
       <p>현재 주문 <StatusText state={current.state} /> · 버전 {current.version}</p>

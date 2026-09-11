@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.OrderingSupportTimelineOperations
+import io.github.kdh949.beanflow.ordering.api.SupportOrderDisplay
 import io.github.kdh949.beanflow.ordering.api.SupportOrderSnapshot
 import io.github.kdh949.beanflow.ordering.api.SupportOrderState
 import io.github.kdh949.beanflow.shared.api.SUPPORT_TIMELINE_COMPARATOR
@@ -21,6 +22,37 @@ import java.util.UUID
 internal class OrderingSupportTimelineQueryService(
     private val jdbcTemplate: JdbcTemplate,
 ) : OrderingSupportTimelineOperations {
+    override fun findOrderDisplays(orderIds: Set<UUID>): Map<UUID, SupportOrderDisplay> {
+        require(orderIds.size <= 100)
+        if (orderIds.isEmpty()) return emptyMap()
+        val placeholders = orderIds.joinToString(",") { "?" }
+        return jdbcTemplate
+            .query(
+                "SELECT id, public_reference, store_name_snapshot, state FROM ordering_order WHERE id IN ($placeholders)",
+                ::display,
+                *orderIds.toTypedArray(),
+            ).associateBy { it.orderId }
+    }
+
+    override fun findOrderByPublicReference(reference: String): SupportOrderDisplay? =
+        jdbcTemplate
+            .query(
+                "SELECT id, public_reference, store_name_snapshot, state FROM ordering_order WHERE public_reference = ?",
+                ::display,
+                PublicOrderReference.parse(reference).value,
+            ).singleOrNull()
+
+    private fun display(
+        rs: ResultSet,
+        row: Int,
+    ): SupportOrderDisplay =
+        SupportOrderDisplay(
+            rs.getObject("id", UUID::class.java),
+            rs.getString("public_reference"),
+            rs.getString("store_name_snapshot"),
+            SupportOrderState.valueOf(rs.getString("state")),
+        )
+
     override fun findTimelineFacts(query: SupportOwnerTimelineQuery): List<SupportOwnerTimelineFact> =
         findOrders(query.orderIds)
             .flatMap { it.timelineFacts() }

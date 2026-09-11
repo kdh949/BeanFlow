@@ -5,7 +5,7 @@ import MockDate from "mockdate";
 import type { components } from "../../api/schema";
 import { SupportCompensationWorkspace } from "./SupportCompensationWorkspace";
 const id = "75000000-0000-4000-8000-000000000001", orderId = "75000000-0000-4000-8000-000000000002", actionId = "75000000-0000-4000-8000-000000000003";
-const supportCase = { caseId: id, state: "IN_PROGRESS", subjectLinks: [{ subjectType: "ORDER", subjectId: orderId, relationship: "RELATED_ORDER" }] };
+const supportCase = { caseId: id, state: "IN_PROGRESS", subjectLinks: [{ subjectType: "ORDER", display: { state: "AVAILABLE", label: "BF-7K9M-2P4R · 빈플로우 시청점" }, subjectId: orderId, relationship: "RELATED_ORDER" }] };
 const verification = { sessionId: id, state: "VERIFIED", subjectType: "CUSTOMER", actionScope: "SUPPORT_ACTION", purpose: "CASE_RESOLUTION", expiresAt: "2026-09-11T09:15:00Z" };
 const request: components["schemas"]["SupportCompensationResource"] = { compensationRequestId: id, supportCaseId: id, incidentId: id, orderId, storeId: id, benefitType: "POINT", amountKrw: 100, couponTemplateId: null, policyVersionId: id, band: "LOW", approvalRoute: "NONE", actionRequestId: null, state: "READY_FOR_EXECUTION", payloadDigest: "a".repeat(64), terminalBenefitId: null, benefitIssuedAt: null, notificationDeliveryId: null, notificationState: null, notificationFailureCode: null, version: 0, createdAt: "2026-09-11T09:01:00Z", updatedAt: "2026-09-11T09:01:00Z" };
 const terms: components["schemas"]["SupportCompensationTermsResource"] = { responsibility: "PLATFORM", evidenceBasis: null, costEvidenceDigest: null, platformShareBps: 10000, storeShareBps: 0, evidenceDigest: "b".repeat(64), targetVersion: 4 };

@@ -134,7 +134,8 @@ BR-57/ADR-128 및 관련 owner ADR amendment, OpenAPI와 본 계획, 최종 ID �
 - [x] S2 최종 빌드/Docs/MCP 응답 확인.
 - [x] S2 PR #172 발행 (11c9c6c), #171 d444e63을 base로 유지.
 - [x] S2 11c9c6c 최신 head CI 전부 통과.
-- [ ] S3 상담 대상·담당자.
+- [x] S3 상담 대상·담당자 구현과 관련 backend/frontend/문서 검증.
+- [ ] S3 MCP 전체 결과 응답 수집 및 PR 최신 head CI.
 - [ ] S4 요청 재개·점주 동의.
 - [ ] S5 사고·비용 참조.
 - [ ] S6 전체 검증과 PR 최신 head CI.
@@ -166,7 +167,13 @@ frontend typecheck, unit 233개, presentation 10개, copy 11개, design과 제�
 정적 Docs의 제거된 ID 입력 표식을 주문번호로 갱신했다. 최신 빌드의 111개 문서,
 15개 상태 문서, 47개 상태 surface와 제품 build/Sites 4개 검증이 통과했다.
 S3는 서명된 조직 로그인 이름의 표시 모델과 목적별 현재 grant 후보를 구현한다. V84는 담당자 표시 조회 모델만 추가한다.
-S3a 담당자 디렉터리와 다섯 배정/필터 화면을 구현했다. 실제 PostgreSQL에서 새 디렉터리 5개, 기존 상담/인증/구조/계약 20개와 HTTP 인증 9개 테스트가 통과했다. frontend typecheck, unit 233개, presentation 10개, copy 11개와 design 검증이 통과했다. S3b 상담 대상, S4~S5와 전체 마무리 검증은 아직 수행하지 않았다.
+S3a 담당자 디렉터리와 다섯 배정/필터 화면을 구현했다. 실제 PostgreSQL에서 새 디렉터리 5개, 기존 상담/인증/구조/계약 20개와 HTTP 인증 9개 테스트가 통과했다. frontend typecheck, unit 233개, presentation 10개, copy 11개와 design 검증이 통과했다. S3b는 정확 검색 후보/공개 주문번호 선택과 owner의 마스킹 표시 정보를 접수/대상 연결 및 5개 업무 선택 항목에 연결했다.
+반복 조회의 Audit unique source 충돌을 별도 조회 source로 수정했다. 최종 관련 backend 32개가 통과했고,
+frontend unit 233개, presentation 10개, copy 11개, design, 제품/Sites/Storybook build와 docs/OpenAPI가 통과했다.
+정적 Docs 113개 entry, 15개 상태 문서, 47개 surface가 통과했다. focused MCP 9개가 정상 응답으로 통과했다.
+전체 MCP runner 632개는 통과했지만 결과 전달 중 Node 8 GiB heap 부족으로 응답 연결이 끊어졌다.
+서버를 복구하고 공식 로컬 사용 통계 제외 옵션으로 결과 전달을 재확인 중이다. 제품 설정/검증 기준은 변경하지 않았다.
+S4~S5와 전체 마무리 검증은 아직 수행하지 않았다.
 
 ## Revision Notes
 

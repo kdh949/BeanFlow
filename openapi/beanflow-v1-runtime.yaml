@@ -1114,6 +1114,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1event-publication-recoveries~1{publicationId}"
   /operations/event-publication-recoveries/{publicationId}/retries:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1event-publication-recoveries~1{publicationId}~1retries"
+  /support/cases/{caseId}/order-candidates/{orderReference}:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1order-candidates~1{orderReference}"
   /support/cases/{caseId}/orders/{orderId}:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1orders~1{orderId}"
   /support/action-requests/{requestId}/workflow:
@@ -1232,6 +1234,10 @@ components:
       $ref: "./beanflow-v1.yaml#/components/schemas/GoodwillCouponTemplateView"
     SupportCompensationCouponTemplatePage:
       $ref: "./beanflow-v1.yaml#/components/schemas/SupportCompensationCouponTemplatePage"
+    SupportOrderDisplay:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportOrderDisplay"
+    SupportSubjectDisplay:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportSubjectDisplay"
     SupportOrderContextResource:
       $ref: "./beanflow-v1.yaml#/components/schemas/SupportOrderContextResource"
     SupportOrderWorkflowAction:

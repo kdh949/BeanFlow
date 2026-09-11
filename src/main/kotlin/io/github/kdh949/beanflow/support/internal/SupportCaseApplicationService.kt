@@ -184,6 +184,7 @@ internal data class SupportSubjectLinkResource(
     val relationship: SupportSubjectRelationship,
     val linkedAt: Instant,
     val caseVersion: Long? = null,
+    val display: SupportSubjectDisplay? = null,
 )
 
 internal data class SupportSubjectUnlinkResource(
@@ -232,6 +233,7 @@ internal class SupportCaseApplicationService(
     private val idempotency: SupportCaseIdempotencyJpaRepository,
     private val queryRepository: SupportCaseQueryRepository,
     private val operatorDirectory: OperatorDirectoryOperations,
+    private val subjectSelection: SupportSubjectSelectionService,
     private val customerInquiries: CustomerInquiryRepository,
     private val commandLock: SupportCaseCommandLock,
     private val cursors: SignedCursorCodec,
@@ -626,8 +628,24 @@ internal class SupportCaseApplicationService(
             permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
             val entity = cases.findById(caseId).orElseThrow(::notFound)
             entity
-                .toResource(subjectLinks.findBySupportCaseIdAndUnlinkedAtIsNullOrderByLinkedAtAsc(entity.id).map { it.toResource() })
-                .copy(assigneeDisplay = operatorDirectory.displays(setOf(entity.currentAssigneeId)).getValue(entity.currentAssigneeId))
+                .toResource(
+                    subjectSelection
+                        .displays(
+                            actorId,
+                            caseId,
+                            subjectLinks
+                                .findBySupportCaseIdAndUnlinkedAtIsNullOrderByLinkedAtAsc(
+                                    entity.id,
+                                ).map {
+                                    it.toResource()
+                                },
+                        ),
+                ).copy(
+                    assigneeDisplay =
+                        operatorDirectory
+                            .displays(setOf(entity.currentAssigneeId))
+                            .getValue(entity.currentAssigneeId),
+                )
         }
 
     @Transactional
