@@ -26,7 +26,7 @@
 
 ## Consequences
 
-새 조회 계약과 검증이 필요하다. 집계·목록·명령은 서로 다른 관측 시점이며 단일 snapshot을 보장하지 않는다. 새 schema, production dependency와 write command는 없다.
+새 조회 계약과 검증이 필요하다. 집계·목록·명령은 서로 다른 관측 시점이며 단일 snapshot을 보장하지 않는다. 새 DB schema, production dependency와 write command는 없다.
 
 ## Verification
 
@@ -43,4 +43,4 @@
 ## Related Decisions
 
 ADR-081, ADR-082, ADR-084, ADR-090, ADR-128.
-[ExecPlan](../exec-plans/active/support-console-query-completion.md).
+[ExecPlan](../exec-plans/completed/support-console-query-completion.md).

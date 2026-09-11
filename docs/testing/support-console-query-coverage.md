@@ -35,8 +35,24 @@
 
 S1: backend 14 tests; 관련 MCP 11 stories; static Docs 120 entries. PR #181 `fb092f6` 원격 required CI 통과.
 S2: backend 15 tests; 관련 MCP 19 stories; static Docs 121 entries. PR #182 `561eb06` 원격 required CI 통과.
-S3: backend 7 suites 70 tests 통과. 최초 3개 fixture/기대값 실패를 보완하고 해당 suites 29 tests를 재실행해 통과했다. PR 게시와 원격 CI 확인은 진행 중.
+S3: backend 7 suites 70 tests 통과. 최초 3개 fixture/기대값 실패를 보완하고 해당 suites 29 tests를 재실행해 통과했다. PR #183 `aff73c2` 원격 required CI 통과.
 
 공통 frontend unit 236/presentation 10/product-copy 11, typecheck/design/product/Storybook build/Sites, 문서/OpenAPI 검증을 실행했다. 최종 등록 707개 Storybook story를 정확한 ID별로 대조해 MCP test/a11y 통과를 확인했다. Static Docs 122 entries/15 stateful docs/47 state surfaces 통과. 세 슬라이스의 주요 화면을 320/768/1440px로 검사한 15개 viewport에서 문서 가로 넘침이 없고 검사한 control/label/p 최소 14px였다. 단계별 결과는 각 구현 시점에 해당한다.
 
 실서비스 배포·live 인증 E2E·운영 DB·원문 reveal·실제 금융 명령은 Not run. 구조/API/Storybook 검증을 운영 완료로 해석하지 않는다. 자동 visual regression baseline은 Not configured.
+
+## PR 단위와 의존 관계
+
+| 단위 | PR | 구현 커밋 | 직전 기준 |
+| --- | --- | --- | --- |
+| 내 상담 현황·목록 필터 | [#181](https://github.com/kdh949/BeanFlow/pull/181) | `fb092f6c9cf369127207a17ca756d72d70d7f618` | #180 `d2213c1` |
+| 연결 주문 품목·금액 | [#182](https://github.com/kdh949/BeanFlow/pull/182) | `561eb06c80fea92aca00a94ff4e70a52c43e4267` | #181 `fb092f6` |
+| 통합 승인함·결정 이력 | [#183](https://github.com/kdh949/BeanFlow/pull/183) | `aff73c2261a0d36c90c93a50a311e1f867dfdcf7` | #182 `561eb06` |
+
+세 구현 커밋은 직전 단위의 자손이며 각 PR은 해당 직전 브랜치를 기준으로 비교한다. 마지막 검증 문서는 #183 위 문서 전용 변경으로 유지한다.
+
+세 구현 PR에서 preflight/frontend/backend-build/test 6개/build의 10개 required checks가 모두 SUCCESS이며 로컬·원격 구현 head가 일치함을 확인했다.
+
+- [PR #181 CI 결과](https://github.com/kdh949/BeanFlow/actions/runs/34599184041/job/103267465301): `fb092f6c9cf369127207a17ca756d72d70d7f618`.
+- [PR #182 CI 결과](https://github.com/kdh949/BeanFlow/actions/runs/34600021456/job/103270367831): `561eb06c80fea92aca00a94ff4e70a52c43e4267`.
+- [PR #183 CI 결과](https://github.com/kdh949/BeanFlow/actions/runs/34602086609/job/103277381463): `aff73c2261a0d36c90c93a50a311e1f867dfdcf7`.

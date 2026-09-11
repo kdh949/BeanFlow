@@ -1,11 +1,11 @@
 # 상담 현황과 연결 주문, 통합 승인함 조회 완성
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** `docs/exec-plans/completed/internal-identifier-workflow-selection.md`
-> **Completed-At:** `—`
+> **Completed-At:** `2026-09-11`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -15,9 +15,9 @@
 
 ## Current State
 
-기준은 PR #180의 `d2213c1`이다. PR #125의 `c2efc8f`가 제안한 9개 GET 계약을 현재 구현과 대조했다.
-현재 상담 목록·상세, 본인확인, 주문 변경, 보상·정보 정정 요청 선택, 승인 단계·상담 이력, 내장 고객 문의는 구현돼 있다.
-미구현은 내 상담 현황·분류/우선순위 필터, 연결 주문의 품목/금액 조회, 여러 종류를 모으는 승인함이다.
+착수 기준은 PR #180의 `d2213c1`이다. PR #125의 `c2efc8f`가 제안한 9개 GET 계약을 현재 구현과 대조했다.
+착수 당시 상담 목록·상세, 본인확인, 주문 변경, 보상·정보 정정 요청 선택, 승인 단계·상담 이력, 내장 고객 문의는 구현돼 있다.
+착수 당시 미구현은 내 상담 현황·분류/우선순위 필터, 연결 주문의 품목/금액 조회, 여러 종류를 모으는 승인함이었다.
 기존 업무별 상세와 명령은 새 조회의 도착점으로 유지한다. 원래 9개 GET의 처리와 가져오지 않은 중복은 [대조표](../../testing/support-console-query-coverage.md)에 기록했다. PR #125의 셸·라우트 대체와 중복 요청 목록 API는 가져오지 않는다.
 
 ## Definitions
@@ -49,7 +49,7 @@ Controller→Application Service→소유 Query Repository/공개 포트. Suppor
 
 ## Alternatives Considered
 
-PR #125 전체 병합은 현행 셸·권한·상태 처리와 중복되어 기각한다. 새 요청 목록을 중복 구현하는 대신 #174의 목록과 현재 상세를 재사용한다. 필터·현황·주문 요약만 필요한 공개 계약을 확장한다.
+PR #125 전체 병합은 현행 셸·권한·상태 처리와 중복되어 기각한다. 새 요청 목록을 중복 구현하는 대신 #174의 목록과 현재 상세를 재사용한다. 누락된 현황·필터·주문 요약·승인함과 이력에 필요한 공개 계약만 확장한다.
 
 ## Failure Semantics
 
@@ -92,8 +92,8 @@ ADR-129와 현재 문서에 선택 경계·검증 결과를 기록한다. 완료
 - [x] #125와 #180의 조회 계약/업무 화면 대조 및 canonical Storybook MCP 확인.
 - [x] S1 구현: 집계·필터·API 및 14 backend tests, frontend unit 236/presentation 10/copy 11, typecheck/design/build/Sites/Storybook build, 11 focused MCP tests 통과. PR #181 `fb092f6` 게시 완료.
 - [x] S2 구현·검증: backend 15 tests, frontend unit 236/presentation 10/copy 11, typecheck/design/build/Sites/Storybook build, 관련 MCP 19개 통과. PR #182 `561eb06` 게시 완료.
-- [x] S3 구현: 5종류 승인함, 현재 검토/전체 조회, 정확한 요청의 전체 revision 결정 이력, 기존 상세 링크. backend 70 tests, frontend 검증 및 707개 Storybook story 통과. PR 게시 진행 중.
-- [ ] 최종 CI와 stack head 검증, 문서 완료 처리.
+- [x] S3 구현: 5종류 승인함, 현재 검토/전체 조회, 정확한 요청의 전체 revision 결정 이력, 기존 상세 링크. backend 70 tests, frontend 검증 및 707개 Storybook story 통과. PR #183 `aff73c2` 게시 완료.
+- [x] #181 `fb092f6` → #182 `561eb06` → #183 `aff73c2`의 정확한 원격 head와 직전 base·ancestry, 각 10개 required CI SUCCESS 확인. 완료 문서로 이동하고 ADR 참조 갱신.
 
 ## Surprises & Discoveries
 
@@ -108,8 +108,15 @@ S3 테스트에서 요청 enum APPROVE와 저장 결과 APPROVED의 차이, 감�
 
 ## Outcomes & Retrospective
 
-S1: RESOLVED/CLOSED 제외, 다른 담당자 제외, 필터와 cursor 결합 검증 통과. 320/768/1440px 두 화면에서 문서 가로 넘침 없음, 검사한 control/label/p 최소 14px. 최초 Story selector 중복과 종료 fixture의 시각 제약을 바로잡고 재검증했다. Static Docs 120 entries/15 stateful docs/47 state surfaces 통과. S2: 담당자·활성 Case·활성 주문 링크를 조회 전후 검사하며 Ordering 품목/금액만 반환한다. backend 15 tests와 관련 MCP 19개, Static Docs 121 entries/15 stateful/47 surfaces 통과. 320/768/1440px에서 가로 넘침·선택 탭 잘림 없음, 검사한 control/label/p 최소 14px. 최초 새 포트에 대한 기존 테스트 더블의 메서드 누락을 보완 후 재검증했다. S3: 관련 backend 7 suites 70 tests 통과(실패 fixture 보완 후 해당 suites 재실행 포함). frontend unit 236/presentation 10/copy 11, typecheck/design/build/Sites/Storybook build와 문서/OpenAPI 통과. 현재 등록 707개 story의 정확한 ID별 MCP test/a11y 통과를 확인했다. Static Docs 122 entries/15 stateful/47 surfaces 통과. 320/768/1440px 두 화면에서 가로 넘침 없음, 검사한 control/label/p 최소 14px. S1·S2의 모든 원격 required CI 통과. S3 PR 게시와 CI 확인이 남아 있다.
+S1: RESOLVED/CLOSED 제외, 다른 담당자 제외, 필터와 cursor 결합 검증 통과. 320/768/1440px 두 화면에서 문서 가로 넘침 없음, 검사한 control/label/p 최소 14px. 최초 Story selector 중복과 종료 fixture의 시각 제약을 바로잡고 재검증했다. Static Docs 120 entries/15 stateful docs/47 state surfaces 통과.
+
+S2: 담당자·활성 Case·활성 주문 링크를 조회 전후 검사하며 Ordering 품목/금액만 반환한다. backend 15 tests와 관련 MCP 19개, Static Docs 121 entries/15 stateful/47 surfaces 통과. 320/768/1440px에서 가로 넘침·선택 탭 잘림 없음, 검사한 control/label/p 최소 14px. 최초 새 포트에 대한 기존 테스트 더블의 메서드 누락을 보완 후 재검증했다.
+
+S3: 관련 backend 7 suites 70 tests 통과(실패 fixture 보완 후 해당 suites 재실행 포함). frontend unit 236/presentation 10/copy 11, typecheck/design/build/Sites/Storybook build와 문서/OpenAPI 통과. 현재 등록 707개 story의 정확한 ID별 MCP test/a11y 통과를 확인했다. Static Docs 122 entries/15 stateful/47 surfaces 통과. 320/768/1440px 두 화면에서 가로 넘침 없음, 검사한 control/label/p 최소 14px. S1·S2의 모든 원격 required CI 통과. S3 PR #183 `aff73c2`의 preflight/frontend/backend-build/test 6개/build 모두 SUCCESS를 확인했다. 세 기능 PR의 로컬·원격 head가 일치한다.
+
+실서비스 인증 E2E·운영 DB·배포·원문 reveal·금융 명령은 Not run. 자동 visual regression baseline은 Not configured. 이번 대조 범위의 필요한 조회는 기존 기능과 세 슬라이스로 충족했다. PR #125 전체 병합은 필요하지 않다.
 
 ## Revision Notes
 
 - 2026-09-11: 현재 구현과 비교한 세 슬라이스로 시작.
+- 2026-09-11: 세 구현 PR과 원격 CI 검증을 완료하고 completed로 이동. 구현 커밋을 보존한 문서 전용 후속 PR로 검증 기록을 분리한다.
