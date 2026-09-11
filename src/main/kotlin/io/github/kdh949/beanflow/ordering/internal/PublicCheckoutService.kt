@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import io.github.kdh949.beanflow.payment.api.OneTimePaymentAmount
 import io.github.kdh949.beanflow.payment.api.OneTimePaymentAttemptView
 import io.github.kdh949.beanflow.payment.api.OneTimePaymentOperations
+import io.github.kdh949.beanflow.shared.api.DomainFailure
+import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.Instant
@@ -69,7 +71,15 @@ internal class PublicCheckoutService(
         idempotencyKey: String,
     ): PublicOneTimePaymentAttemptResponse {
         val resolved = references.resolveCustomer(customerId, reference)
-        return checkout.prepare(customerId, resolved.orderId, idempotencyKey).publicResponse(resolved.reference.value)
+        if (!get(customerId, resolved.reference.value).canPay) {
+            throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "Payment is not eligible; query current checkout")
+        }
+        val prepared = checkout.prepare(customerId, resolved.orderId, idempotencyKey)
+        // Preparing can replay a historical attempt. Public SDK credentials require current eligibility.
+        return get(customerId, resolved.reference.value)
+            .readyAttempt
+            ?.takeIf { it.paymentId == prepared.paymentId }
+            ?: throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "Payment is not ready to resume; query current checkout")
     }
 }
 
