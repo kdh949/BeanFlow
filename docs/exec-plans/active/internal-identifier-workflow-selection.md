@@ -257,3 +257,16 @@ presentation 10개, copy 11개, typecheck, design, 제품/Sites 4개/Storybook b
 정적 Docs 119개 entry/15개 상태 문서/47개 surface가 통과했다. 102개 production TSX의 입력 선언
 230개와 동적 profile fields를 재대조했다. 남은 ID 입력 라벨은 로그인 이름 3개다. 업무별 28개 대조는
 `docs/testing/internal-identifier-workflow-coverage.md`에 기록했다. 원격 각 PR 최신 head CI는 확인 중이다.
+
+추가 시각 검증에서 비용 주체·외부 업무 코드·상담 열람 대기 화면을 각각 320/768/1440px로 확인했다.
+9개 화면 모두 document 가로 넘침 0, 입력·버튼·label·legend·안내문 최소 14px였다. 다만 320px
+비용 주체 직접 주소 진입에서 선택된 세 번째 탭의 이름 일부가 수평 목록 밖에 가려졌다. 공통 Tabs의
+TabList를 EXTEND하여 활성 탭의 가로 위치만 보정한다. 새 스타일·토큰·dependency·API는 없으며
+수동 키보드 활성화와 disabled 상태를 유지한다. 긴 목록 초기 선택 story와 좁은 실제 소비 화면으로
+검증한다. 페이지 전체를 스크롤하는 대안은 피하고 탭 목록의 scrollLeft만 조정한다.
+
+탭 가림을 긴 목록 story의 실제 bounding box 실패로 재현했다. 수정 후 기존 수동/자동 키보드 선택을
+포함한 focused 5개와 전체 MCP 684개, typecheck, unit 236개/presentation 10개/copy 11개,
+design, 제품/Sites 4개/Storybook build가 통과했다. 9개 Chromium viewport에서 가로 넘침 0,
+선택 탭 가림 0, control·안내문 최소 14px를 확인했다. 정적 Docs 재검증은 진행 중이다.
+#176(587df6d)과 #177(4b3355a)의 최신 head CI가 모두 통과했다.
