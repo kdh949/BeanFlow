@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Button } from "../../design-system";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
 import { http, HttpResponse } from "msw";
@@ -21,3 +23,41 @@ export const LostNoteResponse: Story = { play: async ({ canvas, msw }) => { awai
 export const LinkOrder: Story = { play: async ({ canvas, msw }) => { await userEvent.click(await canvas.findByRole("tab", { name: "대상 연결" })); await userEvent.selectOptions(canvas.getByLabelText("연결 대상 유형"), "ORDER"); await userEvent.type(canvas.getByLabelText("연결 대상 ID"), "a2000000-0000-4000-8000-000000000002"); await userEvent.selectOptions(canvas.getByLabelText("상담과의 관계"), "RELATED_ORDER"); await userEvent.type(canvas.getByLabelText("연결 사유"), "문의 대상 주문 확인"); msw.use(http.post("/api/v1/support/cases/:caseId/subject-links", async ({ request }) => { expect(await request.json()).toEqual({ subjectType: "ORDER", subjectId: "a2000000-0000-4000-8000-000000000002", relationship: "RELATED_ORDER", reason: "문의 대상 주문 확인" }); return HttpResponse.json({ linkId: "linked-order", caseVersion: 5 }); })); await userEvent.click(canvas.getByRole("button", { name: "상담 대상 연결" })); await expect(await canvas.findByText("대상을 연결했습니다")).toBeVisible(); } };
 export const FailedRefresh: Story = { play: async ({ canvas, msw }) => { await userEvent.selectOptions(await canvas.findByLabelText("변경할 상담 상태"), "WAITING"); await userEvent.type(canvas.getByLabelText("상태 변경 사유"), "자료 회신 대기"); msw.use(http.post("/api/v1/support/cases/:caseId/status-transitions", () => { msw.use(http.get("/api/v1/support/cases/:caseId", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE", correlationId: "CASE-READ-UNAVAILABLE" }, { status: 503 }))); return HttpResponse.json({ currentState: "WAITING", caseVersion: 5 }); })); await userEvent.click(canvas.getByRole("button", { name: "상담 상태 변경" })); await expect(await canvas.findByText("문의 코드 CASE-READ-UNAVAILABLE")).toBeVisible(); await expect(canvas.queryByRole("tab", { name: "상태 변경" })).not.toBeInTheDocument(); } };
 export const FutureInteraction: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "접촉 기록" })); await userEvent.selectOptions(canvas.getByLabelText("접촉 채널"), "PHONE"); await userEvent.selectOptions(canvas.getByLabelText("접촉 방향"), "OUTBOUND"); await userEvent.type(canvas.getByLabelText("접촉 시각 (한국 시간)"), "2099-01-01T12:00"); await userEvent.type(canvas.getByLabelText("비식별 접촉 요약"), "고객 문의 확인"); await userEvent.click(canvas.getByRole("button", { name: "접촉 기록 추가" })); await expect(await canvas.findByText("접촉 시각은 현재까지의 유효한 한국 시간으로 입력해 주세요.")).toBeVisible(); } };
+
+export const RemovedSelectionDoesNotRetarget: Story = { play: async ({ canvas, msw }) => {
+  const otherLink = { ...current.subjectLinks[0], linkId: "a3000000-0000-4000-8000-000000000002", subjectId: "a2000000-0000-4000-8000-000000000002" };
+  msw.use(http.get("/api/v1/support/cases/:caseId", () => HttpResponse.json({ ...current, subjectLinks: [...current.subjectLinks, otherLink] })));
+  await userEvent.click(await canvas.findByRole("button", { name: "상담 상태 새로고침" }));
+  await userEvent.click(await canvas.findByRole("tab", { name: "대상 연결" }));
+  await userEvent.selectOptions(canvas.getByLabelText("해제할 대상 연결"), otherLink.linkId);
+  await userEvent.type(canvas.getByLabelText("연결 해제 사유"), "두 번째 주문 연결만 해제");
+  msw.use(http.get("/api/v1/support/cases/:caseId", () => HttpResponse.json({ ...current, version: 5 })));
+  await userEvent.click(canvas.getByRole("button", { name: "상담 상태 새로고침" }));
+  await expect(await canvas.findByLabelText("해제할 대상 연결")).toHaveValue("");
+  await expect(canvas.getByRole("button", { name: "선택한 연결 해제" })).toBeDisabled();
+} };
+
+function ReopenCaseManagement() {
+  const [revision, setRevision] = useState(0);
+  return <><Button onClick={() => setRevision(value => value + 1)}>화면 다시 열기</Button><SupportCaseManagementPage key={revision} /></>;
+}
+export const LostNoteSurvivesReentry: Story = { render: () => <ReopenCaseManagement />, play: async ({ canvas, msw }) => {
+  let first: { key: string | null; body: unknown } | null = null;
+  msw.use(http.post("/api/v1/support/cases/:caseId/notes", async ({ request }) => {
+    const sent = { key: request.headers.get("Idempotency-Key"), body: await request.json() };
+    if (!first) { first = sent; return HttpResponse.error(); }
+    expect(sent).toEqual(first); return HttpResponse.json({ summary: "SUPPORT_NOTE_RECORDED", caseVersion: 5 });
+  }));
+  async function writeNote() {
+    await userEvent.click(await canvas.findByRole("tab", { name: "내부 노트" }));
+    await userEvent.type(canvas.getByLabelText("내부 노트 내용"), "고객 회신 예정");
+    await userEvent.type(canvas.getByLabelText("노트 작성 사유"), "상담 기록");
+    await userEvent.click(canvas.getByRole("button", { name: "내부 노트 추가" }));
+  }
+  await writeNote();
+  await expect(await canvas.findByRole("button", { name: "같은 요청 결과 확인" })).toBeVisible();
+  expect(JSON.stringify(Object.entries(sessionStorage))).not.toContain("고객 회신 예정");
+  await userEvent.click(canvas.getByRole("button", { name: "화면 다시 열기" }));
+  await writeNote();
+  await expect(await canvas.findByText("내부 노트를 추가했습니다")).toBeVisible();
+} };

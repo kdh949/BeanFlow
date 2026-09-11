@@ -10,6 +10,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -44,6 +46,61 @@ internal class StoreIdentityManagementIntegrationTest(
 ) {
     @BeforeEach fun clean() {
         jdbc.execute("TRUNCATE merchant_store, operations_operator_permission_grant, operations_audit_record CASCADE")
+    }
+
+    @ParameterizedTest
+    @EnumSource(StoreTargetPurpose::class)
+    fun `minimal targets use only the selected workflow grant`(purpose: StoreTargetPurpose) {
+        val admin = operator()
+        val store = service.change(create(admin))
+        val actor = UUID.randomUUID()
+        jdbc.update(
+            "INSERT INTO operations_operator_permission_grant(actor_id, permission, state, granted_at, version, audit_source_reference) VALUES (?, ?, 'ACTIVE', ?, 1, ?)",
+            actor,
+            purpose.permission.name,
+            Timestamp.from(Instant.now().minusSeconds(1)),
+            "targets:$actor",
+        )
+        mvc
+            .perform(get("/api/v1/operations/store-targets").param("purpose", purpose.name).with(jwt(actor)))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items[0].storeId").value(store.storeId.toString()))
+            .andExpect(jsonPath("$.items[0].name").value(store.name))
+            .andExpect(jsonPath("$.items[0].latitude").doesNotExist())
+            .andExpect(jsonPath("$.items[0].acceptingOrders").doesNotExist())
+        if (purpose != StoreTargetPurpose.IDENTITY) {
+            mvc.perform(get("/api/v1/operations/stores").with(jwt(actor))).andExpect(status().isForbidden)
+        }
+        jdbc.update("UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ?", actor)
+        mvc
+            .perform(get("/api/v1/operations/store-targets").param("purpose", purpose.name).with(jwt(actor)))
+            .andExpect(status().isForbidden)
+    }
+
+    @Test fun `target cursor cannot cross purpose actor or search scope`() {
+        val actor = operator()
+        service.change(create(actor))
+        service.change(create(actor).copy(key = "another-store-key"))
+        val page = service.targets(actor, StoreTargetPurpose.IDENTITY, null, null, 1)
+        assertThat(page.nextCursor).isNotBlank()
+        assertThat(
+            service
+                .targets(actor, StoreTargetPurpose.IDENTITY, null, page.nextCursor, 1)
+                .items
+                .single()
+                .storeId,
+        ).isNotEqualTo(page.items.single().storeId)
+        assertThatThrownBy { service.targets(operator(), StoreTargetPurpose.IDENTITY, null, page.nextCursor, 1) }
+            .isInstanceOf(DomainFailure::class.java)
+        assertThatThrownBy { service.targets(actor, StoreTargetPurpose.IDENTITY, "other", page.nextCursor, 1) }
+            .isInstanceOf(DomainFailure::class.java)
+        assertThatThrownBy { service.list(actor, null, page.nextCursor, 1) }.isInstanceOf(DomainFailure::class.java)
+        jdbc.update(
+            "UPDATE operations_operator_permission_grant SET permission = 'STORE_SETTLEMENT_TERMS_READ' WHERE actor_id = ? AND permission = 'STORE_IDENTITY_READ'",
+            actor,
+        )
+        assertThatThrownBy { service.targets(actor, StoreTargetPurpose.TERMS, null, page.nextCursor, 1) }
+            .isInstanceOf(DomainFailure::class.java)
     }
 
     @Test fun `HTTP creation supplies a searchable closed Store with validated region and coordinates`() {

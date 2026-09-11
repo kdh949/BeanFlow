@@ -60,7 +60,7 @@ function CreateCompensation({ supportCase, verification, initialIncidentId, onCr
   const [evaluation, setEvaluation] = useState<{ result: Evaluation; body: Payload } | null>(null), [preparing, setPreparing] = useState(false), [error, setError] = useState<unknown>(null);
   const sequence = useRef(0);
   const order = useResource(useCallback(async () => orderId ? unwrap(await operationsApi.GET("/support/cases/{caseId}/orders/{orderId}", { params: { path: { caseId: supportCase.caseId, orderId } } })) : null, [supportCase.caseId, orderId]));
-  const command = useSupportCommand(() => { setEvaluation(null); order.reload(); });
+  const command = useSupportCommand(`compensation-create:${supportCase.caseId}`, () => { setEvaluation(null); order.reload(); });
   const busy = preparing || command.busy || command.pending;
   useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
   useEffect(() => { sequence.current++; setEvaluation(null); }, [orderId, incidentId, benefit, amount, responsibility, share, basis, costEvidence, evidence, template, verification?.sessionId, verification?.state]);
@@ -121,7 +121,7 @@ function CouponPicker({ disabled, selected, onSelect }: { disabled: boolean; sel
 function CompensationInspection({ id, caseId, onBusyChange }: { id: string; caseId?: string; onBusyChange: (busy: boolean) => void }) {
   const read = useResource(useCallback(async () => { const value = unwrap(await operationsApi.GET("/support/compensations/{compensationRequestId}/workflow", { params: { path: { compensationRequestId: id } } })); if (caseId && value.request.supportCaseId !== caseId) throw new ApiRequestError(409, "RESOURCE_STATE_CONFLICT", "현재 상담에 연결된 보상 요청이 아닙니다."); return value; }, [id, caseId]));
   const [reviewed, setReviewed] = useState(false), [reason, setReason] = useState(""), [decision, setDecision] = useState<"APPROVE" | "DENY" | "RETURN_FOR_REVISION">("APPROVE"), [assignee, setAssignee] = useState(""), [assignmentReason, setAssignmentReason] = useState(""), [message, setMessage] = useState("");
-  const command = useSupportCommand(() => { setReviewed(false); read.reload(); });
+  const command = useSupportCommand(`compensation:${id}`, () => { setReviewed(false); read.reload(); });
   const busy = command.busy || command.pending;
   useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
   const value: Workflow | null = read.state.status === "ready" ? read.state.value : null;

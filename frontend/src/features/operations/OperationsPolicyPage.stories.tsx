@@ -81,7 +81,7 @@ export const StorePointPolicyEntry: Story = { play: async ({ canvas }) => { awai
 
 export const PointPolicyConflict: Story = {
   parameters: {
-    msw: { handlers: [getPoint, http.patch("/api/v1/operations/policies/ordinary-point-accrual/global", () => HttpResponse.json({ code: "POLICY_VERSION_CONFLICT", message: "다른 운영자가 정책을 먼저 변경했습니다. 현재값을 다시 조회해 주세요.", correlationId: "REQ-POLICY-409" }, { status: 409 }))] },
+    msw: { handlers: [getPoint, http.patch("/api/v1/operations/policies/ordinary-point-accrual/global", () => HttpResponse.json({ code: "ORDER_STATE_CONFLICT", message: "다른 운영자가 정책을 먼저 변경했습니다. 현재값을 다시 조회해 주세요.", correlationId: "REQ-POLICY-409" }, { status: 409 }))] },
   },
   play: async ({ canvas }) => {
     await loadPoint(canvas);
@@ -89,7 +89,7 @@ export const PointPolicyConflict: Story = {
     await userEvent.type(canvas.getByLabelText("적립률(%)"), "7");
     await userEvent.type(canvas.getByLabelText("변경 사유"), "프로모션 적립률 반영");
     await userEvent.click(canvas.getByRole("button", { name: "새 적립 정책 적용" }));
-    await expect(await canvas.findByText("정책 버전이 변경되었습니다")).toBeVisible();
+    await expect(await canvas.findByText("현재 상태와 요청이 맞지 않습니다")).toBeVisible();
   },
 };
 

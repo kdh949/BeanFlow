@@ -500,7 +500,8 @@ paths:
       security: [{ customerSession: [] }]
       description: |
         기존 Order/Payment 잠금과 멱등 결제 준비를 사용합니다. 서버 금액만 사용하며 내부 orderId를
-        반환하지 않습니다. READY 이외의 replay는 결제창을 열지 않고 현재 결제 결과를 조회해야 합니다.
+        반환하지 않습니다. 서버 시각 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만
+        준비 정보를 반환합니다. 그 외 상태는 409이며 현재 결제 결과를 조회해야 합니다.
       parameters:
         - $ref: "#/components/parameters/OrderReference"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -7691,6 +7692,59 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DisputeManagementRequest'
+  /operations/store-targets:
+    get:
+      tags:
+      - Operations
+      operationId: listStoreTargets
+      summary: 업무별 최소 매장 목록 조회
+      description: 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: purpose
+        required: true
+        schema:
+          type: string
+          enum: [IDENTITY, TERMS, MEMBERSHIP, BRAND, POINT_POLICY]
+      - in: query
+        name: query
+        schema:
+          type: string
+          maxLength: 200
+      - in: query
+        name: cursor
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 운영자 매장 목록 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorStoreTargetPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /operations/stores:
     get:
       tags:
@@ -8647,6 +8701,38 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RetryPublicationRequest'
+  /support/cases/{caseId}/orders/{orderId}/pickup-slots:
+    get:
+      tags:
+      - Support
+      operationId: listSupportOrderPickupSlots
+      summary: 상담 주문 픽업 후보 조회
+      description: 현재 Case 배정, 활성 주문 연결, SUPPORT_CASE_READ와 SUPPORT_ORDER_READ를 검증한다. 고객 세션은 필요하지 않으며 실행 시 정원을 재검증한다.
+      parameters:
+      - $ref: '#/components/parameters/SupportCaseId'
+      - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickupSlotList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /support/cases/{caseId}/orders/{orderId}:
     get:
       tags:
@@ -8679,13 +8765,44 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /support/action-requests/{requestId}/pickup-slots:
+    get:
+      tags:
+      - Support
+      operationId: listSupportRequestPickupSlots
+      summary: 상담 승인 요청 픽업 후보 조회
+      description: 현재 요청 가시성 및 SUPPORT_CASE_READ와 SUPPORT_ORDER_READ를 검증한다. workflow와 같은 만료 및 권한 철회 read repair를 포함하며 실제 주문 변경은 실행하지 않는다.
+      parameters:
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      responses:
+        '200':
+          description: 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickupSlotList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /support/action-requests/{requestId}/workflow:
     get:
       tags:
       - Support
       operationId: getSupportOrderWorkflow
       summary: 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다
-      description: 기존 요청 조회 권한으로 현재 승인안과 실행 담당 권한을 재검증합니다. 개인정보나 action 원문은 반환하지 않습니다.
+      description: 기존 요청 조회 권한으로 현재 승인안과 실행 담당 권한을 재검증합니다. 승인 대기 만료 및 실행 권한 철회는 기존 S60 트랜잭션에서 상태·버전·감사로 반영하며 반복 조회는 추가 전이를 만들지 않습니다. 개인정보나 action 원문은 반환하지 않습니다.
       parameters:
       - $ref: '#/components/parameters/SupportActionRequestId'
       responses:
@@ -8698,6 +8815,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SupportOrderWorkflowResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /stores/{storeId}/support-order-change-requests/{requestId}/pickup-slots:
+    get:
+      tags:
+      - Support
+      security: [{ merchantSession: [] }]
+      operationId: listStoreSupportRequestPickupSlots
+      summary: 매장 상담 동의 픽업 후보 조회
+      description: 현재 same-store OWNER 또는 STAFF와 동의 대상의 action, revision, 정책 버전, 주문 버전, 만료를 검증한다. 고객 세션은 필요하지 않다.
+      parameters:
+      - $ref: '#/components/parameters/StoreId'
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      responses:
+        '200':
+          description: 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickupSlotList'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -10363,6 +10513,29 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+    OperatorStoreTarget:
+      type: object
+      additionalProperties: false
+      required: [storeId, name]
+      properties:
+        storeId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+    OperatorStoreTargetPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorStoreTarget'
+        nextCursor:
+          type: string
+          nullable: true
+          maxLength: 2048
     OperatorStoreIdentityPage:
       type: object
       additionalProperties: false
@@ -14766,7 +14939,8 @@ components:
           pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
         state:
           type: string
-          enum: [READY, CONFIRMING, APPROVED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
+          enum: [READY]
+          description: 서버 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만 반환한다.
         providerOrderId:
           type: string
           minLength: 6

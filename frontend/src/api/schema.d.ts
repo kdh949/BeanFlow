@@ -883,7 +883,8 @@ export interface paths {
         /**
          * 공개 주문번호로 일회성 결제 준비
          * @description 기존 Order/Payment 잠금과 멱등 결제 준비를 사용합니다. 서버 금액만 사용하며 내부 orderId를
-         *     반환하지 않습니다. READY 이외의 replay는 결제창을 열지 않고 현재 결제 결과를 조회해야 합니다.
+         *     반환하지 않습니다. 서버 시각 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만
+         *     준비 정보를 반환합니다. 그 외 상태는 409이며 현재 결제 결과를 조회해야 합니다.
          */
         post: operations["preparePublicCheckoutPayment"];
         delete?: never;
@@ -4866,6 +4867,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/store-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 업무별 최소 매장 목록 조회
+         * @description 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
+         */
+        get: operations["listStoreTargets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/stores": {
         parameters: {
             query?: never;
@@ -5194,6 +5215,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/cases/{caseId}/orders/{orderId}/pickup-slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 상담 주문 픽업 후보 조회
+         * @description 현재 Case 배정, 활성 주문 연결, SUPPORT_CASE_READ와 SUPPORT_ORDER_READ를 검증한다. 고객 세션은 필요하지 않으며 실행 시 정원을 재검증한다.
+         */
+        get: operations["listSupportOrderPickupSlots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support/cases/{caseId}/orders/{orderId}": {
         parameters: {
             query?: never;
@@ -5214,6 +5255,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/action-requests/{requestId}/pickup-slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 상담 승인 요청 픽업 후보 조회
+         * @description 현재 요청 가시성 및 SUPPORT_CASE_READ와 SUPPORT_ORDER_READ를 검증한다. workflow와 같은 만료 및 권한 철회 read repair를 포함하며 실제 주문 변경은 실행하지 않는다.
+         */
+        get: operations["listSupportRequestPickupSlots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support/action-requests/{requestId}/workflow": {
         parameters: {
             query?: never;
@@ -5223,9 +5284,29 @@ export interface paths {
         };
         /**
          * 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다
-         * @description 기존 요청 조회 권한으로 현재 승인안과 실행 담당 권한을 재검증합니다. 개인정보나 action 원문은 반환하지 않습니다.
+         * @description 기존 요청 조회 권한으로 현재 승인안과 실행 담당 권한을 재검증합니다. 승인 대기 만료 및 실행 권한 철회는 기존 S60 트랜잭션에서 상태·버전·감사로 반영하며 반복 조회는 추가 전이를 만들지 않습니다. 개인정보나 action 원문은 반환하지 않습니다.
          */
         get: operations["getSupportOrderWorkflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/support-order-change-requests/{requestId}/pickup-slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 매장 상담 동의 픽업 후보 조회
+         * @description 현재 same-store OWNER 또는 STAFF와 동의 대상의 action, revision, 정책 버전, 주문 버전, 만료를 검증한다. 고객 세션은 필요하지 않다.
+         */
+        get: operations["listStoreSupportRequestPickupSlots"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7010,8 +7091,11 @@ export interface components {
         PublicOneTimePaymentAttempt: {
             paymentId: components["schemas"]["Identifier"];
             orderReference: string;
-            /** @enum {string} */
-            state: "READY" | "CONFIRMING" | "APPROVED" | "FAILED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW";
+            /**
+             * @description 서버 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만 반환한다.
+             * @enum {string}
+             */
+            state: "READY";
             providerOrderId: string;
             customerKey: string;
             orderName: string;
@@ -12015,6 +12099,15 @@ export interface components {
             /** Format: int64 */
             expectedVersion: number;
             reason: string;
+        };
+        OperatorStoreTarget: {
+            /** Format: uuid */
+            storeId: string;
+            name: string;
+        };
+        OperatorStoreTargetPage: {
+            items: components["schemas"]["OperatorStoreTarget"][];
+            nextCursor: string | null;
         };
         StoreIdentitySnapshot: {
             /** Format: uuid */
@@ -19621,6 +19714,37 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    listStoreTargets: {
+        parameters: {
+            query: {
+                purpose: "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY";
+                query?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 운영자 매장 목록 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorStoreTargetPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     listManagedStores: {
         parameters: {
             query?: {
@@ -20351,6 +20475,36 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    listSupportOrderPickupSlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+                orderId: components["parameters"]["OrderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupSlotList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     getSupportOrderContext: {
         parameters: {
             query?: never;
@@ -20381,6 +20535,35 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    listSupportRequestPickupSlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupSlotList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     getSupportOrderWorkflow: {
         parameters: {
             query?: never;
@@ -20400,6 +20583,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SupportOrderWorkflowResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listStoreSupportRequestPickupSlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupSlotList"];
                 };
             };
             400: components["responses"]["BadRequest"];
