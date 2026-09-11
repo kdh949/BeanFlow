@@ -9923,6 +9923,101 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /operations/point-cost-issuers:
+    get:
+      tags:
+      - Operations
+      operationId: listPointCostIssuers
+      summary: 목적별 현재 권한으로 이름과 실제 출처가 있는 비용 주체 선택
+      parameters:
+      - name: purpose
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - POLICY
+          - ADJUSTMENT
+      - name: type
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - PLATFORM
+          - BRAND
+          - STORE
+      - name: query
+        in: query
+        schema:
+          type: string
+          maxLength: 200
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          maxLength: 2048
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 명명된 포인트 비용 주체
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PointCostIssuerPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/platform-point-cost-owners:
+    post:
+      tags:
+      - Operations
+      operationId: registerPlatformPointCostOwner
+      summary: 정책 변경 권한으로 플랫폼 비용 주체의 불변 이름과 참조를 등록
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterPlatformPointCostOwnerRequest'
+      responses:
+        '201':
+          description: 명명된 포인트 비용 주체
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PointCostIssuerResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 components:
   securitySchemes:
     bearerAuth:
@@ -21928,3 +22023,67 @@ components:
         occurredAt:
           type: string
           format: date-time
+    PointCostIssuerResource:
+      type: object
+      required:
+      - issuerType
+      - issuerReference
+      - displayName
+      - source
+      - sourcePolicyVersion
+      properties:
+        issuerType:
+          type: string
+          enum:
+          - PLATFORM
+          - BRAND
+          - STORE
+        issuerReference:
+          type: string
+          maxLength: 240
+        displayName:
+          type: string
+        source:
+          type: string
+          enum:
+          - STORE_PROFILE
+          - BRAND_PROFILE
+          - REGISTERED_PLATFORM
+          - GLOBAL_POLICY
+        sourcePolicyVersion:
+          type:
+          - integer
+          - 'null'
+          format: int64
+    PointCostIssuerPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      - canRegisterPlatform
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PointCostIssuerResource'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+        canRegisterPlatform:
+          type: boolean
+    RegisterPlatformPointCostOwnerRequest:
+      type: object
+      required:
+      - name
+      - reason
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500

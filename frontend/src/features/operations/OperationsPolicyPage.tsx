@@ -1,3 +1,7 @@
+import { useSearchParams } from "react-router";
+import { PointCostIssuerPicker, currentPolicyIssuer, pointIssuerTypeLabels, type PointCostIssuerSelection } from "./PointCostIssuerPicker";
+import { PlatformCostOwnerWorkspace } from "./PlatformCostOwnerWorkspace";
+import { useSupportCommand } from "../support/useSupportCommand";
 import { Gift, RefreshCw, SearchCheck, Settings2, Tags } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
@@ -20,11 +24,12 @@ function completeGlobalPolicy(policy: PolicyVersion): PointPolicy {
 type RestorationPolicy = components["schemas"]["ExpiredBenefitRestorationPolicy"];
 type Brand = components["schemas"]["Brand"];
 type SearchResult = components["schemas"]["SearchIndexRebuildResponse"];
-type Workspace = "points" | "store-points" | "restoration" | "brands" | "search";
+type Workspace = "points" | "store-points" | "restoration" | "brands" | "search" | "cost-owners";
 
 const workspaceItems: Array<{ id: Workspace; label: string; icon: typeof Settings2 }> = [
   { id: "points", label: "포인트 적립", icon: Settings2 },
   { id: "store-points", label: "매장별 포인트", icon: Settings2 },
+  { id: "cost-owners", label: "포인트 비용 주체", icon: Tags },
   { id: "restoration", label: "만료 혜택 복원", icon: Gift },
   { id: "brands", label: "브랜드", icon: Tags },
   { id: "search", label: "검색 색인", icon: SearchCheck },
@@ -35,15 +40,19 @@ function mutationError(error: unknown, intent: SubmissionIntent) {
 }
 
 export function OperationsPolicyPage() {
-  const [workspace, setWorkspace] = useState<Workspace>("points");
+  const [params, setParams] = useSearchParams();
+  const requestedWorkspace = params.get("workspace");
+  const workspace = workspaceItems.some(item => item.id === requestedWorkspace) ? requestedWorkspace! : "points";
+  const [locked, setLocked] = useState(false);
   return (
     <div className="console-page operations-policy-page">
       <PageHeading title="운영 정책 관리" />
-      <Tabs value={workspace} onValueChange={(value) => setWorkspace(value as Workspace)}>
-        <TabList label="운영 정책 업무 선택">{workspaceItems.map(({ id, label, icon: Icon }) => <Tab key={id} value={id}><Icon size={17} aria-hidden="true" /> {label}</Tab>)}</TabList>
-        <TabPanel value="points"><PointPolicyWorkspace /><PointPolicyHistory /></TabPanel>
+      <Tabs value={workspace} onValueChange={value => { if (!locked) setParams({ workspace: value }); }}>
+        <TabList label="운영 정책 업무 선택">{workspaceItems.map(({ id, label, icon: Icon }) => <Tab key={id} value={id} disabled={locked}><Icon size={17} aria-hidden="true" /> {label}</Tab>)}</TabList>
+        <TabPanel value="points"><PointPolicyWorkspace onBusyChange={setLocked} /><PointPolicyHistory /></TabPanel>
         <TabPanel value="store-points"><StorePointPolicyDirectory /></TabPanel>
         <TabPanel value="restoration"><RestorationPolicyWorkspace /></TabPanel>
+        <TabPanel value="cost-owners"><PlatformCostOwnerWorkspace onBusyChange={setLocked} /></TabPanel>
         <TabPanel value="brands"><BrandWorkspace /></TabPanel>
         <TabPanel value="search"><SearchIndexWorkspace /></TabPanel>
       </Tabs>
@@ -51,32 +60,33 @@ export function OperationsPolicyPage() {
   );
 }
 
-function PointPolicyWorkspace() {
+function PointPolicyWorkspace({ onBusyChange }: { onBusyChange: (busy: boolean) => void }) {
   const [accessReason, setAccessReason] = useState("");
   const [policy, setPolicy] = useState<PointPolicy | null>(null);
   const [rate, setRate] = useState("0");
   const [roundingMode, setRoundingMode] = useState<"FLOOR" | "HALF_UP">("FLOOR");
-  const [issuerType, setIssuerType] = useState<"PLATFORM" | "BRAND" | "STORE">("PLATFORM");
-  const [issuerReference, setIssuerReference] = useState("platform:beanflow");
+  const [issuer, setIssuer] = useState<PointCostIssuerSelection | null>(null);
   const [expiryRule, setExpiryRule] = useState<"EXACT_DURATION_FROM_COMPLETION" | "SEOUL_CALENDAR_DAYS_FROM_COMPLETION">("SEOUL_CALENDAR_DAYS_FROM_COMPLETION");
   const [validityDays, setValidityDays] = useState("365");
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+
   const [error, setError] = useState<unknown>(null);
-  const [saveError, setSaveError] = useState<unknown>(null);
-  const intent = useRef(new SubmissionIntent());
+  const command = useSupportCommand(() => undefined);
+  const saving = command.busy, locked = command.busy || command.pending;
+  const saveError = command.failure;
+  useEffect(() => { onBusyChange(locked); return () => onBusyChange(false); }, [locked, onBusyChange]);
 
   function fillForm(next: PointPolicy) {
     setRate((next.accrualRateBps / 100).toString());
     setRoundingMode(next.roundingMode);
-    setIssuerType(next.issuerType);
-    setIssuerReference(next.issuerReference);
+    setIssuer(currentPolicyIssuer(next));
     setExpiryRule(next.expiryRule);
     setValidityDays(String(next.validityDays));
   }
 
   async function load() {
+    if (locked || loading) return;
     setLoading(true);
     setError(null);
     try {
@@ -93,37 +103,15 @@ function PointPolicyWorkspace() {
     }
   }
 
-  async function save() {
-    if (!policy) return;
-    const body = {
-      state: "OVERRIDE" as const,
-      expectedPolicyVersionId: policy.policyVersionId,
-      accrualRateBps: Math.round(Number(rate) * 100),
-      roundingMode,
-      issuerType,
-      issuerReference: issuerReference.trim(),
-      expiryRule,
-      validityDays: Number(validityDays),
-      reason: reason.trim(),
-    };
-    const fingerprint = JSON.stringify(body);
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const next = completeGlobalPolicy(unwrap(await operationsApi.PATCH("/operations/policies/ordinary-point-accrual/global", {
-        params: { header: { "Idempotency-Key": intent.current.keyFor(fingerprint) } },
-        body,
-      })));
-      setPolicy(next);
-      fillForm(next);
-      setReason("");
-      intent.current.complete();
-    } catch (nextError) {
-      mutationError(nextError, intent.current);
-      setSaveError(nextError);
-    } finally {
-      setSaving(false);
-    }
+  function save() {
+    if (!policy || !issuer || locked || !reason.trim()) return;
+    const body = { state: "OVERRIDE" as const, expectedPolicyVersionId: policy.policyVersionId,
+      accrualRateBps: Math.round(Number(rate) * 100), roundingMode, issuerType: issuer.issuerType,
+      issuerReference: issuer.issuerReference, expiryRule, validityDays: Number(validityDays), reason: reason.trim() };
+    command.submit(JSON.stringify(body), async key => {
+      const next = completeGlobalPolicy(unwrap(await operationsApi.PATCH("/operations/policies/ordinary-point-accrual/global", { params: { header: { "Idempotency-Key": key } }, body })));
+      setPolicy(next); fillForm(next); setReason("");
+    }, () => undefined);
   }
 
   return (
@@ -136,7 +124,7 @@ function PointPolicyWorkspace() {
             <option value="POLICY_CHANGE_REVIEW">정책 변경 전 현재값 확인</option>
             <option value="POLICY_AUDIT_REVIEW">정책 감사 검토</option>
           </SelectField>
-          <Button variant="secondary" disabled={!accessReason} loading={loading} onClick={() => void load()}>현재 적립 정책 조회</Button>
+          <Button variant="secondary" disabled={locked || !accessReason} loading={loading} onClick={() => void load()}>현재 적립 정책 조회</Button>
         </div>
       </div>
       {loading ? <LoadingState label="현재 적립 정책을 조회하는 중" /> : null}
@@ -149,24 +137,25 @@ function PointPolicyWorkspace() {
             <dl className="detail-list">
               <div><dt>적립률</dt><dd>{(policy.accrualRateBps / 100).toFixed(2)}%</dd></div>
               <div><dt>반올림</dt><dd>{policy.roundingMode === "FLOOR" ? "버림" : "반올림"}</dd></div>
-              <div><dt>비용 주체</dt><dd>{policy.issuerType} · {policy.issuerReference}</dd></div>
+              <div><dt>비용 주체</dt><dd>{pointIssuerTypeLabels[policy.issuerType]} · 정책 버전 {policy.policyVersionId}의 비용 주체</dd></div>
               <div><dt>유효기간</dt><dd>{policy.validityDays}일</dd></div>
               <div><dt>적용 시각</dt><dd>{fullDateTime.format(new Date(policy.effectiveAt))}</dd></div>
             </dl>
           </section>
           <form className="surface-card policy-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-            <h3>새 정책 버전</h3>
+            <fieldset className="catalog-fieldset" disabled={locked}><legend>새 정책 버전</legend>
             <div className="field-grid">
-              <TextField label="적립률(%)" type="number" min="0" max="100" step="0.01" value={rate} onValueChange={(value) => { setRate(value); intent.current.rotate(); }} required />
+              <TextField label="적립률(%)" type="number" min="0" max="100" step="0.01" value={rate} onValueChange={setRate} required />
               <SelectField label="반올림 방식" value={roundingMode} onValueChange={(value) => setRoundingMode(value as typeof roundingMode)}><option value="FLOOR">버림</option><option value="HALF_UP">반올림</option></SelectField>
-              <SelectField label="발행 주체" value={issuerType} onValueChange={(value) => setIssuerType(value as typeof issuerType)}><option value="PLATFORM">플랫폼</option><option value="BRAND">브랜드</option><option value="STORE">매장</option></SelectField>
-              <TextField label="발행 주체 ID" value={issuerReference} maxLength={240} onValueChange={setIssuerReference} required />
+              <PointCostIssuerPicker key={policy.policyVersionId} purpose="POLICY" value={issuer} onValueChange={setIssuer} disabled={locked} />
               <SelectField label="만료 계산" value={expiryRule} onValueChange={(value) => setExpiryRule(value as typeof expiryRule)}><option value="SEOUL_CALENDAR_DAYS_FROM_COMPLETION">서울 달력일</option><option value="EXACT_DURATION_FROM_COMPLETION">정확한 시간</option></SelectField>
               <TextField label="유효일수" type="number" min="1" max="3650" value={validityDays} onValueChange={setValidityDays} required />
             </div>
-            <TextAreaField label="변경 사유" value={reason} maxLength={500} onValueChange={(value) => { setReason(value); setSaveError(null); intent.current.rotate(); }} required />
-            <Button type="submit" loading={saving} disabled={!reason.trim()}>새 적립 정책 적용</Button>
+            <TextAreaField label="변경 사유" value={reason} maxLength={500} onValueChange={setReason} required />
+            <Button type="submit" loading={saving} disabled={!reason.trim() || !issuer}>새 적립 정책 적용</Button>
+            </fieldset>
             {saveError ? <ErrorState error={saveError} /> : null}
+            {command.pending ? <><p role="status">정책 변경 결과를 확인하지 못했습니다. 선택한 비용 주체와 변경 내용을 유지합니다.</p><Button variant="secondary" loading={saving} onClick={() => void command.retry()}>같은 공통 정책 변경 결과 확인</Button></> : null}
           </form>
         </div>
       ) : null}

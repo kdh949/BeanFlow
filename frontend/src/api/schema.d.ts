@@ -5775,6 +5775,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/point-cost-issuers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 목적별 현재 권한으로 이름과 실제 출처가 있는 비용 주체 선택 */
+        get: operations["listPointCostIssuers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/platform-point-cost-owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 정책 변경 권한으로 플랫폼 비용 주체의 불변 이름과 참조를 등록 */
+        post: operations["registerPlatformPointCostOwner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6661,6 +6695,25 @@ export interface components {
             orderId: string | null;
             /** Format: date-time */
             occurredAt: string;
+        };
+        PointCostIssuerResource: {
+            /** @enum {string} */
+            issuerType: "PLATFORM" | "BRAND" | "STORE";
+            issuerReference: string;
+            displayName: string;
+            /** @enum {string} */
+            source: "STORE_PROFILE" | "BRAND_PROFILE" | "REGISTERED_PLATFORM" | "GLOBAL_POLICY";
+            /** Format: int64 */
+            sourcePolicyVersion: number | null;
+        };
+        PointCostIssuerPage: {
+            items: components["schemas"]["PointCostIssuerResource"][];
+            nextCursor: string | null;
+            canRegisterPlatform: boolean;
+        };
+        RegisterPlatformPointCostOwnerRequest: {
+            name: string;
+            reason: string;
         };
         OperationsOidcConfiguration: {
             /** Format: uri */
@@ -22443,6 +22496,74 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listPointCostIssuers: {
+        parameters: {
+            query: {
+                purpose: "POLICY" | "ADJUSTMENT";
+                type: "PLATFORM" | "BRAND" | "STORE";
+                query?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 명명된 포인트 비용 주체 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointCostIssuerPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    registerPlatformPointCostOwner: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterPlatformPointCostOwnerRequest"];
+            };
+        };
+        responses: {
+            /** @description 명명된 포인트 비용 주체 */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointCostIssuerResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };

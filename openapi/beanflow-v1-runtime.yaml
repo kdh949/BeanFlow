@@ -1163,6 +1163,10 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1investigation-queue"
   /support/cases/{caseId}/compensation-incidents:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1compensation-incidents"
+  /operations/point-cost-issuers:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-cost-issuers"
+  /operations/platform-point-cost-owners:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1platform-point-cost-owners"
 components:
   securitySchemes:
     bearerAuth:
@@ -1470,3 +1474,9 @@ components:
       $ref: "./beanflow-v1.yaml#/components/schemas/SupportCompensationIncidentPage"
     RegisterSupportCompensationIncidentRequest:
       $ref: "./beanflow-v1.yaml#/components/schemas/RegisterSupportCompensationIncidentRequest"
+    PointCostIssuerResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/PointCostIssuerResource"
+    PointCostIssuerPage:
+      $ref: "./beanflow-v1.yaml#/components/schemas/PointCostIssuerPage"
+    RegisterPlatformPointCostOwnerRequest:
+      $ref: "./beanflow-v1.yaml#/components/schemas/RegisterPlatformPointCostOwnerRequest"

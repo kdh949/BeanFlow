@@ -217,3 +217,26 @@ frontend typecheck, unit 233개, presentation 10개, copy 11개, design, 제품/
 정식 MCP 전체 664개, 정적 Docs 116개 entry/15개 상태 문서/47개 surface가 통과했다.
 PR #174 최신 head CI가 전부 통과했다. #175 CI는 진행 중이다. main은 a6199c6/V81로 변동 없음을
 원격과 로컬에서 재확인했다. S5b 비용 주체 선택 및 S6 최종 감사가 남아 있다.
+
+S5a 59773c3를 #176으로 발행했다. S5b는 Operations PointCostIssuerDirectory/PlatformCostOwner 등록,
+V86, PointCostIssuerPicker/PlatformCostOwnerWorkspace, 전역·매장 정책 및 PointAccount의 비용 입력만
+변경한다. #170 고객 검색/계정 연결은 유지한다. 플랫폼 이름 입력은 비용 주체 등록 업무이며 사용자에게
+DB ID를 요구하지 않는다. REUSE: 기존 field/button/notice/tabs; COMPOSE: 비용 선택과 등록;
+EXTEND: 세 소비 화면 및 /ops/policies의 비용 주체 메뉴. 새 dependency/token은 추가하지 않는다.
+플랫폼 등록과 감사는 짧은 local transaction, Merchant 표시 조회는 public port로 읽는다. 금융 명령의
+기존 멱등/버전/비용 snapshot은 유지한다. 전역 정책 변경의 불명 결과에서도 대상·내용·key를 고정한다.
+명부 없이 이름을 추정하는 대안과 외부/비용 참조를 임의 플랫폼 기본값으로 바꾸는 대안은 제외한다.
+새 source와 legacy 유지 차이를 ADR-066에 먼저 기록했다. 새 DDL은 동일 수동 직렬 lane의 V86이다.
+검증은 이름/실제 owner 매핑, 목적별 권한·교차 cursor·archived 브랜드, 중복 등록·다른 payload·Audit
+rollback, 세 화면의 실제 요청 body, unknown 잠금, 기존 고객 선택 회귀와 전체 프론트/문서/API/구조다.
+
+S5b는 이름 기반 매장·브랜드·플랫폼 비용 주체 선택과 불변 플랫폼 이름 등록을 구현했다.
+목적별 현재 권한, cursor 결합, archived 브랜드, 이름 정규화 중복·동시 요청, 멱등 replay와
+Audit 실패 rollback을 실제 PostgreSQL에서 검증했다. 신규 통합 6개, runtime parity 1개,
+Modulith 1개와 Spotless가 통과했다. 초기 새 테스트의 JsonNode map 호출을 배열 순회로 고쳤다.
+frontend typecheck, unit 233개, presentation 10개, copy 11개, design, 제품/Sites 4개/Storybook build,
+정식 MCP 전체 676개와 정적 Docs 118개 entry/15개 상태 문서/47개 surface, 문서·OpenAPI가 통과했다.
+각 MCP 배치의 요청 story ID가 정상 통과 응답에 모두 포함되는지도 대조했다. 초기 focused 도구가
+직전 결과를 반환해 해당 결과는 근거에서 제외하고 전체 배치로 재검증했다. #175 CI는 전부 통과했다.
+#176 backend 전체는 통과했으나 동의 갱신 중 버튼을 너무 일찍 찾는 부모 story를 587df6d에서
+수정했다. S6에서 공통 명령의 불명 결과 보존, 부모 선택 잠금과 외부 업무 코드 설명을 마무리한다.

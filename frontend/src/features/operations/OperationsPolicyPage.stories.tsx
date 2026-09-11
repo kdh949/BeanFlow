@@ -151,3 +151,12 @@ export const SearchIndexInProgress: Story = {
     await expect(await canvas.findByText("요청을 처리하고 있습니다")).toBeVisible();
   },
 };
+
+export const CostOwnerRegistrationEntry: Story = { parameters: { routing: { path: "/ops/policies", initialEntry: "/ops/policies?workspace=cost-owners" }, msw: { handlers: [http.get("/api/v1/operations/point-cost-issuers", () => HttpResponse.json({ items: [], nextCursor: null, canRegisterPlatform: true }))] } }, play: async ({ canvas }) => { await expect(await canvas.findByLabelText("플랫폼 비용 주체 이름")).toBeVisible(); await expect(canvas.getByRole("tab", { name: "포인트 비용 주체" })).toHaveAttribute("aria-selected", "true"); } };
+export const LostPointPolicyKeepsIssuer: Story = { play: async ({ canvas, msw }) => {
+  const keys: string[] = []; const bodies: unknown[] = [];
+  msw.use(http.patch("/api/v1/operations/policies/ordinary-point-accrual/global", async ({ request }) => { keys.push(request.headers.get("Idempotency-Key")!); bodies.push(await request.json()); if (keys.length === 1) return HttpResponse.error(); expect(keys[1]).toBe(keys[0]); expect(bodies[1]).toEqual(bodies[0]); return HttpResponse.json({ ...pointPolicy, policyVersionId: 13 }); }));
+  await loadPoint(canvas); await userEvent.type(canvas.getByLabelText("변경 사유"), "비용 책임 유지 확인"); await userEvent.click(canvas.getByRole("button", { name: "새 적립 정책 적용" }));
+  await canvas.findByRole("button", { name: "같은 공통 정책 변경 결과 확인" }); await expect(canvas.getByRole("button", { name: "비용 주체 변경" })).toBeDisabled(); await expect(canvas.getByLabelText("적립률(%)")).toBeDisabled(); await expect(canvas.getByRole("tab", { name: "포인트 비용 주체" })).toBeDisabled(); await expect(canvas.getByRole("button", { name: "현재 적립 정책 조회" })).toBeDisabled();
+  await userEvent.click(canvas.getByRole("button", { name: "같은 공통 정책 변경 결과 확인" })); await expect(await canvas.findByText("버전 13 적용 중")).toBeVisible();
+} };
