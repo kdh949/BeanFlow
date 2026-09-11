@@ -34,6 +34,25 @@ internal class StoreIdentityService(
     private val jdbc: JdbcTemplate,
     private val mapper: ObjectMapper,
 ) : StoreIdentityOperations {
+    override fun names(storeIds: Set<UUID>): Map<UUID, String> {
+        val names =
+            storeIds
+                .chunked(100)
+                .flatMap { batch ->
+                    jdbc.query(
+                        "SELECT store_id, name FROM merchant_store_discovery_profile WHERE store_id IN (${batch.joinToString(
+                            ",",
+                        ) { "?" }})",
+                        { rs, _ -> rs.getObject("store_id", UUID::class.java) to rs.getString("name") },
+                        *batch.toTypedArray(),
+                    )
+                }.toMap()
+        if (names.keys != storeIds || names.values.any(String::isBlank)) {
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Current store labels are incomplete")
+        }
+        return names
+    }
+
     override fun get(storeId: UUID): StoreIdentitySnapshot =
         jdbc
             .query(

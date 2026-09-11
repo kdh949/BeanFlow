@@ -8399,6 +8399,8 @@ export interface components {
          *     }
          */
         MerchantMembershipView: {
+            /** @description 현재 공개 매장 이름. 계정 조회의 소속 목록에서 제공됩니다. */
+            storeName?: string | null;
             /** @description 해당 매장 자원을 가리키는 UUID 식별자입니다. */
             storeId: components["schemas"]["Identifier"];
             /**
@@ -8816,6 +8818,8 @@ export interface components {
          *     }
          */
         OrdinaryPointAccrualPolicyVersion: {
+            /** @description 현재 매장 이름. 매장 정책 목록 조회에서 제공되며 감사 버전 snapshot은 변경하지 않습니다. */
+            scopeName?: string | null;
             /**
              * Format: int64
              * @description 생성 후 바뀌지 않는 정책 버전을 가리키는 식별자입니다.
@@ -12747,6 +12751,10 @@ export interface components {
             revision: number;
         };
         ManagedStoreMembership: {
+            /** @description 현재 계정 표시 이름. 소속 목록과 상세 조회에서 제공하며 명령 응답에는 생략할 수 있습니다. */
+            accountDisplayName?: string | null;
+            /** @description 소속 대상 계정의 로그인 아이디. 소속 조회에서 제공됩니다. */
+            accountLoginId?: string | null;
             /** Format: uuid */
             membershipId: string;
             /** Format: uuid */

@@ -6,6 +6,7 @@ import { operationsApi } from "../../api/consoleClient";
 import { Button, EmptyState, LoadingState, PageHeading, SelectField, Tab, TabList, TabPanel, Tabs, TextAreaField, TextField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
 import { shortDateTime } from "../../lib/format";
+import { StoreTargetPicker, type StoreSelection } from "./StoreTargetPicker";
 
 type MerchantAccount = components["schemas"]["MerchantAccountView"];
 type OneTimePassword = components["schemas"]["MerchantTemporaryPasswordResult"] | components["schemas"]["MerchantAccountCreationResult"];
@@ -34,7 +35,7 @@ export function MerchantAccountsPage() {
 
   const [newLoginId, setNewLoginId] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [storeId, setStoreId] = useState("");
+  const [store, setStore] = useState<StoreSelection | null>(null);
   const [membershipRole, setMembershipRole] = useState<"OWNER" | "STAFF">("OWNER");
   const [createReason, setCreateReason] = useState("");
   const [creating, setCreating] = useState(false);
@@ -53,12 +54,14 @@ export function MerchantAccountsPage() {
     clearSensitiveResult();
     setUnlocked(false);
     try {
-      setAccount(unwrap(await operationsApi.GET("/operations/merchant-accounts", {
+      const found = unwrap(await operationsApi.GET("/operations/merchant-accounts", {
         params: {
           query: { loginId: normalizedLoginId },
           header: { "X-Access-Reason": accessReason.trim() },
         },
-      })));
+      }));
+      if (found.memberships.some(membership => !membership.storeName)) throw new Error("현재 매장 이름을 확인할 수 없습니다.");
+      setAccount(found);
     } catch (error) {
       setLookupError(error);
     } finally {
@@ -131,10 +134,11 @@ export function MerchantAccountsPage() {
   }
 
   async function createAccount() {
+    if (!store || creating) return;
     const body = {
       loginId: newLoginId.trim(),
       displayName: displayName.trim(),
-      storeId: storeId.trim(),
+      storeId: store.storeId,
       membershipRole,
       reason: createReason.trim(),
     };
@@ -196,7 +200,7 @@ export function MerchantAccountsPage() {
                 <div className="merchant-memberships">
                   <h3>매장 권한</h3>
                   {account.memberships.map((membership) => (
-                    <div key={`${membership.storeId}-${membership.role}`}><code>{membership.storeId}</code><StatusText state={membership.role} /></div>
+                    <div key={`${membership.storeId}-${membership.role}`}><span>{membership.storeName}</span><StatusText state={membership.role} /></div>
                   ))}
                 </div>
               </section>
@@ -226,15 +230,16 @@ export function MerchantAccountsPage() {
       <TabPanel value="create">
         <form className="surface-card operation-form merchant-account-create" onSubmit={(event) => { event.preventDefault(); void createAccount(); }}>
           <div className="operation-heading"><UserPlus aria-hidden="true" /><div><strong>점주 계정과 첫 매장 권한</strong></div></div>
+          <fieldset className="catalog-fieldset" disabled={creating}><legend>새 계정 정보</legend>
           <div className="account-create-grid">
             <TextField label="새 로그인 ID" id="new-merchant-login" value={newLoginId} minLength={5} maxLength={32} required onValueChange={(value) => { setNewLoginId(value); clearSensitiveResult(); createIntent.current.rotate(); }} />
             <TextField label="표시 이름" id="new-merchant-name" value={displayName} maxLength={100} required onValueChange={(value) => { setDisplayName(value); clearSensitiveResult(); createIntent.current.rotate(); }} />
-            <TextField label="첫 매장 ID" id="new-merchant-store" value={storeId} required onValueChange={(value) => { setStoreId(value); clearSensitiveResult(); createIntent.current.rotate(); }} />
             <SelectField label="첫 매장 역할" id="new-merchant-role" value={membershipRole} onValueChange={(value) => { setMembershipRole(value as "OWNER" | "STAFF"); clearSensitiveResult(); createIntent.current.rotate(); }}><option value="OWNER">점주</option><option value="STAFF">직원</option></SelectField>
           </div>
+          <StoreTargetPicker value={store} onValueChange={next => { setStore(next); clearSensitiveResult(); createIntent.current.rotate(); }} disabled={creating} />
           <TextAreaField label="발급 사유" id="create-merchant-reason" value={createReason} maxLength={200} required onValueChange={(value) => { setCreateReason(value); clearSensitiveResult(); createIntent.current.rotate(); }} />
-          <Button type="submit" loading={creating}>{creating ? "발급 중" : "점주 계정 발급"}</Button>
-          {createError ? <ErrorState error={createError} /> : null}
+          <Button type="submit" loading={creating} disabled={!store}>{creating ? "발급 중" : "점주 계정 발급"}</Button>
+          {createError ? <ErrorState error={createError} /> : null}</fieldset>
         </form>
       </TabPanel>
       </Tabs>

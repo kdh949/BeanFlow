@@ -120,6 +120,7 @@ internal class MerchantCredentialAdministrationIntegrationTest(
             .andExpect(jsonPath("$.merchantAccountId").value(accountId.toString()))
             .andExpect(jsonPath("$.temporaryPassword").doesNotExist())
             .andExpect(jsonPath("$.memberships[0].role").value("OWNER"))
+            .andExpect(jsonPath("$.memberships[0].storeName").value("BeanFlow Operations Test"))
         assertThat(
             jdbc.queryForObject("SELECT count(*) FROM operations_audit_record WHERE action = 'MERCHANT_ACCOUNT_READ'", Long::class.java),
         ).isEqualTo(1)

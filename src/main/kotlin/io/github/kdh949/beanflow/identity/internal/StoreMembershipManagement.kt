@@ -82,6 +82,8 @@ internal data class ManagedStoreMembership(
     val version: Long,
     val createdAt: Instant,
     val updatedAt: Instant,
+    val accountDisplayName: String? = null,
+    val accountLoginId: String? = null,
 )
 
 internal data class ManagedStoreMembershipPage(
@@ -125,11 +127,17 @@ internal class StoreMembershipManagementService(
             OperatorPermission.STORE_MEMBERSHIP_READ,
         )
         stores.requireExisting(storeId)
-        return memberships
-            .findByActorIdAndStoreId(
-                accountId,
-                storeId,
-            )?.snapshot() ?: missing()
+        val membership =
+            memberships
+                .findByActorIdAndStoreId(
+                    accountId,
+                    storeId,
+                )?.snapshot() ?: missing()
+        val account =
+            accounts.findById(accountId).orElseThrow {
+                DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Membership account is missing")
+            }
+        return membership.copy(accountDisplayName = account.displayName, accountLoginId = account.loginId)
     }
 
     fun list(
@@ -178,8 +186,9 @@ internal class StoreMembershipManagementService(
         args += limit + 1
         val rows =
             jdbc.query(
-                "SELECT id, actor_id, store_id, membership_role, status, version, created_at, updated_at " +
-                    "FROM identity_store_membership WHERE store_id = ?$where ORDER BY actor_id LIMIT ?",
+                "SELECT m.*, a.display_name, a.login_id FROM identity_store_membership m " +
+                    "LEFT JOIN identity_merchant_account a ON a.id = m.actor_id " +
+                    "WHERE store_id = ?$where ORDER BY actor_id LIMIT ?",
                 ::map,
                 *args.toTypedArray(),
             )
@@ -374,6 +383,8 @@ internal class StoreMembershipManagementService(
         rs.getLong("version"),
         rs.getTimestamp("created_at").toInstant(),
         rs.getTimestamp("updated_at").toInstant(),
+        rs.getString("display_name") ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Membership account label is missing"),
+        rs.getString("login_id") ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Membership account login is missing"),
     )
 
     private fun digest(bytes: ByteArray) = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))

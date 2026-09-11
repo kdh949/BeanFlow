@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import io.github.kdh949.beanflow.merchant.api.StoreIdentityOperations
 import io.github.kdh949.beanflow.merchant.api.StorePolicyScopeOperations
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
@@ -47,6 +48,7 @@ internal class OrdinaryPointAccrualPolicyQueryService(
     private val selector: OrdinaryPointAccrualPolicyOperations,
     private val authorization: OperatorPermissionAuthorization,
     private val storePolicyScopeOperations: StorePolicyScopeOperations,
+    private val storeIdentities: StoreIdentityOperations,
     private val signedCursorCodec: SignedCursorCodec,
     private val auditRecordOperations: AuditRecordOperations,
     private val correlationIdSource: CorrelationIdSource,
@@ -90,7 +92,9 @@ internal class OrdinaryPointAccrualPolicyQueryService(
                 command.cursor?.let { signedCursorCodec.verify(it, scope).sort }
                     ?: StorePolicyHeadSort(Long.MAX_VALUE, MAX_UUID)
             val fetched = queryPersistence.findStoreHeads(command.state, before, limit + 1)
-            val items = fetched.take(limit)
+            val page = fetched.take(limit)
+            val names = storeIdentities.names(page.map { it.scopeReference }.toSet())
+            val items = page.map { it.copy(scopeName = names.getValue(it.scopeReference)) }
             OrdinaryPointAccrualPolicyPage(
                 items,
                 nextCursor =

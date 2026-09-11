@@ -30,6 +30,7 @@ data class ReplaceMerchantTemporaryPasswordCommand(
 data class ProvisionedMerchantMembership(
     val storeId: UUID,
     val role: MerchantCredentialMembershipRole,
+    val storeName: String? = null,
 )
 
 data class ProvisionedMerchantCredential(

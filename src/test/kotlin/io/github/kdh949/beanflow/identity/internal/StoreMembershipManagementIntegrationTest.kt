@@ -86,11 +86,17 @@ internal class StoreMembershipManagementIntegrationTest(
                 result,
                 ManagedStoreMembership::class.java,
             )
-        mvc.perform(get(path(c)).with(jwt(c.operatorId))).andExpect(status().isOk).andExpect(jsonPath("$.items.length()").value(1))
+        mvc
+            .perform(get(path(c)).with(jwt(c.operatorId)))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].accountDisplayName").value("Test merchant actor"))
+            .andExpect(jsonPath("$.items[0].accountLoginId").isString)
         mvc
             .perform(get("${path(c)}/${c.accountId}").with(jwt(c.operatorId)))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.membershipId").value(first.membershipId.toString()))
+            .andExpect(jsonPath("$.accountDisplayName").value("Test merchant actor"))
         mvc
             .perform(
                 put("${path(c)}/${c.accountId}")
