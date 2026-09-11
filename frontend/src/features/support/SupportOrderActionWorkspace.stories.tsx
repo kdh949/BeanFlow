@@ -65,6 +65,6 @@ export const AcceptedOrderSelectsConsent: Story = {
     await waitFor(() => expect(canvas.getByRole("button", { name: "확인한 주문 변경 실행" })).toBeEnabled());
     await userEvent.click(canvas.getByRole("button", { name: "확인한 주문 변경 실행" }));
     await canvas.findByRole("button", { name: "같은 요청으로 결과 확인" });
-    await expect(canvas.getByRole("button", { name: "다른 매장 동의 선택" })).toBeDisabled();
+    await expect(await canvas.findByRole("button", { name: "다른 매장 동의 선택" })).toBeDisabled();
   },
 };
