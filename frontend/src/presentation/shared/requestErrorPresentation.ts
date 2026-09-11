@@ -35,9 +35,9 @@ const knownErrors: Record<string, Omit<RequestErrorPresentation, "reference">> =
     title: "결제 정보를 확인할 수 없습니다",
     description: "결제창에서 돌아온 정보가 주문과 일치하지 않습니다. 주문 상태를 확인해 주세요.",
   },
-  POLICY_VERSION_CONFLICT: {
-    title: "정책 버전이 변경되었습니다",
-    description: "다른 운영자가 정책을 먼저 변경했습니다. 현재 값을 다시 조회해 주세요.",
+  ORDER_STATE_CONFLICT: {
+    title: "현재 상태와 요청이 맞지 않습니다",
+    description: "대상의 현재 상태를 다시 조회하고, 변경할 내용과 적용 조건을 확인해 주세요.",
   },
   POLICY_DATA_INCOMPLETE: {
     title: "정책 값을 확인하지 못했습니다",
