@@ -135,7 +135,8 @@ BR-57/ADR-128 및 관련 owner ADR amendment, OpenAPI와 본 계획, 최종 ID �
 - [x] S2 PR #172 발행 (11c9c6c), #171 d444e63을 base로 유지.
 - [x] S2 11c9c6c 최신 head CI 전부 통과.
 - [x] S3 상담 대상·담당자 구현과 관련 backend/frontend/문서 검증.
-- [ ] S3 MCP 전체 결과 응답 수집 및 PR 최신 head CI.
+- [x] S3 전체 MCP 632개 정상 응답 통과, PR #173 발행.
+- [ ] S3 PR #173 최신 head CI.
 - [ ] S4 요청 재개·점주 동의.
 - [ ] S5 사고·비용 참조.
 - [ ] S6 전체 검증과 PR 최신 head CI.
@@ -172,7 +173,7 @@ S3a 담당자 디렉터리와 다섯 배정/필터 화면을 구현했다. 실�
 frontend unit 233개, presentation 10개, copy 11개, design, 제품/Sites/Storybook build와 docs/OpenAPI가 통과했다.
 정적 Docs 113개 entry, 15개 상태 문서, 47개 surface가 통과했다. focused MCP 9개가 정상 응답으로 통과했다.
 전체 MCP runner 632개는 통과했지만 결과 전달 중 Node 8 GiB heap 부족으로 응답 연결이 끊어졌다.
-서버를 복구하고 공식 로컬 사용 통계 제외 옵션으로 결과 전달을 재확인 중이다. 제품 설정/검증 기준은 변경하지 않았다.
+서버를 복구하고 공식 로컬 사용 통계 제외 옵션으로 재실행하여 전체 632개가 정상 MCP 응답으로 통과했다. 제품 설정/검증 기준은 변경하지 않았다. PR #173은 #172를 base로 두고 최신 CI를 확인한다.
 S4~S5와 전체 마무리 검증은 아직 수행하지 않았다.
 
 ## Revision Notes
