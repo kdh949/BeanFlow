@@ -932,6 +932,10 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1case-queue~1summary"
   /support/orders/{orderId}/overview:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1orders~1{orderId}~1overview"
+  /support/approval-tasks:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1approval-tasks"
+  /support/approval-tasks/{kind}/{requestId}/history:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1approval-tasks~1{kind}~1{requestId}~1history"
   /support/cases:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases"
   /support/cases/{caseId}:

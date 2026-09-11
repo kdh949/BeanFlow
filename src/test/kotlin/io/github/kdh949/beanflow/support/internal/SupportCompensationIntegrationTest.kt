@@ -133,6 +133,20 @@ internal class SupportCompensationIntegrationTest
                     created.compensationRequestId,
                 ),
             ).isNull()
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks")
+                        .with(jwt().jwt { it.subject(managerId.toString()) })
+                        .param("kind", "COMPENSATION"),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].requestId").value(created.compensationRequestId.toString()))
+                .andExpect(jsonPath("$.items[0].reviewAction").value("DECIDE"))
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks/COMPENSATION/${created.compensationRequestId}/history")
+                        .with(jwt().jwt { it.subject(managerId.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isEmpty())
         }
 
         @Test

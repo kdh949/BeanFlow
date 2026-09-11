@@ -104,6 +104,34 @@ internal class SupportOrderChangeExecutionIntegrationTest
                     sessionId,
                 )
             }
+            val reviewer = UUID.randomUUID()
+            listOf("SUPPORT_CASE_READ", "SUPPORT_ACTION_APPROVE", "SUPPORT_ORDER_READ").forEach { permission ->
+                jdbcTemplate.update(
+                    """INSERT INTO operations_operator_permission_grant(actor_id, permission, state, granted_at, version, audit_source_reference)
+                       VALUES (?, ?, 'ACTIVE', now(), 1, ?)""",
+                    reviewer,
+                    permission,
+                    "approval-inbox-$permission",
+                )
+            }
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks")
+                        .with(jwt().jwt { it.subject(reviewer.toString()) })
+                        .param("kind", "ORDER_ACTION")
+                        .param("view", "VISIBLE"),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].requestId").value(requestId.toString()))
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks/ORDER_ACTION/$requestId/history")
+                        .with(jwt().jwt { it.subject(reviewer.toString()) }),
+                ).andExpect(status().isOk)
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks/ORDER_ACTION/$orderId/history")
+                        .with(jwt().jwt { it.subject(reviewer.toString()) }),
+                ).andExpect(status().isNotFound)
             val path = "/api/v1/support/work-items"
             val actor = jwt().jwt { it.subject(supportActorId.toString()) }
             mockMvc

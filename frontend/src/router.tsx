@@ -116,6 +116,7 @@ export const router = createBrowserRouter([
     path: "/support", element: <ConsoleShell kind="support" />, children: [
       { lazy: async () => { const { OperationsSessionGate: Component } = await import("./features/auth/operations/OperationsSessionGate"); return { Component }; }, children: [
         { index: true, lazy: async () => { const { SupportWorkspacePage: Component } = await import("./features/support/SupportWorkspacePage"); return { Component }; } },
+        { path: "approvals", lazy: async () => { const { SupportApprovalInboxPage: Component } = await import("./features/support/SupportApprovalInboxPage"); return { Component }; } },
         { path: "cases", lazy: async () => { const { SupportCaseDirectoryPage: Component } = await import("./features/support/SupportCaseDirectoryPage"); return { Component }; } },
         { path: "inquiries", lazy: async () => { const { SupportInquiryDirectoryPage: Component } = await import("./features/support/SupportInquiryPages"); return { Component }; } },
         { path: "inquiries/:inquiryId", lazy: async () => { const { SupportInquiryDetailPage: Component } = await import("./features/support/SupportInquiryPages"); return { Component }; } },

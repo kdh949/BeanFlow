@@ -95,6 +95,18 @@ internal class BreakGlassIntegrationTest
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.items[0].requestId").value(requestId.toString()))
                 .andExpect(jsonPath("$.items[0].field").doesNotExist())
+            mockMvc
+                .perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get(
+                            "/api/v1/support/approval-tasks",
+                        ).with(operatorJwt(approverId))
+                        .param("kind", "BREAK_GLASS"),
+                ).andExpect(
+                    status().isOk,
+                ).andExpect(
+                    jsonPath("$.items[0].requestId").value(requestId.toString()),
+                ).andExpect(jsonPath("$.items[0].reviewAction").value("DECIDE"))
             assertThat(countIntents(requestId)).isEqualTo(1)
         }
 
@@ -120,6 +132,16 @@ internal class BreakGlassIntegrationTest
                 ).andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.state").value("ACTIVE"))
+            mockMvc
+                .perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get(
+                            "/api/v1/support/approval-tasks/BREAK_GLASS/$requestId/history",
+                        ).with(operatorJwt(approverId)),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].state").value("APPROVED"))
+                .andExpect(jsonPath("$.items[0].actorId").doesNotExist())
+                .andExpect(jsonPath("$.items[0].reasonCode").doesNotExist())
             assertThat(countIntents(requestId)).isEqualTo(2)
 
             mockMvc
@@ -169,6 +191,28 @@ internal class BreakGlassIntegrationTest
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.state").value("REVIEWED"))
 
+            val historyPath = "/api/v1/support/approval-tasks/BREAK_GLASS/$requestId/history"
+            val firstPage =
+                mockMvc
+                    .perform(get(historyPath).with(operatorJwt(reviewerId)).param("limit", "1"))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items[0].state").value("CONFIRMED"))
+                    .andReturn()
+                    .response.contentAsString
+            val historyCursor =
+                JsonMapper
+                    .builder()
+                    .build()
+                    .readTree(firstPage)["nextCursor"]
+                    .asText()
+            mockMvc
+                .perform(get(historyPath).with(operatorJwt(reviewerId)).param("limit", "1").param("cursor", historyCursor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].state").value("APPROVED"))
+                .andExpect(jsonPath("$.nextCursor").doesNotExist())
+            mockMvc
+                .perform(get(historyPath).with(operatorJwt(approverId)).param("cursor", historyCursor))
+                .andExpect(status().isBadRequest)
             worker.dispatchDue()
             assertThat(notificationProvider.calls.get()).isEqualTo(3)
             assertThat(notificationProvider.observedTransaction.get()).isFalse()

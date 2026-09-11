@@ -18,7 +18,7 @@
 기준은 PR #180의 `d2213c1`이다. PR #125의 `c2efc8f`가 제안한 9개 GET 계약을 현재 구현과 대조했다.
 현재 상담 목록·상세, 본인확인, 주문 변경, 보상·정보 정정 요청 선택, 승인 단계·상담 이력, 내장 고객 문의는 구현돼 있다.
 미구현은 내 상담 현황·분류/우선순위 필터, 연결 주문의 품목/금액 조회, 여러 종류를 모으는 승인함이다.
-기존 업무별 상세와 명령은 새 조회의 도착점으로 유지한다. PR #125의 셸·라우트 대체와 중복 요청 목록 API는 가져오지 않는다.
+기존 업무별 상세와 명령은 새 조회의 도착점으로 유지한다. 원래 9개 GET의 처리와 가져오지 않은 중복은 [대조표](../../testing/support-console-query-coverage.md)에 기록했다. PR #125의 셸·라우트 대체와 중복 요청 목록 API는 가져오지 않는다.
 
 ## Definitions
 
@@ -91,8 +91,8 @@ ADR-129와 현재 문서에 선택 경계·검증 결과를 기록한다. 완료
 
 - [x] #125와 #180의 조회 계약/업무 화면 대조 및 canonical Storybook MCP 확인.
 - [x] S1 구현: 집계·필터·API 및 14 backend tests, frontend unit 236/presentation 10/copy 11, typecheck/design/build/Sites/Storybook build, 11 focused MCP tests 통과. PR #181 `fb092f6` 게시 완료.
-- [x] S2 구현·검증: backend 15 tests, frontend unit 236/presentation 10/copy 11, typecheck/design/build/Sites/Storybook build, 관련 MCP 19개 통과. PR 게시 진행 중.
-- [ ] S3 구현·검증·PR.
+- [x] S2 구현·검증: backend 15 tests, frontend unit 236/presentation 10/copy 11, typecheck/design/build/Sites/Storybook build, 관련 MCP 19개 통과. PR #182 `561eb06` 게시 완료.
+- [x] S3 구현: 5종류 승인함, 현재 검토/전체 조회, 정확한 요청의 전체 revision 결정 이력, 기존 상세 링크. backend 70 tests, frontend 검증 및 707개 Storybook story 통과. PR 게시 진행 중.
 - [ ] 최종 CI와 stack head 검증, 문서 완료 처리.
 
 ## Surprises & Discoveries
@@ -100,6 +100,7 @@ ADR-129와 현재 문서에 선택 경계·검증 결과를 기록한다. 완료
 #125의 active 집계는 CLOSED만 제외하므로 RESOLVED까지 포함한다. 현재 domain terminal 정의에 맞춰 OPEN/IN_PROGRESS/WAITING만 집계한다.
 #174가 보상·정보 정정의 기존 요청 목록을 이미 구현했다. 중복 GET을 추가하지 않는다.
 기존 상담 timeline은 Case/접촉/대상 기록이며 승인 결정 전체를 포함하지 않는다. S3는 기존 승인 step 및 grant/break-glass decision의 요청별 bounded 이력을 추가한다.
+S3 테스트에서 요청 enum APPROVE와 저장 결과 APPROVED의 차이, 감사 source reference의 전역 unique 제약을 확인했다. 실제 저장 계약에 맞춘 fixture로 수정하고 실패한 세 suite 29 tests를 재실행해 모두 통과했다.
 
 ## Decision Log
 
@@ -107,7 +108,7 @@ ADR-129와 현재 문서에 선택 경계·검증 결과를 기록한다. 완료
 
 ## Outcomes & Retrospective
 
-S1: RESOLVED/CLOSED 제외, 다른 담당자 제외, 필터와 cursor 결합 검증 통과. 320/768/1440px 두 화면에서 문서 가로 넘침 없음, 검사한 control/label/p 최소 14px. 최초 Story selector 중복과 종료 fixture의 시각 제약을 바로잡고 재검증했다. Static Docs 120 entries/15 stateful docs/47 state surfaces 통과. S2: 담당자·활성 Case·활성 주문 링크를 조회 전후 검사하며 Ordering 품목/금액만 반환한다. backend 15 tests와 관련 MCP 19개, Static Docs 121 entries/15 stateful/47 surfaces 통과. 320/768/1440px에서 가로 넘침·선택 탭 잘림 없음, 검사한 control/label/p 최소 14px. 최초 새 포트에 대한 기존 테스트 더블의 메서드 누락을 보완 후 재검증했다. S3 미구현.
+S1: RESOLVED/CLOSED 제외, 다른 담당자 제외, 필터와 cursor 결합 검증 통과. 320/768/1440px 두 화면에서 문서 가로 넘침 없음, 검사한 control/label/p 최소 14px. 최초 Story selector 중복과 종료 fixture의 시각 제약을 바로잡고 재검증했다. Static Docs 120 entries/15 stateful docs/47 state surfaces 통과. S2: 담당자·활성 Case·활성 주문 링크를 조회 전후 검사하며 Ordering 품목/금액만 반환한다. backend 15 tests와 관련 MCP 19개, Static Docs 121 entries/15 stateful/47 surfaces 통과. 320/768/1440px에서 가로 넘침·선택 탭 잘림 없음, 검사한 control/label/p 최소 14px. 최초 새 포트에 대한 기존 테스트 더블의 메서드 누락을 보완 후 재검증했다. S3: 관련 backend 7 suites 70 tests 통과(실패 fixture 보완 후 해당 suites 재실행 포함). frontend unit 236/presentation 10/copy 11, typecheck/design/build/Sites/Storybook build와 문서/OpenAPI 통과. 현재 등록 707개 story의 정확한 ID별 MCP test/a11y 통과를 확인했다. Static Docs 122 entries/15 stateful/47 surfaces 통과. 320/768/1440px 두 화면에서 가로 넘침 없음, 검사한 control/label/p 최소 14px. S1·S2의 모든 원격 required CI 통과. S3 PR 게시와 CI 확인이 남아 있다.
 
 ## Revision Notes
 

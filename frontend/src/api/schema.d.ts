@@ -2971,6 +2971,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/approval-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 현재 담당자의 통합 승인함
+         * @description 종류별 승인/검토 grant와 기존 workflow 객체 권한을 적용한다. REVIEW는 현재 검토 판정이 있는 요청, VISIBLE은 같은 권한으로 조회 가능한 요청이다. 목록은 승인 성공을 보장하지 않는다. 생성 시각·요청 ID·종류 내림차순, actor/종류/모드에 결합된 15분 cursor. 최대 limit개 후보를 검사하므로 items가 비어도 nextCursor가 존재할 수 있다. 명시적 객체 권한 거절만 필터링하고 의존성 실패는 오류로 반환한다.
+         */
+        get: operations["listSupportApprovalTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/approval-tasks/{kind}/{requestId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 선택한 승인 요청의 결정 이력
+         * @description 종류별 승인 권한과 기존 객체 조회 권한을 전후 재검증한다. 주문 변경은 action request ID, 보상/정보 정정은 해당 요청에 연결된 정확한 action request의 전체 revision 결정만 반환한다. 원문 사유·개인정보 payload는 반환하지 않는다. 결정 시각/이력 ID 내림차순, actor/종류/요청에 결합된 15분 cursor.
+         */
+        get: operations["getSupportApprovalHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support/cases": {
         parameters: {
             query?: never;
@@ -10395,6 +10435,39 @@ export interface components {
                 /** Format: int64 */
                 amountKrw: number;
             }[];
+        };
+        /** @enum {string} */
+        SupportApprovalKind: "DATA_ACCESS" | "BREAK_GLASS" | "ORDER_ACTION" | "COMPENSATION" | "PROFILE_CHANGE";
+        SupportApprovalItem: {
+            kind: components["schemas"]["SupportApprovalKind"];
+            requestId: components["schemas"]["Identifier"];
+            caseId: components["schemas"]["Identifier"];
+            caseCategory: components["schemas"]["SupportInquiryCategory"];
+            /** Format: date-time */
+            caseOpenedAt: string;
+            purpose: string;
+            state: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @enum {string|null} */
+            reviewAction: "DECIDE" | "REVIEW" | null;
+        };
+        SupportApprovalPage: {
+            items: components["schemas"]["SupportApprovalItem"][];
+            nextCursor: string | null;
+        };
+        SupportApprovalDecisionItem: {
+            eventId: components["schemas"]["Identifier"];
+            step: string;
+            state: string;
+            /** Format: date-time */
+            occurredAt: string;
+            revisionNumber: number | null;
+            actorDisplay: components["schemas"]["OperatorDisplay"] | null;
+        };
+        SupportApprovalHistoryPage: {
+            items: components["schemas"]["SupportApprovalDecisionItem"][];
+            nextCursor: string | null;
         };
         /** @enum {string} */
         SupportCasePriority: "LOW" | "NORMAL" | "HIGH" | "URGENT";
@@ -18368,6 +18441,75 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportApprovalTasks: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["SupportApprovalKind"];
+                view?: "REVIEW" | "VISIBLE";
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized approval candidates */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportApprovalPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportApprovalHistory: {
+        parameters: {
+            query?: {
+                /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                kind: components["schemas"]["SupportApprovalKind"];
+                requestId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded decision history */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportApprovalHistoryPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

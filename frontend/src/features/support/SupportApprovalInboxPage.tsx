@@ -1,0 +1,35 @@
+import { useCallback, useState } from "react";
+import type { components } from "../../api/schema";
+import { operationsApi } from "../../api/consoleClient";
+import { unwrap } from "../../api/client";
+import { Button, ButtonLink, EmptyState, InlineNotice, LoadingState, PageHeading, SelectField } from "../../design-system";
+import { ErrorState, StatusText } from "../../presentation/shared";
+import { fullDateTime } from "../../lib/format";
+import { useResource } from "../shared/useResource";
+import { caseCategoryLabels } from "./supportCaseLabels";
+import { supportWorkLabels, supportWorkPurposeLabels, supportWorkStateLabels } from "./SupportWorkPicker";
+type Kind = components["schemas"]["SupportApprovalKind"];
+type Item = components["schemas"]["SupportApprovalItem"];
+const paths: Record<Kind, string> = { DATA_ACCESS: "data-access", BREAK_GLASS: "break-glass", ORDER_ACTION: "action-requests", COMPENSATION: "compensations", PROFILE_CHANGE: "profile-changes" };
+/** Read-only federated inbox; each existing detail remains the current command authority. */
+export function SupportApprovalInboxPage() {
+  const [kind, setKind] = useState<Kind | "">("");
+  const [view, setView] = useState<"REVIEW" | "VISIBLE">("REVIEW");
+  const [query, setQuery] = useState<{ kind?: Kind; view: "REVIEW" | "VISIBLE" }>({ view: "REVIEW" });
+  const [cursors, setCursors] = useState<Array<string | undefined>>([undefined]);
+  const [selected, setSelected] = useState<Item | null>(null);
+  const cursor = cursors.at(-1);
+  const resource = useResource(useCallback(async () => unwrap(await operationsApi.GET("/support/approval-tasks", { params: { query: { ...query, cursor, limit: 20 } } })), [query, cursor]));
+  function reload() { setSelected(null); resource.reload(); }
+  return <div className="console-page management-workspace"><PageHeading title="승인함" /><InlineNotice title="현재 권한으로 검토할 요청을 모았습니다" description="요청을 선택하면 기존 처리 화면에서 최신 승인 조건을 다시 확인합니다. 이전 결정은 승인 이력에서 조회할 수 있습니다." /><form className="management-card-grid" onSubmit={event => { event.preventDefault(); setSelected(null); setCursors([undefined]); setQuery({ kind: kind || undefined, view }); }}><SelectField label="승인 업무 종류" value={kind} onValueChange={value => setKind(value as typeof kind)}><option value="">모든 업무</option>{(Object.keys(paths) as Kind[]).map(value => <option key={value} value={value}>{supportWorkLabels[value]}</option>)}</SelectField><SelectField label="승인 요청 범위" value={view} onValueChange={value => setView(value as typeof view)}><option value="REVIEW">검토 대기</option><option value="VISIBLE">조회 가능한 전체 요청</option></SelectField><Button type="submit">승인 요청 검색</Button></form>{resource.state.status === "loading" ? <LoadingState label="승인 요청을 확인하는 중" /> : resource.state.status === "failed" ? <ErrorState error={resource.state.error} retry={reload} /> : <>{resource.state.value.items.length ? <div className="management-card-grid">{resource.state.value.items.map(item => <article key={`${item.kind}:${item.requestId}`} className="surface-card management-card management-workspace"><h2>{supportWorkLabels[item.kind]} · {supportWorkPurposeLabels[item.purpose] ?? "요청 상세 확인"}</h2><StatusText state={item.state} label={supportWorkStateLabels[item.state] ?? "현재 상태 확인 필요"} /><p>{item.reviewAction === "REVIEW" ? "독립 사후 검토 대기" : item.reviewAction === "DECIDE" ? "승인 검토 대기" : "현재 나에게 열려 있는 검토 단계 없음"}</p><dl className="detail-list"><div><dt>상담</dt><dd>{caseCategoryLabels[item.caseCategory]} · {fullDateTime.format(new Date(item.caseOpenedAt))} 접수</dd></div><div><dt>요청 시각</dt><dd>{fullDateTime.format(new Date(item.createdAt))}</dd></div></dl><div className="button-row"><ButtonLink to={`/support/${paths[item.kind]}/${encodeURIComponent(item.requestId)}`}>{supportWorkLabels[item.kind]} 처리 화면</ButtonLink><Button variant="secondary" onClick={() => setSelected(item)}>승인 이력 보기</Button></div></article>)}</div> : <EmptyState title="현재 조회 구간에 요청이 없습니다" description={resource.state.value.nextCursor ? "다음 구간에 조회 가능한 요청이 있을 수 있습니다." : "다른 업무나 조회 범위로 확인할 수 있습니다."} />}<div className="button-row"><Button variant="secondary" disabled={cursors.length === 1} onClick={() => { setSelected(null); setCursors(value => value.slice(0, -1)); }}>이전 요청</Button><Button variant="secondary" disabled={!resource.state.value.nextCursor} onClick={() => { const next = resource.state.status === "ready" ? resource.state.value.nextCursor : null; if (next) { setSelected(null); setCursors(value => [...value, next]); } }}>다음 요청</Button><Button variant="ghost" onClick={reload}>승인함 새로고침</Button></div>{selected ? <section className="management-workspace" aria-label="선택한 요청의 승인 이력"><h2>{supportWorkLabels[selected.kind]} 승인 이력</h2><Button variant="secondary" onClick={() => setSelected(null)}>이력 닫기</Button><ApprovalHistory key={`${selected.kind}:${selected.requestId}`} item={selected} /></section> : null}</>}</div>;
+}
+const decisions: Record<string, string> = { APPROVE: "승인 완료", APPROVED: "승인 완료", DENY: "반려", DENIED: "반려", REJECTED: "반려", RETURNED: "조건 수정 요청", RETURN_FOR_REVISION: "조건 수정 요청", CONFIRMED: "정책 준수 확인", ESCALATED: "추가 검토 필요", EXPIRED: "기한 만료", STALE: "승인 조건 변경", PENDING: "결정 대기" };
+const steps: Record<string, string> = { DECISION: "열람 승인", APPROVAL: "사전 승인", PRE_APPROVAL: "사전 승인", REVIEW: "사후 검토", POST_REVIEW: "사후 검토", SUPPORT_MANAGER: "상담 관리자", OPERATIONS: "운영 검토" };
+function ApprovalHistory({ item }: { item: Item }) {
+  const [cursors, setCursors] = useState<Array<string | undefined>>([undefined]);
+  const cursor = cursors.at(-1);
+  const { state, reload } = useResource(useCallback(async () => unwrap(await operationsApi.GET("/support/approval-tasks/{kind}/{requestId}/history", { params: { path: { kind: item.kind, requestId: item.requestId }, query: { cursor, limit: 20 } } })), [item.kind, item.requestId, cursor]));
+  if (state.status === "loading") return <LoadingState label="승인 결정 이력을 확인하는 중" />;
+  if (state.status === "failed") return <ErrorState error={state.error} retry={reload} />;
+  return <>{state.value.items.length ? <ol className="management-workspace">{state.value.items.map(event => <li key={event.eventId} className="surface-card management-card management-workspace"><strong>{steps[event.step] ?? "승인 결정"}{event.revisionNumber != null ? ` · 요청 ${event.revisionNumber}차` : ""}</strong><StatusText state={event.state} label={decisions[event.state] ?? "상세 상태 확인 필요"} /><span>{event.actorDisplay?.state === "AVAILABLE" ? event.actorDisplay.loginName : event.actorDisplay ? "조직 로그인 이름 미등록" : "결정자 기록 없음"}</span><span>{fullDateTime.format(new Date(event.occurredAt))}</span></li>)}</ol> : <EmptyState title="아직 기록된 승인 결정이 없습니다" description="승인이 필요하지 않은 요청에는 승인 이력이 없습니다." />}<div className="button-row"><Button variant="secondary" disabled={cursors.length === 1} onClick={() => setCursors(value => value.slice(0, -1))}>최근 결정으로</Button><Button variant="secondary" disabled={!state.value.nextCursor} onClick={() => { const next = state.value.nextCursor; if (next) setCursors(value => [...value, next]); }}>이전 결정 더 보기</Button><Button variant="ghost" onClick={reload}>이력 새로고침</Button></div></>;
+}

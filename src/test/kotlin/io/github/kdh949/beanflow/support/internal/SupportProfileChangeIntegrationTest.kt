@@ -128,6 +128,20 @@ internal class SupportProfileChangeIntegrationTest
                     .andReturn()
                     .response.contentAsString
             assertThat(body).doesNotContain("maskedBefore", "maskedAfter", "payloadDigest", "verificationSessionId")
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks")
+                        .with(jwt().jwt { it.subject(managerId.toString()) })
+                        .param("kind", "PROFILE_CHANGE"),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].requestId").value(created.profileChangeId.toString()))
+                .andExpect(jsonPath("$.items[0].reviewAction").value("DECIDE"))
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks/PROFILE_CHANGE/${created.profileChangeId}/history")
+                        .with(jwt().jwt { it.subject(managerId.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isEmpty())
         }
 
         @Test

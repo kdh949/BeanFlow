@@ -4334,6 +4334,66 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/approval-tasks:
+    get:
+      tags: [Support]
+      operationId: listSupportApprovalTasks
+      summary: 현재 담당자의 통합 승인함
+      description: 종류별 승인/검토 grant와 기존 workflow 객체 권한을 적용한다. REVIEW는 현재 검토 판정이 있는 요청, VISIBLE은 같은 권한으로 조회 가능한 요청이다. 목록은 승인 성공을 보장하지 않는다. 생성 시각·요청 ID·종류 내림차순, actor/종류/모드에 결합된 15분 cursor. 최대 limit개 후보를 검사하므로 items가 비어도 nextCursor가 존재할 수 있다. 명시적 객체 권한 거절만 필터링하고 의존성 실패는 오류로 반환한다.
+      parameters:
+        - name: kind
+          in: query
+          schema: { $ref: "#/components/schemas/SupportApprovalKind" }
+        - name: view
+          in: query
+          schema: { type: string, enum: [REVIEW, VISIBLE], default: REVIEW }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Authorized approval candidates
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportApprovalPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/approval-tasks/{kind}/{requestId}/history:
+    get:
+      tags: [Support]
+      operationId: getSupportApprovalHistory
+      summary: 선택한 승인 요청의 결정 이력
+      description: 종류별 승인 권한과 기존 객체 조회 권한을 전후 재검증한다. 주문 변경은 action request ID, 보상/정보 정정은 해당 요청에 연결된 정확한 action request의 전체 revision 결정만 반환한다. 원문 사유·개인정보 payload는 반환하지 않는다. 결정 시각/이력 ID 내림차순, actor/종류/요청에 결합된 15분 cursor.
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/SupportApprovalKind" }
+        - name: requestId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Bounded decision history
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportApprovalHistoryPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/cases:
     post:
       tags: [Support]
@@ -18765,6 +18825,47 @@ components:
               menuName: { type: string }
               quantity: { type: integer, format: int64 }
               amountKrw: { type: integer, format: int64 }
+    SupportApprovalKind:
+      type: string
+      enum: [DATA_ACCESS, BREAK_GLASS, ORDER_ACTION, COMPENSATION, PROFILE_CHANGE]
+    SupportApprovalItem:
+      type: object
+      required: [kind, requestId, caseId, caseCategory, caseOpenedAt, purpose, state, createdAt, reviewAction]
+      properties:
+        kind: { $ref: "#/components/schemas/SupportApprovalKind" }
+        requestId: { $ref: "#/components/schemas/Identifier" }
+        caseId: { $ref: "#/components/schemas/Identifier" }
+        caseCategory: { $ref: "#/components/schemas/SupportInquiryCategory" }
+        caseOpenedAt: { type: string, format: date-time }
+        purpose: { type: string }
+        state: { type: string }
+        createdAt: { type: string, format: date-time }
+        reviewAction: { type: [string, 'null'], enum: [DECIDE, REVIEW, null] }
+    SupportApprovalPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SupportApprovalItem" } }
+        nextCursor: { type: [string, 'null'] }
+    SupportApprovalDecisionItem:
+      type: object
+      required: [eventId, step, state, occurredAt, revisionNumber, actorDisplay]
+      properties:
+        eventId: { $ref: "#/components/schemas/Identifier" }
+        step: { type: string }
+        state: { type: string }
+        occurredAt: { type: string, format: date-time }
+        revisionNumber: { type: [integer, 'null'] }
+        actorDisplay:
+          anyOf:
+            - $ref: "#/components/schemas/OperatorDisplay"
+            - type: 'null'
+    SupportApprovalHistoryPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SupportApprovalDecisionItem" } }
+        nextCursor: { type: [string, 'null'] }
     SupportCaseQueueSummary:
       type: object
       required: [active, open, inProgress, waiting, urgent]
