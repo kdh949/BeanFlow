@@ -240,3 +240,20 @@ frontend typecheck, unit 233개, presentation 10개, copy 11개, design, 제품/
 직전 결과를 반환해 해당 결과는 근거에서 제외하고 전체 배치로 재검증했다. #175 CI는 전부 통과했다.
 #176 backend 전체는 통과했으나 동의 갱신 중 버튼을 너무 일찍 찾는 부모 story를 587df6d에서
 수정했다. S6에서 공통 명령의 불명 결과 보존, 부모 선택 잠금과 외부 업무 코드 설명을 마무리한다.
+
+S5b 4b3355a를 #177로 발행했다. S6는 useSupportCommand와 SupportWorkspace/DataAccess,
+StorePointPolicyDirectory/OperationsPolicyPage의 부모 선택 잠금, ProfileFields 업무 코드 안내를
+변경한다. REUSE: 기존 field/button/notice; EXTEND: 상위 workspace busy 전달과 재시도 보존.
+원문 열람은 재실행하지 않으며 현재 원문 삭제·만료 정책을 유지한다. 최초 불명 후 403/409 응답은
+최초 요청의 rollback 증거가 아니므로 기존 key/payload를 유지한다. 데이터 소유권·transaction·
+API/DB 변경 없이 화면 상태만 보완한다. 대상 변경을 허용하는 대안은 미확정 요청을 잃으므로 제외한다.
+의미 있는 hook 회귀와 부모 화면 interaction/a11y, 기존 전체 스토리·문서 검증을 수행한다.
+
+S6 코드와 입력 재감사를 완료했다. 공통 명령의 최초 불명 상태 보존, 상담 접수/연결의 같은 요청 재시도,
+열람·보상·본인확인과 상위 상담 선택 잠금, 매장 정책 변경 중 상위 정책 탭 잠금을 검증했다.
+외부 업무 코드 3개에 발급처와 형식 설명을 연결했다. 관련 hook 회귀 3개를 포함한 unit 236개,
+presentation 10개, copy 11개, typecheck, design, 제품/Sites 4개/Storybook build가 통과했다.
+전체 683개 정식 story의 interaction/a11y가 요청 ID와 정상 MCP 통과 응답 대조까지 통과했고,
+정적 Docs 119개 entry/15개 상태 문서/47개 surface가 통과했다. 102개 production TSX의 입력 선언
+230개와 동적 profile fields를 재대조했다. 남은 ID 입력 라벨은 로그인 이름 3개다. 업무별 28개 대조는
+`docs/testing/internal-identifier-workflow-coverage.md`에 기록했다. 원격 각 PR 최신 head CI는 확인 중이다.

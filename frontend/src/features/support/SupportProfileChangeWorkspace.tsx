@@ -40,7 +40,7 @@ export function ProfileFields({ purpose, values, onChange, disabled }: { purpose
   return <div className="operation-form">
     {descriptor.risk === "R4" ? <InlineNotice title="인증정보 재등록 요청" description="비밀번호나 인증 토큰을 입력하거나 조회하지 않습니다. 승인 후 기존 소유 서비스에 재등록 의도를 전달합니다." /> : <p>입력값은 제출 후 또는 화면을 벗어나면 지워집니다. 승인 후 실행할 때 같은 값을 다시 입력합니다.</p>}
     {descriptor.fields.some(field => field.optional) ? <p>값을 입력한 항목만 변경합니다. 빈 항목은 기존 값을 유지합니다.</p> : null}
-    {descriptor.fields.map(field => <TextField key={`${purpose}:${field.key}`} label={field.label} value={values[field.key] ?? ""} onValueChange={value => onChange({ ...values, [field.key]: value })} maxLength={field.maxLength} required={!field.optional} disabled={disabled} autoComplete="off" type={field.key === "email" ? "email" : field.key.toLowerCase().includes("phone") ? "tel" : "text"} description={field.key.endsWith("Reference") ? "등록된 불투명 참조값만 입력합니다. 실제 계좌번호·카드정보·서비스 비밀키는 입력하지 않습니다." : undefined} />)}
+    {descriptor.fields.map(field => <TextField key={`${purpose}:${field.key}`} label={field.label} value={values[field.key] ?? ""} onValueChange={value => onChange({ ...values, [field.key]: value })} maxLength={field.maxLength} required={!field.optional} disabled={disabled} autoComplete="off" type={field.key === "email" ? "email" : field.key.toLowerCase().includes("phone") ? "tel" : "text"} description={field.description} />)}
   </div>;
 }
 
