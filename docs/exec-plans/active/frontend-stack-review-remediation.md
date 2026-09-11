@@ -139,6 +139,16 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
   영향 Storybook 52개(초기 포커스 실패 수정 후 해당 상태 재실행 포함), typecheck, check:design,
   build-storybook, build, test:sites 4개. 원격 CI와 리뷰 해결은 대기 중이다.
 
+### #162 로컬 검증
+
+- 실제 ORDER_STATE_CONFLICT와 현재 정책 재조회 안내, GLOBAL/STORE 이력 라벨을 일치시킨다.
+- 업무별 최소 매장 목록은 목적별 단독 grant로 이름·ID만 반환한다. 전체 식별정보 권한은 유지한다.
+- Passed: PostgreSQL 매장 관리 14개, Runtime OpenAPI parity 1개, 인증 경로 3개,
+  frontend unit 231개, presentation boundary 10개, product copy 11개, 영향 Storybook 34개,
+  typecheck, check:design, build-storybook, build, test:sites 4개, verify-docs.
+- 권한 철회 fixture에 revoked_at이 빠진 초기 테스트 실패를 수정해 재검증했다.
+- 원격 CI와 리뷰 해결은 대기 중이다.
+
 ## Surprises & Discoveries
 
 이미지 삭제는 후속 #168에서 코드가 보완돼 있으므로 #161 자체의 회귀와 함께 확인한다.

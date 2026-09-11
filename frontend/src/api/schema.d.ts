@@ -4793,6 +4793,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/store-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 업무별 최소 매장 목록 조회
+         * @description 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
+         */
+        get: operations["listStoreTargets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/stores": {
         parameters: {
             query?: never;
@@ -11531,6 +11551,15 @@ export interface components {
             /** Format: int64 */
             expectedVersion: number;
             reason: string;
+        };
+        OperatorStoreTarget: {
+            /** Format: uuid */
+            storeId: string;
+            name: string;
+        };
+        OperatorStoreTargetPage: {
+            items: components["schemas"]["OperatorStoreTarget"][];
+            nextCursor: string | null;
         };
         StoreIdentitySnapshot: {
             /** Format: uuid */
@@ -18981,6 +19010,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DisputeManagementResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listStoreTargets: {
+        parameters: {
+            query: {
+                purpose: "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY";
+                query?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 운영자 매장 목록 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorStoreTargetPage"];
                 };
             };
             400: components["responses"]["BadRequest"];
