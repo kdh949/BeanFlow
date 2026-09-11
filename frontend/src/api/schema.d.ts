@@ -2931,6 +2931,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/case-queue/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 현재 담당자의 진행 중 상담 현황
+         * @description SUPPORT_CASE_READ 필요. 현재 actor에게 배정된 OPEN/IN_PROGRESS/WAITING만 집계하며 RESOLVED/CLOSED는 제외한다. urgent는 진행 중 긴급 건수다.
+         */
+        get: operations["getSupportCaseQueueSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support/cases": {
         parameters: {
             query?: never;
@@ -2941,7 +2961,7 @@ export interface paths {
         /**
          * 필터에 고정된 커서로 SupportCase 목록 조회
          * @description openedAt 내림차순, 동률 시 Case ID 내림차순으로 정렬됩니다. 서명된 커서는 조회 시점의 state,
-         *     assigneeId 필터에 고정되며 15분 뒤 만료되고, interactions나 notes는 엔티티 컬렉션으로 함께
+         *     assigneeId·category·priority 필터에 고정되며 15분 뒤 만료되고, interactions나 notes는 엔티티 컬렉션으로 함께
          *     로드하지 않습니다. 만료되었거나 필터가 바뀐 커서로 재요청하면 400을 반환합니다.
          */
         get: operations["listSupportCases"];
@@ -10312,10 +10332,22 @@ export interface components {
             ambiguous: boolean;
             hasMore: boolean;
         };
-        /** @enum {string} */
-        SupportCaseState: "OPEN" | "IN_PROGRESS" | "WAITING" | "RESOLVED" | "CLOSED";
+        SupportCaseQueueSummary: {
+            /** Format: int64 */
+            active: number;
+            /** Format: int64 */
+            open: number;
+            /** Format: int64 */
+            inProgress: number;
+            /** Format: int64 */
+            waiting: number;
+            /** Format: int64 */
+            urgent: number;
+        };
         /** @enum {string} */
         SupportCasePriority: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+        /** @enum {string} */
+        SupportCaseState: "OPEN" | "IN_PROGRESS" | "WAITING" | "RESOLVED" | "CLOSED";
         /**
          * @description SupportCase 목록 조회에 쓰이는 요약 표현.
          * @example {
@@ -18233,9 +18265,37 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    getSupportCaseQueueSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current assignment counts */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCaseQueueSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     listSupportCases: {
         parameters: {
             query?: {
+                category?: components["schemas"]["SupportInquiryCategory"];
+                priority?: components["schemas"]["SupportCasePriority"];
+                /** @description 현재 로그인 담당자만 조회. 다른 assigneeId와 함께 지정하면 400. */
+                mine?: boolean;
                 state?: components["schemas"]["SupportCaseState"];
                 assigneeId?: components["schemas"]["Identifier"];
                 /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */

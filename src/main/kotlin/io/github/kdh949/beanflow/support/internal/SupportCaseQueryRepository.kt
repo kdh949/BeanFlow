@@ -9,6 +9,14 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
+internal data class SupportCaseQueueSummaryResource(
+    val active: Long,
+    val open: Long,
+    val inProgress: Long,
+    val waiting: Long,
+    val urgent: Long,
+)
+
 internal data class SupportCaseListProjection(
     val caseId: UUID,
     val state: SupportCaseState,
@@ -28,11 +36,36 @@ internal data class SupportCaseSort(
 internal class SupportCaseQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
+    fun summary(actorId: UUID): SupportCaseQueueSummaryResource =
+        jdbcTemplate.queryForObject(
+            """SELECT count(*) AS active,
+            count(*) FILTER (WHERE state = 'OPEN') AS open,
+            count(*) FILTER (WHERE state = 'IN_PROGRESS') AS in_progress,
+            count(*) FILTER (WHERE state = 'WAITING') AS waiting,
+            count(*) FILTER (WHERE priority = 'URGENT') AS urgent
+            FROM support_case WHERE current_assignee_id = ? AND state IN ('OPEN', 'IN_PROGRESS', 'WAITING')""",
+            {
+                rs,
+                _,
+                ->
+                SupportCaseQueueSummaryResource(
+                    rs.getLong("active"),
+                    rs.getLong("open"),
+                    rs.getLong("in_progress"),
+                    rs.getLong("waiting"),
+                    rs.getLong("urgent"),
+                )
+            },
+            actorId,
+        )
+
     fun findPage(
         state: SupportCaseState?,
         assigneeId: UUID?,
         after: SupportCaseSort?,
         limit: Int,
+        category: SupportInquiryCategory? = null,
+        priority: SupportCasePriority? = null,
     ): List<SupportCaseListProjection> {
         val clauses = mutableListOf<String>()
         val arguments = mutableListOf<Any>()
@@ -43,6 +76,14 @@ internal class SupportCaseQueryRepository(
         assigneeId?.let {
             clauses += "current_assignee_id = ?"
             arguments += it
+        }
+        category?.let {
+            clauses += "category = ?"
+            arguments += it.name
+        }
+        priority?.let {
+            clauses += "priority = ?"
+            arguments += it.name
         }
         after?.let {
             clauses += "(opened_at < ? OR (opened_at = ? AND id < ?))"
