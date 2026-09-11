@@ -848,6 +848,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1point-accounts~1{accountId}"
   /point-accounts/{accountId}/transactions:
     $ref: "./beanflow-v1.yaml#/paths/~1point-accounts~1{accountId}~1transactions"
+  /operations/customers/{customerId}/point-account:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1customers~1{customerId}~1point-account"
   /operations/customer-searches:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1customer-searches"
   /operations/point-accounts/{accountId}:
@@ -1156,6 +1158,8 @@ components:
       in: cookie
       name: BEANFLOW_MERCHANT_SESSION
   schemas:
+    OperationsCustomerPointAccountResponse:
+      $ref: ./beanflow-v1.yaml#/components/schemas/OperationsCustomerPointAccountResponse
     OperationsCustomerSearchRequest:
       $ref: ./beanflow-v1.yaml#/components/schemas/OperationsCustomerSearchRequest
     OperationsCustomerSearchItem:

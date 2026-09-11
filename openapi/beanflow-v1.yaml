@@ -5102,6 +5102,49 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/customers/{customerId}/point-account:
+    get:
+      tags: [Operations, Loyalty]
+      operationId: resolveOperationsCustomerPointAccount
+      summary: (운영팀) 선택 고객의 포인트 계정 연결
+      description: >-
+        POINT_ACCOUNT_READ active grant와 고정 조회 사유를 확인하고 Loyalty가 소유한 고객-계정 관계를 조회한다.
+        관계 조회와 PII_ACCESS 감사가 같은 transaction에서 성공해야 no-store 응답을 반환한다.
+        고객의 계정이 없으면 POINT_ACCOUNT_INTEGRITY_FAILURE(503)이며 생성하거나 0 잔액으로 대체하지 않는다.
+        반환 ID를 사용하는 후속 조회·조정은 각각 기존 권한을 독립적으로 확인한다.
+      x-beanflow-contract-status: TARGET
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Identifier'
+        - name: X-Access-Reason
+          in: header
+          required: true
+          schema:
+            type: string
+            enum: [POINT_ACCOUNT_INVESTIGATION]
+      responses:
+        '200':
+          description: 선택한 고객의 포인트 계정 식별자
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsCustomerPointAccountResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /operations/customer-searches:
     post:
       tags: [Operations, Identity]
@@ -10040,6 +10083,15 @@ components:
         type: string
         const: no-store
   schemas:
+    OperationsCustomerPointAccountResponse:
+      type: object
+      additionalProperties: false
+      required: [customerId, accountId]
+      properties:
+        customerId:
+          $ref: '#/components/schemas/Identifier'
+        accountId:
+          $ref: '#/components/schemas/Identifier'
     OperationsCustomerSearchRequest:
       type: object
       additionalProperties: false

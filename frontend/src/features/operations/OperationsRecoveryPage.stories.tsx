@@ -8,6 +8,6 @@ export const RecoveryTabs: Story = { play: async ({ canvas }) => { await expect(
 
 export const OrderAndRepairTabs: Story = { play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("tab", { name: "주문 후속 처리" })); await expect(await canvas.findByLabelText("후속 처리 주문 ID")).toBeVisible(); await userEvent.click(canvas.getByRole("tab", { name: "환불 복구 승인" })); await expect(await canvas.findByLabelText("복구 제안 ID")).toBeVisible(); } };
 
-export const PointInvestigation: Story = { play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("tab", { name: "포인트 조사" })); await expect(await canvas.findByLabelText("포인트 계정 ID")).toBeVisible(); } };
+export const PointInvestigation: Story = { play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("tab", { name: "포인트 조사" })); await expect(await canvas.findByLabelText("고객 로그인 아이디")).toBeVisible(); } };
 
 export const RefundTab: Story = { play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("tab", { name: "품목 환불" })); await expect(await canvas.findByLabelText("환불 대상 주문 번호")).toBeVisible(); } };

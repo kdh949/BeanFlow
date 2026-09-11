@@ -1892,6 +1892,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/customers/{customerId}/point-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * (운영팀) 선택 고객의 포인트 계정 연결
+         * @description POINT_ACCOUNT_READ active grant와 고정 조회 사유를 확인하고 Loyalty가 소유한 고객-계정 관계를 조회한다. 관계 조회와 PII_ACCESS 감사가 같은 transaction에서 성공해야 no-store 응답을 반환한다. 고객의 계정이 없으면 POINT_ACCOUNT_INTEGRITY_FAILURE(503)이며 생성하거나 0 잔액으로 대체하지 않는다. 반환 ID를 사용하는 후속 조회·조정은 각각 기존 권한을 독립적으로 확인한다.
+         */
+        get: operations["resolveOperationsCustomerPointAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/customer-searches": {
         parameters: {
             query?: never;
@@ -5570,6 +5590,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OperationsCustomerPointAccountResponse: {
+            customerId: components["schemas"]["Identifier"];
+            accountId: components["schemas"]["Identifier"];
+        };
         OperationsCustomerSearchRequest: {
             /** @description 앞뒤 공백 제거와 ASCII 대문자 소문자 변환 후 BR-34의 5~32자 사용자명으로 정확 검색한다. */
             loginId: string;
@@ -16016,6 +16040,35 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    resolveOperationsCustomerPointAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Access-Reason": "POINT_ACCOUNT_INVESTIGATION";
+            };
+            path: {
+                customerId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 선택한 고객의 포인트 계정 식별자 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsCustomerPointAccountResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

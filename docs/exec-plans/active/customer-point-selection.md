@@ -97,8 +97,9 @@ BR-56, ADR-127, OpenAPI target/runtime와 생성 client, 본 계획을 갱신한
 - [x] 사용자 선택 흐름과 메모리 보관 방식 승인, 기준 PR/head 및 별도 worktree 확인.
 - [x] 정책/설계/직렬 migration 범위를 기록.
 - [x] 고객 검색 수직 슬라이스: API/DB 권한·감사/마스킹/선택 컴포넌트와 10개 Storybook 상태.
-- [ ] 포인트 연결/기존 명령 통합 수직 슬라이스.
-- [ ] 로컬 검증 및 단일 PR/원격 CI.
+- [x] 포인트 연결/기존 명령 통합 수직 슬라이스: 연결 감사, 기존 조회·조정, 고객 전환과 불명 명령 잠금/재시도.
+- [x] 관련 로컬 검증 및 최종 diff 검토.
+- [ ] 단일 PR 생성 및 최신 head 원격 CI 확인.
 
 ## Surprises & Discoveries
 
@@ -112,11 +113,24 @@ BR-56, ADR-127, OpenAPI target/runtime와 생성 client, 본 계획을 갱신한
 
 ## Outcomes & Retrospective
 
-1차 검증: 고객 검색 PostgreSQL 통합 6개, Runtime parity 1개, Modulith 1개 통과.
-Storybook MCP 신규 10개(a11y 포함), TypeScript, 디자인 검사, 문서 검증 통과.
-별도 6007 브라우저에서 선택 결과와 검색 복귀를 확인했다. 포인트 연결과 전체 최종 검증은 진행 중.
-초기 테스트 fixture의 grant version 제약과 감사 commit 실패 처리를 수정하고 재검증했다.
-실제 서비스의 고객 조회/포인트 조정은 실행하지 않는다.
+Passed:
+- PostgreSQL 고객 검색 6개, 고객-포인트 연결 6개, 기존 포인트 조회 6개, 조정 17개.
+- Runtime OpenAPI parity 1개 및 Modulith 1개. 경로 참조의 따옴표 표기 수정 후 parity 재통과.
+- 프론트엔드 unit 233개, presentation 경계 10개, product copy 11개, Sites 4개.
+- Storybook MCP 전체 602개(a11y 포함), 추가 결과 불명 상태 1개 별도 통과(총 603개).
+- TypeScript, 디자인 검사(190 tokens/106 story files/60 routes), 앱 및 Storybook 빌드.
+- Storybook Docs 110개, 상태 있는 docs 15개/47개 surface. Chromium sandbox 실행 제한 후 허용된 실행으로 재통과.
+- 문서 검사 18개, runtime 223 paths/256 operations/458 schemas.
+- 독립 6007 브라우저에서 고객 선택/검색 복귀, 조정 결과와 390px 폼의 가로 넘침 없음을 확인.
+
+초기 fixture grant version과 감사 commit 실패 처리를 수정하고 재검증했다. 기존 생성 번들의 크기
+경고는 남아 있으며 production dependency나 디자인 토큰은 추가하지 않았다.
+선택/결과/연결 ID는 컴포넌트 메모리에만 남는다. 조정의 불명 결과 뒤 권한 거절이 오더라도 과거
+요청 실패로 추정하지 않고 같은 명령을 유지한다. 담당자에게 CUSTOMER_ACCOUNT_SEARCH 권한을
+명시적으로 부여해야 한다. 새 권한을 자동 부여하지 않는다.
+
+Pending: 단일 PR과 최신 head CI. Not run: 실제 고객 데이터 조회, 실제 포인트 조정, merge/deploy.
+계획과 V83 migration lane은 이 PR의 직렬 merge 확인 전까지 ACTIVE로 유지한다.
 
 ## Revision Notes
 
