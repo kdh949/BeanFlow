@@ -117,11 +117,12 @@ export function RefreshCustomerOrderDetailPage() {
   useEffect(() => {
     let disposed = false; let timer = 0;
     async function load() {
+      if (document.visibilityState !== "visible") return;
       try {
         const next = unwrap(await customerApi.GET("/me/orders/{orderReference}", { params: { path: { orderReference } } }));
         if (disposed) return; setOrder(next); setError(null);
         if (isLive(next.status) || ["REQUESTED", "PROCESSING"].includes(next.paymentRecovery?.state ?? "")) timer = window.setTimeout(() => void load(), 5_000);
-      } catch (failure) { if (!disposed) { setOrder(null); setError(failure); timer = window.setTimeout(() => void load(), 5_000); } }
+      } catch (failure) { if (!disposed) { setOrder(null); setError(failure); if (retryableRead(failure)) timer = window.setTimeout(() => void load(), 5_000); } }
     }
     void load(); return () => { disposed = true; window.clearTimeout(timer); };
   }, [orderReference, nonce]);
@@ -218,3 +219,7 @@ function Pricing({ pricing }: { pricing: { subtotalKrw: number; couponDiscountKr
 
 function isLive(status: CustomerOrderDetail["status"]) { return ["PENDING_PAYMENT", "PAID", "ACCEPTED", "PREPARING", "READY"].includes(status); }
 function statusHeading(status: CustomerOrderDetail["status"]) { const labels: Record<CustomerOrderDetail["status"], string> = { PENDING_PAYMENT: "결제를 기다리고 있어요", PAID: "매장 접수를 기다리고 있어요", ACCEPTED: "주문이 접수됐어요", PREPARING: "메뉴를 준비하고 있어요", READY: "픽업할 준비가 끝났어요", COMPLETED: "픽업이 완료됐어요", CANCELLED: "취소된 주문이에요", REJECTED: "매장에서 주문을 거절했어요", EXPIRED: "결제 시간이 만료됐어요" }; return labels[status]; }
+
+function retryableRead(error: unknown) {
+  return error instanceof TypeError || (error instanceof ApiRequestError && (error.status === 408 || error.status === 429 || error.status >= 500));
+}
