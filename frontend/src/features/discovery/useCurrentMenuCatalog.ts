@@ -7,19 +7,18 @@ import { useResource } from "../shared/useResource";
 export function useCurrentMenuCatalog(storeId: string) {
   const catalog = useResource(useCallback(async () => {
     const menus = unwrap(await customerApi.GET("/stores/{storeId}/menus", { params: { path: { storeId } } })).items;
-    if (menus.some((menu) => menu.image && Date.parse(menu.image.expiresAt) <= Date.now())) {
-      throw new Error("메뉴 이미지 주소가 만료되었습니다. 다시 조회해 주세요.");
-    }
     return menus;
   }, [storeId]));
-  const { state, reload } = catalog;
+  const { state, refresh } = catalog;
   useEffect(() => {
     if (state.status !== "ready") return;
     const expirations = state.value.flatMap((menu) => menu.image ? [Date.parse(menu.image.expiresAt)] : []);
     if (!expirations.length) return;
-    // Cap long fixture lifetimes at one day to stay within browser timer bounds.
-    const timer = window.setTimeout(reload, Math.min(86_400_000, Math.max(0, Math.min(...expirations) - Date.now())));
+    const remaining = Math.min(...expirations) - Date.now();
+    // A past local deadline may be clock skew. The current server read remains authoritative;
+    // use the hint once per minute rather than creating an immediate refresh loop.
+    const timer = window.setTimeout(refresh, Math.min(86_400_000, remaining > 0 ? remaining : 60_000));
     return () => window.clearTimeout(timer);
-  }, [state, reload]);
+  }, [state, refresh]);
   return catalog;
 }

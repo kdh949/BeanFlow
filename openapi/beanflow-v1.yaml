@@ -500,7 +500,8 @@ paths:
       security: [{ customerSession: [] }]
       description: |
         기존 Order/Payment 잠금과 멱등 결제 준비를 사용합니다. 서버 금액만 사용하며 내부 orderId를
-        반환하지 않습니다. READY 이외의 replay는 결제창을 열지 않고 현재 결제 결과를 조회해야 합니다.
+        반환하지 않습니다. 서버 시각 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만
+        준비 정보를 반환합니다. 그 외 상태는 409이며 현재 결제 결과를 조회해야 합니다.
       parameters:
         - $ref: "#/components/parameters/OrderReference"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -7691,6 +7692,59 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DisputeManagementRequest'
+  /operations/store-targets:
+    get:
+      tags:
+      - Operations
+      operationId: listStoreTargets
+      summary: 업무별 최소 매장 목록 조회
+      description: 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: purpose
+        required: true
+        schema:
+          type: string
+          enum: [IDENTITY, TERMS, MEMBERSHIP, BRAND, POINT_POLICY]
+      - in: query
+        name: query
+        schema:
+          type: string
+          maxLength: 200
+      - in: query
+        name: cursor
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 운영자 매장 목록 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorStoreTargetPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /operations/stores:
     get:
       tags:
@@ -10044,6 +10098,29 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+    OperatorStoreTarget:
+      type: object
+      additionalProperties: false
+      required: [storeId, name]
+      properties:
+        storeId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+    OperatorStoreTargetPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorStoreTarget'
+        nextCursor:
+          type: string
+          nullable: true
+          maxLength: 2048
     OperatorStoreIdentityPage:
       type: object
       additionalProperties: false
@@ -14447,7 +14524,8 @@ components:
           pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
         state:
           type: string
-          enum: [READY, CONFIRMING, APPROVED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
+          enum: [READY]
+          description: 서버 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만 반환한다.
         providerOrderId:
           type: string
           minLength: 6

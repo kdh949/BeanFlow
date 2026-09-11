@@ -883,7 +883,8 @@ export interface paths {
         /**
          * 공개 주문번호로 일회성 결제 준비
          * @description 기존 Order/Payment 잠금과 멱등 결제 준비를 사용합니다. 서버 금액만 사용하며 내부 orderId를
-         *     반환하지 않습니다. READY 이외의 replay는 결제창을 열지 않고 현재 결제 결과를 조회해야 합니다.
+         *     반환하지 않습니다. 서버 시각 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만
+         *     준비 정보를 반환합니다. 그 외 상태는 409이며 현재 결제 결과를 조회해야 합니다.
          */
         post: operations["preparePublicCheckoutPayment"];
         delete?: never;
@@ -4866,6 +4867,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/store-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 업무별 최소 매장 목록 조회
+         * @description 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
+         */
+        get: operations["listStoreTargets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/stores": {
         parameters: {
             query?: never;
@@ -6786,8 +6807,11 @@ export interface components {
         PublicOneTimePaymentAttempt: {
             paymentId: components["schemas"]["Identifier"];
             orderReference: string;
-            /** @enum {string} */
-            state: "READY" | "CONFIRMING" | "APPROVED" | "FAILED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW";
+            /**
+             * @description 서버 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만 반환한다.
+             * @enum {string}
+             */
+            state: "READY";
             providerOrderId: string;
             customerKey: string;
             orderName: string;
@@ -11779,6 +11803,15 @@ export interface components {
             /** Format: int64 */
             expectedVersion: number;
             reason: string;
+        };
+        OperatorStoreTarget: {
+            /** Format: uuid */
+            storeId: string;
+            name: string;
+        };
+        OperatorStoreTargetPage: {
+            items: components["schemas"]["OperatorStoreTarget"][];
+            nextCursor: string | null;
         };
         StoreIdentitySnapshot: {
             /** Format: uuid */
@@ -19375,6 +19408,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DisputeManagementResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listStoreTargets: {
+        parameters: {
+            query: {
+                purpose: "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY";
+                query?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 운영자 매장 목록 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorStoreTargetPage"];
                 };
             };
             400: components["responses"]["BadRequest"];
