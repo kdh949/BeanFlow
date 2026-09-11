@@ -930,6 +930,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1searches"
   /support/case-queue/summary:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1case-queue~1summary"
+  /support/orders/{orderId}/overview:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1orders~1{orderId}~1overview"
   /support/cases:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases"
   /support/cases/{caseId}:

@@ -104,6 +104,9 @@ class SupportTimelineOwnerQueriesTest {
             )
         }
 
+        override fun findOrderOverviews(orderIds: Set<UUID>): List<io.github.kdh949.beanflow.ordering.api.SupportOrderOverviewSnapshot> =
+            error("Not used by timeline tests")
+
         override fun findOrderDisplays(orderIds: Set<UUID>): Map<UUID, io.github.kdh949.beanflow.ordering.api.SupportOrderDisplay> =
             error("Not used by timeline tests")
 

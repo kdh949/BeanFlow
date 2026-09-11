@@ -4306,6 +4306,34 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/orders/{orderId}/overview:
+    get:
+      tags: [Support]
+      operationId: getSupportLinkedOrderOverview
+      summary: 담당 상담에 연결된 주문의 품목과 금액 조회
+      description: SUPPORT_CASE_READ와 SUPPORT_ORDER_READ, 현재 담당자의 활성 Case와 활성 ORDER 링크가 필요하다. 조회 전후 권한/링크를 재확인한다. Ordering의 주문 당시 금액이며 현재 결제·환불 상태를 추정하지 않는다.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - name: caseId
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+      responses:
+        "200":
+          description: Linked order overview
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportOrderOverview" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/cases:
     post:
       tags: [Support]
@@ -18709,6 +18737,34 @@ components:
           minimum: 0
         openedAt:
           $ref: "#/components/schemas/DateTime"
+    SupportOrderOverview:
+      type: object
+      required: [orderId, publicReference, storeName, state, version, orderedAt, pickupWindowStart, pickupWindowEnd, subtotalKrw, couponDiscountKrw, pointsAppliedKrw, payableKrw, currency, lines]
+      properties:
+        orderId: { $ref: "#/components/schemas/Identifier" }
+        publicReference: { type: string }
+        storeName: { type: string }
+        state: { $ref: "#/components/schemas/OrderState" }
+        version: { type: integer, format: int64 }
+        orderedAt: { type: string, format: date-time }
+        pickupWindowStart: { type: string, format: date-time }
+        pickupWindowEnd: { type: string, format: date-time }
+        subtotalKrw: { type: integer, format: int64 }
+        couponDiscountKrw: { type: integer, format: int64 }
+        pointsAppliedKrw: { type: integer, format: int64 }
+        payableKrw: { type: integer, format: int64 }
+        currency: { type: string, enum: [KRW] }
+        lines:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [sequence, menuName, quantity, amountKrw]
+            properties:
+              sequence: { type: integer }
+              menuName: { type: string }
+              quantity: { type: integer, format: int64 }
+              amountKrw: { type: integer, format: int64 }
     SupportCaseQueueSummary:
       type: object
       required: [active, open, inProgress, waiting, urgent]

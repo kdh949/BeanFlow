@@ -1,3 +1,4 @@
+import { linkedOrderFixture } from "./SupportLinkedOrderSummary.stories";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
 import { http, HttpResponse } from "msw";
@@ -24,3 +25,5 @@ export const FailedRefresh: Story = { play: async ({ canvas, msw }) => { await u
 export const FutureInteraction: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "접촉 기록" })); await userEvent.selectOptions(canvas.getByLabelText("접촉 채널"), "PHONE"); await userEvent.selectOptions(canvas.getByLabelText("접촉 방향"), "OUTBOUND"); await userEvent.type(canvas.getByLabelText("접촉 시각 (한국 시간)"), "2099-01-01T12:00"); await userEvent.type(canvas.getByLabelText("비식별 접촉 요약"), "고객 문의 확인"); await userEvent.click(canvas.getByRole("button", { name: "접촉 기록 추가" })); await expect(await canvas.findByText("접촉 시각은 현재까지의 유효한 한국 시간으로 입력해 주세요.")).toBeVisible(); } };
 
 export const CustomerConversation: Story = { parameters: { msw: { handlers: [operatorDirectory, http.get("/api/v1/support/cases/:caseId", () => HttpResponse.json({ ...current, customerInquiryId: "b1000000-0000-4000-8000-000000000001" }))] } }, play: async ({ canvas }) => { await expect(await canvas.findByRole("link", { name: "고객 공개 문의와 답변" })).toHaveAttribute("href", "/support/inquiries/b1000000-0000-4000-8000-000000000001"); } };
+
+export const LinkedOrder: Story = { parameters: { msw: { handlers: [read, http.get("/api/v1/support/orders/:orderId/overview", () => HttpResponse.json(linkedOrderFixture))] } }, play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "연결 주문" })); await userEvent.selectOptions(canvas.getByLabelText("연결된 주문 선택"), linkedOrderFixture.orderId); await userEvent.click(canvas.getByRole("button", { name: "주문 요약 조회" })); await expect(await canvas.findByText("아이스 카페라테 · 2개")).toBeVisible(); } };

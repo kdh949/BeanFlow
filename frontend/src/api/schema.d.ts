@@ -2951,6 +2951,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/orders/{orderId}/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 담당 상담에 연결된 주문의 품목과 금액 조회
+         * @description SUPPORT_CASE_READ와 SUPPORT_ORDER_READ, 현재 담당자의 활성 Case와 활성 ORDER 링크가 필요하다. 조회 전후 권한/링크를 재확인한다. Ordering의 주문 당시 금액이며 현재 결제·환불 상태를 추정하지 않는다.
+         */
+        get: operations["getSupportLinkedOrderOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support/cases": {
         parameters: {
             query?: never;
@@ -10343,6 +10363,38 @@ export interface components {
             waiting: number;
             /** Format: int64 */
             urgent: number;
+        };
+        SupportOrderOverview: {
+            orderId: components["schemas"]["Identifier"];
+            publicReference: string;
+            storeName: string;
+            state: components["schemas"]["OrderState"];
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            orderedAt: string;
+            /** Format: date-time */
+            pickupWindowStart: string;
+            /** Format: date-time */
+            pickupWindowEnd: string;
+            /** Format: int64 */
+            subtotalKrw: number;
+            /** Format: int64 */
+            couponDiscountKrw: number;
+            /** Format: int64 */
+            pointsAppliedKrw: number;
+            /** Format: int64 */
+            payableKrw: number;
+            /** @enum {string} */
+            currency: "KRW";
+            lines: {
+                sequence: number;
+                menuName: string;
+                /** Format: int64 */
+                quantity: number;
+                /** Format: int64 */
+                amountKrw: number;
+            }[];
         };
         /** @enum {string} */
         SupportCasePriority: "LOW" | "NORMAL" | "HIGH" | "URGENT";
@@ -18286,6 +18338,36 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getSupportLinkedOrderOverview: {
+        parameters: {
+            query: {
+                caseId: components["schemas"]["Identifier"];
+            };
+            header?: never;
+            path: {
+                orderId: components["schemas"]["Identifier"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Linked order overview */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportOrderOverview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };
