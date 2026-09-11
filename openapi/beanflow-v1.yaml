@@ -2206,6 +2206,30 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /operations/order-compensations/{orderReference}:
+    get:
+      tags: [Operations]
+      operationId: getOrderCompensationByReference
+      summary: 공개 주문번호로 주문 후속 처리 조회
+      description: ORDER_COMPENSATION_READ grant와 조회 사유를 확인하고 공개 주문번호를 정확 조회한다. 기존 보상 조사와 감사 transaction 안에서 최소 주문 표시 정보를 함께 반환한다. 공개 주문번호는 권한 증명이 아니다.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: orderReference
+          required: true
+          schema: { type: string, minLength: 12, maxLength: 12 }
+        - $ref: '#/components/parameters/AccessReason'
+      responses:
+        '200':
+          description: 선택한 주문과 실제 후속 처리 상태
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperatorOrderCompensationView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
   /operations/orders/{orderId}/compensation:
     get:
       tags: [Operations]
@@ -2315,6 +2339,63 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /operations/payment-setup-recovery-cases:
+    get:
+      tags: [Operations]
+      operationId: listPaymentSetupRecoveryCases
+      summary: 주문별 환불 복구 건 목록
+      description: PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [OPEN, RUNNING, RESOLVED, MANUAL_REVIEW] }
+        - in: query
+          name: cursor
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 현재 권한으로 선택할 수 있는 복구 목록
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SetupRecoveryCasePage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /operations/reprocessing-repair-proposals:
+    get:
+      tags: [Operations]
+      operationId: listPaymentSetupRepairProposals
+      summary: 환불 복구 제안 목록
+      description: PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: caseId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: state
+          schema: { type: string, enum: [PENDING_APPROVAL, EXECUTED, REJECTED, EXPIRED, STALE] }
+        - in: query
+          name: cursor
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 현재 권한으로 선택할 수 있는 복구 목록
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SetupRepairProposalPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
   /operations/reprocessing-repair-proposals/{proposalId}:
     get:
       tags: [Operations]
@@ -15211,6 +15292,26 @@ components:
         updatedAt:
           $ref: '#/components/schemas/DateTime'
           description: 리소스가 마지막으로 변경된 시각입니다.
+    OrderInvestigationTarget:
+      type: object
+      additionalProperties: false
+      required: [orderId, publicReference, storeId, storeName, state, createdAt]
+      properties:
+        orderId: { $ref: '#/components/schemas/Identifier' }
+        publicReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
+        storeId: { $ref: '#/components/schemas/Identifier' }
+        storeName: { type: string }
+        state:
+          type: string
+          enum: [PENDING_PAYMENT, PAID, ACCEPTED, PREPARING, READY, COMPLETED, REJECTED, EXPIRED, CANCELLED]
+        createdAt: { $ref: '#/components/schemas/DateTime' }
+    OperatorOrderCompensationView:
+      type: object
+      additionalProperties: false
+      required: [order, followUp]
+      properties:
+        order: { $ref: '#/components/schemas/OrderInvestigationTarget' }
+        followUp: { $ref: '#/components/schemas/OperatorCompensationView' }
     OperatorCompensationView:
       type: object
       additionalProperties: false
@@ -15412,6 +15513,52 @@ components:
           minLength: 1
           maxLength: 500
           description: 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다.
+    RepairOrderDisplay:
+      type: object
+      additionalProperties: false
+      required: [publicReference, storeName, state, createdAt]
+      properties:
+        publicReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
+        storeName: { type: string }
+        state:
+          type: string
+          enum: [PENDING_PAYMENT, PAID, ACCEPTED, PREPARING, READY, COMPLETED, REJECTED, EXPIRED, CANCELLED]
+        createdAt: { $ref: '#/components/schemas/DateTime' }
+    SetupRecoveryCaseItem:
+      type: object
+      additionalProperties: false
+      required: [caseId, status, reason, updatedAt, order]
+      properties:
+        caseId: { $ref: '#/components/schemas/Identifier' }
+        status: { type: string, enum: [OPEN, RUNNING, RESOLVED, MANUAL_REVIEW] }
+        reason: { type: string }
+        updatedAt: { $ref: '#/components/schemas/DateTime' }
+        order: { $ref: '#/components/schemas/RepairOrderDisplay' }
+    SetupRecoveryCasePage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SetupRecoveryCaseItem' }
+        nextCursor: { type: [string, "null"] }
+    SetupRepairProposalItem:
+      type: object
+      additionalProperties: false
+      required: [proposal, order]
+      properties:
+        proposal: { $ref: '#/components/schemas/RepairProposal' }
+        order: { $ref: '#/components/schemas/RepairOrderDisplay' }
+    SetupRepairProposalPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SetupRepairProposalItem' }
+        nextCursor: { type: [string, "null"] }
     RepairProposal:
       type: object
       additionalProperties: false

@@ -517,6 +517,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}~1refund-previews"
   /stores/{storeId}/orders/{orderReference}/refunds:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders~1{orderReference}~1refunds"
+  /operations/order-compensations/{orderReference}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1order-compensations~1{orderReference}"
   /operations/orders/{orderId}/compensation:
     get:
       tags:
@@ -650,6 +652,10 @@ paths:
           $ref: ./beanflow-v1.yaml#/components/responses/Conflict
         '503':
           $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+  /operations/payment-setup-recovery-cases:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1payment-setup-recovery-cases"
+  /operations/reprocessing-repair-proposals:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1reprocessing-repair-proposals"
   /operations/reprocessing-repair-proposals/{proposalId}:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1reprocessing-repair-proposals~1{proposalId}"
   /operations/reprocessing-repair-proposals/{proposalId}/decisions:

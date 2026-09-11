@@ -32,6 +32,23 @@
 등록된 표시 정보가 사라진 경우 조회 실패로 드러내며 UUID 별칭이나 이전 이름으로 대체하지 않는다.
 소속 추가는 기존 로그인 아이디 정확 조회로 통일하고 수동 account UUID 경로를 제거한다.
 
+### Order and repair discovery
+
+`GET /operations/order-compensations/{orderReference}`는 `ORDER_COMPENSATION_READ`와 기존 조회 사유를
+확인한 뒤 Ordering이 공개 주문번호를 정규화·정확 조회한다. 기존 보상 조사와 감사 transaction 안에서
+주문 표시 정보와 후속 처리 상태를 반환한다. 내부 UUID 경로는 호환성을 위해 유지한다. Operations가 소유하는
+outbound query port를 Ordering이 구현하여 기존 모듈 의존 방향을 유지한다.
+주문번호·주문 시점 매장명·주문 상태·생성 시각을 표시하고 고객/Provider 정보는 제외한다.
+권한 있는 주문 조회의 내부 주문/매장 ID는 명령 연결용으로만 전달하며 화면의 입력이나 이름으로 쓰지 않는다.
+
+`GET /operations/payment-setup-recovery-cases`와 `GET /operations/reprocessing-repair-proposals`는
+`PAYMENT_CANCELLATION_SETUP_REPAIR`가 있는 운영자가 대상과 현재 상태를 선택하기 위한 목록이다.
+커서는 actor, 상태 필터와 선택한 Case에 바인딩한다. owner-local 복구 조회와 Ordering의 일괄 표시
+projection을 사용하며 상세·제안·판정은 기존 grant와 safe guard를 다시 검증한다. 목록 조회는 만료 처리나
+복구를 실행하지 않는다. 유효기간이 지난 대기 항목은 현재 시각 기준 만료 안내와 함께 실행을 막는다.
+제안자/판정자의 이름은 담당자 디렉터리 단계에서 연결하고 이 단계에서는 본인 여부와 역할을 구분한다.
+불명 명령 응답에서는 대상·payload·동일 key를 고정하고 입력을 바꿔 새 요청을 만들지 않는다.
+
 ### Manual sequential migration scope
 
 이번 작업은 #170의 구현 제외를 명시한 수동 후속 요청이다. 정확한 기준은 #170

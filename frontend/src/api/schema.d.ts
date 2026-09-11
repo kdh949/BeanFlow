@@ -1532,6 +1532,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/order-compensations/{orderReference}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 공개 주문번호로 주문 후속 처리 조회
+         * @description ORDER_COMPENSATION_READ grant와 조회 사유를 확인하고 공개 주문번호를 정확 조회한다. 기존 보상 조사와 감사 transaction 안에서 최소 주문 표시 정보를 함께 반환한다. 공개 주문번호는 권한 증명이 아니다.
+         */
+        get: operations["getOrderCompensationByReference"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/orders/{orderId}/compensation": {
         parameters: {
             query?: never;
@@ -1709,6 +1729,46 @@ export interface paths {
          *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         post: operations["proposeCustomerCancellationSetupRepair"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/payment-setup-recovery-cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 주문별 환불 복구 건 목록
+         * @description PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다.
+         */
+        get: operations["listPaymentSetupRecoveryCases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/reprocessing-repair-proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 환불 복구 제안 목록
+         * @description PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다.
+         */
+        get: operations["listPaymentSetupRepairProposals"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -8268,6 +8328,15 @@ export interface components {
             updatedAt: components["schemas"]["DateTime"];
             correlationId: string;
         };
+        OrderInvestigationTarget: {
+            orderId: components["schemas"]["Identifier"];
+            publicReference: string;
+            storeId: components["schemas"]["Identifier"];
+            storeName: string;
+            /** @enum {string} */
+            state: "PENDING_PAYMENT" | "PAID" | "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED" | "EXPIRED" | "CANCELLED";
+            createdAt: components["schemas"]["DateTime"];
+        };
         /**
          * @description 주문 보상에 실제로 사용한 쿠폰 또는 포인트 복원 정책의 버전 정보입니다.
          * @example {
@@ -8391,6 +8460,16 @@ export interface components {
         } | {
             invariantViolations: ("SOURCE_MISMATCH" | "AMOUNT_TIE_OUT_MISMATCH")[];
         });
+        /** @description Platform-operator-only compensation and payment setup integrity view */
+        OperatorCompensationView: {
+            compensation: components["schemas"]["CompensationSummary"];
+            paymentSetupIssue?: components["schemas"]["PaymentSetupIssue"];
+            setupReprocessingCaseId?: components["schemas"]["Identifier"];
+        };
+        OperatorOrderCompensationView: {
+            order: components["schemas"]["OrderInvestigationTarget"];
+            followUp: components["schemas"]["OperatorCompensationView"];
+        };
         /**
          * @description 점주 계정이 특정 매장에서 보유한 OWNER 또는 STAFF 멤버십입니다.
          * @example {
@@ -8624,6 +8703,33 @@ export interface components {
             decidedAt?: components["schemas"]["DateTime"];
             /** @description 서버 로그와 관련 작업을 함께 찾을 때 사용하는 요청 추적 ID입니다. */
             correlationId: string;
+        };
+        RepairOrderDisplay: {
+            publicReference: string;
+            storeName: string;
+            /** @enum {string} */
+            state: "PENDING_PAYMENT" | "PAID" | "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED" | "EXPIRED" | "CANCELLED";
+            createdAt: components["schemas"]["DateTime"];
+        };
+        SetupRecoveryCaseItem: {
+            caseId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            status: "OPEN" | "RUNNING" | "RESOLVED" | "MANUAL_REVIEW";
+            reason: string;
+            updatedAt: components["schemas"]["DateTime"];
+            order: components["schemas"]["RepairOrderDisplay"];
+        };
+        SetupRecoveryCasePage: {
+            items: components["schemas"]["SetupRecoveryCaseItem"][];
+            nextCursor: string | null;
+        };
+        SetupRepairProposalItem: {
+            proposal: components["schemas"]["RepairProposal"];
+            order: components["schemas"]["RepairOrderDisplay"];
+        };
+        SetupRepairProposalPage: {
+            items: components["schemas"]["SetupRepairProposalItem"][];
+            nextCursor: string | null;
         };
         /**
          * @description 복구 제안을 승인 또는 반려하는 요청입니다. 결정과 운영 사유를 포함합니다.
@@ -15576,6 +15682,36 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    getOrderCompensationByReference: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
+                "X-Access-Reason": components["parameters"]["AccessReason"];
+            };
+            path: {
+                orderReference: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 선택한 주문과 실제 후속 처리 상태 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorOrderCompensationView"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     getOrderCompensation: {
         parameters: {
             query?: never;
@@ -15821,6 +15957,63 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listPaymentSetupRecoveryCases: {
+        parameters: {
+            query?: {
+                status?: "OPEN" | "RUNNING" | "RESOLVED" | "MANUAL_REVIEW";
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 권한으로 선택할 수 있는 복구 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupRecoveryCasePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listPaymentSetupRepairProposals: {
+        parameters: {
+            query?: {
+                caseId?: string;
+                state?: "PENDING_APPROVAL" | "EXECUTED" | "REJECTED" | "EXPIRED" | "STALE";
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 권한으로 선택할 수 있는 복구 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupRepairProposalPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

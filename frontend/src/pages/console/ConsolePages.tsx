@@ -8,14 +8,14 @@ import {
   RotateCcw,
   Search,
 } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { components } from "../../api/schema";
-import { unwrap } from "../../api/client";
-import { operationsApi } from "../../api/consoleClient";
-import { Button, EmptyState, InlineNotice, LoadingState, PageHeading, TextField } from "../../design-system";
+import { InlineNotice, PageHeading } from "../../design-system";
 import { compactId, shortDateTime } from "../../lib/format";
-import { ErrorState, StatusText } from "../../presentation/shared";
+import { StatusText } from "../../presentation/shared";
+
+import { OrderCompensationWorkspace } from "../../features/operations/OrderCompensationWorkspace";
 
 type Compensation = components["schemas"]["CompensationSummary"];
 
@@ -47,32 +47,14 @@ export function OpsDashboardPage({ scenario = "contract-pending", summary }: { s
       <section className="console-shortcuts">
         <Link className="surface-card shortcut-card" to="/ops/merchant-accounts"><Search /><div><strong>점주 계정 관리</strong><span>계정 조회와 임시 비밀번호 발급</span></div><ArrowRight /></Link>
         <Link className="surface-card shortcut-card" to="/ops/campaigns"><ListChecks /><div><strong>쿠폰 캠페인 관리</strong><span>캠페인 조회와 초안 작성</span></div><ArrowRight /></Link>
-        <Link className="surface-card shortcut-card" to="/ops/orders"><Search /><div><strong>보상 내역 찾기</strong><span>내부 주문 ID로 보상 상태 확인</span></div><ArrowRight /></Link>
+        <Link className="surface-card shortcut-card" to="/ops/orders"><Search /><div><strong>보상 내역 찾기</strong><span>주문 번호로 취소·거절 후속 처리 확인</span></div><ArrowRight /></Link>
       </section>
     </div>
   );
 }
 
 export function OpsOrderPage() {
-  const [orderId, setOrderId] = useState("");
-  const [accessReason, setAccessReason] = useState("");
-  const [result, setResult] = useState<Compensation | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  async function lookup(event: FormEvent) {
-    event.preventDefault(); setLoading(true); setError(null); setResult(null);
-    try {
-      const response = await operationsApi.GET("/operations/orders/{orderId}/compensation", { params: { path: { orderId: orderId.trim() }, header: { "X-Access-Reason": accessReason.trim() } } });
-      setResult(unwrap(response).compensation);
-    } catch (failure) { setError(failure); } finally { setLoading(false); }
-  }
-  return <div className="console-page">
-    <PageHeading title="주문 보상 조회" />
-    <form className="lookup-bar lookup-bar-two" onSubmit={(event) => void lookup(event)}><div><Search size={18} /><TextField label="주문 ID" id="ops-order-id" value={orderId} onValueChange={setOrderId} placeholder="내부 주문 ID 입력" description="고객 주문 번호(BF-…)와 다른 내부 식별자입니다." /><TextField label="접근 사유" value={accessReason} onValueChange={setAccessReason} placeholder="감사 접근 사유" /><Button type="submit" disabled={loading || !orderId.trim() || !accessReason.trim()}>조회</Button></div></form>
-    {loading ? <LoadingState label="보상 상태를 조회하는 중" /> : null}{error ? <ErrorState error={error} /> : null}
-    {!result && !loading && !error ? <EmptyState title="감사 조회 대기" description="주문 ID와 업무상 접근 사유가 모두 필요합니다." /> : null}
-    {result ? <CompensationResult result={result} /> : null}
-  </div>;
+  return <div className="console-page"><PageHeading title="주문 후속 처리 조회" /><OrderCompensationWorkspace /></div>;
 }
 
 const compensationStepLabels: Record<components["schemas"]["CompensationStep"]["type"], string> = {

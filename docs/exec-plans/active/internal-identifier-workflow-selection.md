@@ -21,7 +21,8 @@
 구현했고 최신 head CI가 모두 통과했다. 해당 기능은 재구현하지 않는다.
 선행 감사는 #169에서 ID 직접 입력 28개(로그인 ID 제외), 21개 컴포넌트를 확인했다. #170은 이 중
 PointAccount 입력을 해결했다. 비용 주체 입력과 다른 운영·상담 업무는 남아 있다.
-현재 checkout은 `feature/operations-target-selection`이며 기존 힙 덤프는 작업 범위 밖이다.
+S1은 `feature/operations-target-selection`의 #171이며 S2는 그 head를 잇는
+`feature/order-recovery-selection`이다. 기존 힙 덤프는 작업 범위 밖이다.
 
 ## Definitions
 
@@ -127,8 +128,11 @@ BR-57/ADR-128 및 관련 owner ADR amendment, OpenAPI와 본 계획, 최종 ID �
 - [x] 이전 28개 ID 입력 목록과 실제 route/자동 전달 대안 확인.
 - [x] S1 매장 선택 구현: 4개 ID 입구를 이름 선택으로 전환하고 정책·소속 목록 표시 정보를 owner 조회로 연결.
 - [x] 소속 추가의 수동 account ID 경로 제거 및 정책 응답 유실 시 대상/payload/key 고정.
-- [ ] S1 PR 발행과 최신 head CI.
-- [ ] S2 주문·복구 선택.
+- [x] S1 PR #171 발행. CI에서 드러난 정책 HTTP fixture의 매장명 누락을 d444e63으로 보완하고 관련 테스트 통과.
+- [ ] S1 d444e63 최신 head CI.
+- [x] S2 공개 주문번호 조회, 복구 대상/제안 목록, 기존 명령 연결과 불명 대상 잠금 구현.
+- [x] S2 최종 빌드/Docs/MCP 응답 확인.
+- [ ] S2 PR 발행과 최신 head CI.
 - [ ] S3 상담 대상·담당자.
 - [ ] S4 요청 재개·점주 동의.
 - [ ] S5 사고·비용 참조.
@@ -147,12 +151,20 @@ BR-57/ADR-128 및 관련 owner ADR amendment, OpenAPI와 본 계획, 최종 ID �
 
 ## Outcomes & Retrospective
 
-S1 구현 완료, PR/CI 준비 중. backend 4개 클래스의 기존 19개 테스트와 추가한 이름 변경/누락 경로
+S1 구현 완료, PR #171 최신 head CI 진행 중. backend 4개 클래스의 기존 19개 테스트와 추가한 이름 변경/누락 경로
 1개 테스트가 통과했다. frontend typecheck, unit 233개, presentation 10개, copy 11개, design,
 product build, Sites 4개, Storybook build, docs/OpenAPI 검증이 통과했다. 전체 dev MCP 613개 중
 612개가 통과했고 제거한 ID field를 기대한 부모 story 1개를 수정하여 focused 재검증을 통과했다.
 별도 static Docs Chromium 검증도 111개 entry, 15개 상태 문서, 47개 상태 surface에서 통과했다. #170 고객 검색/PointAccount 파일은 수정하지 않았다.
-S2~S5와 전체 마무리 검증은 아직 수행하지 않았다.
+S2는 공개 주문번호 조회와 복구 대상/제안 목록을 구현했다. PaymentSetupRepairIntegrationTest 17개,
+OperatorCompensationControllerTest 2개, RuntimeOpenApiParityTest 1개, ModularityTests 1개가 통과했다.
+권한 철회 fixture에 revoked_at을 누락한 초기 테스트 실패는 DB 제약에 맞게 수정하고 재검증했다.
+frontend typecheck, unit 233개, presentation 10개, copy 11개, design과 제품/Sites/Storybook build가 통과했다.
+전체 MCP 실행의 616개 interaction/a11y 테스트가 통과했고 도구 응답도 정상 반환되었다.
+첫 전체 실행은 결과 직렬화 중 Node heap 부족으로 중단되어 dev server를 8 GiB heap으로 재시작했다.
+정적 Docs의 제거된 ID 입력 표식을 주문번호로 갱신했다. 최신 빌드의 111개 문서,
+15개 상태 문서, 47개 상태 surface와 제품 build/Sites 4개 검증이 통과했다.
+S3~S5와 전체 마무리 검증은 아직 수행하지 않았다.
 
 ## Revision Notes
 
