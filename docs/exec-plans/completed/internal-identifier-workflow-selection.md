@@ -1,11 +1,11 @@
 # 내부 식별자 입력 없이 운영과 상담 업무 이어가기
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-09-11`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -139,8 +139,8 @@ BR-57/ADR-128 및 관련 owner ADR amendment, OpenAPI와 본 계획, 최종 ID �
 - [x] S3 PR #173 3a1dbe1 최신 head CI 전부 통과.
 - [x] S4a 기존 업무 요청/Case 목록 재개 구현, 관련 backend/frontend/문서 검증 통과.
 - [x] S4b 점주 동의·운영 조사 선택 및 관련 검증.
-- [ ] S5 사고·비용 참조.
-- [ ] S6 전체 검증과 PR 최신 head CI.
+- [x] S5 사고·비용 참조.
+- [x] S6 전체 검증과 PR 최신 head CI.
 
 ## Surprises & Discoveries
 
@@ -154,6 +154,12 @@ BR-57/ADR-128 및 관련 owner ADR amendment, OpenAPI와 본 계획, 최종 ID �
 - 2026-09-11: #170 head를 보존하는 직렬 후속 PR들로 진행. 불명/인가/금융 정책 유지.
 
 ## Outcomes & Retrospective
+
+S1~S6의 구현·로컬 검증·각 기능 PR의 최신 head CI를 완료했다. 기존 28개 항목 중 #170의
+고객→PointAccount 연결을 제외한 27개와 추가 비용 주체 입력 두 곳을 검색·선택·요청 재개로
+연결했다. 외부 업무 코드 3개는 발급처·형식 안내를 보완했다. 마지막 시각 검증의 좁은 화면
+선택 탭 가림도 별도 수직 슬라이스로 수정했다. 아래는 단계별 진행 당시의 기록이며 최종 증거는
+문서 마지막 표와 `docs/testing/internal-identifier-workflow-coverage.md`에 있다.
 
 S1 구현 완료, PR #171 최신 head CI 전부 통과. backend 4개 클래스의 기존 19개 테스트와 추가한 이름 변경/누락 경로
 1개 테스트가 통과했다. frontend typecheck, unit 233개, presentation 10개, copy 11개, design,
@@ -270,3 +276,28 @@ TabList를 EXTEND하여 활성 탭의 가로 위치만 보정한다. 새 스타�
 design, 제품/Sites 4개/Storybook build가 통과했다. 9개 Chromium viewport에서 가로 넘침 0,
 선택 탭 가림 0, control·안내문 최소 14px를 확인했다. 정적 Docs 재검증은 진행 중이다.
 #176(587df6d)과 #177(4b3355a)의 최신 head CI가 모두 통과했다.
+
+## Final verification evidence
+
+최종 코드 head는 `fef5aa3`이다. 전체 MCP 684개 interaction/a11y와 요청 ID 대조, 정적 Docs
+119개 entry/15개 상태 문서/47개 surface, unit 236개/presentation 10개/copy 11개, typecheck,
+design, 제품 build/Sites 4개/Storybook build, 문서·OpenAPI 검증이 통과했다. 추가 Chromium
+9개 viewport(3화면 × 320/768/1440px)는 가로 넘침과 선택 탭 가림 0, control·안내문 최소 14px였다.
+#170의 고객 선택·PointAccount 연결 함수는 원본과 byte-identical임을 확인했다. 모든 후속 branch의
+부모 ancestry와 GitHub head를 재확인했다. main과 기존 V82/V83은 변경하지 않았고 V84~V86만 추가했다.
+
+| PR | 확인한 head | 검증 범위 | 결과 |
+|---|---|---|---|
+| [#171](https://github.com/kdh949/BeanFlow/pull/171) | `d444e6327325` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34580785367) |
+| [#172](https://github.com/kdh949/BeanFlow/pull/172) | `11c9c6cc319e` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34581572755) |
+| [#173](https://github.com/kdh949/BeanFlow/pull/173) | `3a1dbe1dce1c` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34585765261) |
+| [#174](https://github.com/kdh949/BeanFlow/pull/174) | `d330560827bd` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34589263905) |
+| [#175](https://github.com/kdh949/BeanFlow/pull/175) | `e66c87dd829f` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34591209403) |
+| [#176](https://github.com/kdh949/BeanFlow/pull/176) | `587df6dce484` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34594781579) |
+| [#177](https://github.com/kdh949/BeanFlow/pull/177) | `4b3355a7c1d8` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34594946147) |
+| [#178](https://github.com/kdh949/BeanFlow/pull/178) | `0d131f2cd253` | frontend; backend는 변경 분류에 따라 Skipped | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34595839576) |
+| [#179](https://github.com/kdh949/BeanFlow/pull/179) | `fef5aa3992d7` | frontend; backend는 변경 분류에 따라 Skipped | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34596678492) |
+
+이 완료는 구현과 검증·PR 게시의 완료다. Merge/deploy, 운영 migration 적용, 실거래 및 실제 개인정보
+업무 E2E는 Not run이다. 기존 힙 덤프는 작업 범위 밖으로 보존했다. 최종 완료 기록은 기능 PR과
+분리한 문서 PR로 게시하며 문서 전용 CI를 별도로 확인한다.

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-11
-- **Implementation owner:** [내부 ID 입력 제거](../exec-plans/active/internal-identifier-workflow-selection.md)
+- **Implementation owner:** [내부 ID 입력 제거](../exec-plans/completed/internal-identifier-workflow-selection.md)
 
 ## Context
 

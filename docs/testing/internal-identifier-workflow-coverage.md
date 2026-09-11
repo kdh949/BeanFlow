@@ -70,3 +70,27 @@
 로컬 API/실제 PostgreSQL·동시성·감사 rollback·권한·계약·Modulith와 UI interaction/a11y,
 정적 문서·타입·단위 테스트·디자인 검사·빌드를 실행한다. PR별 결과는 해당 ExecPlan과 원격 CI가 근거다.
 실제 운영 환경의 로그인·금융/개인정보 업무 E2E, 배포와 migration 적용은 실행하지 않았다.
+
+## 최종 검증 결과
+
+- 통과: 정식 Storybook MCP 전체 684개 interaction/a11y와 요청 ID 대조.
+- 통과: 정적 Docs 119개 entry, 상태 문서 15개, 상태 surface 47개.
+- 통과: frontend typecheck, unit 236개, presentation 10개, copy 11개, design, 제품/Sites 4개/Storybook build.
+- 통과: 문서·OpenAPI 검증. Runtime 235 paths/269 operations, target 245 paths/279 operations.
+- 통과: 비용 주체·외부 코드·상담 대기 화면의 320/768/1440px 확인. 가로 넘침 0, 선택 탭 가림 0, control·안내문 최소 14px.
+- 좁은 화면의 선택 탭 가림은 [#179](https://github.com/kdh949/BeanFlow/pull/179)의 공통 TabList 수정으로 해소했다.
+- 상태·외부 코드 안내 보완은 [#178](https://github.com/kdh949/BeanFlow/pull/178)에 있다.
+
+| PR | 확인한 head | 검증 범위 | 결과 |
+|---|---|---|---|
+| [#171](https://github.com/kdh949/BeanFlow/pull/171) | `d444e6327325` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34580785367) |
+| [#172](https://github.com/kdh949/BeanFlow/pull/172) | `11c9c6cc319e` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34581572755) |
+| [#173](https://github.com/kdh949/BeanFlow/pull/173) | `3a1dbe1dce1c` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34585765261) |
+| [#174](https://github.com/kdh949/BeanFlow/pull/174) | `d330560827bd` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34589263905) |
+| [#175](https://github.com/kdh949/BeanFlow/pull/175) | `e66c87dd829f` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34591209403) |
+| [#176](https://github.com/kdh949/BeanFlow/pull/176) | `587df6dce484` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34594781579) |
+| [#177](https://github.com/kdh949/BeanFlow/pull/177) | `4b3355a7c1d8` | backend 및 frontend 전체 | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34594946147) |
+| [#178](https://github.com/kdh949/BeanFlow/pull/178) | `0d131f2cd253` | frontend; backend는 변경 분류에 따라 Skipped | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34595839576) |
+| [#179](https://github.com/kdh949/BeanFlow/pull/179) | `fef5aa3992d7` | frontend; backend는 변경 분류에 따라 Skipped | [필수 gate 통과](https://github.com/kdh949/BeanFlow/actions/runs/34596678492) |
+
+전체 진행·정책·검증 이력은 [완료 ExecPlan](../exec-plans/completed/internal-identifier-workflow-selection.md)에 기록했다.
