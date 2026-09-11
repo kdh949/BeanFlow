@@ -5,6 +5,8 @@ import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
+import io.github.kdh949.beanflow.operations.api.OperatorDirectoryOperations
+import io.github.kdh949.beanflow.operations.api.OperatorDisplay
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization
 import io.github.kdh949.beanflow.operations.api.RetentionPolicyCategory
@@ -122,6 +124,7 @@ internal data class SupportCaseResource(
     val closedAt: Instant?,
     val subjectLinks: List<SupportSubjectLinkResource>,
     val customerInquiryId: UUID? = null,
+    val assigneeDisplay: OperatorDisplay? = null,
 )
 
 internal data class SupportCaseSummaryResource(
@@ -131,6 +134,7 @@ internal data class SupportCaseSummaryResource(
     val assigneeId: UUID,
     val version: Long,
     val openedAt: Instant,
+    val assigneeDisplay: OperatorDisplay? = null,
 )
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -227,6 +231,7 @@ internal class SupportCaseApplicationService(
     private val subjectLinks: SupportCaseSubjectLinkJpaRepository,
     private val idempotency: SupportCaseIdempotencyJpaRepository,
     private val queryRepository: SupportCaseQueryRepository,
+    private val operatorDirectory: OperatorDirectoryOperations,
     private val customerInquiries: CustomerInquiryRepository,
     private val commandLock: SupportCaseCommandLock,
     private val cursors: SignedCursorCodec,
@@ -620,7 +625,9 @@ internal class SupportCaseApplicationService(
         persistenceBoundary {
             permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
             val entity = cases.findById(caseId).orElseThrow(::notFound)
-            entity.toResource(subjectLinks.findBySupportCaseIdAndUnlinkedAtIsNullOrderByLinkedAtAsc(entity.id).map { it.toResource() })
+            entity
+                .toResource(subjectLinks.findBySupportCaseIdAndUnlinkedAtIsNullOrderByLinkedAtAsc(entity.id).map { it.toResource() })
+                .copy(assigneeDisplay = operatorDirectory.displays(setOf(entity.currentAssigneeId)).getValue(entity.currentAssigneeId))
         }
 
     @Transactional
@@ -646,8 +653,19 @@ internal class SupportCaseApplicationService(
                 } else {
                     null
                 }
+            val displays = operatorDirectory.displays(items.map { it.assigneeId }.toSet())
             SupportCasePageResource(
-                items.map { SupportCaseSummaryResource(it.caseId, it.state, it.priority, it.assigneeId, it.version, it.openedAt) },
+                items.map {
+                    SupportCaseSummaryResource(
+                        it.caseId,
+                        it.state,
+                        it.priority,
+                        it.assigneeId,
+                        it.version,
+                        it.openedAt,
+                        displays.getValue(it.assigneeId),
+                    )
+                },
                 nextCursor,
             )
         }

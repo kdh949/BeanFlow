@@ -1,3 +1,4 @@
+import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import type { components } from "../../api/schema";
@@ -116,7 +117,7 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
   const command = useSupportCommand(read.reload);
   const [message, setMessage] = useState(""); const [execution, setExecution] = useState<components["schemas"]["SupportOrderChangeExecutionResource"] | null>(null);
   const [reasonCode, setReasonCode] = useState<CancellationReason>("CHANGED_MIND"); const [slotId, setSlotId] = useState(""); const [digest, setDigest] = useState("");
-  const [decision, setDecision] = useState<components["schemas"]["SupportApprovalDecision"]>("APPROVE"); const [reason, setReason] = useState(""); const [assignee, setAssignee] = useState(""); const [authorizationId, setAuthorizationId] = useState("");
+  const [decision, setDecision] = useState<components["schemas"]["SupportApprovalDecision"]>("APPROVE"); const [reason, setReason] = useState(""); const [assignee, setAssignee] = useState<OperatorSelection | null>(null); const [authorizationId, setAuthorizationId] = useState("");
   const [resolutionDraft, setResolutionDraft] = useState<ResolutionDraft>(initialResolutionDraft);
   const [resolutionBusy, setResolutionBusy] = useState(false);
   const [preparingResolution, setPreparingResolution] = useState(false);
@@ -141,8 +142,9 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
     command.submit(JSON.stringify(body), key => operationsApi.POST("/support/action-requests/{requestId}/support-manager-decisions", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => { setMessage("승인 결정을 기록했습니다"); setReason(""); });
   }
   function reassign() {
+    if (!assignee) return;
     if (!request || !value || !allowed("REASSIGN")) return;
-    const body = { revisionNumber: request.revisionNumber, expectedRequestVersion: request.requestVersion, expectedCaseVersion: value.caseVersion, assigneeId: assignee.trim(), reason: reason.trim() };
+    const body = { revisionNumber: request.revisionNumber, expectedRequestVersion: request.requestVersion, expectedCaseVersion: value.caseVersion, assigneeId: assignee.operatorId, reason: reason.trim() };
     command.submit(JSON.stringify(body), key => operationsApi.POST("/support/action-requests/{requestId}/reassignments", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => setMessage("상담과 요청의 담당자를 변경했습니다"));
   }
   function execute() {
@@ -184,7 +186,7 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
       </form> : null}
       {request.action === "POST_ACCEPTANCE_RESOLUTION" && allowed("EXECUTE") && !value.resolutionId && !createdResolutionId ? <Button disabled={blocked || !matches} onClick={() => void createResolution()}>확인한 해결 실행 계획 등록</Button> : null}
       {value.resolutionId ? <SupportResolutionWorkspace key={value.resolutionId} resolutionId={value.resolutionId} onBusyChange={setResolutionBusy} /> : null}
-      {allowed("REASSIGN") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); reassign(); }}><TextField label="새 실행 담당자 ID" value={assignee} onValueChange={setAssignee} required disabled={blocked} /><TextAreaField label="배정 사유" value={reason} onValueChange={setReason} required maxLength={500} disabled={blocked} /><Button variant="secondary" type="submit" disabled={blocked || !assignee.trim() || !reason.trim()}>상담과 요청 함께 재배정</Button></form> : null}
+      {allowed("REASSIGN") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); reassign(); }}><OperatorTargetPicker label="새 실행 담당자" purpose={request.action === "GOODWILL_COMPENSATION" ? "COMPENSATION" : request.action} value={assignee} onSelect={setAssignee} disabled={blocked} /><TextAreaField label="배정 사유" value={reason} onValueChange={setReason} required maxLength={500} disabled={blocked} /><Button variant="secondary" type="submit" disabled={blocked || !assignee || !reason.trim()}>상담과 요청 함께 재배정</Button></form> : null}
       {allowed("REVISE") && supportCase ? <><Button variant="secondary" disabled={blocked} onClick={() => setRevisionOpen(value => !value)}>승인안 수정</Button>{revisionOpen ? <CreateOrderRequest onBusyChange={setRevisionBusy} key={request.revisionNumber} supportCase={supportCase} verification={verification} revision={request} onCreated={() => { setRevisionOpen(false); setMessage("새 승인안을 제출했습니다"); read.reload(); }} /> : null}</> : null}
       {!expired && value.allowedActions.length === 0 ? <InlineNotice tone="info" title="현재 담당자가 실행할 명령이 없습니다" description="다른 담당자의 승인 대기, 권한 또는 요청 상태를 확인해 주세요." /> : null}
     </> : null}

@@ -7,6 +7,7 @@ import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.MerchantAccountState
 import io.github.kdh949.beanflow.shared.api.MerchantActor
 import io.github.kdh949.beanflow.shared.api.OperatorActor
+import io.github.kdh949.beanflow.shared.api.OperatorLoginIdentity
 import org.springframework.core.MethodParameter
 import org.springframework.security.authentication.AbstractAuthenticationToken
 import org.springframework.security.core.Authentication
@@ -73,9 +74,27 @@ internal class CurrentActorArgumentResolver : HandlerMethodArgumentResolver {
                     authority.authority?.takeIf { it.startsWith("ROLE_") }?.removePrefix("ROLE_")
                 }
         return when {
-            "CUSTOMER" in roles -> CustomerActor(actorId)
-            "STORE_OWNER" in roles || "STORE_STAFF" in roles -> MerchantActor(actorId, MerchantAccountState.ACTIVE)
-            else -> OperatorActor(actorId, roles)
+            "CUSTOMER" in roles -> {
+                CustomerActor(actorId)
+            }
+
+            "STORE_OWNER" in roles || "STORE_STAFF" in roles -> {
+                MerchantActor(actorId, MerchantAccountState.ACTIVE)
+            }
+
+            else -> {
+                val label = token.claims["preferred_username"]
+                val loginIdentity =
+                    if (label == null) {
+                        null
+                    } else {
+                        if (label !is String || token.issuedAt == null) {
+                            throw DomainFailure(FailureCode.ACCESS_DENIED, "Authenticated operator display claims are invalid")
+                        }
+                        OperatorLoginIdentity(label, requireNotNull(token.issuedAt))
+                    }
+                OperatorActor(actorId, roles, loginIdentity)
+            }
         }
     }
 }

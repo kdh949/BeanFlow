@@ -296,6 +296,36 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/operator-directory:
+    get:
+      tags: [Operations]
+      operationId: listOperatorCandidates
+      summary: 조직 로그인 이름으로 상담 담당자 선택
+      description: SUPPORT_CASE_READ 또는 SUPPORT_CASE_ASSIGN의 현재 grant를 확인한다. CASE_FILTER는 이력 조회용으로 철회된 Case 쓰기 권한도 포함하며, 나머지 목적은 현재 Case 쓰기 및 목적별 실행 grant가 모두 있는 계정만 반환한다. 표시 이름은 서명된 최근 로그인 관측 정보이며 명령 권한이 아니다.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: purpose
+          schema: { $ref: '#/components/schemas/OperatorSelectionPurpose' }
+        - in: query
+          name: query
+          schema: { type: string, maxLength: 100 }
+        - in: query
+          name: cursor
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 표시 가능한 담당자와 이름 미등록 계정 수
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperatorDirectoryPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
   /operations/me:
     get:
       tags: [Identity]
@@ -12529,6 +12559,36 @@ components:
         merchantId: { $ref: "#/components/schemas/Identifier" }
         displayName: { type: string, minLength: 1, maxLength: 100 }
         accountState: { type: string, enum: [INITIAL_PASSWORD, ACTIVE] }
+    OperatorDisplay:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state: { type: string, enum: [AVAILABLE, MISSING_PROFILE] }
+        loginName: { type: [string, 'null'], minLength: 1, maxLength: 200 }
+        observedAt: { type: [string, 'null'], format: date-time }
+    OperatorSelectionPurpose:
+      type: string
+      enum: [CASE_FILTER, CASE_ASSIGNMENT, ORDER_CANCELLATION, PICKUP_RESCHEDULE, POST_ACCEPTANCE_RESOLUTION, COMPENSATION, PROFILE_CHANGE]
+      default: CASE_ASSIGNMENT
+    OperatorCandidate:
+      type: object
+      additionalProperties: false
+      required: [operatorId, loginName, observedAt]
+      properties:
+        operatorId: { $ref: '#/components/schemas/Identifier' }
+        loginName: { type: string, minLength: 1, maxLength: 200 }
+        observedAt: { $ref: '#/components/schemas/DateTime' }
+    OperatorDirectoryPage:
+      type: object
+      additionalProperties: false
+      required: [items, missingProfileCount]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OperatorCandidate' }
+        nextCursor: { type: [string, 'null'] }
+        missingProfileCount: { type: integer, format: int64, minimum: 0 }
     OperatorActor:
       type: object
       additionalProperties: false
@@ -12539,6 +12599,7 @@ components:
         operatorId: 3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f
         roles: [SETTLEMENT_REVIEWER]
       properties:
+        display: { $ref: '#/components/schemas/OperatorDisplay' }
         actorType: { const: OPERATOR }
         operatorId: { $ref: "#/components/schemas/Identifier" }
         roles:
@@ -18205,6 +18266,7 @@ components:
             linkedAt: "2026-08-15T09:01:00Z"
             caseVersion: 2
       properties:
+        assigneeDisplay: { $ref: '#/components/schemas/OperatorDisplay' }
         customerInquiryId:
           type: string
           format: uuid
@@ -18242,6 +18304,7 @@ components:
         version: 3
         openedAt: "2026-08-15T09:00:00Z"
       properties:
+        assigneeDisplay: { $ref: '#/components/schemas/OperatorDisplay' }
         caseId:
           $ref: "#/components/schemas/Identifier"
         state:

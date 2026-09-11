@@ -199,6 +199,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/operator-directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 조직 로그인 이름으로 상담 담당자 선택
+         * @description SUPPORT_CASE_READ 또는 SUPPORT_CASE_ASSIGN의 현재 grant를 확인한다. CASE_FILTER는 이력 조회용으로 철회된 Case 쓰기 권한도 포함하며, 나머지 목적은 현재 Case 쓰기 및 목적별 실행 grant가 모두 있는 계정만 반환한다. 표시 이름은 서명된 최근 로그인 관측 정보이며 명령 권한이 아니다.
+         */
+        get: operations["listOperatorCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/me": {
         parameters: {
             query?: never;
@@ -6592,6 +6612,35 @@ export interface components {
             newPassword: components["schemas"]["Password"];
         };
         /**
+         * @default CASE_ASSIGNMENT
+         * @enum {string}
+         */
+        OperatorSelectionPurpose: "CASE_FILTER" | "CASE_ASSIGNMENT" | "ORDER_CANCELLATION" | "PICKUP_RESCHEDULE" | "POST_ACCEPTANCE_RESOLUTION" | "COMPENSATION" | "PROFILE_CHANGE";
+        /**
+         * Format: date-time
+         * @description 오프셋 또는 UTC 지정자를 포함한 ISO-8601 시각입니다.
+         * @example 2026-08-15T09:30:00+09:00
+         */
+        DateTime: string;
+        OperatorCandidate: {
+            operatorId: components["schemas"]["Identifier"];
+            loginName: string;
+            observedAt: components["schemas"]["DateTime"];
+        };
+        OperatorDirectoryPage: {
+            items: components["schemas"]["OperatorCandidate"][];
+            nextCursor?: string | null;
+            /** Format: int64 */
+            missingProfileCount: number;
+        };
+        OperatorDisplay: {
+            /** @enum {string} */
+            state: "AVAILABLE" | "MISSING_PROFILE";
+            loginName?: string | null;
+            /** Format: date-time */
+            observedAt?: string | null;
+        };
+        /**
          * @description Keycloak 기반으로 인증된 현재 운영자(operator)를 나타내는 actor 정보입니다.
          * @example {
          *       "actorType": "OPERATOR",
@@ -6602,17 +6651,12 @@ export interface components {
          *     }
          */
         OperatorActor: {
+            display?: components["schemas"]["OperatorDisplay"];
             /** @constant */
             actorType: "OPERATOR";
             operatorId: components["schemas"]["Identifier"];
             roles: string[];
         };
-        /**
-         * Format: date-time
-         * @description 오프셋 또는 UTC 지정자를 포함한 ISO-8601 시각입니다.
-         * @example 2026-08-15T09:30:00+09:00
-         */
-        DateTime: string;
         /** @description 현재 시각 이후 7일 안에서 capacity가 남은 가장 이른 실제 pickup slot입니다. */
         NextPickupWindow: {
             startsAt: components["schemas"]["DateTime"];
@@ -10020,6 +10064,7 @@ export interface components {
          *     }
          */
         SupportCaseSummary: {
+            assigneeDisplay?: components["schemas"]["OperatorDisplay"];
             caseId: components["schemas"]["Identifier"];
             state: components["schemas"]["SupportCaseState"];
             priority: components["schemas"]["SupportCasePriority"];
@@ -10119,6 +10164,7 @@ export interface components {
          *     }
          */
         SupportCase: {
+            assigneeDisplay?: components["schemas"]["OperatorDisplay"];
             /**
              * Format: uuid
              * @description 내장 고객 문의와 연결된 경우 공개 대화로 돌아갈 문의 ID. 내부 메모를 공개하지 않습니다.
@@ -13484,6 +13530,35 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listOperatorCandidates: {
+        parameters: {
+            query?: {
+                purpose?: components["schemas"]["OperatorSelectionPurpose"];
+                query?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 표시 가능한 담당자와 이름 미등록 계정 수 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorDirectoryPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             503: components["responses"]["DependencyUnavailable"];

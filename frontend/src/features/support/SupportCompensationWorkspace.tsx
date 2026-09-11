@@ -1,3 +1,4 @@
+import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import type { components } from "../../api/schema";
@@ -120,7 +121,7 @@ function CouponPicker({ disabled, selected, onSelect }: { disabled: boolean; sel
 
 function CompensationInspection({ id, caseId, onBusyChange }: { id: string; caseId?: string; onBusyChange: (busy: boolean) => void }) {
   const read = useResource(useCallback(async () => { const value = unwrap(await operationsApi.GET("/support/compensations/{compensationRequestId}/workflow", { params: { path: { compensationRequestId: id } } })); if (caseId && value.request.supportCaseId !== caseId) throw new ApiRequestError(409, "RESOURCE_STATE_CONFLICT", "현재 상담에 연결된 보상 요청이 아닙니다."); return value; }, [id, caseId]));
-  const [reviewed, setReviewed] = useState(false), [reason, setReason] = useState(""), [decision, setDecision] = useState<"APPROVE" | "DENY" | "RETURN_FOR_REVISION">("APPROVE"), [assignee, setAssignee] = useState(""), [assignmentReason, setAssignmentReason] = useState(""), [message, setMessage] = useState("");
+  const [reviewed, setReviewed] = useState(false), [reason, setReason] = useState(""), [decision, setDecision] = useState<"APPROVE" | "DENY" | "RETURN_FOR_REVISION">("APPROVE"), [assignee, setAssignee] = useState<OperatorSelection | null>(null), [assignmentReason, setAssignmentReason] = useState(""), [message, setMessage] = useState("");
   const command = useSupportCommand(() => { setReviewed(false); read.reload(); });
   const busy = command.busy || command.pending;
   useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
@@ -139,8 +140,9 @@ function CompensationInspection({ id, caseId, onBusyChange }: { id: string; case
     command.submit(JSON.stringify(body), key => operationsApi.POST("/support/action-requests/{requestId}/support-manager-decisions", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => setMessage("보상 승인 결정을 기록했습니다"));
   }
   function reassign() {
-    if (!value?.approval || !allowed("REASSIGN") || !uuid(assignee) || !assignmentReason.trim() || busy) return;
-    const body = { revisionNumber: value.approval.revisionNumber, expectedRequestVersion: value.approval.requestVersion, expectedCaseVersion: value.approval.caseVersion, assigneeId: assignee.trim(), reason: assignmentReason.trim() }, requestId = value.approval.requestId;
+    if (!assignee) return;
+    if (!value?.approval || !allowed("REASSIGN") || !assignee || !assignmentReason.trim() || busy) return;
+    const body = { revisionNumber: value.approval.revisionNumber, expectedRequestVersion: value.approval.requestVersion, expectedCaseVersion: value.approval.caseVersion, assigneeId: assignee.operatorId, reason: assignmentReason.trim() }, requestId = value.approval.requestId;
     command.submit(JSON.stringify(body), key => operationsApi.POST("/support/action-requests/{requestId}/reassignments", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => setMessage("보상과 상담의 담당자를 변경했습니다"));
   }
   return <div className="surface-card management-card management-workspace">
@@ -162,7 +164,7 @@ function CompensationInspection({ id, caseId, onBusyChange }: { id: string; case
       {allowed("EXECUTE") ? <Button disabled={busy || !reviewed} onClick={execute}>확인한 보상 지급</Button> : null}
       {allowed("DECIDE_SUPPORT_MANAGER") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); decide(); }}><SelectField label="보상 승인 결정" value={decision} onValueChange={next => setDecision(next as typeof decision)} disabled={busy}><option value="APPROVE">승인</option><option value="DENY">반려</option><option value="RETURN_FOR_REVISION">수정 요청</option></SelectField><TextAreaField label="승인 결정 사유" value={reason} onValueChange={setReason} maxLength={500} required disabled={busy} description="개인정보와 인증 원문은 입력하지 않습니다." /><Button type="submit" disabled={busy || !reason.trim() || (decision === "APPROVE" && !reviewed)}>보상 승인 결정 기록</Button></form> : null}
       {allowed("RETRY_NOTIFICATION") ? <Button variant="secondary" disabled={busy} onClick={() => command.submit(`notification:${id}:${value.request.version}`, key => operationsApi.POST("/support/compensations/{compensationRequestId}/notification-retries", { params: { path: { compensationRequestId: id }, header: { "Idempotency-Key": key } } }).then(unwrap), () => setMessage("보상 알림을 다시 요청했습니다"))}>보상 알림 다시 요청</Button> : null}
-      {allowed("REASSIGN") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); reassign(); }}><TextField label="새 보상 실행 담당자 ID" value={assignee} onValueChange={setAssignee} required disabled={busy} /><TextAreaField label="배정 사유" value={assignmentReason} onValueChange={setAssignmentReason} maxLength={500} required disabled={busy} /><Button type="submit" disabled={busy || !uuid(assignee) || !assignmentReason.trim()}>보상과 상담 함께 재배정</Button></form> : null}
+      {allowed("REASSIGN") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); reassign(); }}><OperatorTargetPicker label="새 실행 담당자" purpose="COMPENSATION" value={assignee} onSelect={setAssignee} disabled={busy} /><TextAreaField label="배정 사유" value={assignmentReason} onValueChange={setAssignmentReason} maxLength={500} required disabled={busy} /><Button type="submit" disabled={busy || !assignee || !assignmentReason.trim()}>보상과 상담 함께 재배정</Button></form> : null}
       {value.approval?.state === "REVISION_REQUIRED" || value.approval?.state === "STALE" ? <ButtonLink variant="secondary" to={`/support/follow-up?caseId=${value.request.supportCaseId}&incidentId=${value.request.incidentId}`}>같은 사고로 보상 조건 다시 작성</ButtonLink> : null}
       {expired ? <InlineNotice tone="warning" title="본인확인 유효 시간이 지났습니다" description="새 지급이나 승인 전에 현재 본인확인 조건을 확인해 주세요. 이미 지급한 혜택의 알림은 별도로 처리합니다." /> : null}
     </> : null}

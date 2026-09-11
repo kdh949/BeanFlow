@@ -49,6 +49,26 @@ projection을 사용하며 상세·제안·판정은 기존 grant와 safe guard�
 제안자/판정자의 이름은 담당자 디렉터리 단계에서 연결하고 이 단계에서는 본인 여부와 역할을 구분한다.
 불명 명령 응답에서는 대상·payload·동일 key를 고정하고 입력을 바꿔 새 요청을 만들지 않는다.
 
+### Operator display and assignment discovery
+
+Operations는 인증된 `/operations/me` 요청에서 서명 검증을 마친 JWT의 `preferred_username`과 `iat`만
+관측하여 operator display read model을 갱신한다. 이름을 요청 body로 받거나 UUID에서 생성하지 않는다.
+이름은 조직 로그인 식별명이며 현재 권한이나 실제 법적 이름의 증거로 사용하지 않는다. 최근 관측 시각을
+함께 반환하며 더 오래된 `iat`는 새 관측 값을 덮어쓰지 않는다. claim이 없던 기존 계정은 `MISSING_PROFILE`로
+구분한다. 이 상태는 저장소 장애와 다르며 후보 수/표시 상태를 명시한다. 저장소 오류를 미등록으로 숨기지 않는다.
+
+담당자 목록은 현재 `SUPPORT_CASE_READ` 또는 `SUPPORT_CASE_ASSIGN` 권한을 요구한다. 선택 목적에 따라
+Case 쓰기 및 주문/보상/정정 실행에 필요한 실제 grant를 모두 가진 계정을 조회하며, 실행 시 owner 명령이
+승인자 분리·현재 Case/요청/버전과 권한을 다시 검증한다. 표시 이름이 준비되지 않은 계정을 임의 이름으로
+선택시키지 않고 해당 조직 계정의 로그인이 필요함을 알린다. 현재 Case 담당자 표시는 등록 여부를 명시한다.
+상담 이력 필터 목적은 과거 Case 쓰기 권한이 철회된 담당자도 선택할 수 있다. 이 목적은 배정에 사용하지 않는다.
+목록 커서는 요청 actor·목적·검색 조건에 바인딩한다. 이름 검색 원문과 표시 이름은 Audit/로그/metric에 남기지 않는다.
+로그인 표시 갱신은 짧은 local transaction이며 외부 인증 서버 API를 호출하지 않는다.
+
+Bundled Keycloak realm에 access-token `preferred_username` mapper를 명시하며 external Keycloak도 동일
+mapper를 설정한다. BeanFlow가 Keycloak 관리자 credential을 받거나 인증 서버의 사용자 원장을 복제하지 않는다.
+조회 모델은 실제 로그인 계정의 최신 관측 정보이며, 아직 로그인하지 않은 조직 계정 전체를 열거하는 API가 아니다.
+
 ### Manual sequential migration scope
 
 이번 작업은 #170의 구현 제외를 명시한 수동 후속 요청이다. 정확한 기준은 #170

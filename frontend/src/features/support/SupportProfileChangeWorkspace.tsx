@@ -1,3 +1,4 @@
+import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import type { components } from "../../api/schema";
@@ -112,7 +113,7 @@ function ProfileInspection({ id, supportCase, verification, onBusyChange }: { id
   const read = useResource(useCallback(async () => { const workflow = unwrap(await operationsApi.GET("/support/profile-changes/{profileChangeId}/workflow", { params: { path: { profileChangeId: id } } })); if (supportCase && workflow.profileChange.caseId !== supportCase.caseId) throw new ApiRequestError(409, "RESOURCE_STATE_CONFLICT", "상담에 연결된 정정 건이 아닙니다"); return workflow; }, [id, supportCase?.caseId]));
   const value = read.state.status === "ready" ? read.state.value : null, profile = value?.profileChange, approval = value?.approval;
   const raw = useProfileValues(`${profile?.purpose}:${profile?.version}:${read.state.status}`);
-  const [digest, setDigest] = useState(""), [decision, setDecision] = useState<"APPROVE" | "DENY" | "RETURN_FOR_REVISION">("APPROVE"), [reason, setReason] = useState(""), [message, setMessage] = useState(""), [assignee, setAssignee] = useState(""), [assignmentReason, setAssignmentReason] = useState(""), [revising, setRevising] = useState(false), [revisionBusy, setRevisionBusy] = useState(false);
+  const [digest, setDigest] = useState(""), [decision, setDecision] = useState<"APPROVE" | "DENY" | "RETURN_FOR_REVISION">("APPROVE"), [reason, setReason] = useState(""), [message, setMessage] = useState(""), [assignee, setAssignee] = useState<OperatorSelection | null>(null), [assignmentReason, setAssignmentReason] = useState(""), [revising, setRevising] = useState(false), [revisionBusy, setRevisionBusy] = useState(false);
   const sensitive = useSensitiveSupportCommand(), command = useSupportCommand(() => { raw.clear(); read.reload(); });
   const busy = sensitive.busy || command.busy, frozen = busy || !!sensitive.pending || command.pending || revisionBusy;
   useEffect(() => { onBusyChange(frozen); return () => onBusyChange(false); }, [frozen, onBusyChange]);
@@ -134,8 +135,9 @@ function ProfileInspection({ id, supportCase, verification, onBusyChange }: { id
     command.submit(JSON.stringify(body), key => operationsApi.POST("/support/action-requests/{requestId}/support-manager-decisions", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => setMessage("정정 승인 결정을 기록했습니다")); raw.clear();
   }
   function reassign() {
-    if (!approval || !value || !allowed("REASSIGN") || frozen || !uuid(assignee) || !assignmentReason.trim()) return;
-    const body = { revisionNumber: approval.revisionNumber, expectedRequestVersion: approval.requestVersion, expectedCaseVersion: value.caseVersion, assigneeId: assignee.trim(), reason: assignmentReason.trim() }, requestId = approval.requestId;
+    if (!assignee) return;
+    if (!approval || !value || !allowed("REASSIGN") || frozen || !assignee || !assignmentReason.trim()) return;
+    const body = { revisionNumber: approval.revisionNumber, expectedRequestVersion: approval.requestVersion, expectedCaseVersion: value.caseVersion, assigneeId: assignee.operatorId, reason: assignmentReason.trim() }, requestId = approval.requestId;
     command.submit(JSON.stringify(body), key => operationsApi.POST("/support/action-requests/{requestId}/reassignments", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => setMessage("정정과 상담의 담당자를 변경했습니다"));
   }
   return <div className="surface-card management-card management-workspace"><h3>정정 검토와 실행</h3>
@@ -152,7 +154,7 @@ function ProfileInspection({ id, supportCase, verification, onBusyChange }: { id
       {allowed("DECIDE_SUPPORT_MANAGER") && !revising ? <form className="operation-form" onSubmit={event => { event.preventDefault(); decide(); }}><SelectField label="정정 승인 결정" value={decision} onValueChange={next => setDecision(next as typeof decision)} disabled={frozen}><option value="APPROVE">승인</option><option value="DENY">반려</option><option value="RETURN_FOR_REVISION">수정 요청</option></SelectField><TextAreaField label="정정 승인 사유" value={reason} onValueChange={setReason} disabled={frozen} maxLength={500} required description="개인정보나 인증 원문은 입력하지 않습니다." /><Button type="submit" disabled={frozen || !reason.trim() || (decision === "APPROVE" && !matches)}>정정 승인 결정 기록</Button></form> : null}
       {allowed("REVISE") && !revising ? supportCase ? <Button variant="secondary" disabled={frozen} onClick={() => { raw.clear(); setRevising(true); }}>정정안 수정</Button> : <ButtonLink variant="secondary" to={`/support/follow-up?caseId=${profile.caseId}&profileChangeId=${id}`}>상담에서 정정안 수정</ButtonLink> : null}
       {revising && supportCase ? <><CreateProfileChange supportCase={supportCase} verification={verification} revision={value} onBusyChange={setRevisionBusy} onCreated={() => { setRevising(false); read.reload(); }} /><Button variant="ghost" disabled={revisionBusy} onClick={() => setRevising(false)}>수정 닫기</Button></> : null}
-      {allowed("REASSIGN") && !revising ? <form className="operation-form" onSubmit={event => { event.preventDefault(); reassign(); }}><TextField label="새 정정 실행 담당자 ID" value={assignee} onValueChange={setAssignee} disabled={frozen} required /><TextAreaField label="정정 배정 사유" value={assignmentReason} onValueChange={setAssignmentReason} disabled={frozen} maxLength={500} required /><Button type="submit" disabled={frozen || !uuid(assignee) || !assignmentReason.trim()}>정정과 상담 함께 재배정</Button></form> : null}
+      {allowed("REASSIGN") && !revising ? <form className="operation-form" onSubmit={event => { event.preventDefault(); reassign(); }}><OperatorTargetPicker label="새 실행 담당자" purpose="PROFILE_CHANGE" value={assignee} onSelect={setAssignee} disabled={frozen} /><TextAreaField label="정정 배정 사유" value={assignmentReason} onValueChange={setAssignmentReason} disabled={frozen} maxLength={500} required /><Button type="submit" disabled={frozen || !assignee || !assignmentReason.trim()}>정정과 상담 함께 재배정</Button></form> : null}
       {allowed("RETRY_NOTIFICATION") ? <Button variant="secondary" disabled={frozen} onClick={() => { const body = { expectedProfileChangeVersion: profile.version }; command.submit(JSON.stringify({ id, body }), key => operationsApi.POST("/support/profile-changes/{profileChangeId}/notification-retries", { params: { path: { profileChangeId: id }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => setMessage("정정 알림을 다시 요청했습니다")); }}>정정 알림 다시 요청</Button> : null}
     </> : null}
   </div>;

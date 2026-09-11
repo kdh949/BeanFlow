@@ -104,6 +104,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1auth~1merchant~1password-changes"
   /auth/merchant/sessions/current:
     $ref: "./beanflow-v1.yaml#/paths/~1auth~1merchant~1sessions~1current"
+  /operations/operator-directory:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1operator-directory"
   /operations/me:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1me"
   /me:

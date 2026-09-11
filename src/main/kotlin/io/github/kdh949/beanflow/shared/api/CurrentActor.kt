@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.shared.api
 
 import java.io.Serializable
+import java.time.Instant
 import java.util.UUID
 
 sealed interface CurrentActor : Serializable {
@@ -25,7 +26,18 @@ data class MerchantActor(
 data class OperatorActor(
     override val actorId: UUID,
     val roles: Set<String>,
-) : CurrentActor
+    val loginIdentity: OperatorLoginIdentity? = null,
+) : CurrentActor {
+    override fun toString(): String = "OperatorActor(actorId=$actorId, roles=$roles, loginIdentity=<redacted>)"
+}
+
+/** Identity-provider login label observed only after JWT verification. */
+data class OperatorLoginIdentity(
+    val loginName: String,
+    val tokenIssuedAt: Instant,
+) : Serializable {
+    override fun toString(): String = "OperatorLoginIdentity(<redacted>)"
+}
 
 enum class BrowserActorType {
     CUSTOMER,
