@@ -1070,6 +1070,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1disputes~1{disputeId}"
   /stores/{storeId}/disputes/{disputeId}/withdrawals:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1disputes~1{disputeId}~1withdrawals"
+  /operations/store-targets:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1store-targets"
   /operations/stores:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores"
   /operations/stores/{storeId}/identity:

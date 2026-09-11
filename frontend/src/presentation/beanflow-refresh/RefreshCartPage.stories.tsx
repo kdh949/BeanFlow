@@ -85,12 +85,12 @@ export const ImageLeaseRenewal: Story = {
   },
 };
 
-export const ExpiredImageResponse: Story = {
+export const BrowserClockAhead: Story = {
   tags: ["!autodocs"],
-  parameters: { msw: { handlers: [http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [{ menuId: ids.menu, image: { url: "/expired-private-image", expiresAt: "2000-01-01T00:00:00Z" } }] })), ...meta.parameters.msw.handlers] } },
+  parameters: { msw: { handlers: [http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [{ menuId: ids.menu, name: "오트 라떼", available: true, options: [], basePriceKrw: 6400, currency: "KRW", image: { url: "/demo/catalog/cafe-latte.webp", expiresAt: "2000-01-01T00:00:00Z" } }] })), ...meta.parameters.msw.handlers] } },
   play: async ({ canvas, canvasElement }) => {
-    await expect(await canvas.findByRole("alert")).toBeVisible();
-    await expect(canvasElement.querySelector(".bfr-cart-line-media img")).toBeNull();
+    await waitFor(() => expect(canvasElement.querySelector(".bfr-cart-line-media img")).toHaveAttribute("src", "/demo/catalog/cafe-latte.webp"));
+    await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
   },
 };
 
