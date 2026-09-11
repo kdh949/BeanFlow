@@ -1,3 +1,4 @@
+import { SupportOrderConsentPicker, type OrderConsentSelection } from "./SupportOrderConsentPicker";
 import { SupportWorkPicker } from "./SupportWorkPicker";
 import { supportSubjectLabel } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
@@ -116,7 +117,7 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
   const command = useSupportCommand(read.reload);
   const [message, setMessage] = useState(""); const [execution, setExecution] = useState<components["schemas"]["SupportOrderChangeExecutionResource"] | null>(null);
   const [reasonCode, setReasonCode] = useState<CancellationReason>("CHANGED_MIND"); const [slotId, setSlotId] = useState(""); const [digest, setDigest] = useState("");
-  const [decision, setDecision] = useState<components["schemas"]["SupportApprovalDecision"]>("APPROVE"); const [reason, setReason] = useState(""); const [assignee, setAssignee] = useState<OperatorSelection | null>(null); const [authorizationId, setAuthorizationId] = useState("");
+  const [decision, setDecision] = useState<components["schemas"]["SupportApprovalDecision"]>("APPROVE"); const [reason, setReason] = useState(""); const [assignee, setAssignee] = useState<OperatorSelection | null>(null); const [consent, setConsent] = useState<{ value: OrderConsentSelection; binding: string } | null>(null);
   const [resolutionDraft, setResolutionDraft] = useState<ResolutionDraft>(initialResolutionDraft);
   const [resolutionBusy, setResolutionBusy] = useState(false);
   const [preparingResolution, setPreparingResolution] = useState(false);
@@ -130,6 +131,10 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
   const request = value?.request;
   const direct = request?.action === "ORDER_CANCELLATION" || request?.action === "PICKUP_RESCHEDULE";
   const expired = useExpired(request?.expiresAt);
+  const consentBinding = `${requestId}:${request?.revisionNumber}:${request?.requestVersion}:${request?.targetVersion}`;
+  const selectedConsent = consent?.binding === consentBinding ? consent.value : null;
+  const consentExpired = useExpired(selectedConsent?.expiresAt);
+  const authorizationId = selectedConsent && !consentExpired ? selectedConsent.authorizationId : "";
   useEffect(() => { let live = true; setDigest(""); if (request && direct && (request.action === "ORDER_CANCELLATION" || slotId)) void orderChangeDigest(request.action as OrderChangeAction, request.targetId, reasonCode, slotId).then(result => { if (live) setDigest(result); }); return () => { live = false; }; }, [request?.targetId, request?.action, reasonCode, slotId]);
   useEffect(() => { let live = true; if (request?.action !== "POST_ACCEPTANCE_RESOLUTION") return; setDigest(""); if (validResolutionDraft(resolutionDraft)) void resolutionPlan(resolutionDraft).then(plan => resolutionDigest(request.targetId, plan)).then(result => { if (live) setDigest(result); }).catch(setResolutionError); return () => { live = false; }; }, [request?.action, request?.targetId, resolutionDraft]);
   const allowed = (name: Workflow["allowedActions"][number]) => !!value && !expired && value.allowedActions.includes(name);
@@ -147,7 +152,7 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
     command.submit(JSON.stringify(body), key => operationsApi.POST("/support/action-requests/{requestId}/reassignments", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => setMessage("상담과 요청의 담당자를 변경했습니다"));
   }
   function execute() {
-    if (!request || !allowed("EXECUTE") || !direct || !matches) return;
+    if (!request || blocked || !allowed("EXECUTE") || !direct || !matches || (value?.order?.state === "ACCEPTED" && !authorizationId)) return;
     const common = { revisionNumber: request.revisionNumber, expectedRequestVersion: request.requestVersion, expectedTargetVersion: request.targetVersion, ...(authorizationId.trim() ? { authorizationId: authorizationId.trim() } : {}) };
     const body = request.action === "ORDER_CANCELLATION" ? { ...common, action: "ORDER_CANCELLATION" as const, reasonCode } : { ...common, action: "PICKUP_RESCHEDULE" as const, newPickupSlotId: slotId };
     command.submit(JSON.stringify(body), async key => { const result = unwrap(await operationsApi.POST("/support/action-requests/{requestId}/executions", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body })); setExecution(result); setMessage(result.outcome === "RESOLUTION_REQUIRED" ? "수락 후 해결 업무로 전환해야 합니다" : "주문 변경을 처리했습니다"); }, () => undefined);
@@ -180,7 +185,7 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
       </> : null}
       {allowed("DECIDE_SUPPORT_MANAGER") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); decide(); }}><SelectField label="승인 결정" value={decision} onValueChange={value => setDecision(value as typeof decision)} disabled={blocked}><option value="APPROVE">승인</option><option value="DENY">반려</option><option value="RETURN_FOR_REVISION">수정 요청</option></SelectField><TextAreaField label="결정 사유" value={reason} onValueChange={setReason} required maxLength={500} disabled={blocked} /><Button type="submit" disabled={blocked || (decision === "APPROVE" && !matches) || !reason.trim()}>승인 결정 기록</Button></form> : null}
       {direct && allowed("EXECUTE") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); execute(); }}>
-        {value.order?.state === "ACCEPTED" ? <TextField label="매장 동의 또는 위임 ID" value={authorizationId} onValueChange={setAuthorizationId} required disabled={blocked} description="매장이 비용 책임을 수락하고 발급한 현재 동의 ID를 입력합니다." /> : null}
+        {value.order?.state === "ACCEPTED" ? <SupportOrderConsentPicker key={consentBinding} requestId={requestId} value={selectedConsent} onValueChange={selected => setConsent(selected ? { value: selected, binding: consentBinding } : null)} disabled={blocked} /> : null}
         <Button type="submit" disabled={blocked || !matches || (value.order?.state === "ACCEPTED" && !authorizationId.trim())}>확인한 주문 변경 실행</Button>
       </form> : null}
       {request.action === "POST_ACCEPTANCE_RESOLUTION" && allowed("EXECUTE") && !value.resolutionId && !createdResolutionId ? <Button disabled={blocked || !matches} onClick={() => void createResolution()}>확인한 해결 실행 계획 등록</Button> : null}

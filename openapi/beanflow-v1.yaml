@@ -9718,6 +9718,119 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /stores/{storeId}/support-order-change-requests:
+    get:
+      tags:
+      - Support
+      operationId: listStoreSupportOrderChangeRequests
+      summary: 소속 매장의 현재 주문 변경 동의 대상을 공개 주문번호로 탐색
+      parameters:
+      - $ref: '#/components/parameters/StoreId'
+      - &s4paths001
+        name: cursor
+        in: query
+        schema:
+          type: string
+          maxLength: 2048
+      - &s4paths002
+        name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 소속 매장의 현재 주문 변경 동의 대상을 공개 주문번호로 탐색
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreOrderChangeCandidatePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+      security:
+      - merchantSession: []
+  /support/action-requests/{requestId}/store-consents:
+    get:
+      tags:
+      - Support
+      operationId: listSupportOrderConsents
+      summary: 현재 실행 승인안에 유효한 매장 동의와 위임을 조회
+      parameters:
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      - *s4paths001
+      - *s4paths002
+      responses:
+        '200':
+          description: 현재 실행 승인안에 유효한 매장 동의와 위임을 조회
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportOrderConsentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/investigation-queue:
+    get:
+      tags:
+      - Operations
+      operationId: listOperationsSupportInvestigations
+      summary: 현재 승인안의 운영 검토 목록 조회
+      parameters:
+      - name: state
+        in: query
+        schema:
+          $ref: '#/components/schemas/OperationsSupportInvestigationState'
+      - *s4paths001
+      - *s4paths002
+      responses:
+        '200':
+          description: 현재 승인안의 운영 검토 목록 조회
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsInvestigationPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 components:
   securitySchemes:
     bearerAuth:
@@ -21542,3 +21655,123 @@ components:
         binding:
           $ref: '#/components/schemas/ProfileChangeRevisionBinding'
           description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+    StoreOrderChangeCandidate:
+      type: object
+      required:
+      - requestId
+      - orderReference
+      - action
+      - revisionNumber
+      - createdAt
+      - expiresAt
+      properties:
+        requestId: &s4schemas002
+          $ref: '#/components/schemas/Identifier'
+        orderReference:
+          type: string
+        action:
+          $ref: '#/components/schemas/SupportActionType'
+        revisionNumber:
+          type: integer
+        createdAt: &s4schemas001
+          type: string
+          format: date-time
+        expiresAt: *s4schemas001
+    StoreOrderChangeCandidatePage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreOrderChangeCandidate'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+    SupportOrderConsentCandidate:
+      type: object
+      required:
+      - authorizationId
+      - authorizationType
+      - authorizedAt
+      - expiresAt
+      - remainingUses
+      properties:
+        authorizationId: *s4schemas002
+        authorizationType:
+          $ref: '#/components/schemas/SupportOrderChangeAuthorizationType'
+        authorizedAt: *s4schemas001
+        expiresAt: *s4schemas001
+        remainingUses:
+          type: integer
+          minimum: 1
+    SupportOrderConsentPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportOrderConsentCandidate'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+    SupportInvestigationDisplay:
+      type: object
+      required:
+      - requestId
+      - action
+      - caseCategory
+      - caseOpenedAt
+      - revisionNumber
+      properties:
+        requestId: *s4schemas002
+        action:
+          $ref: '#/components/schemas/SupportActionType'
+        caseCategory:
+          $ref: '#/components/schemas/SupportInquiryCategory'
+        caseOpenedAt: *s4schemas001
+        revisionNumber:
+          type: integer
+    OperationsInvestigationCandidate:
+      type: object
+      required:
+      - investigationId
+      - request
+      - state
+      - openedAt
+      - expiresAt
+      - canDecide
+      properties:
+        investigationId: *s4schemas002
+        request:
+          $ref: '#/components/schemas/SupportInvestigationDisplay'
+        state:
+          $ref: '#/components/schemas/OperationsSupportInvestigationState'
+        openedAt: *s4schemas001
+        expiresAt: *s4schemas001
+        canDecide:
+          type: boolean
+    OperationsInvestigationPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationsInvestigationCandidate'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048

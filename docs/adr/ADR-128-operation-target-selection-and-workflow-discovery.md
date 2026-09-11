@@ -105,6 +105,25 @@ transaction이며 마지막에 목록 권한을 재검증한다. 따라서 목�
 목록에는 업무 목적, 현재 조회 상태, 생성/만료 시각과 Case 분류/접수 시각만 반환하며 원문 개인정보,
 인증 증명, payload/evidence digest, 비밀 또는 실행 자격을 반환하지 않는다. 기존 상세 공유 주소는 유지한다.
 
+### Store consent and operations investigation discovery
+
+매장의 동의 대기 목록은 현재 매장 주문 관리 권한을 확인하고, Support의 유효한 직접 주문 변경 요청을
+bounded page로 읽어 Ordering의 batch projection으로 해당 매장의 ACCEPTED 주문과 현재 버전을 확인한다.
+공개 주문번호·변경 종류·요청/만료 시각으로 선택한 뒤 기존 상세를 재조회한다. Support는 Ordering 테이블을
+직접 join하지 않는다. 후보 필터로 빈 page라도 다음 cursor를 유지한다.
+
+상담 실행자는 현재 요청 workflow에서 EXECUTE가 허용될 때만 해당 매장·업무·승인안에 유효한 동의/위임을
+조회한다. 만료·철회·사용 횟수·승인자 분리·정확한 revision/digest/targetVersion·활성 위임 정책을 검사한다.
+선택은 사용 횟수를 소비하지 않는다. 실제 실행은 기존 lock 및 consume 검사를 다시 수행한다. 동의 후 매장이
+내부 ID를 복사해 상담원에게 전달할 필요가 없으며 기존 idempotency snapshot은 변경하지 않는다.
+
+운영 검토 목록은 OPERATIONS_SUPPORT_INVESTIGATION 및 SUPPORT_CASE_READ를 확인한다. Operations 소유
+조사 기록과 Support가 제공하는 최소 분류/Case 접수 시각 projection을 조합하며 현재 revision과 다른 조사나
+만료된 OPEN 조사는 대기 목록에서 제외한다. 커서는 actor와 필터에 바인딩한다. 목록에 payload/evidence
+hash나 개인정보를 노출하지 않는다. 선택 후 기존 현재 승인안/조사 조회 및 별도 검토자 검증을 유지한다.
+새 목록은 같은 짧은 local transaction에서 grant와 owner projection을 읽으며 외부 Provider를 호출하지 않는다.
+새 schema 또는 production dependency는 필요하지 않다.
+
 ### Manual sequential migration scope
 
 이번 작업은 #170의 구현 제외를 명시한 수동 후속 요청이다. 정확한 기준은 #170

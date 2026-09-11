@@ -51,3 +51,20 @@ export const SelectExistingRequest: Story = {
     await expect(canvas.getByRole("button", { name: "기존 주문 변경 요청 찾기" })).toHaveAttribute("aria-expanded", "false");
   },
 };
+
+export const AcceptedOrderSelectsConsent: Story = {
+  play: async ({ canvas, msw }) => {
+    const authorizationId = "71000000-0000-4000-8000-000000000006";
+    msw.use(
+      http.get("/api/v1/support/action-requests/:requestId/workflow", async () => HttpResponse.json({ ...await workflow(), order: { ...order, state: "ACCEPTED" } })),
+      http.get("/api/v1/support/action-requests/:requestId/store-consents", () => HttpResponse.json({ items: [{ authorizationId, authorizationType: "CONFIRMATION", authorizedAt: "2026-09-11T09:00:00Z", expiresAt: session.expiresAt, remainingUses: 1 }], nextCursor: null })),
+      http.post("/api/v1/support/action-requests/:requestId/executions", async ({ request: req }) => { expect(await req.json()).toMatchObject({ authorizationId, revisionNumber: 1, expectedTargetVersion: 2 }); return HttpResponse.error(); }),
+    );
+    await expect(await canvas.findByRole("button", { name: "확인한 주문 변경 실행" })).toBeDisabled();
+    await userEvent.click(await canvas.findByRole("button", { name: "이 동의 선택" }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: "확인한 주문 변경 실행" })).toBeEnabled());
+    await userEvent.click(canvas.getByRole("button", { name: "확인한 주문 변경 실행" }));
+    await canvas.findByRole("button", { name: "같은 요청으로 결과 확인" });
+    await expect(canvas.getByRole("button", { name: "다른 매장 동의 선택" })).toBeDisabled();
+  },
+};

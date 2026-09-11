@@ -302,6 +302,92 @@ internal class SupportOrderChangeExecutionIntegrationTest
         }
 
         @Test
+        fun `store request directory keeps store scope and expired requests out of the current queue`() {
+            val slot = UUID.randomUUID()
+            makeAccepted(slot)
+            resetRequest(SupportActionType.PICKUP_RESCHEDULE, pickupDigest(slot))
+            insertStoreMembership()
+            val firstId = requestId
+            insertActionRequest(SupportActionType.PICKUP_RESCHEDULE, pickupDigest(slot))
+            val actor =
+                jwt()
+                    .jwt { it.subject(storeActorId.toString()).claim("roles", listOf("STORE_STAFF")) }
+                    .authorities(SimpleGrantedAuthority("ROLE_MERCHANT"))
+            val path = "/api/v1/stores/${fixture.storeId}/support-order-change-requests"
+            val first =
+                mockMvc
+                    .perform(get(path).with(actor).param("limit", "1"))
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andExpect(jsonPath("$.items[0].orderReference").isNotEmpty)
+                    .andReturn()
+                    .response.contentAsString
+            val tree =
+                tools.jackson.databind.json.JsonMapper
+                    .builder()
+                    .build()
+                    .readTree(first)
+            val cursor = tree.get("nextCursor").asText()
+            mockMvc
+                .perform(get(path).with(actor).param("limit", "1").param("cursor", cursor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+            assertThat(first).doesNotContain("customerId", "actionPayloadDigest", "evidenceDigest", "requesterActorId")
+            mockMvc
+                .perform(get("/api/v1/stores/${UUID.randomUUID()}/support-order-change-requests").with(actor).param("cursor", cursor))
+                .andExpect(status().isForbidden)
+            jdbcTemplate.update(
+                "UPDATE support_action_revision SET expires_at = now() - interval '1 second' WHERE request_id IN (?, ?)",
+                firstId,
+                requestId,
+            )
+            mockMvc.perform(get(path).with(actor)).andExpect(status().isOk).andExpect(jsonPath("$.items").isEmpty())
+            assertThat(count("support_order_change_authorization")).isZero()
+        }
+
+        @Test
+        fun `consent directory lists only current unused consent and binds cursor to request version`() {
+            val slot = UUID.randomUUID()
+            makeAccepted(slot)
+            resetRequest(SupportActionType.PICKUP_RESCHEDULE, pickupDigest(slot))
+            insertStoreMembership()
+            val firstId = authorizationId(createConfirmation("directory-consent-first").andExpect(status().isCreated).andReturn())
+            createConfirmation("directory-consent-second").andExpect(status().isCreated)
+            val actor = jwt().jwt { it.subject(supportActorId.toString()) }
+            val path = "/api/v1/support/action-requests/$requestId/store-consents"
+            val body =
+                mockMvc
+                    .perform(get(path).with(actor).param("limit", "1"))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items[0].remainingUses").value(1))
+                    .andReturn()
+                    .response.contentAsString
+            val cursor =
+                tools.jackson.databind.json.JsonMapper
+                    .builder()
+                    .build()
+                    .readTree(body)
+                    .get("nextCursor")
+                    .asText()
+            mockMvc
+                .perform(get(path).with(actor).param("limit", "1").param("cursor", cursor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+            assertThat(body).doesNotContain("actionPayloadDigest", "authorizedByActorId")
+            assertThat(count("support_order_change_authorization_use")).isZero()
+            jdbcTemplate.update("UPDATE support_order_change_authorization SET revoked_at = now() WHERE id = ?", firstId)
+            mockMvc.perform(get(path).with(actor)).andExpect(status().isOk).andExpect(jsonPath("$.items.length()").value(1))
+            jdbcTemplate.update("UPDATE support_action_request SET version = version + 1 WHERE id = ?", requestId)
+            mockMvc.perform(get(path).with(actor).param("cursor", cursor)).andExpect(status().isBadRequest)
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_ACTION_EXECUTE'",
+                supportActorId,
+            )
+            mockMvc.perform(get(path).with(actor)).andExpect(status().isForbidden)
+        }
+
+        @Test
         fun `pending cancellation commits owner and support outcome and exact replay is no-store`() {
             val first =
                 executeCancellation("execute-pending-001")

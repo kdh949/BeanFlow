@@ -1155,6 +1155,12 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1inquiries~1{inquiryId}~1messages"
   /operations/stores/{storeId}/media-menus:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1media-menus"
+  /stores/{storeId}/support-order-change-requests:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1support-order-change-requests"
+  /support/action-requests/{requestId}/store-consents:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1store-consents"
+  /operations/investigation-queue:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1investigation-queue"
 components:
   securitySchemes:
     bearerAuth:
@@ -1442,3 +1448,17 @@ components:
           $ref: ./beanflow-v1.yaml#/components/schemas/PaymentSetupIssue
         setupReprocessingCaseId:
           $ref: ./beanflow-v1.yaml#/components/schemas/Identifier
+    StoreOrderChangeCandidate:
+      $ref: ./beanflow-v1.yaml#/components/schemas/StoreOrderChangeCandidate
+    StoreOrderChangeCandidatePage:
+      $ref: ./beanflow-v1.yaml#/components/schemas/StoreOrderChangeCandidatePage
+    SupportOrderConsentCandidate:
+      $ref: ./beanflow-v1.yaml#/components/schemas/SupportOrderConsentCandidate
+    SupportOrderConsentPage:
+      $ref: ./beanflow-v1.yaml#/components/schemas/SupportOrderConsentPage
+    SupportInvestigationDisplay:
+      $ref: ./beanflow-v1.yaml#/components/schemas/SupportInvestigationDisplay
+    OperationsInvestigationCandidate:
+      $ref: ./beanflow-v1.yaml#/components/schemas/OperationsInvestigationCandidate
+    OperationsInvestigationPage:
+      $ref: ./beanflow-v1.yaml#/components/schemas/OperationsInvestigationPage

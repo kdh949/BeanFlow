@@ -138,7 +138,7 @@ BR-57/ADR-128 및 관련 owner ADR amendment, OpenAPI와 본 계획, 최종 ID �
 - [x] S3 전체 MCP 632개 정상 응답 통과, PR #173 발행.
 - [x] S3 PR #173 3a1dbe1 최신 head CI 전부 통과.
 - [x] S4a 기존 업무 요청/Case 목록 재개 구현, 관련 backend/frontend/문서 검증 통과.
-- [ ] S4b 점주 동의·운영 조사 선택.
+- [x] S4b 점주 동의·운영 조사 선택 및 관련 검증.
 - [ ] S5 사고·비용 참조.
 - [ ] S6 전체 검증과 PR 최신 head CI.
 
@@ -185,3 +185,9 @@ S4는 기존 inspection 권한을 재사용한 bounded 업무 요청 탐색을 �
 S4a는 6종의 기존 업무 요청 목록과 Case 분류/접수 시각 표시를 구현했다. 관련 73개 backend 테스트 중 72개가 통과했고, 검증 fixture에 실제 VERIFIED challenge 두 개를 보완하여 나머지 본인확인 조회 테스트도 통과했다. 종료된 Case와 연결 해제된 열람 요청은 재개 후보에서 제외하며 최신 경로를 재검증한다. frontend unit 233개, presentation 10개, copy 11개, design, 제품/Sites 4개/Storybook build, 문서·OpenAPI 검증이 통과했다. 정적 Docs 114개 entry/15개 상태 문서/47개 surface가 통과했다. 전체 MCP runner 646개는 통과했으며 전체 결과 직렬화 중 Node heap 부족으로 도구 연결이 종료되어, 서버를 복구하고 모든 story를 작은 묶음으로 나누어 정상 응답을 확인한다. 검증 대상과 a11y 기준은 줄이지 않는다.
 
 S4a 최신 본인확인/열람 디렉터리 20개 테스트가 통과했고, 종료 시각 제약에 맞춘 fixture를 포함한 주문/본인확인 11개 재실행도 통과했다. 개인정보·증명 lifetime 단위 테스트는 기존 보안 검증을 유지한 채 선택 목록에 맞게 갱신했다. MCP 전체 646개 runner 통과와 focused 정상 응답을 확인했으며 전체 결과 전달의 메모리 문제는 별도 검증 환경 한계로 남기고 최종 단계에서 묶음 재실행한다.
+
+S4b는 SupportOrderDiscovery와 OperationsSupportInvestigationDirectory, owner 공개 projection, StoreSupportOrderChangeWorkspace/SupportOrderActionWorkspace/OperationsSupportInvestigationPage 및 OpenAPI를 변경한다. 후보→상세→기존 명령, 교차 매장/actor cursor, 만료·회수·소비·재배정·승인안 변경, 불명 대상 잠금을 검증한다. 직접 ID 설명만 바꾸는 대안 대신 명시적 조회를 추가하며 부작용은 bounded 추가 DB 조회다. ADR-128에 경계와 실패 정책을 기록했다.
+
+S4a 전체 646개는 10개 순차 배치의 정상 MCP 응답으로 모두 통과하여 결과 전달 한계를 해소했다. PR #174를 발행했다. S4b 관련 PostgreSQL/API/구조 22개 테스트가 통과했다. 빈 후보 목록의 owner batch 사전조건, 만료 fixture의 시각 제약, runtime path reference 형식을 검증에서 보완했다. 정적 Docs 115개 entry/15개 상태 문서/47개 surface도 통과했다. 전체 MCP는 부모 매장 관리 story의 옛 ID 입력 기대를 새 목록으로 수정하고 후속 배치를 검증한다.
+
+S4b 전체 657개 정식 story의 interaction/a11y가 10개 순차 배치에서 정상 MCP 응답으로 모두 통과했다. 부모 매장 관리 story의 제거된 ID 입력 기대도 목록 상태로 갱신했다. 전체 frontend typecheck, unit 233개, presentation 10개, copy 11개, design, 제품 build/Sites 4개/Storybook build, docs/OpenAPI가 통과했다. 현행 API는 232 paths/265 operations다.

@@ -5706,6 +5706,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stores/{storeId}/support-order-change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 소속 매장의 현재 주문 변경 동의 대상을 공개 주문번호로 탐색 */
+        get: operations["listStoreSupportOrderChangeRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/action-requests/{requestId}/store-consents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 현재 실행 승인안에 유효한 매장 동의와 위임을 조회 */
+        get: operations["listSupportOrderConsents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/investigation-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 현재 승인안의 운영 검토 목록 조회 */
+        get: operations["listOperationsSupportInvestigations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6521,6 +6572,55 @@ export interface components {
             compensation: components["schemas"]["CompensationSummary"];
             paymentSetupIssue?: components["schemas"]["PaymentSetupIssue"];
             setupReprocessingCaseId?: components["schemas"]["Identifier"];
+        };
+        StoreOrderChangeCandidate: {
+            requestId: components["schemas"]["Identifier"];
+            orderReference: string;
+            action: components["schemas"]["SupportActionType"];
+            revisionNumber: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        StoreOrderChangeCandidatePage: {
+            items: components["schemas"]["StoreOrderChangeCandidate"][];
+            nextCursor: string | null;
+        };
+        SupportOrderConsentCandidate: {
+            authorizationId: components["schemas"]["Identifier"];
+            authorizationType: components["schemas"]["SupportOrderChangeAuthorizationType"];
+            /** Format: date-time */
+            authorizedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            remainingUses: number;
+        };
+        SupportOrderConsentPage: {
+            items: components["schemas"]["SupportOrderConsentCandidate"][];
+            nextCursor: string | null;
+        };
+        SupportInvestigationDisplay: {
+            requestId: components["schemas"]["Identifier"];
+            action: components["schemas"]["SupportActionType"];
+            caseCategory: components["schemas"]["SupportInquiryCategory"];
+            /** Format: date-time */
+            caseOpenedAt: string;
+            revisionNumber: number;
+        };
+        OperationsInvestigationCandidate: {
+            investigationId: components["schemas"]["Identifier"];
+            request: components["schemas"]["SupportInvestigationDisplay"];
+            state: components["schemas"]["OperationsSupportInvestigationState"];
+            /** Format: date-time */
+            openedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            canDecide: boolean;
+        };
+        OperationsInvestigationPage: {
+            items: components["schemas"]["OperationsInvestigationCandidate"][];
+            nextCursor: string | null;
         };
         OperationsOidcConfiguration: {
             /** Format: uri */
@@ -22134,6 +22234,101 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listStoreSupportOrderChangeRequests: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 소속 매장의 현재 주문 변경 동의 대상을 공개 주문번호로 탐색 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreOrderChangeCandidatePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportOrderConsents: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 실행 승인안에 유효한 매장 동의와 위임을 조회 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportOrderConsentPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listOperationsSupportInvestigations: {
+        parameters: {
+            query?: {
+                state?: components["schemas"]["OperationsSupportInvestigationState"];
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 승인안의 운영 검토 목록 조회 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsInvestigationPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };
