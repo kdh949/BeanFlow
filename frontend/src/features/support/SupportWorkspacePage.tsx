@@ -1,3 +1,4 @@
+import { useSupportCommand } from "./useSupportCommand";
 import { supportCaseTitle } from "./supportCaseLabels";
 import {
   FilePlus2,
@@ -14,7 +15,7 @@ import { SupportTimelinePanel } from "./SupportTimelinePanel";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { Button, ButtonLink, EmptyState, LoadingState, PageHeading, SelectField, TextField } from "../../design-system";
+import { Button, ButtonLink, EmptyState, InlineNotice, LoadingState, PageHeading, SelectField, TextField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
 import { shortDateTime } from "../../lib/format";
 
@@ -44,7 +45,6 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
   const [searchError, setSearchError] = useState<unknown>(null);
   const [caseCategory, setCaseCategory] = useState<components["schemas"]["SupportInquiryCategory"]>("ACCOUNT_RECOVERY");
   const [casePriority, setCasePriority] = useState<components["schemas"]["SupportCasePriority"]>("NORMAL");
-  const caseIntent = useRef(new SubmissionIntent());
   const linkIntent = useRef(new SubmissionIntent());
 
   const caseGeneration = useRef(0);
@@ -56,7 +56,12 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [caseLoading, setCaseLoading] = useState(false);
   const [caseError, setCaseError] = useState<unknown>(null);
-  const [creatingCase, setCreatingCase] = useState(false);
+  const caseCommand = useSupportCommand(() => undefined);
+  const creatingCase = caseCommand.busy;
+  const [dataBusy, setDataBusy] = useState(false);
+  const [compensationBusy, setCompensationBusy] = useState(false);
+  const [verificationBusy, setVerificationBusy] = useState(false);
+  const workLocked = dataBusy || compensationBusy || verificationBusy || caseCommand.busy || caseCommand.pending;
 
   const [verification, setVerification] = useState<VerificationSession | null>(null);
   const [securityGeneration, setSecurityGeneration] = useState(0);
@@ -64,6 +69,7 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
   function clearSensitiveState() { setVerification(null); setSecurityGeneration(value => value + 1); }
 
   async function searchSubjects() {
+    if (workLocked || searching) return;
     const body = {
       criterion: { type: criterionType, value: criterion.trim() },
       subjectTypes: [subjectType],
@@ -84,6 +90,7 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
   }
 
   async function openCase(caseId: string) {
+    if (dataBusy || compensationBusy || verificationBusy) return;
     const normalized = caseId.trim();
     if (!normalized) return;
     const generation = ++caseGeneration.current;
@@ -112,7 +119,8 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
     }
   }
 
-  async function createCaseFor(candidate: Candidate) {
+  function createCaseFor(candidate: Candidate) {
+    if (workLocked) return;
     const body = {
       requesterType: candidate.subjectType === "STORE" ? "STORE_OWNER" as const : candidate.subjectType,
       requesterReference: candidate.subjectId,
@@ -120,41 +128,36 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
       priority: casePriority,
       reason: "MASKED_EXACT_SEARCH_CASE_INTAKE",
     };
-    let createdCaseId: string | undefined;
-    setCreatingCase(true);
+    const linkBody = {
+      subjectType: candidate.subjectType === "RIDER" ? "DELIVERY" as const : candidate.subjectType,
+      subjectId: candidate.subjectId,
+      relationship: "REQUESTER" as const,
+      reason: "MASKED_SEARCH_CANDIDATE_SELECTED",
+    };
     setCaseError(null);
-    try {
-      const created = unwrap(await operationsApi.POST("/support/cases", {
-        params: { header: { "Idempotency-Key": caseIntent.current.keyFor(JSON.stringify(body)) } },
-        body,
-      }));
-      createdCaseId = created.caseId;
-      const linkBody = {
-        subjectType: candidate.subjectType === "RIDER" ? "DELIVERY" as const : candidate.subjectType,
-        subjectId: candidate.subjectId,
-        relationship: "REQUESTER" as const,
-        reason: "MASKED_SEARCH_CANDIDATE_SELECTED",
-      };
-      await operationsApi.POST("/support/cases/{caseId}/subject-links", {
-        params: {
-          path: { caseId: created.caseId },
-          header: { "Idempotency-Key": linkIntent.current.keyFor(JSON.stringify(linkBody)) },
-        },
-        body: linkBody,
-      }).then(unwrap);
-      caseIntent.current.complete();
-      linkIntent.current.complete();
-      await openCase(created.caseId);
-    } catch (error) {
-      if (createdCaseId) await openCase(createdCaseId);
-      setCaseError(error);
-    } finally {
-      setCreatingCase(false);
-    }
+    caseCommand.submit(JSON.stringify({ body, linkBody }), async key => {
+      let createdCaseId: string | undefined;
+      try {
+        const created = unwrap(await operationsApi.POST("/support/cases", {
+          params: { header: { "Idempotency-Key": key } }, body,
+        }));
+        createdCaseId = created.caseId;
+        await operationsApi.POST("/support/cases/{caseId}/subject-links", {
+          params: { path: { caseId: created.caseId }, header: { "Idempotency-Key": linkIntent.current.keyFor(JSON.stringify({ caseId: created.caseId, linkBody })) } },
+          body: linkBody,
+        }).then(unwrap);
+        await openCase(created.caseId);
+      } catch (error) {
+        if (createdCaseId) await openCase(createdCaseId);
+        throw error;
+      }
+    }, () => linkIntent.current.complete());
   }
 
   return (
     <div className="console-page support-workspace">
+      {caseCommand.failure ? <ErrorState error={caseCommand.failure} /> : null}
+      {caseCommand.pending ? <InlineNotice tone="warning" title="상담 접수 또는 대상 연결 결과를 확인하지 못했습니다" description="같은 대상과 접수 내용으로 결과를 확인해 주세요." action={<Button loading={creatingCase} onClick={() => void caseCommand.retry()}>같은 상담 접수 결과 확인</Button>} /> : null}
       <PageHeading title="고객지원 콘솔" action={<ButtonLink variant="secondary" to="/support/cases">상담 목록</ButtonLink>} />
       {supportCase ? <>
           <section className="surface-card support-case-header">
@@ -166,14 +169,14 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
       <section className="support-intake-grid">
         <form className="surface-card operation-form" onSubmit={(event) => { event.preventDefault(); void searchSubjects(); }}>
           <div className="operation-heading"><Search aria-hidden="true" /><div><strong>고객 정보 정확 검색</strong></div></div>
-          <SelectField label="검색 기준" id="support-criterion-type" value={criterionType} onValueChange={(value) => setCriterionType(value as "PHONE" | "EMAIL")}>
+          <SelectField disabled={workLocked} label="검색 기준" id="support-criterion-type" value={criterionType} onValueChange={(value) => setCriterionType(value as "PHONE" | "EMAIL")}>
             <option value="PHONE">등록 전화번호</option><option value="EMAIL">등록 이메일</option>
           </SelectField>
-          <SelectField label="대상 유형" id="support-subject-type" value={subjectType} onValueChange={(value) => setSubjectType(value as typeof subjectType)}>
+          <SelectField disabled={workLocked} label="대상 유형" id="support-subject-type" value={subjectType} onValueChange={(value) => setSubjectType(value as typeof subjectType)}>
             <option value="CUSTOMER">고객</option><option value="STORE">매장</option><option value="RIDER">외부 배달원</option>
           </SelectField>
-          <TextField label="전화번호 또는 이메일" id="support-criterion" type={criterionType === "EMAIL" ? "email" : "tel"} value={criterion} required autoComplete="off" onValueChange={setCriterion} />
-          <Button type="submit" loading={searching} disabled={!criterion.trim()}><Search size={17} /> 정확 검색</Button>
+          <TextField disabled={workLocked} label="전화번호 또는 이메일" id="support-criterion" type={criterionType === "EMAIL" ? "email" : "tel"} value={criterion} required autoComplete="off" onValueChange={setCriterion} />
+          <Button type="submit" loading={searching} disabled={workLocked || !criterion.trim()}><Search size={17} /> 정확 검색</Button>
           {searchError ? <ErrorState error={searchError} /> : null}
         </form>
 
@@ -195,9 +198,9 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
                 <article key={`${candidate.subjectType}-${candidate.subjectId}`}>
                   <div><StatusText state={candidate.subjectType} /><strong>{candidate.maskedDisplayName}</strong><span>{candidate.maskedMatchedValue}</span></div>
                   <div className="candidate-case-options">
-                    <SelectField label="문의 분류" value={caseCategory} onValueChange={(value) => setCaseCategory(value as typeof caseCategory)}>{Object.entries(caseCategoryLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>
-                    <SelectField label="우선순위" value={casePriority} onValueChange={(value) => setCasePriority(value as typeof casePriority)}>{Object.entries(casePriorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>
-                    <Button loading={creatingCase} onClick={() => void createCaseFor(candidate)}><FilePlus2 size={16} /> 새 상담 건에 연결</Button>
+                    <SelectField disabled={workLocked} label="문의 분류" value={caseCategory} onValueChange={(value) => setCaseCategory(value as typeof caseCategory)}>{Object.entries(caseCategoryLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>
+                    <SelectField disabled={workLocked} label="우선순위" value={casePriority} onValueChange={(value) => setCasePriority(value as typeof casePriority)}>{Object.entries(casePriorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>
+                    <Button loading={creatingCase} disabled={workLocked} onClick={() => createCaseFor(candidate)}><FilePlus2 size={16} /> 새 상담 건에 연결</Button>
                   </div>
                 </article>
               ))}
@@ -210,17 +213,19 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
       {supportCase ? (
         <>
           {caseError ? <ErrorState error={caseError} retry={() => void openCase(supportCase.caseId)} /> : null}
+          <fieldset className="catalog-fieldset management-workspace" disabled={caseCommand.busy || caseCommand.pending}><legend>현재 상담 처리</legend>
           <div className="support-control-grid">
             <div className="management-workspace">
-              <SupportVerificationPanel key={`${supportCase.caseId}:${securityGeneration}`} caseId={supportCase.caseId} links={supportCase.subjectLinks} disabled={terminal} onChange={setVerification} />
-              {!terminal ? <SupportDataAccessWorkspace key={verification?.sessionId ?? "unverified"} session={verification} /> : null}
+              <SupportVerificationPanel key={`${supportCase.caseId}:${securityGeneration}`} caseId={supportCase.caseId} links={supportCase.subjectLinks} disabled={terminal} locked={dataBusy || compensationBusy || caseCommand.busy || caseCommand.pending} onBusyChange={setVerificationBusy} onChange={setVerification} />
+              {!terminal ? <SupportDataAccessWorkspace key={`${supportCase.caseId}:${securityGeneration}`} session={verification} onBusyChange={setDataBusy} /> : null}
             </div>
 
             <SupportTimelinePanel timeline={timeline} />
             {timeline?.nextCursor ? <ButtonLink variant="secondary" to={`/support/follow-up?caseId=${encodeURIComponent(supportCase.caseId)}`}>이력 더 보기</ButtonLink> : null}
           </div>
 
-          <SupportCompensationWorkspace key={`${supportCase.caseId}:${securityGeneration}`} supportCase={supportCase} verification={verification} />
+          <SupportCompensationWorkspace key={`${supportCase.caseId}:${securityGeneration}`} supportCase={supportCase} verification={verification} onBusyChange={setCompensationBusy} />
+          </fieldset>
         </>
       ) : null}
     </div>

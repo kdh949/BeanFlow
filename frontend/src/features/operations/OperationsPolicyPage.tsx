@@ -50,7 +50,7 @@ export function OperationsPolicyPage() {
       <Tabs value={workspace} onValueChange={value => { if (!locked) setParams({ workspace: value }); }}>
         <TabList label="운영 정책 업무 선택">{workspaceItems.map(({ id, label, icon: Icon }) => <Tab key={id} value={id} disabled={locked}><Icon size={17} aria-hidden="true" /> {label}</Tab>)}</TabList>
         <TabPanel value="points"><PointPolicyWorkspace onBusyChange={setLocked} /><PointPolicyHistory /></TabPanel>
-        <TabPanel value="store-points"><StorePointPolicyDirectory /></TabPanel>
+        <TabPanel value="store-points"><StorePointPolicyDirectory onBusyChange={setLocked} /></TabPanel>
         <TabPanel value="restoration"><RestorationPolicyWorkspace /></TabPanel>
         <TabPanel value="cost-owners"><PlatformCostOwnerWorkspace onBusyChange={setLocked} /></TabPanel>
         <TabPanel value="brands"><BrandWorkspace /></TabPanel>

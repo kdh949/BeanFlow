@@ -16,7 +16,7 @@ type Reason = components["schemas"]["DataAccessReasonCode"];
 type Reveal = components["schemas"]["RevealedPersonalDataResource"];
 const grantLabels: Record<components["schemas"]["DataAccessGrantState"], string> = { REQUESTED: "요청됨", APPROVAL_PENDING: "별도 승인 대기", ACTIVE: "열람 가능", DENIED: "열람 거부", CONSUMED: "열람 횟수 소진", EXPIRED: "기한 만료", REVOKED: "열람 철회" };
 /** Field-scoped requests and a shareable, raw-data-free grant inspection entry. */
-export function SupportDataAccessWorkspace({ session, initialGrantId }: { session?: Session | null; initialGrantId?: string }) {
+export function SupportDataAccessWorkspace({ session, initialGrantId, onBusyChange }: { session?: Session | null; initialGrantId?: string; /** Keeps the parent case and verification selection fixed during requests and raw reveals. */ onBusyChange?: (busy: boolean) => void }) {
   const [fields, setFields] = useState<Field[]>([]);
   const [reason, setReason] = useState<Reason>("CASE_HANDLING");
   const [grantId, setGrantId] = useState(initialGrantId ?? "");
@@ -24,6 +24,13 @@ export function SupportDataAccessWorkspace({ session, initialGrantId }: { sessio
   const command = useSupportCommand(() => {});
   const [inspectionLocked, setInspectionLocked] = useState(false);
   const locked = command.busy || command.pending || inspectionLocked;
+  useEffect(() => { onBusyChange?.(locked); return () => onBusyChange?.(false); }, [locked, onBusyChange]);
+  const previousSession = useRef(session?.sessionId);
+  useEffect(() => {
+    if (locked || previousSession.current === session?.sessionId) return;
+    previousSession.current = session?.sessionId;
+    setFields([]); setGrantId(initialGrantId ?? ""); setOpened(value => value + 1);
+  }, [session?.sessionId, locked, initialGrantId]);
   const sessionValid = session?.state === "VERIFIED" && session.actionScope === "PERSONAL_DATA_REVEAL" && Date.parse(session.expiresAt) > Date.now();
   const available = session ? personalFieldsBySubject[session.subjectType] : [];
   function requestGrant() {

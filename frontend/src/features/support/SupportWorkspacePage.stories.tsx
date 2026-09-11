@@ -164,3 +164,47 @@ export const FindExistingCase: Story = { play: async ({ canvas }) => {
   await expect(canvas.getByRole("link", { name: "상담 목록에서 선택" })).toHaveAttribute("href", "/support/cases");
   await expect(canvas.queryByLabelText("기존 상담 건 ID")).not.toBeInTheDocument();
 } };
+
+export const PendingDataAccessKeepsCase: Story = {
+  parameters: { routing: { surface: "support", path: "/support", initialEntry: `/support?caseId=${caseId}` }, msw: { handlers: caseHandlers } },
+  play: async ({ canvas, msw }) => {
+    const grantId = "a6000000-0000-4000-8000-000000000001";
+    msw.use(
+      http.get("/api/v1/support/work-items", () => HttpResponse.json({ items: [{ requestId: grantId, caseId, kind: "DATA_ACCESS", caseCategory: "ACCOUNT_RECOVERY", caseOpenedAt: activeCase.openedAt, purpose: "CONTACT_CONFIRMATION", state: "APPROVAL_PENDING", createdAt: "2026-08-23T09:05:00Z", expiresAt: null }], nextCursor: null })),
+      http.get("/api/v1/support/data-access-grants/:grantId", () => HttpResponse.json({ grant: { grantId, caseId, subjectLinkId: linkId, subjectType: "CUSTOMER", subjectId: customerId, purpose: "CONTACT_CONFIRMATION", fields: ["CUSTOMER_PRIMARY_PHONE"], risk: "SENSITIVE", state: "APPROVAL_PENDING", maxReveals: 1, reservedReveals: 0, requestedAt: "2026-08-23T09:05:00Z", expiresAt: null, version: 1 }, viewerRole: "APPROVER" })),
+      http.post("/api/v1/support/data-access-grants/:grantId/approvals", () => HttpResponse.error()),
+    );
+    await openCase(canvas);
+    await userEvent.click(canvas.getByRole("button", { name: "기존 열람 승인 요청 찾기" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "이 요청 열기" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "열람 승인" }));
+    await canvas.findByRole("button", { name: "같은 열람 판정 확인" });
+    await expect(canvas.getByLabelText("본인확인 대상")).toBeDisabled();
+    await expect(canvas.getByLabelText("전화번호 또는 이메일")).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "기존 열람 승인 요청 찾기" })).toBeDisabled();
+  },
+};
+
+export const LostCaseIntakeKeepsCandidate: Story = {
+  parameters: MaskedExactSearch.parameters,
+  play: async ({ canvas, msw }) => {
+    const attempts: { key: string | null; body: unknown }[] = [];
+    msw.use(...caseHandlers,
+      http.post("/api/v1/support/cases", async ({ request }) => {
+        attempts.push({ key: request.headers.get("Idempotency-Key"), body: await request.json() });
+        if (attempts.length === 1) return HttpResponse.error();
+        expect(attempts.at(-1)).toEqual(attempts[0]);
+        return HttpResponse.json(activeCase, { status: 201 });
+      }),
+      http.post("/api/v1/support/cases/:caseId/subject-links", () => HttpResponse.json(activeCase.subjectLinks[0], { status: 201 })),
+    );
+    await userEvent.type(canvas.getByLabelText("전화번호 또는 이메일"), "01000000000");
+    await userEvent.click(canvas.getByRole("button", { name: "정확 검색" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "새 상담 건에 연결" }));
+    await canvas.findByRole("button", { name: "같은 상담 접수 결과 확인" });
+    await expect(canvas.getByLabelText("문의 분류")).toBeDisabled();
+    await expect(canvas.getByLabelText("전화번호 또는 이메일")).toBeDisabled();
+    await userEvent.click(canvas.getByRole("button", { name: "같은 상담 접수 결과 확인" }));
+    await expect(await canvas.findByText("계정 복구 상담")).toBeVisible();
+  },
+};
