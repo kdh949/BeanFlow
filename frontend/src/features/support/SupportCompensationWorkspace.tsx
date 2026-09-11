@@ -69,14 +69,19 @@ function CreateCompensation({ supportCase, verification, initialIncidentId, onCr
   const active = !["RESOLVED", "CLOSED"].includes(supportCase.state);
   const currentVersion = order.state.status === "ready" ? (orderId ? order.state.value?.version : 0) : undefined;
   const storeCost = responsibility === "STORE" || responsibility === "SHARED";
-  const platformShare = responsibility === "SHARED" ? percentBps(share) : responsibility === "STORE" ? 0 : 10000;
+  const sharedBps = percentBps(share);
+  const shares = responsibility === "UNDETERMINED" ? [0, 0] as const
+    : responsibility === "PLATFORM" ? [10000, 0] as const
+    : responsibility === "STORE" ? [0, 10000] as const
+    : sharedBps === null ? null : [sharedBps, 10000 - sharedBps] as const;
+  const platformShare = shares?.[0] ?? null;
   const amountKrw = benefit === "COUPON" ? template?.amountKrw : /^\d+$/.test(amount) ? Number(amount) : undefined;
   const valid = uuid(incidentId) && currentVersion !== undefined && amountKrw !== undefined && Number.isSafeInteger(amountKrw) && amountKrw > 0 && platformShare !== null && (!storeCost || !!costEvidence.trim()) && (benefit !== "COUPON" || (!!template && !!orderId));
   async function evaluate() {
     if (!verified || !verification || !active || !valid || busy || amountKrw === undefined || currentVersion === undefined || platformShare === null) return;
     const generation = ++sequence.current; setPreparing(true); setError(null); setEvaluation(null);
     try {
-      const body: Payload = { incidentId: incidentId.trim(), orderId: orderId || null, expectedTargetVersion: currentVersion, benefitType: benefit, amountKrw, couponTemplateId: benefit === "COUPON" ? template!.templateId : null, responsibility, evidenceBasis: storeCost ? basis : null, costEvidenceDigest: storeCost ? await supportDigest(costEvidence.trim()) : null, platformShareBps: platformShare, storeShareBps: 10000 - platformShare, verificationSessionId: verification.sessionId };
+      const body: Payload = { incidentId: incidentId.trim(), orderId: orderId || null, expectedTargetVersion: currentVersion, benefitType: benefit, amountKrw, couponTemplateId: benefit === "COUPON" ? template!.templateId : null, responsibility, evidenceBasis: storeCost ? basis : null, costEvidenceDigest: storeCost ? await supportDigest(costEvidence.trim()) : null, platformShareBps: platformShare, storeShareBps: shares![1], verificationSessionId: verification.sessionId };
       const result = unwrap(await operationsApi.POST("/support/cases/{caseId}/compensation-evaluations", { params: { path: { caseId: supportCase.caseId } }, body }));
       if (generation === sequence.current) setEvaluation({ result, body });
     } catch (failure) { if (generation === sequence.current) setError(failure); } finally { setPreparing(false); }

@@ -166,10 +166,22 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - Passed: PostgreSQL 상담 승인·매장 주문 변경 16개, Runtime OpenAPI parity 1개,
   frontend unit 241개, presentation boundary 10개, product copy 11개, 전체 Storybook 505개,
   typecheck, check:design, build-storybook, build, test:sites 4개, verify-docs.
-- Storybook Docs는 로컬 브라우저 실행 권한 오류 후 재실행 중이다.
+- Storybook Docs는 로컬 브라우저 실행 권한 오류 후 재실행해 93 entries/47 state surfaces가 통과했다.
 - #160 및 #162 원격 CI 통과 후 해당 리뷰 9개를 답변·해결했다. #161의 CI Storybook 일시 실패는
   동일 코드의 후속 브랜치와 로컬 전체 Storybook 통과를 확인하고 실패 작업을 재실행했다.
 - #164 원격 CI와 리뷰 해결은 대기 중이다.
+
+### #165 로컬 검증
+
+- 승인 요청 재배정 시 아직 PLANNED인 Resolution 실행자를 같은 Request→Case→Resolution 잠금 순서로 변경한다.
+  원 계획 작성자와 승인안은 보존하며 시작한 해결 건은 도메인에서 재배정을 거부한다.
+- 비용 책임 미확정은 플랫폼·매장 0/0으로 평가하며 임의 비용 귀속을 하지 않는다.
+- Passed: PostgreSQL Resolution 14개, 프로필 변경 13개, Resolution 도메인 10개, Runtime parity 1개,
+  frontend unit 243개, boundary 10개, copy 11개, 영향 Storybook 40개, Docs 98 entries/47 state surfaces,
+  typecheck, check:design, build-storybook, build, test:sites 4개, verify-docs, Spotless.
+- 재배정 회귀 테스트의 최초 배정 이력 누락을 보완한 후 다시 통과했다.
+- #161 CI 재실행과 #163 CI가 통과해 #160–#163 리뷰 총 16개를 답변·해결했다.
+- #165 원격 CI와 리뷰 해결은 대기 중이다.
 
 ## Surprises & Discoveries
 
