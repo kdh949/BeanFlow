@@ -5757,6 +5757,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/cases/{caseId}/compensation-incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 검증된 고객과 주문의 기존 보상 사고 선택 */
+        get: operations["listSupportCompensationIncidents"];
+        put?: never;
+        /** 고객과 주문에 묶인 별개 사고를 멱등 등록 */
+        post: operations["registerSupportCompensationIncident"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6621,6 +6639,28 @@ export interface components {
         OperationsInvestigationPage: {
             items: components["schemas"]["OperationsInvestigationCandidate"][];
             nextCursor: string | null;
+        };
+        SupportCompensationIncidentResource: {
+            incidentId: components["schemas"]["Identifier"];
+            category: components["schemas"]["SupportInquiryCategory"];
+            /** Format: date-time */
+            occurredAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** @enum {string} */
+            source: "REGISTERED" | "EXISTING_COMPENSATION";
+            benefitIssued: boolean;
+        };
+        SupportCompensationIncidentPage: {
+            items: components["schemas"]["SupportCompensationIncidentResource"][];
+            nextCursor: string | null;
+        };
+        RegisterSupportCompensationIncidentRequest: {
+            verificationSessionId: components["schemas"]["Identifier"];
+            /** Format: uuid */
+            orderId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
         };
         OperationsOidcConfiguration: {
             /** Format: uri */
@@ -22322,6 +22362,81 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperationsInvestigationPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportCompensationIncidents: {
+        parameters: {
+            query: {
+                /** @description 재검토 링크에서 받은 기존 사고만 확인 */
+                incidentId?: components["schemas"]["Identifier"];
+                verificationSessionId: components["schemas"]["Identifier"];
+                orderId?: components["schemas"]["Identifier"];
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 권한으로 확인한 보상 사고 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCompensationIncidentPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    registerSupportCompensationIncident: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
+                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterSupportCompensationIncidentRequest"];
+            };
+        };
+        responses: {
+            /** @description 현재 권한으로 확인한 보상 사고 */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportCompensationIncidentResource"];
                 };
             };
             400: components["responses"]["BadRequest"];

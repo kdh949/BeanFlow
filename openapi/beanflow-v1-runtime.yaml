@@ -1161,6 +1161,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1store-consents"
   /operations/investigation-queue:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1investigation-queue"
+  /support/cases/{caseId}/compensation-incidents:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1compensation-incidents"
 components:
   securitySchemes:
     bearerAuth:
@@ -1462,3 +1464,9 @@ components:
       $ref: ./beanflow-v1.yaml#/components/schemas/OperationsInvestigationCandidate
     OperationsInvestigationPage:
       $ref: ./beanflow-v1.yaml#/components/schemas/OperationsInvestigationPage
+    SupportCompensationIncidentResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportCompensationIncidentResource"
+    SupportCompensationIncidentPage:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportCompensationIncidentPage"
+    RegisterSupportCompensationIncidentRequest:
+      $ref: "./beanflow-v1.yaml#/components/schemas/RegisterSupportCompensationIncidentRequest"

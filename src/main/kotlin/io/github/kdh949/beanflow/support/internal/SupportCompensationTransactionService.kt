@@ -266,6 +266,7 @@ internal class SupportCompensationTransactionService(
     private val limitLocks: SupportCompensationLimitLockJpaRepository,
     private val consumptions: SupportCompensationLimitConsumptionJpaRepository,
     private val terminals: SupportCompensationTerminalBenefitJpaRepository,
+    private val incidents: SupportCompensationIncidentRegistry,
     private val idempotencies: SupportCompensationCommandIdempotencyJpaRepository,
     private val cases: SupportCaseJpaRepository,
     private val subjectLinks: SupportCaseSubjectLinkJpaRepository,
@@ -732,6 +733,7 @@ internal class SupportCompensationTransactionService(
         } else if (order != null || command.expectedTargetVersion != 0L) {
             invalid("Orderless compensation target version must be zero")
         }
+        incidents.requireBinding(command.incidentId, session.subjectId, command.orderId)
         if (command.benefitType == SupportCompensationBenefitType.COUPON) {
             val templateId = command.couponTemplateId ?: invalid("Coupon template is required")
             val template = coupons.findTemplate(templateId) ?: notFound("CouponTemplate")

@@ -9831,6 +9831,98 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /support/cases/{caseId}/compensation-incidents:
+    get:
+      tags:
+      - Support
+      operationId: listSupportCompensationIncidents
+      summary: 검증된 고객과 주문의 기존 보상 사고 선택
+      parameters:
+      - name: incidentId
+        in: query
+        description: 재검토 링크에서 받은 기존 사고만 확인
+        schema:
+          $ref: "#/components/schemas/Identifier"
+      - $ref: '#/components/parameters/SupportCaseId'
+      - name: verificationSessionId
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/Identifier'
+      - name: orderId
+        in: query
+        schema:
+          $ref: '#/components/schemas/Identifier'
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          maxLength: 2048
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 현재 권한으로 확인한 보상 사고
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCompensationIncidentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    post:
+      tags:
+      - Support
+      operationId: registerSupportCompensationIncident
+      summary: 고객과 주문에 묶인 별개 사고를 멱등 등록
+      parameters:
+      - $ref: '#/components/parameters/SupportCaseId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterSupportCompensationIncidentRequest'
+      responses:
+        '201':
+          description: 현재 권한으로 확인한 보상 사고
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCompensationIncidentResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 components:
   securitySchemes:
     bearerAuth:
@@ -21775,3 +21867,64 @@ components:
           - string
           - 'null'
           maxLength: 2048
+    SupportCompensationIncidentResource:
+      type: object
+      required:
+      - incidentId
+      - category
+      - occurredAt
+      - createdAt
+      - source
+      - benefitIssued
+      properties:
+        incidentId:
+          $ref: '#/components/schemas/Identifier'
+        category:
+          $ref: '#/components/schemas/SupportInquiryCategory'
+        occurredAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+          enum:
+          - REGISTERED
+          - EXISTING_COMPENSATION
+        benefitIssued:
+          type: boolean
+    SupportCompensationIncidentPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportCompensationIncidentResource'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+    RegisterSupportCompensationIncidentRequest:
+      type: object
+      required:
+      - verificationSessionId
+      - orderId
+      - occurredAt
+      properties:
+        verificationSessionId:
+          $ref: '#/components/schemas/Identifier'
+        orderId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        occurredAt:
+          type: string
+          format: date-time

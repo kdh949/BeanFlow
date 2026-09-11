@@ -40,7 +40,7 @@ S1은 `feature/operations-target-selection`의 #171이며 S2는 그 head를 잇�
 3. 현재 담당자 선택, 상담 대상 검색/연결, ID 중심 선택 항목의 의미 있는 표시.
 4. 기존 본인확인/열람/주문 변경/보상/정정/긴급 요청 목록 및 별도 승인 재개.
 5. 점주 요청 목록과 동의 목록을 상담 요청에 연결하고 수동 ID 전달 제거.
-6. 신규/기존 사고 선택과 기존 duplicate-benefit 경계, 비용 주체 및 불투명 참조 선택의 출처 명시.
+6. 신규/기존 사고 선택과 기존 duplicate-benefit 경계, 비용 주체 선택 및 외부 업무 코드의 출처 명시.
 7. 관련 계약·권한·감사·테스트·Storybook·수직 커밋과 PR.
 
 ### Non-goals
@@ -93,7 +93,7 @@ owner source 및 ADR과 함께 확정한다. Target/runtime OpenAPI와 생성 Ty
 - S2 주문·복구 선택: 공개 주문번호 조회, 복구 제안 목록/검토와 기존 실행 연결.
 - S3 상담 대상·담당자: 현재 담당자 디렉터리/적격 선택, 대상 검색/표시/연결.
 - S4 요청 재개·점주 동의: Case별 요청, 승인 대기와 store-scoped 요청/동의 목록.
-- S5 사고·비용 참조: 실제 사고 선택/등록과 명명된 비용·등록 참조 선택.
+- S5 사고·비용 참조: 실제 사고 선택/등록, 명명된 비용 주체 선택과 외부 코드 입력 안내.
 - S6 전체 재감사, 관련 테스트·빌드·문서, PR별 최신 head CI 및 미해결 항목 0 확인.
 
 각 milestone은 업무별 수직 커밋을 만들고, 의존하는 다음 PR은 검증된 직전 head를 base로 한다.
@@ -191,3 +191,29 @@ S4b는 SupportOrderDiscovery와 OperationsSupportInvestigationDirectory, owner �
 S4a 전체 646개는 10개 순차 배치의 정상 MCP 응답으로 모두 통과하여 결과 전달 한계를 해소했다. PR #174를 발행했다. S4b 관련 PostgreSQL/API/구조 22개 테스트가 통과했다. 빈 후보 목록의 owner batch 사전조건, 만료 fixture의 시각 제약, runtime path reference 형식을 검증에서 보완했다. 정적 Docs 115개 entry/15개 상태 문서/47개 surface도 통과했다. 전체 MCP는 부모 매장 관리 story의 옛 ID 입력 기대를 새 목록으로 수정하고 후속 배치를 검증한다.
 
 S4b 전체 657개 정식 story의 interaction/a11y가 10개 순차 배치에서 정상 MCP 응답으로 모두 통과했다. 부모 매장 관리 story의 제거된 ID 입력 기대도 목록 상태로 갱신했다. 전체 frontend typecheck, unit 233개, presentation 10개, copy 11개, design, 제품 build/Sites 4개/Storybook build, docs/OpenAPI가 통과했다. 현행 API는 232 paths/265 operations다.
+
+S4b e66c87d를 #175로 발행했다. S5a는 SupportCompensationIncidentDirectory/Registry,
+V85, 기존 보상 평가 binding, SupportCompensationIncidentPicker/Workspace와 계약을 변경한다.
+Controller→Application Service→Support 소유 등록/조회 모델, 현재 권한·Case/session lock과
+기존 advisory idempotency lock을 사용한다. 외부 호출이나 금융 쓰기는 추가하지 않는다.
+새 UUID만 매번 생성하는 대안은 같은 사고 재검토를 잃으므로 기존 사고 목록과 영속 등록을 선택한다.
+일반 field/button/checkbox/state는 REUSE, 사고 선택·등록은 COMPOSE, 기존 보상 화면은 EXTEND다.
+관련 route는 /support/follow-up이다. 입력·불명 명령 동안 주문/본인확인/사고 선택을 잠근다.
+테스트는 등록 replay/다른 payload/감사 rollback/권한·검증·연결 철회/교차 cursor/기지급 사고와
+기존 한도·승인, UI 등록→평가/기존 선택/empty/loading/error/unknown/키보드/a11y를 다룬다.
+2026-09-11 열린 PR inventory에 새 독립 migration writer가 없고 현재 직렬 head는 V84다.
+
+S5의 외부 정산·배달업체 참조는 ADR-087의 불투명 업무 코드로 DB ID와 다르다. 초기 계획의
+일반 등록 참조 catalog를 구현하면 승인 전 원문을 저장하지 않는 경계와 provider credential
+storage 비범위에 충돌한다. 따라서 해당 코드는 입력 출처·형식·금지 원문을 명시하고 기존 R3
+해시/재입력/승인·owner 암호화 정책을 유지한다. 이 세 항목을 DB ID 누락으로 집계하지 않는다.
+
+S5a는 사고 등록·기존 사고 선택 및 등록된 사고의 고객/주문 재검증을 구현했다. V85는 불변 사고와
+멱등 등록 identity 및 새 Audit action 분류를 추가한다. 초기 검증에서 누락된 감사 action FK 등록을
+발견해 같은 미게시 migration에 보완했으며 최종 실제 PostgreSQL 보상 22개, runtime parity 1개,
+Modulith 1개가 통과했다. 동시 동일 등록의 같은 응답·사고/Audit 1개, 다른 payload 충돌, legacy
+사고 유지, 기지급 사고의 추가 지급 거부, 교차 주문·커서 및 철회, 감사 실패 전체 rollback을 검증했다.
+frontend typecheck, unit 233개, presentation 10개, copy 11개, design, 제품/Sites 4개/Storybook build,
+정식 MCP 전체 664개, 정적 Docs 116개 entry/15개 상태 문서/47개 surface가 통과했다.
+PR #174 최신 head CI가 전부 통과했다. #175 CI는 진행 중이다. main은 a6199c6/V81로 변동 없음을
+원격과 로컬에서 재확인했다. S5b 비용 주체 선택 및 S6 최종 감사가 남아 있다.

@@ -1,3 +1,4 @@
+import { SupportCompensationIncidentPicker, type CompensationIncident } from "./SupportCompensationIncidentPicker";
 import { SupportWorkPicker } from "./SupportWorkPicker";
 import { supportSubjectLabel } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
@@ -27,7 +28,6 @@ const bandLabels: Record<string, string> = { LOW: "소액", MEDIUM: "중간 금�
 const reasonLabels: Record<Evaluation["reasonCodes"][number], string> = { RELATED_ORDER_MISSING: "관련 주문이 필요합니다", AMOUNT_ABOVE_LOW_LIMIT: "소액 보상 한도를 초과합니다", AMOUNT_ABOVE_HIGH_LIMIT: "고액 보상 검토가 필요합니다", AMOUNT_ABOVE_SUPPORTED_LIMIT: "지원되는 보상 한도를 초과합니다", ORDER_RATIO_ABOVE_LOW_LIMIT: "주문 금액 대비 보상 비율 검토가 필요합니다", REPEATED_CUSTOMER_COMPENSATION: "반복 보상 검토가 필요합니다", STORE_COST_RESPONSIBILITY: "매장 비용 부담의 운영 검토가 필요합니다", COST_RESPONSIBILITY_UNDETERMINED: "비용 책임을 먼저 확정해 주세요", DUPLICATE_TERMINAL_INCIDENT: "이미 보상한 사고입니다", INSUFFICIENT_VERIFICATION: "추가 본인확인이 필요합니다", STALE_TARGET_VERSION: "주문 정보가 변경되었습니다" };
 const compensationStates: Record<Workflow["request"]["state"], string> = { AWAITING_APPROVAL: "승인 대기", READY_FOR_EXECUTION: "지급 준비", BENEFIT_ISSUED: "혜택 지급", NOTIFICATION_RETRY: "알림 접수 재시도 필요", NOTIFICATION_ACCEPTED: "알림 접수 완료", NOTIFICATION_SKIPPED: "수신 설정에 따라 알림 생략" };
 const approvalStates: Record<string, string> = { AWAITING_SUPPORT_MANAGER: "상담 관리자 승인 대기", AWAITING_OPERATIONS: "운영 검토 대기", READY_FOR_EXECUTION: "실행 준비", REASSIGNMENT_REQUIRED: "실행 담당자 재배정 필요", REVISION_REQUIRED: "보상 조건 수정 필요", DENIED: "반려", EXPIRED: "만료", STALE: "요청 조건 변경", MANUAL_REVIEW: "수동 확인 필요", EXECUTED: "실행 완료" };
-const uuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
 function percentBps(value: string): number | null {
   if (!/^\d{1,2}(\.\d{1,2})?$/.test(value)) return null;
   const [whole, fraction = ""] = value.split(".");
@@ -53,7 +53,10 @@ function CommandResult({ command }: { command: ReturnType<typeof useSupportComma
 
 function CreateCompensation({ supportCase, verification, initialIncidentId, onCreated, onBusyChange }: { supportCase: Case; verification?: Verification | null; initialIncidentId?: string; onCreated: (id: string) => void; onBusyChange: (busy: boolean) => void }) {
   const orders = supportCase.subjectLinks.filter(link => link.subjectType === "ORDER" && link.relationship === "RELATED_ORDER");
-  const [orderId, setOrderId] = useState(orders[0]?.subjectId ?? ""), [incidentId, setIncidentId] = useState(initialIncidentId ?? "");
+  const [orderId, setOrderId] = useState(orders[0]?.subjectId ?? ""), [incident, setIncident] = useState<{ value: CompensationIncident; binding: string } | null>(null), [incidentBusy, setIncidentBusy] = useState(false);
+  const incidentBinding = `${supportCase.caseId}|${verification?.sessionId}|${orderId}`;
+  const selectedIncident = incident?.binding === incidentBinding ? incident.value : null;
+  const incidentId = selectedIncident?.incidentId;
   const [benefit, setBenefit] = useState<Payload["benefitType"]>("POINT"), [amount, setAmount] = useState("");
   const [responsibility, setResponsibility] = useState<Payload["responsibility"]>("UNDETERMINED"), [share, setShare] = useState("");
   const [basis, setBasis] = useState<NonNullable<Payload["evidenceBasis"]>>("STORE_CONSENT"), [costEvidence, setCostEvidence] = useState(""), [evidence, setEvidence] = useState("");
@@ -62,7 +65,7 @@ function CreateCompensation({ supportCase, verification, initialIncidentId, onCr
   const sequence = useRef(0);
   const order = useResource(useCallback(async () => orderId ? unwrap(await operationsApi.GET("/support/cases/{caseId}/orders/{orderId}", { params: { path: { caseId: supportCase.caseId, orderId } } })) : null, [supportCase.caseId, orderId]));
   const command = useSupportCommand(() => { setEvaluation(null); order.reload(); });
-  const busy = preparing || command.busy || command.pending;
+  const busy = preparing || command.busy || command.pending || incidentBusy;
   useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
   useEffect(() => { sequence.current++; setEvaluation(null); }, [orderId, incidentId, benefit, amount, responsibility, share, basis, costEvidence, evidence, template, verification?.sessionId, verification?.state]);
   const expired = useExpired(verification?.expiresAt), evaluationExpired = useExpired(evaluation?.result.expiresAt);
@@ -72,9 +75,9 @@ function CreateCompensation({ supportCase, verification, initialIncidentId, onCr
   const storeCost = responsibility === "STORE" || responsibility === "SHARED";
   const platformShare = responsibility === "SHARED" ? percentBps(share) : responsibility === "STORE" ? 0 : 10000;
   const amountKrw = benefit === "COUPON" ? template?.amountKrw : /^\d+$/.test(amount) ? Number(amount) : undefined;
-  const valid = uuid(incidentId) && currentVersion !== undefined && amountKrw !== undefined && Number.isSafeInteger(amountKrw) && amountKrw > 0 && platformShare !== null && (!storeCost || !!costEvidence.trim()) && (benefit !== "COUPON" || (!!template && !!orderId));
+  const valid = !!incidentId && !selectedIncident?.benefitIssued && currentVersion !== undefined && amountKrw !== undefined && Number.isSafeInteger(amountKrw) && amountKrw > 0 && platformShare !== null && (!storeCost || !!costEvidence.trim()) && (benefit !== "COUPON" || (!!template && !!orderId));
   async function evaluate() {
-    if (!verified || !verification || !active || !valid || busy || amountKrw === undefined || currentVersion === undefined || platformShare === null) return;
+    if (!verified || !verification || !active || !valid || busy || !incidentId || amountKrw === undefined || currentVersion === undefined || platformShare === null) return;
     const generation = ++sequence.current; setPreparing(true); setError(null); setEvaluation(null);
     try {
       const body: Payload = { incidentId: incidentId.trim(), orderId: orderId || null, expectedTargetVersion: currentVersion, benefitType: benefit, amountKrw, couponTemplateId: benefit === "COUPON" ? template!.templateId : null, responsibility, evidenceBasis: storeCost ? basis : null, costEvidenceDigest: storeCost ? await supportDigest(costEvidence.trim()) : null, platformShareBps: platformShare, storeShareBps: 10000 - platformShare, verificationSessionId: verification.sessionId };
@@ -93,8 +96,8 @@ function CreateCompensation({ supportCase, verification, initialIncidentId, onCr
   return <div className="surface-card management-card management-workspace">
     <h3>새 보상 요청</h3>
     {!active ? <InlineNotice tone="info" title="종결된 상담에서는 새 보상을 요청할 수 없습니다" description="필요하면 새 상담을 접수해 주세요." /> : !verified ? <InlineNotice tone="info" title="고객 본인확인이 필요합니다" description="상담 해결·업무 처리 목적의 고객 본인확인을 완료하거나 기존 세션을 조회해 주세요." /> : null}
-    <TextField label="사고 ID" value={incidentId} onValueChange={setIncidentId} disabled={busy} required description="같은 사고를 다시 검토할 때도 기존 사고 ID를 사용합니다." />
     <SelectField label="보상 관련 주문" value={orderId} onValueChange={setOrderId} disabled={busy}><option value="">관련 주문 없음</option>{orders.map(link => <option key={link.subjectId} value={link.subjectId}>{supportSubjectLabel(link)}</option>)}</SelectField>
+    {((verified && active) || incidentBusy) && verification ? <SupportCompensationIncidentPicker key={incidentBinding} caseId={supportCase.caseId} sessionId={verification.sessionId} orderId={orderId || undefined} initialIncidentId={initialIncidentId} selected={selectedIncident} disabled={preparing || command.busy || command.pending} onBusyChange={setIncidentBusy} onSelect={value => { setIncident({ value, binding: incidentBinding }); setEvaluation(null); }} /> : null}
     {order.state.status === "loading" ? <LoadingState label="현재 주문 조건을 읽는 중" /> : order.state.status === "failed" ? <ErrorState error={order.state.error} retry={order.reload} /> : order.state.value ? <p>현재 주문 <StatusText state={order.state.value.state} /></p> : null}
     <SelectField label="보상 혜택" value={benefit} onValueChange={value => setBenefit(value as typeof benefit)} disabled={busy}><option value="POINT">포인트</option><option value="COUPON">쿠폰</option></SelectField>
     {benefit === "POINT" ? <TextField label="보상 금액" type="number" min="1" step="1" value={amount} onValueChange={setAmount} disabled={busy} description="정수 원 단위로 입력합니다." /> : <CouponPicker disabled={busy} selected={template} onSelect={setTemplate} />}
