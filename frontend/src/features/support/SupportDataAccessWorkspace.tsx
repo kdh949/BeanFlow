@@ -1,3 +1,4 @@
+import { SupportWorkPicker } from "./SupportWorkPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import type { components } from "../../api/schema";
@@ -18,27 +19,28 @@ const grantLabels: Record<components["schemas"]["DataAccessGrantState"], string>
 export function SupportDataAccessWorkspace({ session, initialGrantId }: { session?: Session | null; initialGrantId?: string }) {
   const [fields, setFields] = useState<Field[]>([]);
   const [reason, setReason] = useState<Reason>("CASE_HANDLING");
-  const [lookup, setLookup] = useState(initialGrantId ?? "");
   const [grantId, setGrantId] = useState(initialGrantId ?? "");
   const [opened, setOpened] = useState(0);
   const command = useSupportCommand(() => {});
+  const [inspectionLocked, setInspectionLocked] = useState(false);
+  const locked = command.busy || command.pending || inspectionLocked;
   const sessionValid = session?.state === "VERIFIED" && session.actionScope === "PERSONAL_DATA_REVEAL" && Date.parse(session.expiresAt) > Date.now();
   const available = session ? personalFieldsBySubject[session.subjectType] : [];
   function requestGrant() {
-    if (!session || !sessionValid || !fields.length || command.busy || command.pending) return;
+    if (!session || !sessionValid || !fields.length || locked) return;
     const body = { verificationSessionId: session.sessionId, purpose: session.purpose, fields, reasonCode: reason };
     const caseId = session.caseId;
-    command.submit(JSON.stringify({ caseId, body }), async key => { const grant = unwrap(await operationsApi.POST("/support/cases/{caseId}/data-access-grants", { params: { path: { caseId }, header: { "Idempotency-Key": key } }, body })); setGrantId(grant.grantId); setLookup(grant.grantId); setOpened(n => n + 1); }, () => {});
+    command.submit(JSON.stringify({ caseId, body }), async key => { const grant = unwrap(await operationsApi.POST("/support/cases/{caseId}/data-access-grants", { params: { path: { caseId }, header: { "Idempotency-Key": key } }, body })); setGrantId(grant.grantId); setOpened(n => n + 1); }, () => {});
   }
   return <section className="management-workspace"><h2>제한형 개인정보 열람</h2>
-    {sessionValid && session ? <form className="surface-card management-card" onSubmit={event => { event.preventDefault(); requestGrant(); }}><fieldset className="catalog-fieldset" disabled={command.busy || command.pending}><legend>필요한 정보만 선택</legend><p>{verificationPurposeLabels[session.purpose]} · 기본 정보는 10분/3회, 민감 정보는 별도 승인 후 5분/1회 열람할 수 있습니다.</p>{available.map(field => { const sensitive = !["CUSTOMER_DISPLAY_NAME", "STORE_LEGAL_DISPLAY_NAME", "COURIER_DISPLAY_NAME"].includes(field); return <Checkbox key={field} label={personalFieldLabels[field]} description={sensitive ? "강화 본인확인과 별도 승인 필요" : "기본 본인확인 필요"} checked={fields.includes(field)} disabled={sensitive && session.achievedLevel !== "ENHANCED"} onCheckedChange={checked => setFields(values => checked ? [...values, field] : values.filter(value => value !== field))} />; })}<SelectField label="열람 요청 사유" value={reason} onValueChange={value => setReason(value as Reason)}>{Object.entries(dataAccessReasonLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField><Button type="submit" loading={command.busy} disabled={!fields.length}>선택한 정보 열람 요청</Button></fieldset></form> : !initialGrantId ? <InlineNotice title="개인정보 열람 목적의 본인확인이 필요합니다" description="열람할 대상과 목적에 맞는 인증을 먼저 완료해 주세요. 상담 조치용 인증으로는 열람을 요청할 수 없습니다." /> : null}
+    {sessionValid && session ? <form className="surface-card management-card" onSubmit={event => { event.preventDefault(); requestGrant(); }}><fieldset className="catalog-fieldset" disabled={locked}><legend>필요한 정보만 선택</legend><p>{verificationPurposeLabels[session.purpose]} · 기본 정보는 10분/3회, 민감 정보는 별도 승인 후 5분/1회 열람할 수 있습니다.</p>{available.map(field => { const sensitive = !["CUSTOMER_DISPLAY_NAME", "STORE_LEGAL_DISPLAY_NAME", "COURIER_DISPLAY_NAME"].includes(field); return <Checkbox key={field} label={personalFieldLabels[field]} description={sensitive ? "강화 본인확인과 별도 승인 필요" : "기본 본인확인 필요"} checked={fields.includes(field)} disabled={sensitive && session.achievedLevel !== "ENHANCED"} onCheckedChange={checked => setFields(values => checked ? [...values, field] : values.filter(value => value !== field))} />; })}<SelectField label="열람 요청 사유" value={reason} onValueChange={value => setReason(value as Reason)}>{Object.entries(dataAccessReasonLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField><Button type="submit" loading={command.busy} disabled={!fields.length}>선택한 정보 열람 요청</Button></fieldset></form> : !initialGrantId ? <InlineNotice title="개인정보 열람 목적의 본인확인이 필요합니다" description="열람할 대상과 목적에 맞는 인증을 먼저 완료해 주세요. 상담 조치용 인증으로는 열람을 요청할 수 없습니다." /> : null}
     {command.failure ? <ErrorState error={command.failure} /> : null}{command.pending ? <InlineNotice tone="warning" title="열람 요청 응답을 확인하지 못했습니다" description="같은 대상과 필드로 요청 결과를 확인해 주세요." action={<Button disabled={command.busy} onClick={() => void command.retry()}>같은 열람 요청 확인</Button>} /> : null}
-    <form className="surface-card management-card" onSubmit={event => { event.preventDefault(); if (lookup.trim() && !command.busy && !command.pending) { setGrantId(lookup.trim()); setOpened(n => n + 1); } }}><TextField label="기존 열람 요청 ID" value={lookup} onValueChange={setLookup} disabled={command.busy || command.pending} required /><Button type="submit" variant="secondary" disabled={command.busy || command.pending || !lookup.trim()}>열람 요청 현재 상태 조회</Button></form>
-    {grantId ? <GrantInspection key={`${grantId}:${opened}`} grantId={grantId} /> : null}
+    <SupportWorkPicker kind="DATA_ACCESS" caseId={session?.caseId} disabled={locked} onSelect={item => { setGrantId(item.requestId); setOpened(n => n + 1); }} />
+    {grantId ? <GrantInspection key={`${grantId}:${opened}`} grantId={grantId} onBusyChange={setInspectionLocked} /> : null}
   </section>;
 }
 
-function GrantInspection({ grantId }: { grantId: string }) {
+function GrantInspection({ grantId, onBusyChange }: { grantId: string; onBusyChange: (value: boolean) => void }) {
   const [reason, setReason] = useState<Exclude<Reason, "CONTACT_CONFIRMATION">>("CASE_HANDLING");
   const [notice, setNotice] = useState("");
   const [raw, setRaw] = useState<Reveal | null>(null);
@@ -57,6 +59,7 @@ function GrantInspection({ grantId }: { grantId: string }) {
   const command = useSupportCommand(() => read.reload());
   const busy = command.busy || revealBusy;
   const blocked = busy || command.pending;
+  useEffect(() => { onBusyChange(blocked || uncertain || Boolean(raw)); return () => onBusyChange(false); }, [blocked, uncertain, raw, onBusyChange]);
   const selected = fields ?? grant?.fields ?? [];
   const clear = useCallback(() => { generation.current++; setRaw(null); }, []);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; generation.current++; }; }, []);

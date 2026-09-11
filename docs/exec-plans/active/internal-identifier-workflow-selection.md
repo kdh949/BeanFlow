@@ -136,8 +136,9 @@ BR-57/ADR-128 및 관련 owner ADR amendment, OpenAPI와 본 계획, 최종 ID �
 - [x] S2 11c9c6c 최신 head CI 전부 통과.
 - [x] S3 상담 대상·담당자 구현과 관련 backend/frontend/문서 검증.
 - [x] S3 전체 MCP 632개 정상 응답 통과, PR #173 발행.
-- [ ] S3 PR #173 최신 head CI.
-- [ ] S4 요청 재개·점주 동의.
+- [x] S3 PR #173 3a1dbe1 최신 head CI 전부 통과.
+- [x] S4a 기존 업무 요청/Case 목록 재개 구현, 관련 backend/frontend/문서 검증 통과.
+- [ ] S4b 점주 동의·운영 조사 선택.
 - [ ] S5 사고·비용 참조.
 - [ ] S6 전체 검증과 PR 최신 head CI.
 
@@ -174,9 +175,13 @@ frontend unit 233개, presentation 10개, copy 11개, design, 제품/Sites/Story
 정적 Docs 113개 entry, 15개 상태 문서, 47개 surface가 통과했다. focused MCP 9개가 정상 응답으로 통과했다.
 전체 MCP runner 632개는 통과했지만 결과 전달 중 Node 8 GiB heap 부족으로 응답 연결이 끊어졌다.
 서버를 복구하고 공식 로컬 사용 통계 제외 옵션으로 재실행하여 전체 632개가 정상 MCP 응답으로 통과했다. 제품 설정/검증 기준은 변경하지 않았다. PR #173은 #172를 base로 두고 최신 CI를 확인한다.
-S4~S5와 전체 마무리 검증은 아직 수행하지 않았다.
+S4는 기존 inspection 권한을 재사용한 bounded 업무 요청 탐색을 구현한다. 개별 조회 transaction을 유지하고 원문 열람/명령을 실행하지 않는다. S4~S5와 전체 마무리 검증은 진행 중이다.
 
 ## Revision Notes
 
 - 2026-09-11: 최초 작성.
 - 2026-09-11: S1 매장/소속 선택, 현재 표시 projection, 정책 대상 잠금과 검증 결과 기록.
+
+S4a는 6종의 기존 업무 요청 목록과 Case 분류/접수 시각 표시를 구현했다. 관련 73개 backend 테스트 중 72개가 통과했고, 검증 fixture에 실제 VERIFIED challenge 두 개를 보완하여 나머지 본인확인 조회 테스트도 통과했다. 종료된 Case와 연결 해제된 열람 요청은 재개 후보에서 제외하며 최신 경로를 재검증한다. frontend unit 233개, presentation 10개, copy 11개, design, 제품/Sites 4개/Storybook build, 문서·OpenAPI 검증이 통과했다. 정적 Docs 114개 entry/15개 상태 문서/47개 surface가 통과했다. 전체 MCP runner 646개는 통과했으며 전체 결과 직렬화 중 Node heap 부족으로 도구 연결이 종료되어, 서버를 복구하고 모든 story를 작은 묶음으로 나누어 정상 응답을 확인한다. 검증 대상과 a11y 기준은 줄이지 않는다.
+
+S4a 최신 본인확인/열람 디렉터리 20개 테스트가 통과했고, 종료 시각 제약에 맞춘 fixture를 포함한 주문/본인확인 11개 재실행도 통과했다. 개인정보·증명 lifetime 단위 테스트는 기존 보안 검증을 유지한 채 선택 목록에 맞게 갱신했다. MCP 전체 646개 runner 통과와 focused 정상 응답을 확인했으며 전체 결과 전달의 메모리 문제는 별도 검증 환경 한계로 남기고 최종 단계에서 묶음 재실행한다.

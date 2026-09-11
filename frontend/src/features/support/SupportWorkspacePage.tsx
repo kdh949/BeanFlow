@@ -1,3 +1,4 @@
+import { supportCaseTitle } from "./supportCaseLabels";
 import {
   FilePlus2,
   Link2,
@@ -15,7 +16,7 @@ import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
 import { Button, ButtonLink, EmptyState, LoadingState, PageHeading, SelectField, TextField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
-import { compactId, shortDateTime } from "../../lib/format";
+import { shortDateTime } from "../../lib/format";
 
 type SearchResult = components["schemas"]["SupportSubjectSearchResult"];
 type Candidate = components["schemas"]["SupportSubjectSearchCandidate"];
@@ -46,7 +47,6 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
   const caseIntent = useRef(new SubmissionIntent());
   const linkIntent = useRef(new SubmissionIntent());
 
-  const [caseLookupId, setCaseLookupId] = useState(initialCaseId);
   const caseGeneration = useRef(0);
   useEffect(() => {
     if (initialCaseId) void openCase(initialCaseId);
@@ -105,7 +105,6 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
       if (generation !== caseGeneration.current) return;
       setSupportCase(loadedCase);
       setTimeline(loadedTimeline);
-      setCaseLookupId(normalized);
     } catch (error) {
       if (generation === caseGeneration.current) setCaseError(error);
     } finally {
@@ -159,7 +158,7 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
       <PageHeading title="고객지원 콘솔" action={<ButtonLink variant="secondary" to="/support/cases">상담 목록</ButtonLink>} />
       {supportCase ? <>
           <section className="surface-card support-case-header">
-            <div><span className="context-label">현재 상담 건</span><h2>상담 {compactId(supportCase.caseId)}</h2><p className="support-case-reference">상담 ID {supportCase.caseId}</p><p>담당자 {compactId(supportCase.assigneeId)} · 버전 {supportCase.version}</p></div>
+            <div><span className="context-label">현재 상담 건</span><h2>{supportCaseTitle(supportCase)}</h2><p>접수 {shortDateTime.format(new Date(supportCase.openedAt))}</p><p>담당자 {supportCase.assigneeDisplay?.state === "AVAILABLE" ? supportCase.assigneeDisplay.loginName : "조직 로그인 이름 미등록"} · 버전 {supportCase.version}</p></div>
             <div><StatusText state={supportCase.state} /><ButtonLink variant="secondary" to={`/support/follow-up?caseId=${encodeURIComponent(supportCase.caseId)}`}>상담 후속 업무</ButtonLink><ButtonLink variant="secondary" to={`/support/cases/${encodeURIComponent(supportCase.caseId)}`}>상담 상태·담당자 관리</ButtonLink></div>
           </section>
       </> : null}
@@ -178,12 +177,12 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
           {searchError ? <ErrorState error={searchError} /> : null}
         </form>
 
-        <form className="surface-card operation-form" onSubmit={(event) => { event.preventDefault(); void openCase(caseLookupId); }}>
-          <div className="operation-heading"><Link2 aria-hidden="true" /><div><strong>기존 상담 건 열기</strong></div></div>
-          <TextField label="기존 상담 건 ID" id="support-case-id" value={caseLookupId} required onValueChange={setCaseLookupId} />
-          <Button type="submit" variant="secondary" loading={caseLoading}>상담 건 열기</Button>
-          {caseError && !supportCase ? <ErrorState error={caseError} retry={() => void openCase(caseLookupId)} /> : null}
-        </form>
+        <section className="surface-card operation-form">
+          <div className="operation-heading"><Link2 aria-hidden="true" /><strong>기존 상담 찾기</strong></div>
+          <p>상담 목록에서 문의 분류, 담당자, 상태와 접수 시각을 확인하고 선택합니다.</p>
+          <ButtonLink variant="secondary" to="/support/cases">상담 목록에서 선택</ButtonLink>
+          {caseError && !supportCase ? <ErrorState error={caseError} retry={initialCaseId ? () => void openCase(initialCaseId) : undefined} /> : null}
+        </section>
       </section>
 
       {searching ? <LoadingState label="보호 대상을 정확 검색하는 중" /> : null}
@@ -194,7 +193,7 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
             <div className="support-candidate-list">
               {searchResult.items.map((candidate) => (
                 <article key={`${candidate.subjectType}-${candidate.subjectId}`}>
-                  <div><StatusText state={candidate.subjectType} /><strong>{candidate.maskedDisplayName}</strong><span>{candidate.maskedMatchedValue}</span><code>{candidate.subjectId}</code></div>
+                  <div><StatusText state={candidate.subjectType} /><strong>{candidate.maskedDisplayName}</strong><span>{candidate.maskedMatchedValue}</span></div>
                   <div className="candidate-case-options">
                     <SelectField label="문의 분류" value={caseCategory} onValueChange={(value) => setCaseCategory(value as typeof caseCategory)}>{Object.entries(caseCategoryLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>
                     <SelectField label="우선순위" value={casePriority} onValueChange={(value) => setCasePriority(value as typeof casePriority)}>{Object.entries(casePriorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>

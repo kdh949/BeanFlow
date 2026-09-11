@@ -114,6 +114,23 @@ internal class SupportProfileChangeIntegrationTest
         }
 
         @Test
+        fun `work directory finds profile requests for the approver without including profile values`() {
+            val created = profiles.submit(primaryPhoneCommand("directory-profile"))
+            val body =
+                mockMvc
+                    .perform(
+                        get("/api/v1/support/work-items")
+                            .with(jwt().jwt { it.subject(managerId.toString()) })
+                            .param("kind", "PROFILE_CHANGE")
+                            .param("caseId", caseId.toString()),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items[0].requestId").value(created.profileChangeId.toString()))
+                    .andReturn()
+                    .response.contentAsString
+            assertThat(body).doesNotContain("maskedBefore", "maskedAfter", "payloadDigest", "verificationSessionId")
+        }
+
+        @Test
         fun `profile context is current minimal and scoped to active assigned subject and purpose`() {
             val linkId =
                 jdbcTemplate.queryForObject(

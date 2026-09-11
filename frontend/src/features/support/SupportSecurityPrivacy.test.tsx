@@ -67,13 +67,13 @@ describe("support sensitive state lifetime", () => {
   });
   it("clears proof after sending and uses the server session rather than synthesizing enhanced verification", async () => {
     let session: components["schemas"]["VerificationSessionResource"] = { sessionId, caseId, subjectLinkId: linkId, subjectType: "CUSTOMER", subjectId: caseId, purpose: "CONTACT_CONFIRMATION", actionScope: "PERSONAL_DATA_REVEAL", requestedLevel: "ENHANCED", achievedLevel: "UNVERIFIED", state: "PENDING", invalidAttempts: 0, startedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 900_000).toISOString(), version: 1, challenges: [{ challengeId: grantId, sessionId, channel: "REGISTERED_PHONE", state: "ISSUED", requestedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 300_000).toISOString() }] };
-    vi.spyOn(operationsApi, "GET").mockImplementation((async () => response(session)) as never);
+    vi.spyOn(operationsApi, "GET").mockImplementation((async (path: string) => response(path === "/support/work-items" ? { items: [{ requestId: sessionId, kind: "VERIFICATION", caseId, caseCategory: "ACCOUNT_RECOVERY", caseOpenedAt: session.startedAt, purpose: session.purpose, state: session.state, createdAt: session.startedAt, expiresAt: session.expiresAt }], nextCursor: null } : session)) as never);
     let sentProof = "";
     vi.spyOn(operationsApi, "POST").mockImplementation((async (_path: string, options: { body: { proof: string } }) => { sentProof = options.body.proof; session = { ...session, challenges: session.challenges.map(c => ({ ...c, state: "VERIFIED" })) }; return response({ challenge: session.challenges[0], sessionState: "PENDING", achievedLevel: "UNVERIFIED", invalidAttempts: 0, lockedUntil: null }); }) as never);
     const onChange = vi.fn();
     render(<SupportVerificationPanel caseId={caseId} links={[{ linkId, subjectType: "CUSTOMER", subjectId: caseId, relationship: "REQUESTER", linkedAt: session.startedAt }]} disabled={false} onChange={onChange} />);
-    await userEvent.type(screen.getByLabelText("기존 본인확인 ID"), sessionId);
-    await userEvent.click(screen.getByRole("button", { name: "본인확인 현재 상태 조회" }));
+    await userEvent.click(screen.getByRole("button", { name: "기존 본인확인 요청 찾기" }));
+    await userEvent.click(await screen.findByRole("button", { name: "이 요청 열기" }));
     await userEvent.type(await screen.findByLabelText("일회성 인증 코드"), "123456");
     await userEvent.click(screen.getByRole("button", { name: "인증 코드 확인" }));
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ state: "PENDING", achievedLevel: "UNVERIFIED", challenges: [expect.objectContaining({ state: "VERIFIED" })] })));

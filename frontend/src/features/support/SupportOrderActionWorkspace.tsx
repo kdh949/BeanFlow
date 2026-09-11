@@ -1,3 +1,4 @@
+import { SupportWorkPicker } from "./SupportWorkPicker";
 import { supportSubjectLabel } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -26,18 +27,15 @@ const requestStates: Record<Request["state"], string> = { AWAITING_SUPPORT_MANAG
 const evaluationReasons: Record<string, string> = { POLICY_ALLOWED: "현재 정책에서 요청할 수 있습니다", POLICY_APPROVAL_REQUIRED: "별도 담당자의 승인이 필요합니다", UNSUPPORTED_TARGET_STATE: "현재 주문 상태에서는 처리할 수 없습니다", CASE_NOT_ELIGIBLE: "진행 중인 상담 건이 필요합니다", TARGET_RELATIONSHIP_MISMATCH: "본인확인 대상과 주문의 관계가 일치하지 않습니다", MISSING_PERMISSION: "필요한 업무 권한이 없습니다", VERIFICATION_SCOPE_MISMATCH: "업무 처리 목적의 본인확인이 필요합니다", VERIFICATION_PURPOSE_MISMATCH: "상담 해결 목적의 본인확인이 필요합니다", INSUFFICIENT_VERIFICATION: "추가 본인확인이 필요합니다", STALE_TARGET_VERSION: "주문 정보가 변경되었습니다" };
 
 /** Creates typed order changes and inspects the current server-owned approval workflow. */
-export function SupportOrderActionWorkspace({ supportCase, verification, initialRequestId }: { supportCase?: Case; verification?: Verification | null; initialRequestId?: string }) {
+export function SupportOrderActionWorkspace({ supportCase, verification, initialRequestId, onBusyChange }: { supportCase?: Case; verification?: Verification | null; initialRequestId?: string; onBusyChange?: (busy: boolean) => void }) {
   const [activeCommand, setActiveCommand] = useState(false);
-  const [lookup, setLookup] = useState(initialRequestId ?? "");
   const [requestId, setRequestId] = useState(initialRequestId ?? "");
+  useEffect(() => { onBusyChange?.(activeCommand); return () => onBusyChange?.(false); }, [activeCommand, onBusyChange]);
   return <section className="management-workspace" aria-label="상담 주문 변경">
     <h2>주문 변경 요청</h2>
-    <form className="surface-card management-card operation-form" onSubmit={event => { event.preventDefault(); if (!activeCommand) setRequestId(lookup.trim()); }}>
-      <TextField label="기존 주문 변경 요청 ID" value={lookup} onValueChange={setLookup} disabled={activeCommand} required />
-      <Button type="submit" variant="secondary" disabled={activeCommand}>주문 변경 요청 열기</Button>
-      {requestId ? <Button variant="ghost" disabled={activeCommand} onClick={() => { setRequestId(""); setLookup(""); }}>새 요청 작성</Button> : null}
-    </form>
-    {requestId ? <RequestInspection key={requestId} requestId={requestId} supportCase={supportCase} verification={verification} onBusyChange={setActiveCommand} /> : supportCase ? <CreateOrderRequest onBusyChange={setActiveCommand} supportCase={supportCase} verification={verification} onCreated={id => { setRequestId(id); setLookup(id); }} /> : <EmptyState title="상담 건에서 새 요청을 시작해 주세요" description="기존 요청은 ID로 열어 현재 승인 단계와 실행 담당자를 확인할 수 있습니다." />}
+    <SupportWorkPicker kind="ORDER_ACTION" caseId={supportCase?.caseId} disabled={activeCommand} onSelect={item => setRequestId(item.requestId)} />
+    {requestId && supportCase ? <Button variant="ghost" disabled={activeCommand} onClick={() => setRequestId("")}>새 요청 작성</Button> : null}
+    {requestId ? <RequestInspection key={requestId} requestId={requestId} supportCase={supportCase} verification={verification} onBusyChange={setActiveCommand} /> : supportCase ? <CreateOrderRequest onBusyChange={setActiveCommand} supportCase={supportCase} verification={verification} onCreated={id => { setRequestId(id); }} /> : <EmptyState title="상담 건에서 새 요청을 시작해 주세요" description="기존 요청 찾기에서 현재 승인 단계와 실행 담당자를 확인할 수 있습니다." />}
   </section>;
 }
 

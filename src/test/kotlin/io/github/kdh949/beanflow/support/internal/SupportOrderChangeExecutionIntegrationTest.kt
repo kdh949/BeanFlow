@@ -89,6 +89,61 @@ internal class SupportOrderChangeExecutionIntegrationTest
         }
 
         @Test
+        fun `work directory reuses verification ownership and order request visibility`() {
+            listOf("REGISTERED_PHONE", "REGISTERED_EMAIL").forEach { channel ->
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO support_verification_challenge
+                    (id, session_id, channel, state, opaque_provider_reference, requested_at, expires_at, completed_at, version)
+                    SELECT ?, id, ?, 'VERIFIED', 'work-directory-verified', started_at,
+                           started_at + interval '5 minutes', started_at + interval '1 second', 1
+                    FROM support_verification_session WHERE id = ?
+                    """.trimIndent(),
+                    UUID.randomUUID(),
+                    channel,
+                    sessionId,
+                )
+            }
+            val path = "/api/v1/support/work-items"
+            val actor = jwt().jwt { it.subject(supportActorId.toString()) }
+            mockMvc
+                .perform(get(path).with(actor).param("kind", "VERIFICATION").param("caseId", caseId.toString()))
+                .andExpect(status().isForbidden)
+            jdbcTemplate.update(
+                """
+                INSERT INTO operations_operator_permission_grant(actor_id, permission, state, granted_at, version, audit_source_reference)
+                VALUES (?, 'SUPPORT_VERIFICATION_MANAGE', 'ACTIVE', now(), 1, 'work-directory-verification')
+                """.trimIndent(),
+                supportActorId,
+            )
+            mockMvc
+                .perform(get(path).with(actor).param("kind", "VERIFICATION").param("caseId", caseId.toString()))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.items[0].requestId").value(sessionId.toString()))
+                .andExpect(jsonPath("$.items[0].challenges").doesNotExist())
+            mockMvc
+                .perform(get(path).with(actor).param("kind", "ORDER_ACTION").param("caseId", caseId.toString()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].requestId").value(requestId.toString()))
+                .andExpect(jsonPath("$.items[0].actionPayloadDigest").doesNotExist())
+            jdbcTemplate.update("UPDATE support_case SET state = 'CLOSED', closed_at = last_changed_at WHERE id = ?", caseId)
+            mockMvc
+                .perform(get(path).with(actor).param("kind", "VERIFICATION"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isEmpty())
+            jdbcTemplate.update(
+                "UPDATE support_case SET state = 'OPEN', closed_at = NULL, current_assignee_id = ? WHERE id = ?",
+                UUID.randomUUID(),
+                caseId,
+            )
+            mockMvc
+                .perform(get(path).with(actor).param("kind", "VERIFICATION").param("caseId", caseId.toString()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isEmpty())
+        }
+
+        @Test
         fun `public order candidate requires current assignment and grants and commits minimal audit`() {
             grantSelectionPermissions()
             val reference =

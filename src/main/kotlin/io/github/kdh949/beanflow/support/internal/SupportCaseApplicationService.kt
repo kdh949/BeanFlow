@@ -125,6 +125,7 @@ internal data class SupportCaseResource(
     val subjectLinks: List<SupportSubjectLinkResource>,
     val customerInquiryId: UUID? = null,
     val assigneeDisplay: OperatorDisplay? = null,
+    val category: SupportInquiryCategory? = null,
 )
 
 internal data class SupportCaseSummaryResource(
@@ -135,6 +136,7 @@ internal data class SupportCaseSummaryResource(
     val version: Long,
     val openedAt: Instant,
     val assigneeDisplay: OperatorDisplay? = null,
+    val category: SupportInquiryCategory? = null,
 )
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -682,6 +684,7 @@ internal class SupportCaseApplicationService(
                         it.version,
                         it.openedAt,
                         displays.getValue(it.assigneeId),
+                        it.category,
                     )
                 },
                 nextCursor,
@@ -896,7 +899,18 @@ internal class SupportCaseApplicationService(
     }
 
     private fun SupportCaseEntity.toResource(links: List<SupportSubjectLinkResource>): SupportCaseResource =
-        SupportCaseResource(id, state, priority, currentAssigneeId, version, openedAt, closedAt, links, customerInquiries.findIdByCase(id))
+        SupportCaseResource(
+            id,
+            state,
+            priority,
+            currentAssigneeId,
+            version,
+            openedAt,
+            closedAt,
+            links,
+            customerInquiries.findIdByCase(id),
+            category = category,
+        )
 
     private fun SupportCaseSubjectLinkEntity.toResource(): SupportSubjectLinkResource =
         SupportSubjectLinkResource(id, subjectType, subjectId, relationship, linkedAt)

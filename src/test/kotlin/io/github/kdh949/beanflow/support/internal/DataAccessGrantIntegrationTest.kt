@@ -86,6 +86,69 @@ internal class DataAccessGrantIntegrationTest
         }
 
         @Test
+        fun `work directory pages authorized grant metadata without decrypting and binds cursor to actor and case`() {
+            val binding = seedVerifiedBinding(requesterId, "ENHANCED")
+            requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "directory-sensitive", "APPROVAL_PENDING")
+            requestGrant(binding, "CUSTOMER_DISPLAY_NAME", "directory-basic", "ACTIVE")
+            val path = "/api/v1/support/work-items"
+            val first =
+                mockMvc
+                    .perform(
+                        httpGet(path)
+                            .with(operatorJwt(requesterId))
+                            .param("kind", "DATA_ACCESS")
+                            .param("caseId", binding.caseId.toString())
+                            .param("limit", "1"),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andReturn()
+                    .response.contentAsString
+            val cursor =
+                tools.jackson.databind.json.JsonMapper
+                    .builder()
+                    .build()
+                    .readTree(first)
+                    .get("nextCursor")
+                    .asText()
+            mockMvc
+                .perform(
+                    httpGet(path)
+                        .with(operatorJwt(requesterId))
+                        .param("kind", "DATA_ACCESS")
+                        .param("caseId", binding.caseId.toString())
+                        .param("limit", "1")
+                        .param("cursor", cursor),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+            grant(approverId, "SUPPORT_PII_REVEAL_APPROVE")
+            mockMvc
+                .perform(
+                    httpGet(path)
+                        .with(operatorJwt(approverId))
+                        .param("kind", "DATA_ACCESS")
+                        .param("caseId", binding.caseId.toString())
+                        .param("cursor", cursor),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    httpGet(path)
+                        .with(operatorJwt(requesterId))
+                        .param("kind", "DATA_ACCESS")
+                        .param("caseId", UUID.randomUUID().toString())
+                        .param("cursor", cursor),
+                ).andExpect(status().isBadRequest)
+            assertThat(decryptCalls).hasValue(0)
+            jdbcTemplate.update(
+                """
+                UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now()
+                WHERE actor_id = ? AND permission = 'SUPPORT_PII_REVEAL_REQUEST'
+                """.trimIndent(),
+                requesterId,
+            )
+            mockMvc.perform(httpGet(path).with(operatorJwt(requesterId)).param("kind", "DATA_ACCESS")).andExpect(status().isForbidden)
+        }
+
+        @Test
         fun `inspection restricts requester and approver without decrypting or consuming budget`() {
             val binding = seedVerifiedBinding(requesterId, "ENHANCED")
             val grantId = requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "grant-inspect-sensitive", "APPROVAL_PENDING")

@@ -1,3 +1,4 @@
+import { SupportWorkPicker } from "./SupportWorkPicker";
 import { supportSubjectLabel } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -35,16 +36,14 @@ function percentBps(value: string): number | null {
 }
 
 /** Composes policy evaluation, immutable benefit review, separate approval and issuance follow-up. */
-export function SupportCompensationWorkspace({ supportCase, verification, initialCompensationId, initialIncidentId }: { supportCase?: Case; verification?: Verification | null; initialCompensationId?: string; initialIncidentId?: string }) {
-  const [active, setActive] = useState(false), [lookup, setLookup] = useState(initialCompensationId ?? ""), [id, setId] = useState(initialCompensationId ?? "");
+export function SupportCompensationWorkspace({ supportCase, verification, initialCompensationId, initialIncidentId, onBusyChange }: { supportCase?: Case; verification?: Verification | null; initialCompensationId?: string; initialIncidentId?: string; onBusyChange?: (busy: boolean) => void }) {
+  const [active, setActive] = useState(false), [id, setId] = useState(initialCompensationId ?? "");
+  useEffect(() => { onBusyChange?.(active); return () => onBusyChange?.(false); }, [active, onBusyChange]);
   return <section className="management-workspace" aria-label="고객 불편 보상">
     <h2>고객 불편 보상</h2>
-    <form className="surface-card management-card operation-form" onSubmit={event => { event.preventDefault(); if (!active && uuid(lookup)) setId(lookup.trim()); }}>
-      <TextField label="기존 보상 요청 ID" value={lookup} onValueChange={setLookup} disabled={active} required />
-      <Button type="submit" variant="secondary" disabled={active || !uuid(lookup)}>보상 요청 열기</Button>
-      {id && supportCase ? <Button variant="ghost" disabled={active} onClick={() => { setId(""); setLookup(""); }}>새 보상 요청 작성</Button> : null}
-    </form>
-    {id ? <CompensationInspection key={id} id={id} caseId={supportCase?.caseId} onBusyChange={setActive} /> : supportCase ? <CreateCompensation key={initialIncidentId ?? "new"} supportCase={supportCase} verification={verification} initialIncidentId={initialIncidentId} onBusyChange={setActive} onCreated={created => { setLookup(created); setId(created); }} /> : <EmptyState title="상담 건에서 보상을 시작해 주세요" description="기존 보상 요청은 ID로 열어 승인과 지급 상태를 확인할 수 있습니다." />}
+    <SupportWorkPicker kind="COMPENSATION" caseId={supportCase?.caseId} disabled={active} onSelect={item => setId(item.requestId)} />
+    {id && supportCase ? <Button variant="ghost" disabled={active} onClick={() => setId("")}>새 보상 요청 작성</Button> : null}
+    {id ? <CompensationInspection key={id} id={id} caseId={supportCase?.caseId} onBusyChange={setActive} /> : supportCase ? <CreateCompensation key={initialIncidentId ?? "new"} supportCase={supportCase} verification={verification} initialIncidentId={initialIncidentId} onBusyChange={setActive} onCreated={created => { setId(created); }} /> : <EmptyState title="상담 건에서 보상을 시작해 주세요" description="기존 요청 찾기에서 승인과 지급 상태를 확인할 수 있습니다." />}
   </section>;
 }
 

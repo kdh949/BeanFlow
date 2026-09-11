@@ -924,6 +924,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1settlement-items~1{itemId}~1disputes"
   /stores/{storeId}/disputes:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1disputes"
+  /support/work-items:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1work-items"
   /support/searches:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1searches"
   /support/cases:
@@ -1234,6 +1236,12 @@ components:
       $ref: "./beanflow-v1.yaml#/components/schemas/GoodwillCouponTemplateView"
     SupportCompensationCouponTemplatePage:
       $ref: "./beanflow-v1.yaml#/components/schemas/SupportCompensationCouponTemplatePage"
+    SupportWorkKind:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportWorkKind"
+    SupportWorkItem:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportWorkItem"
+    SupportWorkPage:
+      $ref: "./beanflow-v1.yaml#/components/schemas/SupportWorkPage"
     SupportOrderDisplay:
       $ref: "./beanflow-v1.yaml#/components/schemas/SupportOrderDisplay"
     SupportSubjectDisplay:

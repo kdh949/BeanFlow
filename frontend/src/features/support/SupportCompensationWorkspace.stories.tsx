@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, waitFor } from "storybook/test";
+import { expect, userEvent, waitFor, fn } from "storybook/test";
 import { http, HttpResponse } from "msw";
 import MockDate from "mockdate";
 import type { components } from "../../api/schema";
@@ -29,3 +29,18 @@ export const NotificationSkipped: Story = { beforeEach() { current = { ...struct
 export const CouponReview: Story = { beforeEach() { current = { ...structuredClone(initial), request: { ...request, benefitType: "COUPON", amountKrw: 1000, couponTemplateId: actionId }, couponTemplate: { templateId: actionId, amountKrw: 1000, validityDays: 30, minimumEligibleSubtotalKrw: 3000 } }; }, play: async ({ canvas }) => { await expect(await canvas.findByText(/쿠폰 사용 기한 30일.*최소 사용 금액.*3,000/)).toBeVisible(); } };
 
 export const OperationsReviewLink: Story = { beforeEach() { current = { ...current, approval: { ...approval, state: "AWAITING_OPERATIONS" }, allowedActions: [] }; }, play: async ({ canvas }) => { await expect(await canvas.findByRole("link", { name: "운영 조사 검토" })).toHaveAttribute("href", `/ops/support-investigations?requestId=${actionId}`); } };
+
+export const SelectExistingRequest: Story = {
+  args: { initialCompensationId: undefined, supportCase: undefined },
+  play: async ({ canvas, msw }) => {
+    const inspected = fn();
+    msw.use(
+      http.get("/api/v1/support/work-items", () => HttpResponse.json({ items: [{ requestId: id, caseId: id, kind: "COMPENSATION", caseCategory: "ACCOUNT_RECOVERY", caseOpenedAt: "2026-09-10T09:00:00Z", purpose: "CASE_RESOLUTION", state: "PENDING", createdAt: "2026-09-10T09:05:00Z", expiresAt: null }], nextCursor: null })),
+      http.get("/api/v1/support/compensations/:id/workflow", async ({ params }) => { expect(params.id).toBe(id); inspected(); return HttpResponse.json(current); }),
+    );
+    await userEvent.click(canvas.getByRole("button", { name: "기존 보상 요청 찾기" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "이 요청 열기" }));
+    await waitFor(() => expect(inspected).toHaveBeenCalled());
+    await expect(canvas.getByRole("button", { name: "기존 보상 요청 찾기" })).toHaveAttribute("aria-expanded", "false");
+  },
+};

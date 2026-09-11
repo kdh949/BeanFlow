@@ -2882,6 +2882,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/work-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 기존 상담 업무 요청을 현재 조회 권한으로 탐색
+         * @description 업무별 기존 inspection 권한과 상태 갱신을 재사용합니다. 행별 가시성 필터와 마지막 권한 재검사를 거치며, 조회 구간에 보이는 항목이 없어도 nextCursor가 있으면 계속 탐색할 수 있습니다. 원문 열람·승인·실행은 수행하지 않습니다.
+         */
+        get: operations["listSupportWorkItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support/searches": {
         parameters: {
             query?: never;
@@ -6178,6 +6198,24 @@ export interface components {
              * @description 다음 페이지 커서입니다. null이면 마지막 페이지입니다.
              */
             nextCursor: string | null;
+        };
+        /** @enum {string} */
+        SupportWorkKind: "VERIFICATION" | "DATA_ACCESS" | "ORDER_ACTION" | "COMPENSATION" | "PROFILE_CHANGE" | "BREAK_GLASS";
+        SupportWorkItem: {
+            requestId: components["schemas"]["Identifier"];
+            kind: components["schemas"]["SupportWorkKind"];
+            caseId: components["schemas"]["Identifier"];
+            caseCategory: components["schemas"]["SupportInquiryCategory"];
+            caseOpenedAt: components["schemas"]["DateTime"];
+            purpose: string;
+            state: string;
+            createdAt: components["schemas"]["DateTime"];
+            /** Format: date-time */
+            expiresAt?: string | null;
+        };
+        SupportWorkPage: {
+            items: components["schemas"]["SupportWorkItem"][];
+            nextCursor?: string | null;
         };
         SupportOrderDisplay: {
             orderId: components["schemas"]["Identifier"];
@@ -10016,6 +10054,8 @@ export interface components {
             page: components["schemas"]["PageInfo"];
         };
         /** @enum {string} */
+        SupportInquiryCategory: "ORDER_STATUS" | "PICKUP_RESCHEDULE" | "ORDER_CANCELLATION" | "PAYMENT_OR_REFUND" | "COUPON_OR_POINT" | "COMPENSATION" | "CUSTOMER_PROFILE" | "STORE_PROFILE" | "DELIVERY_STATUS" | "DELIVERY_INCIDENT" | "SETTLEMENT" | "DISPUTE" | "ACCOUNT_RECOVERY" | "PRIVACY" | "SAFETY" | "OTHER";
+        /** @enum {string} */
         ExactSearchCriterionType: "PHONE" | "EMAIL";
         SupportSearchCriterion: {
             type: components["schemas"]["ExactSearchCriterionType"];
@@ -10095,6 +10135,7 @@ export interface components {
          *     }
          */
         SupportCaseSummary: {
+            category?: components["schemas"]["SupportInquiryCategory"];
             assigneeDisplay?: components["schemas"]["OperatorDisplay"];
             caseId: components["schemas"]["Identifier"];
             state: components["schemas"]["SupportCaseState"];
@@ -10126,8 +10167,6 @@ export interface components {
         };
         /** @enum {string} */
         SupportRequesterType: "CUSTOMER" | "STORE_OWNER" | "STORE_MEMBER" | "RIDER" | "THIRD_PARTY" | "INTERNAL_OPERATOR" | "SYSTEM" | "UNKNOWN";
-        /** @enum {string} */
-        SupportInquiryCategory: "ORDER_STATUS" | "PICKUP_RESCHEDULE" | "ORDER_CANCELLATION" | "PAYMENT_OR_REFUND" | "COUPON_OR_POINT" | "COMPENSATION" | "CUSTOMER_PROFILE" | "STORE_PROFILE" | "DELIVERY_STATUS" | "DELIVERY_INCIDENT" | "SETTLEMENT" | "DISPUTE" | "ACCOUNT_RECOVERY" | "PRIVACY" | "SAFETY" | "OTHER";
         /**
          * @description 새 SupportCase를 열기 위한 요청. 요청자 유형/참조, 문의 분류, 우선순위와 사유를 담습니다.
          * @example {
@@ -10196,6 +10235,7 @@ export interface components {
          *     }
          */
         SupportCase: {
+            category?: components["schemas"]["SupportInquiryCategory"];
             assigneeDisplay?: components["schemas"]["OperatorDisplay"];
             /**
              * Format: uuid
@@ -17935,6 +17975,38 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listSupportWorkItems: {
+        parameters: {
+            query: {
+                kind: components["schemas"]["SupportWorkKind"];
+                caseId?: components["schemas"]["Identifier"];
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 권한이 확인된 기존 업무 요청의 표시 정보 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportWorkPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

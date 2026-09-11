@@ -82,6 +82,23 @@ internal class BreakGlassIntegrationTest
         }
 
         @Test
+        fun `work directory discovers emergency approvals without revealing or sending another notice`() {
+            val binding = seedBinding()
+            val requestId = request(binding)
+            mockMvc
+                .perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/support/work-items")
+                        .with(operatorJwt(approverId))
+                        .param("kind", "BREAK_GLASS")
+                        .param("caseId", binding.caseId.toString()),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].requestId").value(requestId.toString()))
+                .andExpect(jsonPath("$.items[0].field").doesNotExist())
+            assertThat(countIntents(requestId)).isEqualTo(1)
+        }
+
+        @Test
         fun `break glass requires separated approval one-field reveal and separated post review`() {
             val binding = seedBinding()
             val requestId = request(binding)

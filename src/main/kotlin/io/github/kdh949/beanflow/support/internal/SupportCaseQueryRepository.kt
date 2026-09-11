@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.support.internal
 
 import io.github.kdh949.beanflow.support.internal.domain.SupportCasePriority
 import io.github.kdh949.beanflow.support.internal.domain.SupportCaseState
+import io.github.kdh949.beanflow.support.internal.domain.SupportInquiryCategory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import java.sql.Timestamp
@@ -15,6 +16,7 @@ internal data class SupportCaseListProjection(
     val assigneeId: UUID,
     val version: Long,
     val openedAt: Instant,
+    val category: SupportInquiryCategory,
 )
 
 internal data class SupportCaseSort(
@@ -53,7 +55,7 @@ internal class SupportCaseQueryRepository(
         val where = if (clauses.isEmpty()) "" else " WHERE ${clauses.joinToString(" AND ")}"
         return jdbcTemplate.query(
             """
-            SELECT id, state, priority, current_assignee_id, version, opened_at
+            SELECT id, state, priority, current_assignee_id, version, opened_at, category
               FROM support_case$where
              ORDER BY opened_at DESC, id DESC
              LIMIT ?
@@ -66,6 +68,7 @@ internal class SupportCaseQueryRepository(
                     assigneeId = resultSet.getObject("current_assignee_id", UUID::class.java),
                     version = resultSet.getLong("version"),
                     openedAt = resultSet.getTimestamp("opened_at").toInstant(),
+                    category = SupportInquiryCategory.valueOf(resultSet.getString("category")),
                 )
             },
             *arguments.toTypedArray(),

@@ -114,6 +114,28 @@ internal class SupportCompensationIntegrationTest
         }
 
         @Test
+        fun `work directory discovers compensation for its separate pending approver without issuing a benefit`() {
+            val created = compensations.create(command(UUID.randomUUID(), 3_001, "directory-compensation"))
+            mockMvc
+                .perform(
+                    get("/api/v1/support/work-items")
+                        .with(jwt().jwt { it.subject(managerId.toString()) })
+                        .param("kind", "COMPENSATION")
+                        .param("caseId", caseId.toString()),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].requestId").value(created.compensationRequestId.toString()))
+                .andExpect(jsonPath("$.items[0].payloadDigest").doesNotExist())
+                .andExpect(jsonPath("$.items[0].verificationSessionId").doesNotExist())
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT terminal_benefit_id FROM support_compensation_request WHERE id = ?",
+                    UUID::class.java,
+                    created.compensationRequestId,
+                ),
+            ).isNull()
+        }
+
+        @Test
         fun `workflow exposes exact non personal terms to pending separate approver without expanding legacy reads`() {
             val created = compensations.create(command(UUID.randomUUID(), 3_001, "workflow-medium-create"))
             val path = "/api/v1/support/compensations/${created.compensationRequestId}"

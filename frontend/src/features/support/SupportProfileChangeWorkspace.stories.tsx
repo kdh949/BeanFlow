@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, waitFor } from "storybook/test";
+import { expect, userEvent, waitFor, fn } from "storybook/test";
 import { http, HttpResponse } from "msw";
 import MockDate from "mockdate";
 import type { components } from "../../api/schema";
@@ -30,3 +30,18 @@ export const ChangedProfile: Story = { beforeEach() { current = { ...current, cu
 
 export const CourierCorrection: Story = { args: { initialProfileChangeId: undefined, supportCase: { ...supportCase, subjectLinks: [{ linkId: id, subjectId: id, subjectType: "DELIVERY" }] }, verification: { ...verification, subjectType: "DELIVERY" } }, play: async ({ canvas, msw }) => { msw.use(http.get("/api/v1/support/cases/:caseId/profile-contexts/:linkId", () => HttpResponse.json({ caseId: id, subjectLinkId: id, subjectId: id, subjectType: "RIDER", purpose: "COURIER_DISPLAY_NAME", riskClass: "R1", requiredVerificationLevel: "BASIC", currentProfileVersion: 12 })), http.post("/api/v1/support/cases/:caseId/profile-changes/courier-display-name-corrections", async ({ request }) => { expect(await request.json()).toMatchObject({ binding: { subjectId: id, expectedProfileVersion: 12 }, displayName: "배달담당" }); current = { ...current, profileChange: { ...profile, subjectType: "RIDER", purpose: "COURIER_DISPLAY_NAME", riskClass: "R1", actionRequestId: null, state: "EXECUTED" }, approval: null, allowedActions: [] }; return HttpResponse.json(current.profileChange); })); await waitFor(() => expect(canvas.getByLabelText("배달원 표시 이름")).toBeEnabled()); await userEvent.type(canvas.getByLabelText("배달원 표시 이름"), "배달담당"); await userEvent.type(canvas.getByLabelText("정정 사유"), "표시 이름 정정"); await userEvent.type(canvas.getByLabelText("정정 증빙 참조"), "기록 24"); await userEvent.click(canvas.getByRole("button", { name: "확인한 정보 정정" })); await expect(await canvas.findByText("정보 변경 완료")).toBeVisible(); } };
 export const StoreOptionalFields: Story = { args: { initialProfileChangeId: undefined, supportCase: { ...supportCase, subjectLinks: [{ linkId: id, subjectId: id, subjectType: "STORE" }] }, verification: { ...verification, subjectType: "STORE" } }, play: async ({ canvas, msw }) => { msw.use(http.get("/api/v1/support/cases/:caseId/profile-contexts/:linkId", () => HttpResponse.json({ caseId: id, subjectLinkId: id, subjectId: id, subjectType: "STORE", purpose: "STORE_PUBLIC_PROFILE", riskClass: "R1", requiredVerificationLevel: "BASIC", currentProfileVersion: 12 })), http.post("/api/v1/support/cases/:caseId/profile-changes/store-public-profile-corrections", async ({ request }) => { expect(await request.json()).toMatchObject({ displayName: null, publicPhone: null, description: null, pickupInstructions: "오른쪽 출입구" }); return HttpResponse.json(profile); })); await waitFor(() => expect(canvas.getByLabelText("픽업 안내")).toBeEnabled()); await userEvent.type(canvas.getByLabelText("픽업 안내"), "오른쪽 출입구"); await userEvent.type(canvas.getByLabelText("정정 사유"), "픽업 동선 정정"); await userEvent.type(canvas.getByLabelText("정정 증빙 참조"), "기록 25"); await userEvent.click(canvas.getByRole("button", { name: "확인한 정보 정정" })); await expect(await canvas.findByText(`정정 ID ${id}`)).toBeVisible(); } };
+
+export const SelectExistingRequest: Story = {
+  args: { initialProfileChangeId: undefined, supportCase: undefined },
+  play: async ({ canvas, msw }) => {
+    const inspected = fn();
+    msw.use(
+      http.get("/api/v1/support/work-items", () => HttpResponse.json({ items: [{ requestId: id, caseId: id, kind: "PROFILE_CHANGE", caseCategory: "ACCOUNT_RECOVERY", caseOpenedAt: "2026-09-10T09:00:00Z", purpose: "CASE_RESOLUTION", state: "PENDING", createdAt: "2026-09-10T09:05:00Z", expiresAt: null }], nextCursor: null })),
+      http.get("/api/v1/support/profile-changes/:id/workflow", async ({ params }) => { expect(params.id).toBe(id); inspected(); return HttpResponse.json(current); }),
+    );
+    await userEvent.click(canvas.getByRole("button", { name: "기존 정보 정정 요청 찾기" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "이 요청 열기" }));
+    await waitFor(() => expect(inspected).toHaveBeenCalled());
+    await expect(canvas.getByRole("button", { name: "기존 정보 정정 요청 찾기" })).toHaveAttribute("aria-expanded", "false");
+  },
+};

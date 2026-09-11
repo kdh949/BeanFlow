@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, waitFor } from "storybook/test";
 import { HttpResponse, http, delay } from "msw";
 import { SupportFollowUpRoute } from "./SupportFollowUpRoute";
 
 const caseId = "a1000000-0000-4000-8000-000000000001";
-const supportCase = { caseId, state: "IN_PROGRESS", priority: "NORMAL", assigneeId: "a7000000-0000-4000-8000-000000000001", version: 4, openedAt: "2026-08-23T09:00:00Z", subjectLinks: [] };
+const supportCase = { caseId, category: "ACCOUNT_RECOVERY", state: "IN_PROGRESS", priority: "NORMAL", assigneeId: "a7000000-0000-4000-8000-000000000001", version: 4, openedAt: "2026-08-23T09:00:00Z", subjectLinks: [] };
 const item = { itemId: "a8000000-0000-4000-8000-000000000001", source: "ORDERING", type: "ORDER_STATE", state: "COMPLETED", summary: "ORDER_STATE:COMPLETED", amountKrw: 7500, occurredAt: "2026-08-23T09:30:00Z" };
 const caseHandler = http.get("/api/v1/support/cases/:caseId", () => HttpResponse.json(supportCase));
 const timelineHandler = http.get("/api/v1/support/cases/:caseId/timeline", ({ request }) => {
@@ -26,7 +26,7 @@ type Story = StoryObj<typeof meta>;
 
 export const LinkedCase: Story = {
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText(`상담 ID ${caseId}`)).toBeVisible();
+    await expect(await canvas.findByText("계정 복구 상담")).toBeVisible();
     await expect(canvas.getByText("주문 픽업 완료")).toBeVisible();
     await expect(canvas.getByRole("link", { name: "상담 처리로 돌아가기" })).toHaveAttribute("href", `/support?caseId=${caseId}`);
     await expect(canvas.queryByText(/ORDERING|ORDER_STATE/)).not.toBeInTheDocument();
@@ -46,7 +46,7 @@ export const Unavailable: Story = {
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("alert")).toBeVisible();
     await expect(canvas.queryByText("표시할 이력이 없습니다")).not.toBeInTheDocument();
-    await expect(canvas.queryByText(`상담 ID ${caseId}`)).not.toBeInTheDocument();
+    await expect(canvas.queryByText("계정 복구 상담")).not.toBeInTheDocument();
   },
 };
 export const Loading: Story = {
@@ -57,11 +57,29 @@ export const EmptyTimeline: Story = {
   parameters: { msw: { handlers: [caseHandler, http.get("/api/v1/support/cases/:caseId/timeline", () => HttpResponse.json({ items: [], nextCursor: null }))] } },
   play: async ({ canvas }) => { await expect(await canvas.findByText("표시할 이력이 없습니다")).toBeVisible(); },
 };
-export const OrderWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "주문 변경" })); await expect(await canvas.findByLabelText("기존 주문 변경 요청 ID")).toBeVisible(); await expect(canvas.getByText("업무 처리 목적의 본인확인이 필요합니다")).toBeVisible(); } };
+export const OrderWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "주문 변경" })); await expect(await canvas.findByRole("button", { name: "기존 주문 변경 요청 찾기" })).toBeVisible(); await expect(canvas.getByText("업무 처리 목적의 본인확인이 필요합니다")).toBeVisible(); } };
 
-export const CompensationWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "고객 보상" })); await expect(await canvas.findByLabelText("기존 보상 요청 ID")).toBeVisible(); await expect(canvas.getByText("고객 본인확인이 필요합니다")).toBeVisible(); } };
+export const CompensationWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "고객 보상" })); await expect(await canvas.findByRole("button", { name: "기존 보상 요청 찾기" })).toBeVisible(); await expect(canvas.getByText("고객 본인확인이 필요합니다")).toBeVisible(); } };
 export const ReturnedCompensation: Story = { parameters: { routing: { path: "/support/follow-up", initialEntry: `/support/follow-up?caseId=${caseId}&incidentId=${caseId}` } }, play: async ({ canvas }) => { await expect(await canvas.findByLabelText("사고 ID")).toHaveValue(caseId); } };
 
-export const ProfileWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "정보 정정" })); await expect(await canvas.findByLabelText("기존 정보 정정 ID")).toBeVisible(); await expect(canvas.getByText("정정할 대상이 없습니다")).toBeVisible(); } };
+export const ProfileWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "정보 정정" })); await expect(await canvas.findByRole("button", { name: "기존 정보 정정 요청 찾기" })).toBeVisible(); await expect(canvas.getByText("정정할 대상이 없습니다")).toBeVisible(); } };
 
-export const BreakGlassWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "긴급 열람" })); await expect(await canvas.findByLabelText("기존 긴급 열람 요청 ID")).toBeVisible(); await expect(canvas.getByText("긴급 열람할 대상이 없습니다")).toBeVisible(); } };
+export const BreakGlassWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "긴급 열람" })); await expect(await canvas.findByRole("button", { name: "기존 긴급 열람 요청 찾기" })).toBeVisible(); await expect(canvas.getByText("긴급 열람할 대상이 없습니다")).toBeVisible(); } };
+
+export const PendingOrderKeepsWorkspace: Story = {
+  parameters: { routing: { path: "/support/follow-up", initialEntry: `/support/follow-up?caseId=${caseId}&requestId=${caseId}` } },
+  play: async ({ canvas, msw }) => {
+    const { orderChangeDigest } = await import("../../lib/supportOrderPayload");
+    const digest = await orderChangeDigest("ORDER_CANCELLATION", caseId, "CHANGED_MIND", "");
+    msw.use(http.get("/api/v1/support/action-requests/:requestId/workflow", () => HttpResponse.json({
+      request: { requestId: caseId, caseId, action: "ORDER_CANCELLATION", targetId: caseId, revisionNumber: 1, requestVersion: 1, targetVersion: 2, state: "READY_FOR_EXECUTION", actionPayloadDigest: digest, evidenceDigest: "a".repeat(64), expiresAt: "2099-09-11T09:15:00Z", approvalSteps: [] },
+      order: { orderId: caseId, storeId: caseId, state: "PAID", version: 2 }, caseVersion: 4, allowedActions: ["EXECUTE"],
+    })), http.post("/api/v1/support/action-requests/:requestId/executions", () => HttpResponse.error()));
+    await waitFor(() => expect(canvas.getByRole("button", { name: "확인한 주문 변경 실행" })).toBeEnabled());
+    await userEvent.click(canvas.getByRole("button", { name: "확인한 주문 변경 실행" }));
+    await canvas.findByRole("button", { name: "같은 요청으로 결과 확인" });
+    await expect(canvas.getByRole("tab", { name: "상담 이력" })).toBeDisabled();
+    await expect(canvas.getByRole("tab", { name: "고객 보상" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "기존 본인확인 요청 찾기" })).toBeDisabled();
+  },
+};

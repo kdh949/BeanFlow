@@ -1,3 +1,4 @@
+import { SupportWorkPicker } from "./SupportWorkPicker";
 import { supportSubjectLabel } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,7 +20,6 @@ type Verification = { sessionId: string; subjectLinkId: string; state: string; s
 type Workflow = components["schemas"]["SupportProfileWorkflowResource"];
 const approvalLabels: Record<string, string> = { AWAITING_SUPPORT_MANAGER: "상담 관리자 승인 대기", AWAITING_OPERATIONS: "운영 검토 대기", READY_FOR_EXECUTION: "실행 준비", REASSIGNMENT_REQUIRED: "담당자 재배정 필요", REVISION_REQUIRED: "정정안 수정 필요", DENIED: "반려", EXPIRED: "만료", STALE: "조건 변경", MANUAL_REVIEW: "수동 확인 필요", EXECUTED: "실행 완료" };
 const notificationLabels: Record<string, string> = { NOT_REQUESTED: "알림 대상 없음", PENDING: "알림 대기", PROCESSING: "알림 접수 처리 중", ACCEPTED: "알림 접수 완료", RETRY_SCHEDULED: "알림 재시도 예정", MANUAL_REVIEW: "알림 수동 확인 필요" };
-const uuid = (value: string) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value.trim());
 
 /** Purpose-specific fields use only transient component state; leaving the window or waiting clears raw input. */
 export function useProfileValues(scope: string) {
@@ -50,11 +50,12 @@ function SensitiveResult({ command }: { command: ReturnType<typeof useSensitiveS
 
 /** Composes current profile metadata, typed changes, independent approval and notification follow-up. */
 export function SupportProfileChangeWorkspace({ supportCase, verification, initialProfileChangeId, onBusyChange }: { supportCase?: Case; verification?: Verification | null; initialProfileChangeId?: string; onBusyChange?: (busy: boolean) => void }) {
-  const [id, setId] = useState(initialProfileChangeId ?? ""), [lookup, setLookup] = useState(initialProfileChangeId ?? ""), [active, setActive] = useState(false);
+  const [id, setId] = useState(initialProfileChangeId ?? ""), [active, setActive] = useState(false);
   useEffect(() => { onBusyChange?.(active); return () => onBusyChange?.(false); }, [active, onBusyChange]);
   return <section className="management-workspace" aria-label="정보 정정 업무"><h2>정보 정정</h2>
-    <form className="surface-card management-card operation-form" onSubmit={event => { event.preventDefault(); if (!active && uuid(lookup)) setId(lookup.trim()); }}><TextField label="기존 정보 정정 ID" value={lookup} onValueChange={setLookup} disabled={active} required /><Button type="submit" variant="secondary" disabled={active || !uuid(lookup)}>정보 정정 건 열기</Button>{id && supportCase ? <Button variant="ghost" disabled={active} onClick={() => { setId(""); setLookup(""); }}>새 정보 정정</Button> : null}</form>
-    {id ? <ProfileInspection key={id} id={id} supportCase={supportCase} verification={verification} onBusyChange={setActive} /> : supportCase ? <CreateProfileChange supportCase={supportCase} verification={verification} onBusyChange={setActive} onCreated={created => { setId(created); setLookup(created); }} /> : <EmptyState title="상담 건에서 정정을 시작해 주세요" description="기존 정정 건은 ID로 열어 승인과 변경 상태를 확인할 수 있습니다." />}
+    <SupportWorkPicker kind="PROFILE_CHANGE" caseId={supportCase?.caseId} disabled={active} onSelect={item => setId(item.requestId)} />
+    {id && supportCase ? <Button variant="ghost" disabled={active} onClick={() => setId("")}>새 정보 정정</Button> : null}
+    {id ? <ProfileInspection key={id} id={id} supportCase={supportCase} verification={verification} onBusyChange={setActive} /> : supportCase ? <CreateProfileChange supportCase={supportCase} verification={verification} onBusyChange={setActive} onCreated={created => { setId(created); }} /> : <EmptyState title="상담 건에서 정정을 시작해 주세요" description="기존 요청 찾기에서 승인과 변경 상태를 확인할 수 있습니다." />}
   </section>;
 }
 

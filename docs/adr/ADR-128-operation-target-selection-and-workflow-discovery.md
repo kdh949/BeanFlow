@@ -89,6 +89,22 @@ Case 상세의 연결 대상 표시에는 owner별 일괄 projection을 사용�
 `MISSING_PROFILE`, 저장소/감사/잘못된 마스킹은 조회 실패로 구분한다. UUID를 이름으로 대신 표시하지 않는다.
 본인확인, 개인정보 열람, 정정과 금전 실행은 표시 정보를 권한 근거로 사용하지 않는다.
 
+### Existing support work discovery
+
+`GET /support/work-items`는 업무 종류와 선택적인 Case 범위로 기존 영속 요청을 찾는다. Support 소유
+테이블의 bounded ID page를 읽은 뒤 각 업무의 기존 inspect/get 권한·상태 검사를 재사용한다. 별도 SQL로
+개별 객체의 실행/승인 권한을 재정의하지 않는다. 본인확인/승인 조회의 기존 만료·재배정 상태 갱신은 그대로
+수행할 수 있지만 challenge 발급, 원문 열람, 승인 결정, 금전 실행 또는 외부 발송은 수행하지 않는다.
+
+여러 요청의 lock을 한 transaction에 쌓지 않는다. 후보 조회와 각 기존 inspection은 별도의 짧은 local
+transaction이며 마지막에 목록 권한을 재검증한다. 따라서 목록은 atomic snapshot이 아니며 실제 선택 후
+다시 상세를 읽는다. 기존 inspection이 객체 가시성에 대해 반환한 ACCESS_DENIED는 명시적인 행 권한
+필터로 적용한다. 기본 목록 권한 철회는 403으로 실패하며, 다른 예외/저장소 실패를 빈 목록으로 바꾸지 않는다.
+권한 필터로 빈 page에도 nextCursor가 있으면 다음 조회 구간을 표시한다. 커서는 actor·종류·Case에 묶는다.
+종료된 Case의 본인확인/열람 요청과 연결 해제된 열람 대상은 재개 후보에서 제외한다. 이력은 Case 이력에서 확인한다.
+목록에는 업무 목적, 현재 조회 상태, 생성/만료 시각과 Case 분류/접수 시각만 반환하며 원문 개인정보,
+인증 증명, payload/evidence digest, 비밀 또는 실행 자격을 반환하지 않는다. 기존 상세 공유 주소는 유지한다.
+
 ### Manual sequential migration scope
 
 이번 작업은 #170의 구현 제외를 명시한 수동 후속 요청이다. 정확한 기준은 #170

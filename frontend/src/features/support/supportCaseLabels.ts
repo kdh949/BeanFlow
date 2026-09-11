@@ -13,3 +13,7 @@ export function supportSubjectLabel(link: { subjectType: string; display?: compo
   const state = link.display?.state === "REQUIRES_PERMISSION" ? "표시 정보 조회 권한 필요" : "등록된 표시 정보 없음";
   return `${subjectName} · ${state}`;
 }
+
+export function supportCaseTitle(value: { category?: components["schemas"]["SupportInquiryCategory"] | null }): string {
+  return value.category ? `${caseCategoryLabels[value.category]} 상담` : "상담 상세";
+}
