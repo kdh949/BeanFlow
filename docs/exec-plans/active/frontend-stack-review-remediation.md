@@ -157,6 +157,20 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
   typecheck, check:design, build-storybook, build, test:sites 4개, verify-docs.
 - Backend 동작 변경은 없으며 이 slice의 backend 재실행은 Not run이다. 원격 CI와 리뷰 해결은 대기 중이다.
 
+### #164 로컬 검증
+
+- 상담원과 매장 액터가 각자의 권한·대상 범위로 픽업 후보를 조회하도록 API와 화면을 연결한다.
+- 기존 S60 GET 상태 보정은 상태·버전·감사의 일회 전이를 유지하고 반복 조회 무변경을 검증한다.
+- 상담 명령은 전송 전 actor·업무·입력 해시와 키만 기록해 같은 탭 재진입 때 동일 키를 사용한다.
+- 만료 challenge 재발급, 삭제된 연결의 자동 재선택 방지, 현재 동의 정책 버전 검증을 추가한다.
+- Passed: PostgreSQL 상담 승인·매장 주문 변경 16개, Runtime OpenAPI parity 1개,
+  frontend unit 241개, presentation boundary 10개, product copy 11개, 전체 Storybook 505개,
+  typecheck, check:design, build-storybook, build, test:sites 4개, verify-docs.
+- Storybook Docs는 로컬 브라우저 실행 권한 오류 후 재실행 중이다.
+- #160 및 #162 원격 CI 통과 후 해당 리뷰 9개를 답변·해결했다. #161의 CI Storybook 일시 실패는
+  동일 코드의 후속 브랜치와 로컬 전체 Storybook 통과를 확인하고 실패 작업을 재실행했다.
+- #164 원격 CI와 리뷰 해결은 대기 중이다.
+
 ## Surprises & Discoveries
 
 이미지 삭제는 후속 #168에서 코드가 보완돼 있으므로 #161 자체의 회귀와 함께 확인한다.

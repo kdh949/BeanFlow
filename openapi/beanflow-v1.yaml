@@ -8701,6 +8701,38 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RetryPublicationRequest'
+  /support/cases/{caseId}/orders/{orderId}/pickup-slots:
+    get:
+      tags:
+      - Support
+      operationId: listSupportOrderPickupSlots
+      summary: 상담 주문 픽업 후보 조회
+      description: 현재 Case 배정, 활성 주문 연결, SUPPORT_CASE_READ와 SUPPORT_ORDER_READ를 검증한다. 고객 세션은 필요하지 않으며 실행 시 정원을 재검증한다.
+      parameters:
+      - $ref: '#/components/parameters/SupportCaseId'
+      - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickupSlotList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /support/cases/{caseId}/orders/{orderId}:
     get:
       tags:
@@ -8733,13 +8765,44 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /support/action-requests/{requestId}/pickup-slots:
+    get:
+      tags:
+      - Support
+      operationId: listSupportRequestPickupSlots
+      summary: 상담 승인 요청 픽업 후보 조회
+      description: 현재 요청 가시성 및 SUPPORT_CASE_READ와 SUPPORT_ORDER_READ를 검증한다. workflow와 같은 만료 및 권한 철회 read repair를 포함하며 실제 주문 변경은 실행하지 않는다.
+      parameters:
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      responses:
+        '200':
+          description: 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickupSlotList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /support/action-requests/{requestId}/workflow:
     get:
       tags:
       - Support
       operationId: getSupportOrderWorkflow
       summary: 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다
-      description: 기존 요청 조회 권한으로 현재 승인안과 실행 담당 권한을 재검증합니다. 개인정보나 action 원문은 반환하지 않습니다.
+      description: 기존 요청 조회 권한으로 현재 승인안과 실행 담당 권한을 재검증합니다. 승인 대기 만료 및 실행 권한 철회는 기존 S60 트랜잭션에서 상태·버전·감사로 반영하며 반복 조회는 추가 전이를 만들지 않습니다. 개인정보나 action 원문은 반환하지 않습니다.
       parameters:
       - $ref: '#/components/parameters/SupportActionRequestId'
       responses:
@@ -8752,6 +8815,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SupportOrderWorkflowResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /stores/{storeId}/support-order-change-requests/{requestId}/pickup-slots:
+    get:
+      tags:
+      - Support
+      security: [{ merchantSession: [] }]
+      operationId: listStoreSupportRequestPickupSlots
+      summary: 매장 상담 동의 픽업 후보 조회
+      description: 현재 same-store OWNER 또는 STAFF와 동의 대상의 action, revision, 정책 버전, 주문 버전, 만료를 검증한다. 고객 세션은 필요하지 않다.
+      parameters:
+      - $ref: '#/components/parameters/StoreId'
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      responses:
+        '200':
+          description: 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickupSlotList'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':

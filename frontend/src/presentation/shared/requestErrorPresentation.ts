@@ -7,6 +7,10 @@ export type RequestErrorPresentation = {
 };
 
 const knownErrors: Record<string, Omit<RequestErrorPresentation, "reference">> = {
+  COMMAND_IDENTITY_UNAVAILABLE: {
+    title: "요청 식별 정보를 보관하지 못했습니다",
+    description: "브라우저 저장소를 사용할 수 있는지 확인한 뒤 같은 내용으로 다시 시도해 주세요.",
+  },
   INVALID_REQUEST: {
     title: "입력 내용을 확인해 주세요",
     description: "요청 형식이나 입력한 값이 올바르지 않습니다. 내용을 수정한 뒤 다시 시도해 주세요.",

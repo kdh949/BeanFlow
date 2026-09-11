@@ -315,3 +315,13 @@ Support Manager, Operations reviewer와 executor separation을 서버와 DB 제�
 
 JWT role이나 UI evaluation은 위 grant를 대체하지 않는다. 권한 row는 caller transaction에서 잠그므로 revoke와
 실행이 직렬화된다. Operations reviewer는 exact request를 반환할 뿐 Point/Coupon을 발급하지 않는다.
+
+### 상담 픽업 후보 조회 보완 (2026-09-12)
+
+- `/support/cases/{caseId}/orders/{orderId}/pickup-slots`: 현재 assigned Case·활성 ORDER link와
+  `SUPPORT_CASE_READ`·`SUPPORT_ORDER_READ`.
+- `/support/action-requests/{requestId}/pickup-slots`: 기존 요청 가시성과 `SUPPORT_CASE_READ`·
+  `SUPPORT_ORDER_READ`; workflow와 동일한 상태 갱신 경계.
+- `/stores/{storeId}/support-order-change-requests/{requestId}/pickup-slots`: 현재 same-store
+  OWNER/STAFF와 기존 동의 대상의 revision·policy·order version·expiry 검증.
+- 모두 no-store 응답이며 고객 세션을 요구하지 않는다. 후보 조회는 예약·명령 권한을 대신하지 않는다.
