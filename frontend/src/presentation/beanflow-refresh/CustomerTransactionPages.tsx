@@ -46,32 +46,30 @@ export function RefreshCheckoutPage() {
   const routeState = useLocation().state as { reorderPriceComparison?: ReorderPriceComparison } | null;
   const [failure, setFailure] = useState<unknown>(null);
   const [paying, setPaying] = useState(false);
-  const [deadlineReached, setDeadlineReached] = useState(false);
   const expiryRefresh = useRef("");
   const read = useCallback(async () => unwrap(await customerApi.GET("/me/orders/{orderReference}/checkout", { params: { path: { orderReference } } })), [orderReference]);
   const resource = useResource<PublicCheckout>(read);
-  const { state, reload } = resource;
+  const { state, reload, refresh } = resource;
   useAttentionRefresh(resource.refresh, { enabled: !paying && state.status !== "loading", intervalMs: 15_000 });
   useEffect(() => {
     if (state.status !== "ready") return;
     const deadline = state.value.order.reservationExpiresAt;
     const remaining = deadline ? Date.parse(deadline) - Date.now() : 0;
-    setDeadlineReached(remaining <= 0);
     if (state.value.order.status !== "PENDING_PAYMENT" || !deadline) return;
     const key = `${orderReference}.${deadline}`;
-    if (remaining <= 0) { if (expiryRefresh.current !== key) { expiryRefresh.current = key; reload(); } return; }
-    const timer = window.setTimeout(() => { expiryRefresh.current = key; setDeadlineReached(true); reload(); }, Math.min(remaining, 2_147_483_647));
+    if (remaining <= 0) { if (expiryRefresh.current !== key) { expiryRefresh.current = key; refresh(); } return; }
+    const timer = window.setTimeout(() => { expiryRefresh.current = key; refresh(); }, Math.min(remaining, 2_147_483_647));
     return () => window.clearTimeout(timer);
-  }, [state, reload, orderReference]);
+  }, [state, refresh, orderReference]);
 
   async function pay() {
     if (paying) return;
     setPaying(true); setFailure(null);
     try {
       const current = await read();
-      if (!current.canPay || !current.order.reservationExpiresAt || Date.parse(current.order.reservationExpiresAt) <= Date.now()) { reload(); return; }
+      if (!current.canPay) { reload(); return; }
       const attempt = current.readyAttempt ?? unwrap(await customerApi.POST("/me/orders/{orderReference}/payment-attempts", { params: { path: { orderReference }, header: { "Idempotency-Key": idempotencyKey(`payment-attempt.${orderReference}`), ...(await customerCsrfHeader()) } } }));
-      if (attempt.state !== "READY" || Date.parse(attempt.expiresAt) <= Date.now()) { reload(); return; }
+      if (attempt.state !== "READY") { reload(); return; }
       attemptStorage.save(attempt);
       const config = unwrap(await customerApi.GET("/payment-config"));
       await requestTossStandardPayment(config.clientKey, { customerKey: attempt.customerKey, method: attempt.method, amount: attempt.amount, orderId: attempt.providerOrderId, orderName: attempt.orderName, successUrl: attempt.successUrl, failUrl: attempt.failUrl });
@@ -98,10 +96,9 @@ export function RefreshCheckoutPage() {
       <section className="bfr-payment-method"><header><h2>결제 수단</h2></header><div><span><CreditCard size={22} /></span><p><strong>다음 결제창에서 카드·간편결제를 선택해 주세요.</strong><small>Toss Payments 결제창으로 이동합니다.</small></p></div><p><ShieldCheck size={14} />BeanFlow는 카드 번호를 저장하거나 처리하지 않습니다.</p></section>
       {order.status === "EXPIRED" ? <p className="bfr-inline-status" role="alert">결제 시간이 만료됐어요. 주문 상태에서 새 주문이 필요한지 확인해 주세요.</p> : null}
       {!checkout.canPay && order.status === "PENDING_PAYMENT" ? <p role="status">결제 결과를 확인하고 있어요. 새 결제를 시작하지 마세요.</p> : null}
-      {deadlineReached && order.status === "PENDING_PAYMENT" && checkout.canPay ? <p role="status">결제 가능한 시간을 다시 확인해 주세요.</p> : null}
       {checkout.paymentId && !checkout.canPay ? <ButtonLink variant="secondary" to={`/app/payments/${checkout.paymentId}/success`}>결제 처리 상태 확인</ButtonLink> : null}
       {failure ? <RefreshError error={failure} /> : null}
-      <Button variant="brand" size="xl" block loading={paying} disabled={!checkout.canPay || deadlineReached} onClick={() => void pay()}>{paying ? "Toss 결제창을 여는 중" : `${won.format(order.pricing.payableKrw)} 결제하기`}</Button>
+      <Button variant="brand" size="xl" block loading={paying} disabled={!checkout.canPay} onClick={() => void pay()}>{paying ? "Toss 결제창을 여는 중" : `${won.format(order.pricing.payableKrw)} 결제하기`}</Button>
       <div><Button variant="ghost" onClick={reload} disabled={paying}>현재 상태 새로고침</Button></div>
       <p className="bfr-legal">결제 버튼을 누르면 주문 내용과 결제 진행에 동의합니다.</p>
     </div>

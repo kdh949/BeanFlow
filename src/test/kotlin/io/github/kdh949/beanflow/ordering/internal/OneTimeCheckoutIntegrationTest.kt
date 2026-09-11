@@ -11,6 +11,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -92,6 +94,84 @@ internal class OneTimeCheckoutIntegrationTest
                 .andExpect(jsonPath("$.order.orderReference").value(reference))
                 .andExpect(jsonPath("$.order.orderId").doesNotExist())
                 .andExpect(jsonPath("$.readyAttempt.orderId").doesNotExist())
+            assertNoProviderCalls()
+        }
+
+        @ParameterizedTest
+        @CsvSource(
+            "APPROVING,CONFIRMING",
+            "UNKNOWN,UNKNOWN",
+            "RECONCILING,RECONCILING",
+            "MANUAL_REVIEW,MANUAL_REVIEW",
+            "APPROVED,APPROVED",
+            "FAILED,FAILED",
+            "UNKNOWN,READY",
+            "READY,UNKNOWN",
+        )
+        fun `public prepare only replays a currently ready payment`(
+            paymentState: String,
+            attemptState: String,
+        ) {
+            val fixture = OrderCreationFixture()
+            val orderId = pendingOrder(fixture, "public-state-order")
+            val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+            val prepared = publicCheckout.prepare(fixture.customerId, reference, "public-state-key")
+            jdbcTemplate.update(
+                "UPDATE payment_payment SET approval_state = ?, approved_amount_krw = ? WHERE id = ?",
+                paymentState,
+                if (paymentState == "APPROVED") 1000L else null,
+                prepared.paymentId,
+            )
+            if (attemptState != "READY") {
+                jdbcTemplate.update(
+                    """
+                    UPDATE payment_one_time_attempt SET state = ?, payment_key = ?, callback_payload_hash = ?,
+                        claim_token = ?, claimed_at = ? WHERE payment_id = ?
+                    """.trimIndent(),
+                    attemptState,
+                    "test-payment-key",
+                    "a".repeat(64),
+                    if (attemptState == "CONFIRMING") UUID.randomUUID() else null,
+                    if (attemptState == "CONFIRMING") Timestamp.from(testClock.instant()) else null,
+                    prepared.paymentId,
+                )
+            }
+            val actor = jwt().jwt { it.subject(fixture.customerId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_CUSTOMER"))
+            mockMvc
+                .perform(
+                    post("/api/v1/me/orders/$reference/payment-attempts")
+                        .with(actor)
+                        .with(csrf())
+                        .header("Idempotency-Key", "public-state-key"),
+                ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("ORDER_STATE_CONFLICT"))
+                .andExpect(jsonPath("$.providerOrderId").doesNotExist())
+            assertThat(publicCheckout.get(fixture.customerId, reference).readyAttempt).isNull()
+            assertThat(value<Long>("SELECT count(*) FROM payment_payment")).isOne()
+            assertNoProviderCalls()
+        }
+
+        @Test
+        fun `public prepare refuses the same key at and after reservation expiry`() {
+            val fixture = OrderCreationFixture()
+            val orderId = pendingOrder(fixture, "public-expiry-order")
+            val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+            val prepared = publicCheckout.prepare(fixture.customerId, reference, "public-expiry-key")
+            testClock.set(prepared.expiresAt)
+            val actor = jwt().jwt { it.subject(fixture.customerId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_CUSTOMER"))
+            repeat(2) {
+                mockMvc
+                    .perform(
+                        post("/api/v1/me/orders/$reference/payment-attempts")
+                            .with(actor)
+                            .with(csrf())
+                            .header("Idempotency-Key", "public-expiry-key"),
+                    ).andExpect(status().isConflict)
+                    .andExpect(jsonPath("$.code").value("ORDER_STATE_CONFLICT"))
+                    .andExpect(jsonPath("$.providerOrderId").doesNotExist())
+            }
+            assertThat(publicCheckout.get(fixture.customerId, reference).canPay).isFalse()
+            assertThat(value<Long>("SELECT count(*) FROM payment_payment")).isOne()
             assertNoProviderCalls()
         }
 

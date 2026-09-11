@@ -875,7 +875,8 @@ export interface paths {
         /**
          * 공개 주문번호로 일회성 결제 준비
          * @description 기존 Order/Payment 잠금과 멱등 결제 준비를 사용합니다. 서버 금액만 사용하며 내부 orderId를
-         *     반환하지 않습니다. READY 이외의 replay는 결제창을 열지 않고 현재 결제 결과를 조회해야 합니다.
+         *     반환하지 않습니다. 서버 시각 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만
+         *     준비 정보를 반환합니다. 그 외 상태는 409이며 현재 결제 결과를 조회해야 합니다.
          */
         post: operations["preparePublicCheckoutPayment"];
         delete?: never;
@@ -6538,8 +6539,11 @@ export interface components {
         PublicOneTimePaymentAttempt: {
             paymentId: components["schemas"]["Identifier"];
             orderReference: string;
-            /** @enum {string} */
-            state: "READY" | "CONFIRMING" | "APPROVED" | "FAILED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW";
+            /**
+             * @description 서버 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만 반환한다.
+             * @enum {string}
+             */
+            state: "READY";
             providerOrderId: string;
             customerKey: string;
             orderName: string;

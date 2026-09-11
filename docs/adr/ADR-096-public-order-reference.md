@@ -157,3 +157,10 @@ lock과 결제 확인 멱등성으로 검증한다. 새 조회는 Provider를 �
 - [ADR-098](ADR-098-order-display-snapshots.md)
 - [ADR-003](ADR-003-aggregate-reference-by-id.md)
 - [ADR-030](ADR-030-customer-cancellation-authorization.md)
+
+## Checkout replay clarification (2026-09-12)
+
+공개 payment-attempt POST는 준비 명령 전후에 현재 checkout eligibility를 검사한다.
+Payment/attempt READY와 서버 Clock 기준 유효 예약을 모두 확인한 응답만 결제창에 전달한다.
+그 외 상태는 409이며 고객은 현재 checkout/결제 상태를 조회한다. 브라우저 시계는 재조회 예약의
+힌트일 뿐 서버의 canPay를 무효화하거나 결제창을 독립적으로 허용하는 근거가 아니다.
