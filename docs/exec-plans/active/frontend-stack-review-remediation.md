@@ -149,6 +149,14 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - 권한 철회 fixture에 revoked_at이 빠진 초기 테스트 실패를 수정해 재검증했다.
 - 원격 CI와 리뷰 해결은 대기 중이다.
 
+### #163 로컬 검증
+
+- 재접수 폼은 이전 청구 금액의 부호를 보존하며, 복구 판정은 서버 state와 현재 actor를 따른다.
+- 다른 제안 조회는 이전 판정 사유·생성 안내를 초기화한다.
+- Passed: frontend unit 231개, presentation boundary 10개, product copy 11개, 영향 Storybook 18개,
+  typecheck, check:design, build-storybook, build, test:sites 4개, verify-docs.
+- Backend 동작 변경은 없으며 이 slice의 backend 재실행은 Not run이다. 원격 CI와 리뷰 해결은 대기 중이다.
+
 ## Surprises & Discoveries
 
 이미지 삭제는 후속 #168에서 코드가 보완돼 있으므로 #161 자체의 회귀와 함께 확인한다.
