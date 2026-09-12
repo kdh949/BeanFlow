@@ -208,7 +208,7 @@ export interface paths {
         };
         /**
          * 조직 로그인 이름으로 상담 담당자 선택
-         * @description SUPPORT_CASE_READ 또는 SUPPORT_CASE_ASSIGN의 현재 grant를 확인한다. CASE_FILTER는 이력 조회용으로 철회된 Case 쓰기 권한도 포함하며, 나머지 목적은 현재 Case 쓰기 및 목적별 실행 grant가 모두 있는 계정만 반환한다. 표시 이름은 서명된 최근 로그인 관측 정보이며 명령 권한이 아니다.
+         * @description SUPPORT_CASE_READ 또는 SUPPORT_CASE_ASSIGN의 현재 grant를 확인한다. INTERNAL_REQUESTER만 호출자에게 SUPPORT_CASE_WRITE를 요구하며 현재 ACTIVE grant가 하나 이상 있는 관측 계정을 후보로 반환한다. CASE_FILTER는 이력 조회용으로 철회된 Case 쓰기 권한도 포함하며, 그 외 목적은 현재 Case 쓰기 및 목적별 실행 grant가 모두 있는 계정만 반환한다. 표시 이름은 서명된 최근 로그인 관측 정보이며 명령 권한이 아니다.
          */
         get: operations["listOperatorCandidates"];
         put?: never;
@@ -903,7 +903,8 @@ export interface paths {
         /**
          * 공개 주문번호로 일회성 결제 준비
          * @description 기존 Order/Payment 잠금과 멱등 결제 준비를 사용합니다. 서버 금액만 사용하며 내부 orderId를
-         *     반환하지 않습니다. READY 이외의 replay는 결제창을 열지 않고 현재 결제 결과를 조회해야 합니다.
+         *     반환하지 않습니다. 서버 시각 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만
+         *     준비 정보를 반환합니다. 그 외 상태는 409이며 현재 결제 결과를 조회해야 합니다.
          */
         post: operations["preparePublicCheckoutPayment"];
         delete?: never;
@@ -1764,7 +1765,7 @@ export interface paths {
         };
         /**
          * 주문별 환불 복구 건 목록
-         * @description PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다.
+         * @description PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다. 고정 목적 PAYMENT_SETUP_RECOVERY_REVIEW와 필터 상태·결과 건수의 금융 감사 기록을 같은 transaction에 저장한다. 감사 실패도 503이다. Case 조회 action은 PAYMENT_SETUP_RECOVERY_CASES_READ, 제안은 PAYMENT_SETUP_REPAIR_PROPOSALS_READ다.
          */
         get: operations["listPaymentSetupRecoveryCases"];
         put?: never;
@@ -1784,7 +1785,7 @@ export interface paths {
         };
         /**
          * 환불 복구 제안 목록
-         * @description PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다.
+         * @description PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다. 고정 목적 PAYMENT_SETUP_RECOVERY_REVIEW와 필터 상태·결과 건수의 금융 감사 기록을 같은 transaction에 저장한다. 감사 실패도 503이다. Case 조회 action은 PAYMENT_SETUP_RECOVERY_CASES_READ, 제안은 PAYMENT_SETUP_REPAIR_PROPOSALS_READ다.
          */
         get: operations["listPaymentSetupRepairProposals"];
         put?: never;
@@ -1898,6 +1899,75 @@ export interface paths {
          *     - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
          */
         patch: operations["updateExpiredBenefitRestorationPolicy"];
+        trace?: never;
+    };
+    "/operations/point-adjustment-preparations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 포인트 조정 준비
+         * @description 현재 운영자 본인의 미확인 조정만 다룹니다. POINT_ACCOUNT_READ가 필요하며 준비와 활성 기록 조회는 CUSTOMER_ACCOUNT_SEARCH도 필요합니다. 준비는 POINT_ADJUSTMENT를 추가로 확인합니다.
+         *     계정과 요청 본문은 서버에 고정하며 preparationId를 기존 조정 API의 Idempotency-Key로 사용합니다. 운영자별 미확인 기록은 하나이며, 다른 조정은 409로 차단합니다.
+         *     PREPARED 취소와 기존 조정 실행은 계정 잠금으로 직렬화합니다. APPLIED는 결과 확인만 가능하고 금전 변경을 취소하지 않습니다. 기대 상태가 달라지면 409입니다.
+         *     응답은 no-store이며 조회와 상태 변경에 감사 기록을 남깁니다. 미확인 기록은 유지하고 확인·취소한 기록은 90일 후 정리합니다.
+         */
+        post: operations["preparePointAdjustment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/point-adjustment-preparations/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 미확인 포인트 조정 복구
+         * @description 현재 운영자 본인의 미확인 조정만 다룹니다. POINT_ACCOUNT_READ가 필요하며 준비와 활성 기록 조회는 CUSTOMER_ACCOUNT_SEARCH도 필요합니다. 준비는 POINT_ADJUSTMENT를 추가로 확인합니다.
+         *     계정과 요청 본문은 서버에 고정하며 preparationId를 기존 조정 API의 Idempotency-Key로 사용합니다. 운영자별 미확인 기록은 하나이며, 다른 조정은 409로 차단합니다.
+         *     PREPARED 취소와 기존 조정 실행은 계정 잠금으로 직렬화합니다. APPLIED는 결과 확인만 가능하고 금전 변경을 취소하지 않습니다. 기대 상태가 달라지면 409입니다.
+         *     응답은 no-store이며 조회와 상태 변경에 감사 기록을 남깁니다. 미확인 기록은 유지하고 확인·취소한 기록은 90일 후 정리합니다.
+         */
+        get: operations["getCurrentPointAdjustmentPreparation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/point-adjustment-preparations/{preparationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 미적용 조정 취소 또는 적용 결과 확인
+         * @description 현재 운영자 본인의 미확인 조정만 다룹니다. POINT_ACCOUNT_READ가 필요하며 준비와 활성 기록 조회는 CUSTOMER_ACCOUNT_SEARCH도 필요합니다. 준비는 POINT_ADJUSTMENT를 추가로 확인합니다.
+         *     계정과 요청 본문은 서버에 고정하며 preparationId를 기존 조정 API의 Idempotency-Key로 사용합니다. 운영자별 미확인 기록은 하나이며, 다른 조정은 409로 차단합니다.
+         *     PREPARED 취소와 기존 조정 실행은 계정 잠금으로 직렬화합니다. APPLIED는 결과 확인만 가능하고 금전 변경을 취소하지 않습니다. 기대 상태가 달라지면 409입니다.
+         *     응답은 no-store이며 조회와 상태 변경에 감사 기록을 남깁니다. 미확인 기록은 유지하고 확인·취소한 기록은 90일 후 정리합니다.
+         */
+        delete: operations["dismissPointAdjustmentPreparation"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/operations/point-accounts/{accountId}/adjustments": {
@@ -5014,6 +5084,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/store-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 업무별 최소 매장 목록 조회
+         * @description 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ, MEDIA=STORE_MEDIA_MANAGE, MEMBERSHIP_ASSIGNMENT=STORE_MEMBERSHIP_WRITE, MERCHANT_ACCOUNT=MERCHANT_CREDENTIAL_MANAGE, DISPUTE=SETTLEMENT_DISPUTE_READ, REFUND=기존 PLATFORM_OPERATOR 역할만 확인. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
+         */
+        get: operations["listStoreTargets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/stores": {
         parameters: {
             query?: never;
@@ -5166,6 +5256,26 @@ export interface paths {
          * @description STORE_SETTLEMENT_TERMS_READ grant. 다른 매장의 계약은 404다.
          */
         get: operations["getStoreSettlementTerms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/stores/{storeId}/memberships/account-target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 소속 추가 목적의 기존 계정 정확 조회
+         * @description PLATFORM_OPERATOR와 STORE_MEMBERSHIP_WRITE만 필요하며 현재 매장을 확인한다. accountId/loginId/displayName만 반환하고 인증 상태나 타 매장 소속은 노출하지 않는다. no-store이며 MERCHANT_ACCOUNT_READ 감사 기록의 purpose=MEMBERSHIP_ASSIGNMENT와 storeId를 같은 트랜잭션에 저장한다.
+         */
+        get: operations["findMembershipAccountTarget"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5362,6 +5472,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/cases/{caseId}/orders/{orderId}/pickup-slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 상담 주문 픽업 후보 조회
+         * @description 현재 Case 배정, 활성 주문 연결, SUPPORT_CASE_READ와 SUPPORT_ORDER_READ를 검증한다. 고객 세션은 필요하지 않으며 실행 시 정원을 재검증한다.
+         */
+        get: operations["listSupportOrderPickupSlots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support/cases/{caseId}/orders/{orderId}": {
         parameters: {
             query?: never;
@@ -5382,6 +5512,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/action-requests/{requestId}/pickup-slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 상담 승인 요청 픽업 후보 조회
+         * @description 현재 요청 가시성 및 SUPPORT_CASE_READ와 SUPPORT_ORDER_READ를 검증한다. workflow와 같은 만료 및 권한 철회 read repair를 포함하며 실제 주문 변경은 실행하지 않는다.
+         */
+        get: operations["listSupportRequestPickupSlots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support/action-requests/{requestId}/workflow": {
         parameters: {
             query?: never;
@@ -5391,9 +5541,29 @@ export interface paths {
         };
         /**
          * 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다
-         * @description 기존 요청 조회 권한으로 현재 승인안과 실행 담당 권한을 재검증합니다. 개인정보나 action 원문은 반환하지 않습니다.
+         * @description 기존 요청 조회 권한으로 현재 승인안과 실행 담당 권한을 재검증합니다. 승인 대기 만료 및 실행 권한 철회는 기존 S60 트랜잭션에서 상태·버전·감사로 반영하며 반복 조회는 추가 전이를 만들지 않습니다. 개인정보나 action 원문은 반환하지 않습니다.
          */
         get: operations["getSupportOrderWorkflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores/{storeId}/support-order-change-requests/{requestId}/pickup-slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 매장 상담 동의 픽업 후보 조회
+         * @description 현재 same-store OWNER 또는 STAFF와 동의 대상의 action, revision, 정책 버전, 주문 버전, 만료를 검증한다. 고객 세션은 필요하지 않다.
+         */
+        get: operations["listStoreSupportRequestPickupSlots"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5809,6 +5979,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/support-action-requests/{requestId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 운영 검토 전용 권한으로 현재 상담 승인안의 최소 조건을 조회합니다
+         * @description PLATFORM_OPERATOR 역할과 OPERATIONS_SUPPORT_INVESTIGATION grant를 요구합니다. OPERATIONS 승인 경로만 허용하며 상담 열람 권한은 요구하지 않습니다. 현재 승인안 해시·버전과 정정 목적 또는 보상 비용 조건만 반환합니다. 원문·본인확인 세션·상담 내용은 반환하지 않으며 상태·감사를 변경하지 않습니다. 승인 명령은 현재 권한과 바인딩을 다시 검증합니다.
+         */
+        get: operations["getOperationsSupportRequestReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5918,6 +6108,78 @@ export interface components {
             inquiryId: string;
             /** Format: uuid */
             caseId: string;
+        };
+        OperationsSupportActionReview: {
+            /** @description 해당 요청 자원을 가리키는 UUID 식별자입니다. */
+            requestId: components["schemas"]["Identifier"];
+            /** @description 해당 케이스 자원을 가리키는 UUID 식별자입니다. */
+            caseId: components["schemas"]["Identifier"];
+            /** @description 요청하거나 수행한 작업 유형입니다. */
+            action: components["schemas"]["SupportActionType"];
+            /** @description 해당 작업 대상 자원을 가리키는 UUID 식별자입니다. */
+            targetId: components["schemas"]["Identifier"];
+            /** @description 실행하거나 조회할 승인 요청 내용의 번호입니다. 1부터 시작합니다. */
+            revisionNumber: number;
+            /**
+             * Format: int64
+             * @description 동시 변경 확인에 사용하는 요청 리소스 버전입니다.
+             */
+            requestVersion: number;
+            /** @description 요청의 현재 승인·실행 상태입니다. */
+            state: components["schemas"]["SupportActionRequestState"];
+            /** @description 승인 대상 요청 내용이 바뀌지 않았는지 확인하는 SHA-256 해시값입니다. */
+            actionPayloadDigest: string;
+            /**
+             * Format: int64
+             * @description 요청이 연결된 주문 대상 버전입니다.
+             */
+            targetVersion: number;
+            /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
+            evidenceDigest: string;
+        };
+        OperationsSupportProfileReview: {
+            subjectId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            purpose: "CUSTOMER_DISPLAY_NAME" | "CUSTOMER_LEGAL_NAME_TYPO" | "CUSTOMER_PRIMARY_PHONE" | "CUSTOMER_CREDENTIAL_RESET" | "STORE_PUBLIC_PROFILE" | "STORE_OPERATIONS_CONTACT" | "STORE_REPRESENTATIVE" | "STORE_SETTLEMENT_ACCOUNT" | "STORE_ACCESS_REREGISTRATION" | "COURIER_DISPLAY_NAME" | "COURIER_RELAY_CONTACT" | "COURIER_PROVIDER_IDENTITY" | "COURIER_PAYOUT_REFERENCE" | "COURIER_PROVIDER_REREGISTRATION";
+            /** Format: int64 */
+            expectedProfileVersion: number;
+            payloadDigest: string;
+            /**
+             * Format: int64
+             * @description 현재 소유 모듈의 프로필 버전입니다.
+             */
+            currentProfileVersion: number;
+        };
+        OperationsSupportCompensationReview: {
+            /** @description 해당 사고 자원을 가리키는 UUID 식별자입니다. */
+            incidentId: components["schemas"]["Identifier"];
+            /**
+             * Format: uuid
+             * @description 해당 주문 자원을 가리키는 UUID 식별자입니다.
+             */
+            orderId: string | null;
+            /** @description 혜택 유형입니다. */
+            benefitType: components["schemas"]["SupportCompensationBenefitType"];
+            /**
+             * Format: int64
+             * @description 요청 또는 거래에 적용되는 정수 원(KRW) 단위 금액입니다.
+             */
+            amountKrw: number;
+            /** @description 요청 생성 당시 정규 요청 내용의 SHA-256 해시값입니다. */
+            payloadDigest: string;
+            terms: components["schemas"]["SupportCompensationTermsResource"];
+            /**
+             * Format: int64
+             * @description 현재 주문 버전입니다. 주문 없는 요청은 0이며 조회 불가능한 주문은 null입니다.
+             */
+            currentTargetVersion: number | null;
+            /** @description 쿠폰 보상에 고정된 할인·유효기간·최소 사용 금액입니다. 포인트 보상은 null입니다. */
+            couponTemplate: components["schemas"]["GoodwillCouponTemplateView"] | null;
+        };
+        OperationsSupportRequestReviewResource: {
+            request: components["schemas"]["OperationsSupportActionReview"];
+            profile: components["schemas"]["OperationsSupportProfileReview"] | null;
+            compensation: components["schemas"]["OperationsSupportCompensationReview"] | null;
         };
         /**
          * @description 현재 계정에서 가능한 긴급 열람 명령입니다. 모든 쓰기에서 재검증합니다.
@@ -6909,11 +7171,14 @@ export interface components {
          *       "operatorId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
          *       "roles": [
          *         "SETTLEMENT_REVIEWER"
-         *       ]
+         *       ],
+         *       "display": {
+         *         "state": "MISSING_PROFILE"
+         *       }
          *     }
          */
         OperatorActor: {
-            display?: components["schemas"]["OperatorDisplay"];
+            display: components["schemas"]["OperatorDisplay"];
             /** @constant */
             actorType: "OPERATOR";
             operatorId: components["schemas"]["Identifier"];
@@ -7981,8 +8246,11 @@ export interface components {
         PublicOneTimePaymentAttempt: {
             paymentId: components["schemas"]["Identifier"];
             orderReference: string;
-            /** @enum {string} */
-            state: "READY" | "CONFIRMING" | "APPROVED" | "FAILED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW";
+            /**
+             * @description 서버 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만 반환한다.
+             * @enum {string}
+             */
+            state: "READY";
             providerOrderId: string;
             customerKey: string;
             orderName: string;
@@ -9018,6 +9286,8 @@ export interface components {
             createdAt: components["schemas"]["DateTime"];
         };
         SetupRecoveryCaseItem: {
+            /** @description 현재 Case가 OPEN이고 resolution이 없는 경우만 true이며 명령은 최신 상태를 다시 검증한다. */
+            canPropose: boolean;
             caseId: components["schemas"]["Identifier"];
             /** @enum {string} */
             status: "OPEN" | "RUNNING" | "RESOLVED" | "MANUAL_REVIEW";
@@ -9163,6 +9433,11 @@ export interface components {
             /** @description 공백이 아닌 조정 근거 참조 목록입니다. 증거 원문 대신 감사 조사에서 근거를 찾을 수 있는 비민감 참조를 제공합니다. */
             evidenceReferences: string[];
         } & unknown;
+        PreparePointAdjustmentRequest: {
+            /** Format: uuid */
+            accountId: string;
+            request: components["schemas"]["PointAdjustmentRequest"];
+        };
         /**
          * @description 고객 포인트 계정의 운영자용 요약입니다. 즉시 사용 가능한 포인트와 아직 복구 중인 포인트를 원화 단위로 구분합니다.
          * @example {
@@ -9209,6 +9484,30 @@ export interface components {
             account: components["schemas"]["PointAccount"];
             /** @description 이번 조정으로 생성되거나 조회된 포인트 거래 내역입니다. */
             transactions: components["schemas"]["PointTransaction"][];
+        };
+        PointAdjustmentPreparationView: {
+            /** Format: uuid */
+            preparationId: string;
+            /** Format: uuid */
+            accountId: string;
+            customer: {
+                /** Format: uuid */
+                customerId: string;
+                maskedLoginId: string;
+                maskedDisplayName: string;
+            };
+            request: components["schemas"]["PointAdjustmentRequest"];
+            /** @enum {string} */
+            state: "PREPARED" | "APPLIED";
+            canExecute: boolean;
+            result: components["schemas"]["PointAdjustmentResult"] | null;
+        };
+        CurrentPointAdjustmentPreparation: {
+            preparation: components["schemas"]["PointAdjustmentPreparationView"] | null;
+        };
+        DismissPointAdjustmentPreparationRequest: {
+            /** @enum {string} */
+            expectedState: "PREPARED" | "APPLIED";
         };
         /**
          * @description 전체 기본 정책 또는 매장별 정책의 한 버전입니다. 매장별 설정을 직접 지정했는지, 전체 기본 정책을 따르는지, 언제부터 적용되는지와 변경 사유를 기록합니다.
@@ -13050,6 +13349,15 @@ export interface components {
             expectedVersion: number;
             reason: string;
         };
+        OperatorStoreTarget: {
+            /** Format: uuid */
+            storeId: string;
+            name: string;
+        };
+        OperatorStoreTargetPage: {
+            items: components["schemas"]["OperatorStoreTarget"][];
+            nextCursor: string | null;
+        };
         StoreIdentitySnapshot: {
             /** Format: uuid */
             storeId: string;
@@ -13166,6 +13474,12 @@ export interface components {
             terms: components["schemas"]["ManagedSettlementTermsSnapshot"];
             /** Format: int64 */
             revision: number;
+        };
+        MembershipAccountTarget: {
+            /** Format: uuid */
+            accountId: string;
+            loginId: string;
+            displayName: string;
         };
         ManagedStoreMembership: {
             /** @description 현재 계정 표시 이름. 소속 목록과 상세 조회에서 제공하며 명령 응답에는 생략할 수 있습니다. */
@@ -13531,6 +13845,8 @@ export interface components {
         MerchantAccountId: components["schemas"]["Identifier"];
         PointAccountId: components["schemas"]["Identifier"];
         BrandId: components["schemas"]["Identifier"];
+        /** @description 이미지 조회 목적을 검증하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 합니다. 이 조회는 Audit 기록을 추가하거나 변경하지 않습니다. */
+        ValidatedAccessReason: string;
         SettlementBatchId: components["schemas"]["Identifier"];
         SettlementItemId: components["schemas"]["Identifier"];
         SupportCaseId: components["schemas"]["Identifier"];
@@ -16303,6 +16619,7 @@ export interface operations {
     listPaymentSetupRecoveryCases: {
         parameters: {
             query?: {
+                caseId?: string;
                 status?: "OPEN" | "RUNNING" | "RESOLVED" | "MANUAL_REVIEW";
                 cursor?: string;
                 limit?: number;
@@ -16478,6 +16795,92 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ExpiredBenefitRestorationPolicy"];
                 };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    preparePointAdjustment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreparePointAdjustmentRequest"];
+            };
+        };
+        responses: {
+            /** @description 운영자 본인의 조정 준비 또는 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointAdjustmentPreparationView"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getCurrentPointAdjustmentPreparation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 운영자 본인의 조정 준비 또는 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentPointAdjustmentPreparation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    dismissPointAdjustmentPreparation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preparationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DismissPointAdjustmentPreparationRequest"];
+            };
+        };
+        responses: {
+            /** @description 취소 또는 결과 확인 완료 (같은 기대 상태의 재호출 포함) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
@@ -17477,8 +17880,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
-                "X-Access-Reason": components["parameters"]["AccessReason"];
+                /** @description 이미지 조회 목적을 검증하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 합니다. 이 조회는 Audit 기록을 추가하거나 변경하지 않습니다. */
+                "X-Access-Reason": components["parameters"]["ValidatedAccessReason"];
             };
             path: {
                 storeId: components["parameters"]["StoreId"];
@@ -17569,8 +17972,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
-                "X-Access-Reason": components["parameters"]["AccessReason"];
+                /** @description 이미지 조회 목적을 검증하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 합니다. 이 조회는 Audit 기록을 추가하거나 변경하지 않습니다. */
+                "X-Access-Reason": components["parameters"]["ValidatedAccessReason"];
             };
             path: {
                 storeId: components["parameters"]["StoreId"];
@@ -20926,6 +21329,37 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    listStoreTargets: {
+        parameters: {
+            query: {
+                purpose: "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY" | "MEDIA" | "MEMBERSHIP_ASSIGNMENT" | "MERCHANT_ACCOUNT" | "DISPUTE" | "REFUND";
+                query?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 운영자 매장 목록 조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorStoreTargetPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     listManagedStores: {
         parameters: {
             query?: {
@@ -21329,6 +21763,37 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    findMembershipAccountTarget: {
+        parameters: {
+            query: {
+                loginId: string;
+            };
+            header: {
+                "X-Access-Reason": "STORE_MEMBERSHIP_ASSIGNMENT_REVIEW";
+            };
+            path: {
+                storeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 정확히 일치하는 계정의 최소 표시 정보 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipAccountTarget"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     listStoreMemberships: {
         parameters: {
             query?: {
@@ -21687,6 +22152,36 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    listSupportOrderPickupSlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: components["parameters"]["SupportCaseId"];
+                orderId: components["parameters"]["OrderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupSlotList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     getSupportOrderContext: {
         parameters: {
             query?: never;
@@ -21717,6 +22212,35 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    listSupportRequestPickupSlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupSlotList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     getSupportOrderWorkflow: {
         parameters: {
             query?: never;
@@ -21736,6 +22260,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SupportOrderWorkflowResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    listStoreSupportRequestPickupSlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storeId: components["parameters"]["StoreId"];
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupSlotList"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -22304,8 +22858,8 @@ export interface operations {
                 cursor?: string;
             };
             header: {
-                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
-                "X-Access-Reason": components["parameters"]["AccessReason"];
+                /** @description 이미지 조회 목적을 검증하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 합니다. 이 조회는 Audit 기록을 추가하거나 변경하지 않습니다. */
+                "X-Access-Reason": components["parameters"]["ValidatedAccessReason"];
             };
             path: {
                 storeId: components["parameters"]["StoreId"];
@@ -22564,6 +23118,35 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getOperationsSupportRequestReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 운영 검토 조건 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsSupportRequestReviewResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             503: components["responses"]["DependencyUnavailable"];
         };

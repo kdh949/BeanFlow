@@ -22,7 +22,7 @@ export function SupportResolutionWorkspace({ resolutionId, onBusyChange }: { res
     if (workflow.request.action !== "POST_ACCEPTANCE_RESOLUTION" || workflow.resolutionId !== resolutionId || (workflow.order && workflow.order.orderId !== resolution.orderId)) throw new ApiRequestError(409, "RESOURCE_STATE_CONFLICT", "해결 건과 현재 승인안의 연결을 확인할 수 없습니다.");
     return { resolution, workflow };
   }, [resolutionId]));
-  const command = useSupportCommand(read.reload);
+  const command = useSupportCommand(`resolution:${resolutionId}`, read.reload);
   const [message, setMessage] = useState("");
   const busy = command.busy || command.pending;
   useEffect(() => { onBusyChange?.(busy); return () => onBusyChange?.(false); }, [busy, onBusyChange]);

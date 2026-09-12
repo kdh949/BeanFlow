@@ -38,7 +38,7 @@ function CaseIntake({ onBusy }: { onBusy: (value: boolean) => void }) {
   const [externalReference, setExternalReference] = useState("");
   const [reason, setReason] = useState("");
   const [created, setCreated] = useState<components["schemas"]["SupportCase"] | null>(null);
-  const command = useSupportCommand(() => {});
+  const command = useSupportCommand("create-case", () => {});
   const locked = command.busy || command.pending || Boolean(created);
   useEffect(() => { onBusy(command.busy || command.pending); return () => onBusy(false); }, [command.busy, command.pending, onBusy]);
   const valid = requesterType && requesterReference && category && reason.trim().length >= (category === "OTHER" ? 3 : 1);

@@ -79,6 +79,31 @@ internal data class OperatorStoreIdentityPage(
     val nextCursor: String?,
 )
 
+internal enum class StoreTargetPurpose(
+    val permission: OperatorPermission?,
+) {
+    IDENTITY(OperatorPermission.STORE_IDENTITY_READ),
+    TERMS(OperatorPermission.STORE_SETTLEMENT_TERMS_READ),
+    MEMBERSHIP(OperatorPermission.STORE_MEMBERSHIP_READ),
+    BRAND(OperatorPermission.STORE_BRAND_MANAGE),
+    POINT_POLICY(OperatorPermission.POINT_ACCRUAL_POLICY_READ),
+    MEDIA(OperatorPermission.STORE_MEDIA_MANAGE),
+    MEMBERSHIP_ASSIGNMENT(OperatorPermission.STORE_MEMBERSHIP_WRITE),
+    MERCHANT_ACCOUNT(OperatorPermission.MERCHANT_CREDENTIAL_MANAGE),
+    DISPUTE(OperatorPermission.SETTLEMENT_DISPUTE_READ),
+    REFUND(null),
+}
+
+internal data class OperatorStoreTarget(
+    val storeId: UUID,
+    val name: String,
+)
+
+internal data class OperatorStoreTargetPage(
+    val items: List<OperatorStoreTarget>,
+    val nextCursor: String?,
+)
+
 internal data class OperatorStoreRegionPage(
     val items: List<RegionSnapshot>,
     val nextCursor: String?,
@@ -110,8 +135,30 @@ internal class OperatorStoreIdentityService(
         limit: Int,
     ): OperatorStoreIdentityPage {
         grants.requireActive(actorId, OperatorPermission.STORE_IDENTITY_READ)
+        return listPage(actorId, query, cursor, limit, "operator-store-identity")
+    }
+
+    fun targets(
+        actorId: UUID,
+        purpose: StoreTargetPurpose,
+        query: String?,
+        cursor: String?,
+        limit: Int,
+    ): OperatorStoreTargetPage {
+        purpose.permission?.let { grants.requireActive(actorId, it) }
+        val page = listPage(actorId, query, cursor, limit, "operator-store-targets:${purpose.name}")
+        return OperatorStoreTargetPage(page.items.map { OperatorStoreTarget(it.storeId, it.name) }, page.nextCursor)
+    }
+
+    private fun listPage(
+        actorId: UUID,
+        query: String?,
+        cursor: String?,
+        limit: Int,
+        endpoint: String,
+    ): OperatorStoreIdentityPage {
         validateList(query, limit)
-        val scope = scope("operator-store-identity", actorId, query, 1)
+        val scope = scope(endpoint, actorId, query, 1)
         val after =
             cursor?.let { cursors.verify(it, scope).sort.single() }?.let {
                 runCatching { UUID.fromString(it) }.getOrNull()
@@ -238,6 +285,15 @@ internal class OperatorStoreIdentityController(
         @RequestParam(required = false) @Size(min = 1, max = 2048) cursor: String?,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) limit: Int,
     ) = service.list(actor.actorId, query, cursor, limit)
+
+    @GetMapping("/store-targets")
+    fun targets(
+        actor: OperatorActor,
+        @RequestParam purpose: StoreTargetPurpose,
+        @RequestParam(required = false) @Size(max = 200) query: String?,
+        @RequestParam(required = false) @Size(min = 1, max = 2048) cursor: String?,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) limit: Int,
+    ) = service.targets(actor.actorId, purpose, query, cursor, limit)
 
     @GetMapping("/store-regions")
     fun regions(

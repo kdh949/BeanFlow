@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { SubmissionIntent, unwrap } from "../../api/client";
 import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
@@ -16,35 +16,43 @@ type OperatingDay = components["schemas"]["StoreOperatingDay"];
 type Slot = components["schemas"]["ManagedPickupSlot"];
 const days: [OperatingDay["dayOfWeek"], string][] = [["MONDAY", "월요일"], ["TUESDAY", "화요일"], ["WEDNESDAY", "수요일"], ["THURSDAY", "목요일"], ["FRIDAY", "금요일"], ["SATURDAY", "토요일"], ["SUNDAY", "일요일"]];
 
-export function StoreSchedulingPage() {
+export function StoreSchedulingPage({ onBusyChange }: { /** Report unsaved work before changing workspaces. */ onBusyChange?: (busy: boolean) => void }) {
   const stores = useMerchantStores();
+  const [displayBusy, setDisplayBusy] = useState(false);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [slotBusy, setSlotBusy] = useState(false);
+  const locked = displayBusy || imageBusy || slotBusy;
+  useEffect(() => { onBusyChange?.(locked); return () => onBusyChange?.(false); }, [locked, onBusyChange]);
   if (stores.state.status === "loading") return <LoadingState label="매장을 불러오는 중" />;
   if (stores.state.status === "failed") return <ErrorState error={stores.state.error} retry={stores.reload} />;
   return <div className="management-workspace">
-    <StoreSelector stores={stores.stores} selected={stores.selected} onSelect={stores.select} />
+    <StoreSelector stores={stores.stores} selected={stores.selected} onSelect={stores.select} disabled={locked} />
     {stores.selected ? <div key={stores.selected.storeId}>
-      {stores.selected.membershipRole === "OWNER" ? <><DisplayEditor storeId={stores.selected.storeId} /><StorefrontImageEditor storeId={stores.selected.storeId} label="매장 대표 이미지" /></> : <InlineNotice tone="info" title="고객 공개 정보는 점주가 변경할 수 있습니다" description="직원은 픽업 시간과 정원을 관리할 수 있습니다." />}
-      <PickupSlots storeId={stores.selected.storeId} />
+      {stores.selected.membershipRole === "OWNER" ? <><DisplayEditor storeId={stores.selected.storeId} onBusyChange={setDisplayBusy} /><StorefrontImageEditor storeId={stores.selected.storeId} label="매장 대표 이미지" onBusyChange={setImageBusy} /></> : <InlineNotice tone="info" title="고객 공개 정보는 점주가 변경할 수 있습니다" description="직원은 픽업 시간과 정원을 관리할 수 있습니다." />}
+      <PickupSlots storeId={stores.selected.storeId} onBusyChange={setSlotBusy} />
     </div> : <EmptyState title="관리할 매장이 없습니다" description="소속 매장과 권한을 확인해 주세요." />}
   </div>;
 }
 
-function DisplayEditor({ storeId }: { storeId: string }) {
+function DisplayEditor({ storeId, onBusyChange }: { storeId: string; onBusyChange: (busy: boolean) => void }) {
   const resource = useResource(useCallback(async () => unwrap(await merchantApi.GET("/stores/{storeId}/customer-display", { params: { path: { storeId } } })), [storeId]));
   const [saved, setSaved] = useState(false);
   return <section className="surface-card management-card"><h2>고객 공개 정보와 주간 영업시간</h2>
     {saved ? <p role="status">공개 정보를 저장했습니다.</p> : null}
-    {resource.state.status === "loading" ? <LoadingState label="공개 정보를 불러오는 중" /> : resource.state.status === "failed" ? <ErrorState error={resource.state.error} retry={resource.reload} /> : <DisplayForm key={resource.state.value.version} storeId={storeId} current={resource.state.value} onSaved={() => { setSaved(true); resource.reload(); }} onRefresh={() => { setSaved(false); resource.reload(); }} />}
+    {resource.state.status === "loading" ? <LoadingState label="공개 정보를 불러오는 중" /> : resource.state.status === "failed" ? <ErrorState error={resource.state.error} retry={resource.reload} /> : <DisplayForm key={resource.state.value.version} storeId={storeId} current={resource.state.value} onBusyChange={onBusyChange} onEdit={() => setSaved(false)} onSaved={() => { setSaved(true); resource.reload(); }} onRefresh={() => { setSaved(false); resource.reload(); }} />}
   </section>;
 }
-function DisplayForm({ storeId, current, onSaved, onRefresh }: { storeId: string; current: Display; onSaved: () => void; onRefresh: () => void }) {
+function DisplayForm({ storeId, current, onSaved, onRefresh, onEdit, onBusyChange }: { storeId: string; current: Display; onSaved: () => void; onRefresh: () => void; onEdit: () => void; onBusyChange: (busy: boolean) => void }) {
   const [address, setAddress] = useState(current.addressLine ?? "");
   const [directions, setDirections] = useState(current.directionsHint ?? "");
   const [showHours, setShowHours] = useState(!!current.operatingHours);
   const [schedule, setSchedule] = useState<OperatingDay[]>(days.map(([dayOfWeek]) => current.operatingHours?.days.find(day => day.dayOfWeek === dayOfWeek) ?? { dayOfWeek, closed: true }));
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
-  function update(index: number, value: Partial<OperatingDay>) { setSchedule(items => items.map((day, i) => i === index ? { ...day, ...value } : day)); }
+  const originalSchedule = days.map(([dayOfWeek]) => current.operatingHours?.days.find(day => day.dayOfWeek === dayOfWeek) ?? { dayOfWeek, closed: true });
+  const locked = saving || address !== (current.addressLine ?? "") || directions !== (current.directionsHint ?? "") || showHours !== !!current.operatingHours || JSON.stringify(schedule) !== JSON.stringify(originalSchedule);
+  useEffect(() => { onBusyChange(locked); return () => onBusyChange(false); }, [locked, onBusyChange]);
+  function update(index: number, value: Partial<OperatingDay>) { onEdit(); setSchedule(items => items.map((day, i) => i === index ? { ...day, ...value } : day)); }
   async function save() {
     if (saving) return;
     setSaving(true); setFailure(null);
@@ -57,9 +65,9 @@ function DisplayForm({ storeId, current, onSaved, onRefresh }: { storeId: string
   }
   return <form onSubmit={event => { event.preventDefault(); void save(); }}>
     <fieldset disabled={saving} className="catalog-fieldset">
-      <TextField label="고객에게 표시할 주소" value={address} onValueChange={setAddress} maxLength={300} />
-      <TextAreaField label="길찾기 안내" value={directions} onValueChange={setDirections} maxLength={200} />
-      <Checkbox label="주간 영업시간 표시" description="해제 후 저장하면 고객에게 표시되는 주간 영업시간을 지웁니다. 주문 접수 설정과는 별개입니다." checked={showHours} onCheckedChange={setShowHours} />
+      <TextField label="고객에게 표시할 주소" value={address} onValueChange={value => { setAddress(value); onEdit(); }} maxLength={300} />
+      <TextAreaField label="길찾기 안내" value={directions} onValueChange={value => { setDirections(value); onEdit(); }} maxLength={200} />
+      <Checkbox label="주간 영업시간 표시" description="해제 후 저장하면 고객에게 표시되는 주간 영업시간을 지웁니다. 주문 접수 설정과는 별개입니다." checked={showHours} onCheckedChange={value => { setShowHours(value); onEdit(); }} />
       {showHours ? <div className="management-card-grid">{days.map(([key, label], index) => { const day = schedule[index]!; return <fieldset key={key} className="catalog-fieldset"><legend>{label}</legend>
         <Checkbox label={`${label} 휴무`} checked={day.closed} onCheckedChange={closed => update(index, { closed })} />
         {!day.closed ? <><TextField label={`${label} 시작`} type="time" required value={day.opensAt ?? ""} onValueChange={opensAt => update(index, { opensAt })} /><TextField label={`${label} 종료`} type="time" required value={day.closesAt ?? ""} onValueChange={closesAt => update(index, { closesAt })} /></> : null}
@@ -71,11 +79,12 @@ function DisplayForm({ storeId, current, onSaved, onRefresh }: { storeId: string
   </form>;
 }
 
-function PickupSlots({ storeId }: { storeId: string }) {
+function PickupSlots({ storeId, onBusyChange }: { storeId: string; onBusyChange: (busy: boolean) => void }) {
   const [from, setFrom] = useState(() => seoulInputValue(Date.now()));
   const [to, setTo] = useState(() => seoulInputValue(Date.now() + 7 * 86400000));
   const [query, setQuery] = useState(() => ({ from: seoulInstant(from), to: seoulInstant(to), cursor: undefined as string | undefined }));
   const [selected, setSelected] = useState<string | null>(null);
+  useEffect(() => { onBusyChange(selected !== null); return () => onBusyChange(false); }, [selected, onBusyChange]);
   const [saved, setSaved] = useState(false);
   const [filterError, setFilterError] = useState<unknown>(null);
   const resource = useResource(useCallback(async () => unwrap(await merchantApi.GET("/stores/{storeId}/pickup-slot-management", { params: { path: { storeId }, query: { ...query, limit: 20 } } })), [storeId, query]));
@@ -85,7 +94,7 @@ function PickupSlots({ storeId }: { storeId: string }) {
       <TextField label="조회 종료 (한국 시간)" type="datetime-local" required value={to} onValueChange={setTo} /><Button type="submit" variant="secondary">픽업 목록 조회</Button>
     </form>
     {filterError ? <ErrorState error={filterError} /> : null}
-    <Button variant="secondary" onClick={() => { setSelected("new"); setSaved(false); }}>새 픽업 시간</Button>
+    <Button variant="secondary" disabled={selected !== null} onClick={() => { setSelected("new"); setSaved(false); }}>새 픽업 시간</Button>
     {saved ? <p role="status">픽업 시간을 저장했습니다.</p> : null}
     {selected === "new" ? <SlotForm key="new" storeId={storeId} onSaved={() => { setSelected(null); setSaved(true); resource.reload(); }} onClose={() => setSelected(null)} /> : selected ? <SlotEditor key={selected} storeId={storeId} slotId={selected} onSaved={() => { setSelected(null); setSaved(true); resource.reload(); }} onClose={() => setSelected(null)} /> : null}
     {resource.state.status === "loading" ? <LoadingState label="픽업 시간을 불러오는 중" /> : resource.state.status === "failed" ? <ErrorState error={resource.state.error} retry={resource.reload} /> : <>

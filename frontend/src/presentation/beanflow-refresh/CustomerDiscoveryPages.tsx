@@ -26,8 +26,8 @@ export function RefreshCustomerHomePage() {
   const coordinates = coordinatesOf(location);
   const activeOrders = useResource<CustomerOrderSummary[]>(useCallback(async () => unwrap(await customerApi.GET("/me/orders", { params: { query: { status: "ACTIVE", limit: 3 } } })).items, []));
   const recentOrders = useResource<CustomerOrderSummary[]>(useCallback(async () => unwrap(await customerApi.GET("/me/orders", { params: { query: { status: "PAST", limit: 1 } } })).items, []));
-  const refreshOrders = useCallback(() => { activeOrders.reload(); recentOrders.reload(); }, [activeOrders.reload, recentOrders.reload]);
-  useAttentionRefresh(refreshOrders, { intervalMs: 30_000 });
+  useAttentionRefresh(activeOrders.refresh, { intervalMs: 30_000 });
+  useAttentionRefresh(recentOrders.refresh);
   const recommendations = useResource<StoreRecommendation[]>(useCallback(async () => unwrap(await customerApi.GET("/me/store-recommendations", { params: { query: { limit: 6, ...(coordinates ?? {}) } } })).items, [coordinates]));
 
   return (

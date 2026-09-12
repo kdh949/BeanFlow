@@ -105,7 +105,7 @@ internal class AuditRecordService(
     }
 
     private fun containsRawPii(value: String): Boolean {
-        if (value.isUuid()) return false
+        if (value.isUuid() || runCatching { Instant.parse(value) }.isSuccess) return false
         val valueWithoutOpaqueIds = UUID_TOKEN.replace(value, "opaque-id")
         return RAW_PII_PATTERNS.any { it.containsMatchIn(valueWithoutOpaqueIds) } ||
             containsPaymentCardNumber(valueWithoutOpaqueIds)

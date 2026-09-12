@@ -11,7 +11,7 @@ export function PlatformCostOwnerWorkspace({ onBusyChange }: { /** Keeps navigat
   const [name, setName] = useState(""), [reason, setReason] = useState(""), [message, setMessage] = useState("");
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]), cursor = cursors[cursors.length - 1];
   const read = useResource(useCallback(async () => unwrap(await operationsApi.GET("/operations/point-cost-issuers", { params: { query: { purpose: "POLICY", type: "PLATFORM", cursor, limit: 20 } } })), [cursor]));
-  const command = useSupportCommand(() => undefined), busy = command.busy || command.pending;
+  const command = useSupportCommand("operations-platform-point-cost-owner", () => undefined), busy = command.busy || command.pending;
   useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
   function register() {
     if (busy || read.state.status !== "ready" || !read.state.value.canRegisterPlatform || !name.trim() || !reason.trim()) return;
