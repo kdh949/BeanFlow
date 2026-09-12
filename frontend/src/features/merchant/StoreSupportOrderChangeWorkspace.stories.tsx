@@ -20,7 +20,8 @@ export const PickupConfirmation: Story = { play: async ({ canvas, msw }) => {
   msw.use(http.get("/api/v1/stores/:storeId/support-order-change-requests/:requestId", async () => HttpResponse.json({ requestId, orderId, action: "PICKUP_RESCHEDULE", revisionNumber: 2, requestVersion: 3, targetVersion: 4, actionPayloadDigest: await orderChangeDigest("PICKUP_RESCHEDULE", orderId, "CHANGED_MIND", authorizationId), expiresAt: authorized.expiresAt, policyVersion })), http.get("/api/v1/stores/:storeId/support-order-change-requests/:requestId/pickup-slots", () => HttpResponse.json({ items: [{ pickupSlotId: authorizationId, startsAt: "2026-09-11T09:20:00Z", endsAt: "2026-09-11T09:30:00Z", remainingCapacity: 2 }] })), http.get("/api/v1/stores/:storeId/pickup-slots", () => { throw new Error("Customer session must not be used"); }));
   await userEvent.type(canvas.getByLabelText("상담 주문 변경 요청 ID"), requestId);
   await userEvent.click(canvas.getByRole("button", { name: "현재 동의 대상 조회" }));
-  await userEvent.selectOptions(await canvas.findByLabelText("요청받은 픽업 시간"), authorizationId);
+  await waitFor(() => expect(canvas.getByRole("option", { name: /9\. 11\./ })).toHaveValue(authorizationId));
+  await userEvent.selectOptions(canvas.getByLabelText("요청받은 픽업 시간"), authorizationId);
   await userEvent.click(canvas.getByRole("checkbox", { name: /매장 비용 책임에 동의/ }));
   await waitFor(() => expect(canvas.getByRole("button", { name: "이 승인안의 주문 변경에 동의" })).toBeEnabled());
 } };
