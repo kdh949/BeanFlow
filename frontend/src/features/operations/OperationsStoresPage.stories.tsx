@@ -104,3 +104,8 @@ export const MediaPermissionOnly: Story = { parameters: { msw: { handlers: [
   await expect(await canvas.findByText("해당 범위의 메뉴가 없습니다")).toBeVisible();
   await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
 } };
+
+export const MembershipAssignmentPermissionOnly: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/operations/store-targets", ({ request }) => new URL(request.url).searchParams.get("purpose") === "MEMBERSHIP_ASSIGNMENT" ? HttpResponse.json({ items: [{ storeId: ids.store, name: "소속 추가 대상 매장" }] }) : HttpResponse.json({ code: "ACCESS_DENIED" }, { status: 403 })), http.get("/api/v1/operations/stores/:storeId/identity", () => { throw new Error("Identity grant is not part of assignment"); }), http.get("/api/v1/operations/stores/:storeId/memberships", () => { throw new Error("Read grant is not part of assignment"); })] } },
+  play: async ({ canvas }) => { await userEvent.selectOptions(canvas.getByLabelText("매장 관리 목적"), "MEMBERSHIP_ASSIGNMENT"); await userEvent.click(await canvas.findByRole("button", { name: "소속 추가 대상 매장 관리" })); await expect(await canvas.findByLabelText("추가할 계정 로그인 ID")).toBeVisible(); },
+};

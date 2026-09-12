@@ -7933,7 +7933,7 @@ paths:
       - Operations
       operationId: listStoreTargets
       summary: 업무별 최소 매장 목록 조회
-      description: 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ, MEDIA=STORE_MEDIA_MANAGE. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
+      description: 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ, MEDIA=STORE_MEDIA_MANAGE, MEMBERSHIP_ASSIGNMENT=STORE_MEMBERSHIP_WRITE, MERCHANT_ACCOUNT=MERCHANT_CREDENTIAL_MANAGE, DISPUTE=SETTLEMENT_DISPUTE_READ, REFUND=기존 PLATFORM_OPERATOR 역할만 확인. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
       security:
       - bearerAuth: []
       parameters:
@@ -7942,7 +7942,7 @@ paths:
         required: true
         schema:
           type: string
-          enum: [IDENTITY, TERMS, MEMBERSHIP, BRAND, POINT_POLICY, MEDIA]
+          enum: [IDENTITY, TERMS, MEMBERSHIP, BRAND, POINT_POLICY, MEDIA, MEMBERSHIP_ASSIGNMENT, MERCHANT_ACCOUNT, DISPUTE, REFUND]
       - in: query
         name: query
         schema:
@@ -8512,6 +8512,42 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /operations/stores/{storeId}/memberships/account-target:
+    get:
+      tags: [Identity, Operations]
+      operationId: findMembershipAccountTarget
+      summary: 소속 추가 목적의 기존 계정 정확 조회
+      description: PLATFORM_OPERATOR와 STORE_MEMBERSHIP_WRITE만 필요하며 현재 매장을 확인한다. accountId/loginId/displayName만 반환하고 인증 상태나 타 매장 소속은 노출하지 않는다. no-store이며 MERCHANT_ACCOUNT_READ 감사 기록의 purpose=MEMBERSHIP_ASSIGNMENT와 storeId를 같은 트랜잭션에 저장한다.
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: loginId
+          in: query
+          required: true
+          schema: {type: string, minLength: 3, maxLength: 64}
+        - name: X-Access-Reason
+          in: header
+          required: true
+          schema: {type: string, enum: [STORE_MEMBERSHIP_ASSIGNMENT_REVIEW]}
+      responses:
+        '200':
+          description: 정확히 일치하는 계정의 최소 표시 정보
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MembershipAccountTarget"
+        '400':
+          $ref: "#/components/responses/BadRequest"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '503':
+          $ref: "#/components/responses/DependencyUnavailable"
   /operations/stores/{storeId}/memberships:
     get:
       tags:
@@ -11808,6 +11844,13 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+    MembershipAccountTarget:
+      type: object
+      required: [accountId, loginId, displayName]
+      properties:
+        accountId: {type: string, format: uuid}
+        loginId: {type: string}
+        displayName: {type: string}
     ManagedStoreMembership:
       type: object
       additionalProperties: false

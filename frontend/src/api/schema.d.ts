@@ -4993,7 +4993,7 @@ export interface paths {
         };
         /**
          * 업무별 최소 매장 목록 조회
-         * @description 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ, MEDIA=STORE_MEDIA_MANAGE. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
+         * @description 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ, MEDIA=STORE_MEDIA_MANAGE, MEMBERSHIP_ASSIGNMENT=STORE_MEMBERSHIP_WRITE, MERCHANT_ACCOUNT=MERCHANT_CREDENTIAL_MANAGE, DISPUTE=SETTLEMENT_DISPUTE_READ, REFUND=기존 PLATFORM_OPERATOR 역할만 확인. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
          */
         get: operations["listStoreTargets"];
         put?: never;
@@ -5156,6 +5156,26 @@ export interface paths {
          * @description STORE_SETTLEMENT_TERMS_READ grant. 다른 매장의 계약은 404다.
          */
         get: operations["getStoreSettlementTerms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/stores/{storeId}/memberships/account-target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 소속 추가 목적의 기존 계정 정확 조회
+         * @description PLATFORM_OPERATOR와 STORE_MEMBERSHIP_WRITE만 필요하며 현재 매장을 확인한다. accountId/loginId/displayName만 반환하고 인증 상태나 타 매장 소속은 노출하지 않는다. no-store이며 MERCHANT_ACCOUNT_READ 감사 기록의 purpose=MEMBERSHIP_ASSIGNMENT와 storeId를 같은 트랜잭션에 저장한다.
+         */
+        get: operations["findMembershipAccountTarget"];
         put?: never;
         post?: never;
         delete?: never;
@@ -13033,6 +13053,12 @@ export interface components {
             /** Format: int64 */
             revision: number;
         };
+        MembershipAccountTarget: {
+            /** Format: uuid */
+            accountId: string;
+            loginId: string;
+            displayName: string;
+        };
         ManagedStoreMembership: {
             /** @description 현재 계정 표시 이름. 소속 목록과 상세 조회에서 제공하며 명령 응답에는 생략할 수 있습니다. */
             accountDisplayName?: string | null;
@@ -20735,7 +20761,7 @@ export interface operations {
     listStoreTargets: {
         parameters: {
             query: {
-                purpose: "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY" | "MEDIA";
+                purpose: "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY" | "MEDIA" | "MEMBERSHIP_ASSIGNMENT" | "MERCHANT_ACCOUNT" | "DISPUTE" | "REFUND";
                 query?: string;
                 cursor?: string;
                 limit?: number;
@@ -21163,6 +21189,37 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    findMembershipAccountTarget: {
+        parameters: {
+            query: {
+                loginId: string;
+            };
+            header: {
+                "X-Access-Reason": "STORE_MEMBERSHIP_ASSIGNMENT_REVIEW";
+            };
+            path: {
+                storeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 정확히 일치하는 계정의 최소 표시 정보 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipAccountTarget"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["DependencyUnavailable"];
         };
     };

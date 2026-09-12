@@ -54,13 +54,15 @@ internal class StoreIdentityManagementIntegrationTest(
         val admin = operator()
         val store = service.change(create(admin))
         val actor = UUID.randomUUID()
-        jdbc.update(
-            "INSERT INTO operations_operator_permission_grant(actor_id, permission, state, granted_at, version, audit_source_reference) VALUES (?, ?, 'ACTIVE', ?, 1, ?)",
-            actor,
-            purpose.permission.name,
-            Timestamp.from(Instant.now().minusSeconds(1)),
-            "targets:$actor",
-        )
+        if (purpose.permission != null) {
+            jdbc.update(
+                "INSERT INTO operations_operator_permission_grant(actor_id, permission, state, granted_at, version, audit_source_reference) VALUES (?, ?, 'ACTIVE', ?, 1, ?)",
+                actor,
+                purpose.permission.name,
+                Timestamp.from(Instant.now().minusSeconds(1)),
+                "targets:$actor",
+            )
+        }
         mvc
             .perform(get("/api/v1/operations/store-targets").param("purpose", purpose.name).with(jwt(actor)))
             .andExpect(status().isOk)
@@ -71,6 +73,7 @@ internal class StoreIdentityManagementIntegrationTest(
         if (purpose != StoreTargetPurpose.IDENTITY) {
             mvc.perform(get("/api/v1/operations/stores").with(jwt(actor))).andExpect(status().isForbidden)
         }
+        if (purpose.permission == null) return
         jdbc.update("UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ?", actor)
         mvc
             .perform(get("/api/v1/operations/store-targets").param("purpose", purpose.name).with(jwt(actor)))

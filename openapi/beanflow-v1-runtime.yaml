@@ -1098,6 +1098,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1settlement-terms"
   /operations/stores/{storeId}/settlement-terms/{termsVersionId}:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1settlement-terms~1{termsVersionId}"
+  /operations/stores/{storeId}/memberships/account-target:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1memberships~1account-target"
   /operations/stores/{storeId}/memberships:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1memberships"
   /operations/stores/{storeId}/memberships/{accountId}:

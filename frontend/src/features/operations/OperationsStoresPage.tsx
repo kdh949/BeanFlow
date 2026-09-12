@@ -12,8 +12,8 @@ import { StorePointPolicyWorkspace } from "./StorePointPolicyWorkspace";
 
 type StoreIdentity = components["schemas"]["StoreIdentitySnapshot"];
 type Region = components["schemas"]["OperatorStoreRegion"];
-type StorePurpose = "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY" | "MEDIA";
-const purposeWorkspaces = { IDENTITY: "identity", TERMS: "terms", MEMBERSHIP: "memberships", BRAND: "identity", POINT_POLICY: "points", MEDIA: "media" };
+type StorePurpose = "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY" | "MEDIA" | "MEMBERSHIP_ASSIGNMENT";
+const purposeWorkspaces = { IDENTITY: "identity", TERMS: "terms", MEMBERSHIP: "memberships", BRAND: "identity", POINT_POLICY: "points", MEDIA: "media", MEMBERSHIP_ASSIGNMENT: "memberships" };
 type Brand = components["schemas"]["Brand"];
 
 /** Store selection is shared by the operator's identity and store-scoped management work. */
@@ -29,7 +29,7 @@ export function OperationsStoresPage() {
   const stores = useResource(useCallback(async () => unwrap(await operationsApi.GET("/operations/store-targets", { params: { query: { purpose, query: query || undefined, cursor, limit: 20 } } })), [purpose, query, cursor]));
   return <div className="console-page">
     <PageHeading title="매장 관리" action={<Button onClick={() => { setCreating(true); setSelected(null); setNotice(""); }}>새 매장 등록</Button>} />
-    <SelectField label="매장 관리 목적" value={purpose} onValueChange={value => { setPurpose(value as StorePurpose); setSelected(null); setCreating(false); setCursors([undefined]); }}><option value="IDENTITY">식별정보 확인</option><option value="TERMS">정산 계약</option><option value="MEMBERSHIP">점주·직원 소속</option><option value="BRAND">브랜드 소속</option><option value="POINT_POLICY">포인트 정책</option><option value="MEDIA">매장·메뉴 이미지</option></SelectField>
+    <SelectField label="매장 관리 목적" value={purpose} onValueChange={value => { setPurpose(value as StorePurpose); setSelected(null); setCreating(false); setCursors([undefined]); }}><option value="IDENTITY">식별정보 확인</option><option value="TERMS">정산 계약</option><option value="MEMBERSHIP">점주·직원 소속</option><option value="MEMBERSHIP_ASSIGNMENT">점주·직원 소속 추가</option><option value="BRAND">브랜드 소속</option><option value="POINT_POLICY">포인트 정책</option><option value="MEDIA">매장·메뉴 이미지</option></SelectField>
     <form className="button-row" onSubmit={event => { event.preventDefault(); if (query === search.trim() && !cursor) stores.reload(); else { setQuery(search.trim()); setCursors([undefined]); } }}>
       <TextField label="매장 이름 검색" value={search} onValueChange={setSearch} maxLength={200} />
       <Button type="submit" variant="secondary">매장 검색</Button>
@@ -54,7 +54,7 @@ function StoreWorkspace({ storeId, onChanged, purpose }: { storeId: string; onCh
     {saved ? <p role="status">식별정보를 저장했습니다.</p> : null}
     {identity.state.status === "loading" ? <LoadingState label="현재 식별정보를 불러오는 중" /> : identity.state.status === "failed" ? <ErrorState error={identity.state.error} retry={identity.reload} /> : identity.state.value ? <div className="surface-card management-card"><IdentityForm key={identity.state.value.version} current={identity.state.value} onSaved={() => { setSaved(true); identity.reload(); onChanged(); }} onRefresh={() => { setSaved(false); identity.reload(); }} /></div> : null}
     <StoreBrandEditor storeId={storeId} />
-    </TabPanel><TabPanel value="terms"><StoreTermsWorkspace storeId={storeId} /></TabPanel><TabPanel value="memberships"><StoreMembershipsWorkspace storeId={storeId} /></TabPanel><TabPanel value="points"><StorePointPolicyWorkspace storeId={storeId} /></TabPanel><TabPanel value="media"><StoreMediaWorkspace storeId={storeId} /></TabPanel></Tabs>
+    </TabPanel><TabPanel value="terms"><StoreTermsWorkspace storeId={storeId} /></TabPanel><TabPanel value="memberships"><StoreMembershipsWorkspace storeId={storeId} mode={purpose === "MEMBERSHIP_ASSIGNMENT" ? "add" : "manage"} /></TabPanel><TabPanel value="points"><StorePointPolicyWorkspace storeId={storeId} /></TabPanel><TabPanel value="media"><StoreMediaWorkspace storeId={storeId} /></TabPanel></Tabs>
   </section>;
 }
 
