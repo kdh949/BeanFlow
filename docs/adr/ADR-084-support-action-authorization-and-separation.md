@@ -114,3 +114,11 @@ Decision 분포, approval duration/return/stale/separation denial, investigation
 ## Related Decisions
 
 ADR-053, ADR-064, ADR-069.
+
+### Operations review metadata amendment (2026-09-12)
+
+운영 검토의 현재 승인안 조회는 PLATFORM_OPERATOR와 OPERATIONS_SUPPORT_INVESTIGATION만 요구하는
+`/operations/support-action-requests/{requestId}/review`로 제공한다. OPERATIONS 승인 경로에 속한
+요청의 해시·버전과 목적·비용 조건만 반환하고, 상담 내용·원문·본인확인 세션·담당자 정보는 제외한다.
+읽기는 상태 보정·Audit append를 수행하지 않으며, 실제 결정은 기존 Operations→Support 동기 경계에서
+현재 grant·승인 revision·배정·정책을 다시 검증한다. 별도 SUPPORT_CASE_READ grant를 암묵적으로 요구하지 않는다.

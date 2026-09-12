@@ -5455,10 +5455,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/operations/support-action-requests/{requestId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 운영 검토 전용 권한으로 현재 상담 승인안의 최소 조건을 조회합니다
+         * @description PLATFORM_OPERATOR 역할과 OPERATIONS_SUPPORT_INVESTIGATION grant를 요구합니다. OPERATIONS 승인 경로만 허용하며 상담 열람 권한은 요구하지 않습니다. 현재 승인안 해시·버전과 정정 목적 또는 보상 비용 조건만 반환합니다. 원문·본인확인 세션·상담 내용은 반환하지 않으며 상태·감사를 변경하지 않습니다. 승인 명령은 현재 권한과 바인딩을 다시 검증합니다.
+         */
+        get: operations["getOperationsSupportRequestReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OperationsSupportActionReview: {
+            /** @description 해당 요청 자원을 가리키는 UUID 식별자입니다. */
+            requestId: components["schemas"]["Identifier"];
+            /** @description 해당 케이스 자원을 가리키는 UUID 식별자입니다. */
+            caseId: components["schemas"]["Identifier"];
+            /** @description 요청하거나 수행한 작업 유형입니다. */
+            action: components["schemas"]["SupportActionType"];
+            /** @description 해당 작업 대상 자원을 가리키는 UUID 식별자입니다. */
+            targetId: components["schemas"]["Identifier"];
+            /** @description 실행하거나 조회할 승인 요청 내용의 번호입니다. 1부터 시작합니다. */
+            revisionNumber: number;
+            /**
+             * Format: int64
+             * @description 동시 변경 확인에 사용하는 요청 리소스 버전입니다.
+             */
+            requestVersion: number;
+            /** @description 요청의 현재 승인·실행 상태입니다. */
+            state: components["schemas"]["SupportActionRequestState"];
+            /** @description 승인 대상 요청 내용이 바뀌지 않았는지 확인하는 SHA-256 해시값입니다. */
+            actionPayloadDigest: string;
+            /**
+             * Format: int64
+             * @description 요청이 연결된 주문 대상 버전입니다.
+             */
+            targetVersion: number;
+            /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
+            evidenceDigest: string;
+        };
+        OperationsSupportProfileReview: {
+            subjectId: components["schemas"]["Identifier"];
+            /** @enum {string} */
+            purpose: "CUSTOMER_DISPLAY_NAME" | "CUSTOMER_LEGAL_NAME_TYPO" | "CUSTOMER_PRIMARY_PHONE" | "CUSTOMER_CREDENTIAL_RESET" | "STORE_PUBLIC_PROFILE" | "STORE_OPERATIONS_CONTACT" | "STORE_REPRESENTATIVE" | "STORE_SETTLEMENT_ACCOUNT" | "STORE_ACCESS_REREGISTRATION" | "COURIER_DISPLAY_NAME" | "COURIER_RELAY_CONTACT" | "COURIER_PROVIDER_IDENTITY" | "COURIER_PAYOUT_REFERENCE" | "COURIER_PROVIDER_REREGISTRATION";
+            /** Format: int64 */
+            expectedProfileVersion: number;
+            payloadDigest: string;
+            /**
+             * Format: int64
+             * @description 현재 소유 모듈의 프로필 버전입니다.
+             */
+            currentProfileVersion: number;
+        };
+        OperationsSupportCompensationReview: {
+            /** @description 해당 사고 자원을 가리키는 UUID 식별자입니다. */
+            incidentId: components["schemas"]["Identifier"];
+            /**
+             * Format: uuid
+             * @description 해당 주문 자원을 가리키는 UUID 식별자입니다.
+             */
+            orderId: string | null;
+            /** @description 혜택 유형입니다. */
+            benefitType: components["schemas"]["SupportCompensationBenefitType"];
+            /**
+             * Format: int64
+             * @description 요청 또는 거래에 적용되는 정수 원(KRW) 단위 금액입니다.
+             */
+            amountKrw: number;
+            /** @description 요청 생성 당시 정규 요청 내용의 SHA-256 해시값입니다. */
+            payloadDigest: string;
+            terms: components["schemas"]["SupportCompensationTermsResource"];
+            /**
+             * Format: int64
+             * @description 현재 주문 버전입니다. 주문 없는 요청은 0이며 조회 불가능한 주문은 null입니다.
+             */
+            currentTargetVersion: number | null;
+            /** @description 쿠폰 보상에 고정된 할인·유효기간·최소 사용 금액입니다. 포인트 보상은 null입니다. */
+            couponTemplate: components["schemas"]["GoodwillCouponTemplateView"] | null;
+        };
+        OperationsSupportRequestReviewResource: {
+            request: components["schemas"]["OperationsSupportActionReview"];
+            profile: components["schemas"]["OperationsSupportProfileReview"] | null;
+            compensation: components["schemas"]["OperationsSupportCompensationReview"] | null;
+        };
         /**
          * @description 현재 계정에서 가능한 긴급 열람 명령입니다. 모든 쓰기에서 재검증합니다.
          * @example DECIDE
@@ -21111,6 +21203,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BreakGlassWorkflowResource"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getOperationsSupportRequestReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: components["parameters"]["SupportActionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 운영 검토 조건 */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsSupportRequestReviewResource"];
                 };
             };
             400: components["responses"]["BadRequest"];

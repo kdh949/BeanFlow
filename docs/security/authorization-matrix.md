@@ -325,3 +325,9 @@ JWT role이나 UI evaluation은 위 grant를 대체하지 않는다. 권한 row�
 - `/stores/{storeId}/support-order-change-requests/{requestId}/pickup-slots`: 현재 same-store
   OWNER/STAFF와 기존 동의 대상의 revision·policy·order version·expiry 검증.
 - 모두 no-store 응답이며 고객 세션을 요구하지 않는다. 후보 조회는 예약·명령 권한을 대신하지 않는다.
+
+### 운영 상담 승인안 최소 조회
+
+| API | Actor | Required grant | Scope / failure | Audit |
+|---|---|---|---|---|
+| GET /operations/support-action-requests/{requestId}/review | PLATFORM_OPERATOR | OPERATIONS_SUPPORT_INVESTIGATION | OPERATIONS 승인 경로 및 현재 request/target/digest/version 바인딩, 그 외 403/409 | 읽기 전용, append 없음 |
