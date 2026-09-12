@@ -21,7 +21,7 @@ export function SupportDataAccessWorkspace({ session, initialGrantId, onBusyChan
   const [reason, setReason] = useState<Reason>("CASE_HANDLING");
   const [grantId, setGrantId] = useState(initialGrantId ?? "");
   const [opened, setOpened] = useState(0);
-  const command = useSupportCommand(() => {});
+  const command = useSupportCommand(`data-access-request:${session?.caseId ?? ""}`, () => {});
   const [inspectionLocked, setInspectionLocked] = useState(false);
   const locked = command.busy || command.pending || inspectionLocked;
   useEffect(() => { onBusyChange?.(locked); return () => onBusyChange?.(false); }, [locked, onBusyChange]);
@@ -63,7 +63,7 @@ function GrantInspection({ grantId, onBusyChange }: { grantId: string; onBusyCha
   const current = read.state.status === "ready" ? read.state.value : null;
   const grant = current?.grant;
   const expired = grant?.expiresAt ? Date.parse(grant.expiresAt) <= Date.now() : false;
-  const command = useSupportCommand(() => read.reload());
+  const command = useSupportCommand(`data-access-approval:${grantId}`, () => read.reload());
   const busy = command.busy || revealBusy;
   const blocked = busy || command.pending;
   useEffect(() => { onBusyChange(blocked || uncertain || Boolean(raw)); return () => onBusyChange(false); }, [blocked, uncertain, raw, onBusyChange]);

@@ -104,3 +104,12 @@ PostgreSQL commit/rollback·replay·동시성·권한·Audit 장애, API parity,
 알림 복구(V79)와 publication 복구(V80)의 두 PR로 나눈다. 여섯 기능의 전체 범위는 유지하며 총 일곱 PR이다.
 Notification 소유 실행 변경과 공통 Case lifecycle port를 먼저 제공하고, 다음 PR에서 Ordering 실행 원장과
 publication 후보 선택·결과 대사를 추가한다. 각 PR은 자체 Runtime API parity와 독립 마이그레이션을 검증한다.
+
+### 업무별 최소 매장 탐색 (2026-09-12)
+
+`GET /operations/store-targets`는 IDENTITY, TERMS, MEMBERSHIP, BRAND, POINT_POLICY, MEDIA 목적별
+현재 조회 grant(브랜드는 관리 grant)를 검증하고 `storeId`, `name`만 반환한다. 전체 식별 정보의
+`STORE_IDENTITY_READ`를 다른 업무의 필수 grant로 추가하지 않는다. 기존 `/operations/stores`의
+상세 목록 권한은 유지한다. 이름 검색·bounded page는 기존 Merchant 공개 조회 port를 사용하고,
+cursor는 actor·purpose·검색어에 묶는다. 개인정보가 없는 업무 진입 목록에는 Audit를 추가하지 않으며
+후속 상세·명령의 grant·조회 사유·Audit 요구는 그대로 적용한다. 새 grant와 DDL은 추가하지 않는다.
