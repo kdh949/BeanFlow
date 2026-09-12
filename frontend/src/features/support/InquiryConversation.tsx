@@ -4,6 +4,7 @@ import { Button, ButtonLink, EmptyState, InlineNotice, TextAreaField } from "../
 import { ErrorState, StatusText } from "../../presentation/shared";
 import { fullDateTime } from "../../lib/format";
 import { useSupportCommand } from "./useSupportCommand";
+import { customerInquiryActor } from "./customerInquiryActor";
 export type InquiryDetail = components["schemas"]["CustomerInquiryDetail"];
 export type InquirySummary = components["schemas"]["CustomerInquirySummary"];
 export const inquiryStateLabels: Record<InquirySummary["state"], string> = { RECEIVED: "접수됨", OPEN: "상담원 배정", IN_PROGRESS: "진행 중", WAITING: "확인 대기", RESOLVED: "처리 완료", CLOSED: "종료" };
@@ -14,7 +15,7 @@ export const inquiryContentGuidance = "문의 내용만 작성해 주세요. 전
 export function InquiryConversation({ detail, staff = false, canReply, send, refresh, refreshing, paging }: { detail: InquiryDetail; staff?: boolean; canReply: boolean; send: (key: string, content: string) => Promise<unknown>; refresh: () => void; refreshing: boolean; paging: (disabled: boolean) => ReactNode }) {
   const [content, setContent] = useState("");
   const [sent, setSent] = useState(false);
-  const command = useSupportCommand(() => {});
+  const command = useSupportCommand(`inquiry-reply:${detail.inquiry.inquiryId}`, () => {}, staff ? undefined : customerInquiryActor);
   const locked = command.busy || command.pending;
   const inquiry = detail.inquiry;
   function submit() {

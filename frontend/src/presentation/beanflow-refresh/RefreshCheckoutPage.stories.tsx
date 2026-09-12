@@ -69,3 +69,10 @@ export const LeaseExpiresWhileOpen: Story = {
     await expect(canvas.getByRole("button", { name: /결제하기/ })).toBeDisabled();
   },
 };
+
+/** Only the browser clock is ahead; the server still returns a payable READY checkout. */
+export const BrowserClockAhead: Story = {
+  ...ResumeReadyAttempt,
+  tags: ["!autodocs"],
+  beforeEach: () => { MockDate.set("2030-01-01T00:00:00Z"); mocked(requestTossStandardPayment).mockClear().mockResolvedValue(undefined); return () => MockDate.reset(); },
+};

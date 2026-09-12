@@ -527,7 +527,7 @@ export const NoStoreMembership: Story = {
 };
 
 export const ManagementWorkspace: Story = {
-  render: () => <StoreManagementPage catalogContent={<StoreCatalogPage embedded />} />,
+  render: () => <StoreManagementPage />,
   parameters: { routing: { path: "/store/management", initialEntry: "/store/management", surface: "store" } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("button", { name: "카페 라테 편집" })).toBeVisible();
@@ -561,3 +561,14 @@ export const MenuDisplayEditing: Story = {
   parameters: { msw: { handlers: [http.get("/api/v1/stores/:storeId/menus/:menuId/display-content", () => HttpResponse.json({ version: 2, displayCategory: "커피", description: "고소한 라테" })), http.get("/api/v1/stores/:storeId/menus/:menuId/image", () => HttpResponse.json({})), ...meta.parameters.msw.handlers] } },
   play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("button", { name: "카페 라테 표시 정보" })); await expect(await canvas.findByLabelText("메뉴 분류")).toHaveValue("커피"); await expect(canvas.getByLabelText("메뉴 설명")).toHaveValue("고소한 라테"); await expect(canvas.getByLabelText("카페 라테 메뉴 이미지 파일")).toBeVisible(); },
 };
+
+export const MenuDraftLocksNavigation: Story = { ...ManagementWorkspace, play: async ({ canvas }) => {
+  await userEvent.click(await canvas.findByRole("button", { name: "카페 라테 편집" }));
+  const name = await canvas.findByLabelText("메뉴 이름");
+  await userEvent.type(name, " 추가");
+  await expect(canvas.getByRole("tab", { name: "영업시간과 픽업" })).toBeDisabled();
+  await expect(canvas.getByLabelText("매장 선택")).toBeDisabled();
+  await userEvent.click(canvas.getByRole("button", { name: "편집 닫기" }));
+  await expect(canvas.getByRole("tab", { name: "영업시간과 픽업" })).toBeEnabled();
+  await expect(canvas.getByLabelText("매장 선택")).toBeEnabled();
+} };

@@ -32,6 +32,9 @@ export const WeeklyHours: Story = { play: async ({ canvas }) => {
   await userEvent.click(canvas.getByRole("button", { name: "공개 정보 저장" }));
   await expect(await canvas.findByText("공개 정보를 저장했습니다.")).toBeVisible();
   await waitFor(() => expect(canvas.getByLabelText("고객에게 표시할 주소")).toHaveValue("서울 중구 세종대로 120"));
+  await userEvent.click(canvas.getByLabelText("월요일 휴무"));
+  await expect(canvas.queryByText("공개 정보를 저장했습니다.")).not.toBeInTheDocument();
+  await expect(canvas.getByLabelText("매장 선택")).toBeDisabled();
 } };
 export const StaffPickupOnly: Story = { parameters: { msw: { handlers: [membership("STAFF"), ...handlers.slice(1)] } }, play: async ({ canvas }) => { await expect(await canvas.findByRole("button", { name: "새 픽업 시간" })).toBeVisible(); await expect(canvas.queryByLabelText("고객에게 표시할 주소")).not.toBeInTheDocument(); } };
 export const CreateSlot: Story = { play: async ({ canvas }) => {

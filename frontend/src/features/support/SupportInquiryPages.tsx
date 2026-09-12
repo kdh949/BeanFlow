@@ -27,7 +27,7 @@ function SupportInquiryDetail({ inquiryId }: { inquiryId: string }) {
   const [claimedId, setClaimedId] = useState<string | null>(null);
   const cursor = cursors.at(-1);
   const resource = useResource(useCallback(async () => unwrap(await operationsApi.GET("/support/inquiries/{inquiryId}", { params: { path: { inquiryId }, query: { messageCursor: cursor } } })), [inquiryId, cursor]));
-  const claim = useSupportCommand(() => {});
+  const claim = useSupportCommand(`inquiry-claim:${inquiryId}`, () => {});
   const value = resource.state.status === "ready" ? resource.state.value : null;
   const caseId = value?.caseId || claimedId;
   const locked = claim.busy || claim.pending;
