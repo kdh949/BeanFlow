@@ -236,7 +236,7 @@ export function MerchantAccountsPage() {
             <TextField label="표시 이름" id="new-merchant-name" value={displayName} maxLength={100} required onValueChange={(value) => { setDisplayName(value); clearSensitiveResult(); createIntent.current.rotate(); }} />
             <SelectField label="첫 매장 역할" id="new-merchant-role" value={membershipRole} onValueChange={(value) => { setMembershipRole(value as "OWNER" | "STAFF"); clearSensitiveResult(); createIntent.current.rotate(); }}><option value="OWNER">점주</option><option value="STAFF">직원</option></SelectField>
           </div>
-          <StoreTargetPicker value={store} onValueChange={next => { setStore(next); clearSensitiveResult(); createIntent.current.rotate(); }} disabled={creating} />
+          <StoreTargetPicker purpose="MERCHANT_ACCOUNT" value={store} onValueChange={next => { setStore(next); clearSensitiveResult(); createIntent.current.rotate(); }} disabled={creating} />
           <TextAreaField label="발급 사유" id="create-merchant-reason" value={createReason} maxLength={200} required onValueChange={(value) => { setCreateReason(value); clearSensitiveResult(); createIntent.current.rotate(); }} />
           <Button type="submit" loading={creating} disabled={!store}>{creating ? "발급 중" : "점주 계정 발급"}</Button>
           {createError ? <ErrorState error={createError} /> : null}</fieldset>

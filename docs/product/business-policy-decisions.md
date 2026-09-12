@@ -2572,6 +2572,9 @@
   초기값이며 실패 판정이나 재실행 허가가 아니다. 검증된 exact listener의 동일 source 동시 replay만
   불명 상태에서 허용하고, 나머지는 owner 결과 확인 전 재실행을 거절한다. 늦은 결과는 자기 시도에만
   반영하고 결과 불명 원장은 90일 cleanup에서 제외한다. [ADR-125](../adr/ADR-125-publication-unknown-execution-recovery.md)를 따른다.
+- **Store Discovery Amendment (2026-09-12):** 운영 업무 진입에 필요한 최소 매장 목록은 업무별
+  현재 조회 권한(브랜드는 관리 권한)으로 허용한다. 이름과 식별자만 반환하며 전체 식별 정보 조회
+  권한을 다른 업무에 암묵적으로 추가하지 않는다. 상세 조회와 명령의 기존 권한·감사 경계는 유지한다.
 - **Scope:** 재고 authoring은 제외한다. UI, 외부 지급, 자동 병합·배포는 포함하지 않는다.
 - **Revisit Conditions:** 별도 승인자 분리, 매장 self-service 개설 또는 관리 grant 운영 정책이 필요해질 때.
 - **Related:** [ADR-124](../adr/ADR-124-management-api-vertical-slices.md)
@@ -2768,3 +2771,10 @@
   exact approval consumption, old/new notification, OpenAPI와 failure/security test가 완료되기 전에는 허용하지 않는다.
 - Delivery fulfillment/provider automation과 retention automation은 threat model, owner model, OpenAPI와 failure tests가
   확정되기 전 노출하지 않는다.
+
+### BR-56 보완: 미확인 포인트 조정의 서버 복구 (2026-09-12)
+
+화면은 조정 전 서버 준비 기록을 생성한다. 브라우저 재진입 시 현재 액터의 미확인 기록을 먼저
+조회하고 기존 내용·키로만 결과를 확인한다. 조회 실패나 전송 중 새로고침은 새 금전 명령의
+허가가 아니다. 미실행 준비 취소 또는 반영 결과의 명시적 확인 전에는 새 조정을 막는다.
+브라우저의 고객·계정·본문 영구 저장 금지는 유지하며 복구 세부 계약은 ADR-066/127을 따른다.
