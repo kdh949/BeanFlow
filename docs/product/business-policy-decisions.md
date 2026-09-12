@@ -2572,6 +2572,9 @@
   초기값이며 실패 판정이나 재실행 허가가 아니다. 검증된 exact listener의 동일 source 동시 replay만
   불명 상태에서 허용하고, 나머지는 owner 결과 확인 전 재실행을 거절한다. 늦은 결과는 자기 시도에만
   반영하고 결과 불명 원장은 90일 cleanup에서 제외한다. [ADR-125](../adr/ADR-125-publication-unknown-execution-recovery.md)를 따른다.
+- **Store Discovery Amendment (2026-09-12):** 운영 업무 진입에 필요한 최소 매장 목록은 업무별
+  현재 조회 권한(브랜드는 관리 권한)으로 허용한다. 이름과 식별자만 반환하며 전체 식별 정보 조회
+  권한을 다른 업무에 암묵적으로 추가하지 않는다. 상세 조회와 명령의 기존 권한·감사 경계는 유지한다.
 - **Scope:** 재고 authoring은 제외한다. UI, 외부 지급, 자동 병합·배포는 포함하지 않는다.
 - **Revisit Conditions:** 별도 승인자 분리, 매장 self-service 개설 또는 관리 grant 운영 정책이 필요해질 때.
 - **Related:** [ADR-124](../adr/ADR-124-management-api-vertical-slices.md)

@@ -22,18 +22,21 @@ const REASONS: Record<string, string> = {
 export function DisputeFilingPanel({
   settlementItemId,
   previousDisputeId,
+  initialExpectedAdjustmentKrw = 0,
   onFiled,
   onClose,
 }: {
   settlementItemId: string;
   /** Terminal dispute referenced by a one-time filing with new evidence. */
   previousDisputeId?: string;
+  /** Previous signed claim to review when filing again; never use held amount here. */
+  initialExpectedAdjustmentKrw?: number;
   /** Fired once, right after a successful submit, so the caller can refresh its own data. */
   onFiled: (dispute: SettlementDispute) => void;
   /** The operator dismisses the confirmation explicitly; this panel never unmounts itself. */
   onClose: () => void;
 }) {
-  const [expectedAdjustmentKrw, setExpectedAdjustmentKrw] = useState(0);
+  const [expectedAdjustmentKrw, setExpectedAdjustmentKrw] = useState(initialExpectedAdjustmentKrw);
   const [reason, setReason] = useState("");
   const [evidence, setEvidence] = useState("");
   const [filed, setFiled] = useState<SettlementDispute | null>(null);

@@ -11,6 +11,18 @@ import kotlin.test.assertTrue
 
 class PostAcceptanceResolutionCaseTest {
     @Test
+    fun `executor can change only before resolution starts`() {
+        val resolution = resolution()
+        val next = UUID.randomUUID()
+        resolution.reassignExecutor(next, NOW.plusSeconds(1))
+        assertEquals(next, resolution.executorActorId)
+        assertEquals(1L, resolution.version)
+        resolution.start(NOW.plusSeconds(2))
+        assertThrows<IllegalStateException> { resolution.reassignExecutor(UUID.randomUUID(), NOW.plusSeconds(3)) }
+        assertEquals(next, resolution.executorActorId)
+    }
+
+    @Test
     fun `resolution plan accepts only post-acceptance order facts and exact financial shapes`() {
         assertThrows<IllegalArgumentException> { resolution(triggerState = "ACCEPTED") }
         assertThrows<IllegalArgumentException> {

@@ -28,3 +28,15 @@ export const NotificationSkipped: Story = { beforeEach() { current = { ...struct
 export const CouponReview: Story = { beforeEach() { current = { ...structuredClone(initial), request: { ...request, benefitType: "COUPON", amountKrw: 1000, couponTemplateId: actionId }, couponTemplate: { templateId: actionId, amountKrw: 1000, validityDays: 30, minimumEligibleSubtotalKrw: 3000 } }; }, play: async ({ canvas }) => { await expect(await canvas.findByText(/쿠폰 사용 기한 30일.*최소 사용 금액.*3,000/)).toBeVisible(); } };
 
 export const OperationsReviewLink: Story = { beforeEach() { current = { ...current, approval: { ...approval, state: "AWAITING_OPERATIONS" }, allowedActions: [] }; }, play: async ({ canvas }) => { await expect(await canvas.findByRole("link", { name: "운영 조사 검토" })).toHaveAttribute("href", `/ops/support-investigations?requestId=${actionId}`); } };
+export const UndeterminedCost: Story = { args: { initialCompensationId: undefined }, play: async ({ canvas, msw }) => {
+  msw.use(http.post("/api/v1/support/cases/:caseId/compensation-evaluations", async ({ request: req }) => {
+    expect(await req.json()).toMatchObject({ responsibility: "UNDETERMINED", platformShareBps: 0, storeShareBps: 0 });
+    return HttpResponse.json({ decision: "INVESTIGATION_REQUIRED", band: "EXCEPTIONAL", approvalRoute: "OPERATIONS", executable: false, reasonCodes: ["COST_RESPONSIBILITY_UNDETERMINED"], targetVersion: 4, expiresAt: "2026-09-11T09:06:00Z" });
+  }));
+  await userEvent.type(await canvas.findByLabelText("사고 ID"), id);
+  await userEvent.type(canvas.getByLabelText("보상 금액"), "1000");
+  await waitFor(() => expect(canvas.getByRole("button", { name: "현재 보상 가능 여부 평가" })).toBeEnabled());
+  await userEvent.click(canvas.getByRole("button", { name: "현재 보상 가능 여부 평가" }));
+  await expect(await canvas.findByText("비용 책임을 먼저 확정해 주세요")).toBeVisible();
+  await expect(canvas.queryByRole("button", { name: "평가한 보상 요청 등록" })).not.toBeInTheDocument();
+} };

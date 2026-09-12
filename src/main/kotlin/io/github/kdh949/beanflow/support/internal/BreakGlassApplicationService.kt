@@ -243,7 +243,11 @@ internal class BreakGlassTransactions(
         val assigned = requester && active && bound && supportCase.currentAssigneeId == actorId
         val withinExpiry = entity.expiresAt?.let { clock.instant().isBefore(it) } == true
         val allowed = mutableListOf<BreakGlassWorkflowAction>()
-        if (active && bound && approver && entity.state == BreakGlassState.APPROVAL_PENDING) allowed += BreakGlassWorkflowAction.DECIDE
+        if (active && bound && supportCase.currentAssigneeId == entity.requesterId && approver &&
+            entity.state == BreakGlassState.APPROVAL_PENDING
+        ) {
+            allowed += BreakGlassWorkflowAction.DECIDE
+        }
         if (assigned && withinExpiry && entity.state == BreakGlassState.ACTIVE) allowed += BreakGlassWorkflowAction.REVEAL
         if (reviewer && entity.state == BreakGlassState.REVIEW_PENDING) allowed += BreakGlassWorkflowAction.REVIEW
         val review =
@@ -319,6 +323,11 @@ internal class BreakGlassTransactions(
                 val entity = requests.findLockedById(command.requestId) ?: notFound()
                 if (entity.supportCaseId != caseId) conflict("Break-glass request binding is stale")
                 if (entity.version != command.expectedVersion) conflict("Break-glass request version is stale")
+                activeAssignedCase(caseId, entity.requesterId)
+                val link = activeLink(caseId, entity.subjectLinkId)
+                if (link.subjectType.toBreakGlassSubjectType() != entity.subjectType || link.subjectId != entity.subjectId) {
+                    conflict("Break-glass subject binding is stale")
+                }
                 val aggregate = entity.toAggregate()
                 val now = clock.instant()
                 when (command.decision) {

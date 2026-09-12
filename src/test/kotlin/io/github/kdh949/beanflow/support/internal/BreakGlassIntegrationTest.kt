@@ -13,6 +13,8 @@ import io.github.kdh949.beanflow.shared.internal.VaultTransitPersonalDataAdapter
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.Mockito
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -79,6 +81,38 @@ internal class BreakGlassIntegrationTest
             grant(requesterId, "SUPPORT_BREAK_GLASS_REQUEST")
             grant(approverId, "SUPPORT_PII_REVEAL_APPROVE")
             grant(reviewerId, "PRIVACY_BREAK_GLASS_REVIEW")
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = ["REASSIGNED", "UNLINKED"])
+        fun `approval rejects requests whose assignment or subject link changed`(change: String) {
+            val binding = seedBinding()
+            val requestId = request(binding)
+            if (change == "REASSIGNED") {
+                jdbcTemplate.update("UPDATE support_case SET current_assignee_id = ? WHERE id = ?", reviewerId, binding.caseId)
+            } else {
+                jdbcTemplate.update(
+                    "UPDATE support_case_subject_link SET unlinked_at = now(), unlinked_by_actor_id = ?, " +
+                        "unlink_reason = 'target no longer applies', unlink_case_version = 2 WHERE id = ?",
+                    requesterId,
+                    binding.linkId,
+                )
+            }
+            mockMvc
+                .perform(get("/api/v1/support/break-glass-requests/$requestId/workflow").with(operatorJwt(approverId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+            mockMvc
+                .perform(
+                    post("/api/v1/support/break-glass-requests/$requestId/approvals")
+                        .with(operatorJwt(approverId))
+                        .header("Idempotency-Key", "stale-break-glass-$change")
+                        .json("""{"decision":"APPROVE","expectedVersion":0}"""),
+                ).andExpect(if (change == "REASSIGNED") status().isForbidden else status().isConflict)
+            assertThat(
+                jdbcTemplate.queryForObject("SELECT state FROM support_break_glass_request WHERE id = ?", String::class.java, requestId),
+            ).isEqualTo("APPROVAL_PENDING")
+            assertThat(countIntents(requestId)).isEqualTo(1L)
         }
 
         @Test
