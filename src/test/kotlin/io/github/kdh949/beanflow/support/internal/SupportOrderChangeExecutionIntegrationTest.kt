@@ -31,9 +31,13 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
@@ -57,6 +61,7 @@ internal class SupportOrderChangeExecutionIntegrationTest
         private val createOrder: CreateOrderUseCase,
         private val orderQuoteUseCase: OrderQuoteUseCase,
         private val payloads: SupportOrderChangePayloadCanonicalizer,
+        private val transactionManager: PlatformTransactionManager,
     ) {
         private val supportActorId = UUID.fromString("67000000-0000-0000-0000-000000000001")
         private val storeActorId = UUID.fromString("67000000-0000-0000-0000-000000000002")
@@ -229,7 +234,9 @@ internal class SupportOrderChangeExecutionIntegrationTest
                     ).andExpect(status().isOk)
                     .andReturn()
                     .response.contentAsString
-            assertThat(before).contains("REQUIRES_PERMISSION", "BF-")
+            assertThat(
+                before,
+            ).contains("REQUIRES_PERMISSION").doesNotContain("BF-", "publicReference", "storeName").contains("\"label\":null")
             grantSelectionPermissions()
             val after =
                 mockMvc
@@ -243,6 +250,22 @@ internal class SupportOrderChangeExecutionIntegrationTest
                     .andReturn()
                     .response.contentAsString
             assertThat(after).contains("MISSING_PROFILE", "AVAILABLE").doesNotContain("REQUIRES_PERMISSION")
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_SUBJECT_SEARCH'",
+                supportActorId,
+            )
+            val revoked =
+                mockMvc
+                    .perform(get(path).with(jwt().jwt { it.subject(supportActorId.toString()) }))
+                    .andExpect(status().isOk)
+                    .andExpect(
+                        jsonPath(
+                            "$.subjectLinks[?(@.subjectType == 'ORDER')].display.state",
+                        ).value(org.hamcrest.Matchers.contains("REQUIRES_PERMISSION")),
+                    ).andReturn()
+                    .response.contentAsString
+            assertThat(revoked).doesNotContain("BF-", "publicReference", "storeName").contains("\"label\":null")
+            grantSelectionPermissions()
             mockMvc
                 .perform(get(path).with(jwt().jwt { it.subject(supportActorId.toString()) }))
                 .andExpect(
@@ -252,6 +275,59 @@ internal class SupportOrderChangeExecutionIntegrationTest
                     jsonPath("$.subjectLinks[?(@.subjectType == 'ORDER')].display.state")
                         .value(org.hamcrest.Matchers.contains("AVAILABLE")),
                 )
+        }
+
+        @Test
+        fun `candidate lookup and case note acquire grants before the case without a deadlock`() {
+            grantSelectionPermissions()
+            val reference =
+                jdbcTemplate.queryForObject(
+                    "SELECT public_reference FROM ordering_order WHERE id = ?",
+                    String::class.java,
+                    orderId,
+                )!!
+            Executors.newSingleThreadExecutor().use { pool ->
+                lateinit var lookup: java.util.concurrent.Future<Int>
+                TransactionTemplate(transactionManager).executeWithoutResult {
+                    val writerPid = jdbcTemplate.queryForObject("SELECT pg_backend_pid()", Int::class.java)!!
+                    jdbcTemplate.queryForObject(
+                        "SELECT actor_id FROM operations_operator_permission_grant WHERE actor_id = ? AND permission = 'SUPPORT_CASE_WRITE' FOR UPDATE",
+                        UUID::class.java,
+                        supportActorId,
+                    )
+                    lookup =
+                        pool.submit<Int> {
+                            mockMvc
+                                .perform(
+                                    get("/api/v1/support/cases/$caseId/order-candidates/$reference")
+                                        .with(jwt().jwt { it.subject(supportActorId.toString()) }),
+                                ).andReturn()
+                                .response.status
+                        }
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    var blocked = false
+                    while (!blocked && System.nanoTime() < deadline) {
+                        blocked =
+                            jdbcTemplate.queryForObject(
+                                "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE ? = ANY(pg_blocking_pids(pid)))",
+                                Boolean::class.java,
+                                writerPid,
+                            )!!
+                        if (!blocked) Thread.sleep(10)
+                    }
+                    assertThat(blocked).isTrue()
+                    mockMvc
+                        .perform(
+                            post("/api/v1/support/cases/$caseId/notes")
+                                .with(jwt().jwt { it.subject(supportActorId.toString()) })
+                                .with(csrf())
+                                .header("Idempotency-Key", "candidate-concurrent-note")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""{"content":"상담 기록 확인","reason":"진행 기록"}"""),
+                        ).andExpect(status().isOk)
+                }
+                assertThat(lookup.get(10, TimeUnit.SECONDS)).isEqualTo(200)
+            }
         }
 
         private fun grantSelectionPermissions() {
@@ -297,6 +373,18 @@ internal class SupportOrderChangeExecutionIntegrationTest
                 .perform(
                     get("/api/v1/stores/${UUID.randomUUID()}/support-order-change-requests/$requestId").with(actor),
                 ).andExpect(status().isForbidden)
+            mockMvc
+                .perform(get("$path/pickup-slots").with(actor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isArray)
+            jdbcTemplate.update("UPDATE support_action_revision SET policy_version = 'retired-policy' WHERE id = ?", revisionId)
+            mockMvc.perform(get(path).with(actor)).andExpect(status().isConflict)
+            mockMvc.perform(get("$path/pickup-slots").with(actor)).andExpect(status().isConflict)
+            jdbcTemplate.update(
+                "UPDATE support_action_revision SET policy_version = ? WHERE id = ?",
+                SupportActionPolicy.POLICY_VERSION,
+                revisionId,
+            )
             jdbcTemplate.update("UPDATE support_action_revision SET expires_at = now() - interval '1 second' WHERE id = ?", revisionId)
             mockMvc.perform(get(path).with(actor)).andExpect(status().isConflict)
         }

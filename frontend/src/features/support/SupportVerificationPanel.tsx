@@ -1,5 +1,5 @@
 import { SupportWorkPicker } from "./SupportWorkPicker";
-import { supportSubjectLabel } from "./supportCaseLabels";
+import { supportSubjectLabel, isSupportSubjectSelectable, type SupportSubjectDisplaySource } from "./supportCaseLabels";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
@@ -37,7 +37,7 @@ export function SupportVerificationPanel({ caseId, links, disabled, locked = fal
   }, [request, disabled, caseId, links]));
   const current = read.state.status === "ready" ? read.state.value : null;
   const expired = current ? Date.now() >= Date.parse(current.expiresAt) : false;
-  const command = useSupportCommand(() => { setProof(""); if (request) read.reload(); });
+  const command = useSupportCommand(`verification:${caseId}`, () => { setProof(""); if (request) read.reload(); });
   const busy = command.busy || proofBusy;
   const blocked = busy || command.pending || disabled || locked;
   useEffect(() => { onBusyChange?.(busy || command.pending); return () => onBusyChange?.(false); }, [busy, command.pending, onBusyChange]);
@@ -55,13 +55,13 @@ export function SupportVerificationPanel({ caseId, links, disabled, locked = fal
     return () => { window.removeEventListener("focus", clear); document.removeEventListener("visibilitychange", clear); };
   }, [request, read.reload]);
   function create() {
-    if (blocked || !eligible.some(link => link.linkId === linkId)) return;
+    if (blocked || !eligible.some(link => link.linkId === linkId && isSupportSubjectSelectable(link))) return;
     const body = { subjectLinkId: linkId, requestedLevel: level, purpose: scope === "SUPPORT_ACTION" ? "CASE_RESOLUTION" as const : purpose, actionScope: scope };
     command.submit(JSON.stringify({ caseId, body }), async key => { const result = unwrap(await operationsApi.POST("/support/cases/{caseId}/verification-sessions", { params: { path: { caseId }, header: { "Idempotency-Key": key } }, body })); setRequest({ id: result.sessionId }); }, () => {});
   }
   const pending = current?.state === "PENDING" && !expired;
   const issued = pending ? current.challenges.find(c => c.state === "ISSUED" && Date.parse(c.expiresAt) > Date.now()) : null;
-  const unavailableChannels = new Set(current?.challenges.filter(c => !["EXPIRED", "INVALID", "REVOKED"].includes(c.state)).map(c => c.channel));
+  const unavailableChannels = new Set(current?.challenges.filter(c => !["EXPIRED", "INVALID", "REVOKED"].includes(c.state) && !(c.state === "ISSUED" && Date.parse(c.expiresAt) <= Date.now())).map(c => c.channel));
   function issue() {
     if (blocked || !current || !pending || unavailableChannels.has(channel)) return;
     const body = { channel }; const sessionId = current.sessionId;
@@ -83,7 +83,7 @@ export function SupportVerificationPanel({ caseId, links, disabled, locked = fal
   if (disabled) return <InlineNotice title="종료된 상담 건에서는 본인확인을 진행할 수 없습니다" description="상담 목록에서 현재 처리 중인 건을 확인해 주세요." />;
   return <section className="management-workspace"><h2>본인확인</h2>
     <InlineNotice title="강화 인증에는 서로 다른 인증 수단 두 가지가 필요합니다" description="이미 등록된 앱·전화·이메일을 사용합니다. 상담 조치는 상담 해결 목적의 별도 인증이 필요합니다." />
-    {!eligible.length ? <EmptyState title="본인확인 가능한 대상이 없습니다" description="고객, 매장 또는 배송 대상을 상담 건에 연결해 주세요." /> : <form className="surface-card management-card" onSubmit={e => { e.preventDefault(); create(); }}><fieldset className="catalog-fieldset" disabled={blocked}><legend>새 본인확인</legend><SelectField label="본인확인 대상" value={linkId} onValueChange={setLinkId} required><option value="">대상 선택</option>{eligible.map(link => <option key={link.linkId} value={link.linkId}>{supportSubjectLabel(link)}</option>)}</SelectField><SelectField label="인증 사용 업무" value={scope} onValueChange={value => setScope(value as Session["actionScope"])}><option value="PERSONAL_DATA_REVEAL">개인정보 열람</option><option value="SUPPORT_ACTION">상담 조치</option></SelectField><SelectField label="본인확인 목적" value={scope === "SUPPORT_ACTION" ? "CASE_RESOLUTION" : purpose} onValueChange={value => setPurpose(value as Session["purpose"])} disabled={scope === "SUPPORT_ACTION"}>{Object.entries(verificationPurposeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField><SelectField label="요청 인증 수준" value={level} onValueChange={value => setLevel(value as typeof level)}><option value="BASIC">기본 · 인증 수단 1개</option><option value="ENHANCED">강화 · 서로 다른 인증 수단 2개</option></SelectField><Button type="submit" loading={command.busy} disabled={!linkId}>본인확인 시작</Button></fieldset></form>}
+    {!eligible.length ? <EmptyState title="본인확인 가능한 대상이 없습니다" description="고객, 매장 또는 배송 대상을 상담 건에 연결해 주세요." /> : <form className="surface-card management-card" onSubmit={e => { e.preventDefault(); create(); }}><fieldset className="catalog-fieldset" disabled={blocked}><legend>새 본인확인</legend>{eligible.some(link => !isSupportSubjectSelectable(link)) ? <p>표시 정보 조회 권한과 등록된 대상 프로필을 확인해 주세요.</p> : null}<SelectField label="본인확인 대상" value={linkId} onValueChange={setLinkId} required><option value="">대상 선택</option>{eligible.map(link => <option key={link.linkId} value={link.linkId} disabled={!isSupportSubjectSelectable(link)}>{supportSubjectLabel(link)}</option>)}</SelectField><SelectField label="인증 사용 업무" value={scope} onValueChange={value => setScope(value as Session["actionScope"])}><option value="PERSONAL_DATA_REVEAL">개인정보 열람</option><option value="SUPPORT_ACTION">상담 조치</option></SelectField><SelectField label="본인확인 목적" value={scope === "SUPPORT_ACTION" ? "CASE_RESOLUTION" : purpose} onValueChange={value => setPurpose(value as Session["purpose"])} disabled={scope === "SUPPORT_ACTION"}>{Object.entries(verificationPurposeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField><SelectField label="요청 인증 수준" value={level} onValueChange={value => setLevel(value as typeof level)}><option value="BASIC">기본 · 인증 수단 1개</option><option value="ENHANCED">강화 · 서로 다른 인증 수단 2개</option></SelectField><Button type="submit" loading={command.busy} disabled={!eligible.some(link => link.linkId === linkId && isSupportSubjectSelectable(link))}>본인확인 시작</Button></fieldset></form>}
     <SupportWorkPicker kind="VERIFICATION" caseId={caseId} disabled={blocked} onSelect={item => { setProof(""); setProofError(null); setRequest({ id: item.requestId }); }} />
     {command.failure ? <ErrorState error={command.failure} /> : null}{command.pending ? <InlineNotice tone="warning" title="본인확인 요청 응답을 확인하지 못했습니다" description="같은 요청으로 결과를 확인해 주세요." action={<Button disabled={busy} onClick={() => void command.retry()}>같은 인증 요청 확인</Button>} /> : null}{proofError ? <ErrorState error={proofError} /> : null}
     {read.state.status === "loading" && request ? <LoadingState label="본인확인 현재 상태를 확인하는 중" /> : read.state.status === "failed" ? <ErrorState error={read.state.error} retry={read.reload} /> : current ? <article className="surface-card management-card management-workspace"><h3>현재 본인확인</h3><p className="support-case-reference">본인확인 ID {current.sessionId}</p><p>{current.actionScope === "SUPPORT_ACTION" ? "상담 조치" : "개인정보 열람"} · {verificationPurposeLabels[current.purpose]}</p><p className="support-case-reference">대상 {current.subjectId}</p><StatusText state={expired ? "EXPIRED" : current.state} /><p>요청 수준 {current.requestedLevel === "ENHANCED" ? "강화" : "기본"} · 실패 {current.invalidAttempts}/5 · 만료 {fullDateTime.format(new Date(current.expiresAt))}</p>

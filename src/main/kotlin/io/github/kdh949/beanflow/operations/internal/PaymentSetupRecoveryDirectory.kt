@@ -1,10 +1,15 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
+import io.github.kdh949.beanflow.operations.api.AuditActorType
+import io.github.kdh949.beanflow.operations.api.AuditCategory
+import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization
 import io.github.kdh949.beanflow.operations.api.OrderInvestigationOperations
 import io.github.kdh949.beanflow.operations.api.OrderInvestigationState
 import io.github.kdh949.beanflow.operations.api.OrderInvestigationTarget
+import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.CursorSortAdapter
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -45,6 +50,7 @@ internal data class SetupRecoveryCaseItem(
     val reason: String,
     val updatedAt: Instant,
     val order: RepairOrderDisplay,
+    val canPropose: Boolean,
 )
 
 internal data class SetupRepairProposalItem(
@@ -70,9 +76,12 @@ internal class PaymentSetupRecoveryDirectory(
     private val jdbc: JdbcTemplate,
     private val cursors: SignedCursorCodec,
     private val clock: Clock,
+    private val audits: AuditRecordOperations,
+    private val correlation: CorrelationIdSource,
 ) {
     fun cases(
         actorId: UUID,
+        caseId: UUID?,
         status: ReprocessingCaseStatus?,
         cursor: String?,
         limit: Int,
@@ -87,10 +96,14 @@ internal class PaymentSetupRecoveryDirectory(
                 "setup-recovery-cases",
                 actorId,
                 status?.name,
-                null,
+                caseId,
             )
         val args = mutableListOf<Any>()
         var where = "case_type = 'PAYMENT_CANCELLATION_SETUP'"
+        if (caseId != null) {
+            where += " AND id = ?"
+            args += caseId
+        }
         if (status != null) {
             where += " AND status = ?"
             args += status.name
@@ -107,7 +120,7 @@ internal class PaymentSetupRecoveryDirectory(
         args += limit + 1
         val rows =
             jdbc.query(
-                "SELECT id, owner_reference, status, reason, updated_at " +
+                "SELECT id, owner_reference, status, reason, updated_at, resolution " +
                     "FROM operations_reprocessing_case WHERE $where ORDER BY id LIMIT ?",
                 {
                     rs,
@@ -126,28 +139,33 @@ internal class PaymentSetupRecoveryDirectory(
                         ReprocessingCaseStatus.valueOf(rs.getString("status")),
                         rs.getString("reason"),
                         rs.getTimestamp("updated_at").toInstant(),
+                        rs.getString("status") == "OPEN" && rs.getString("resolution") == null,
                     )
                 },
                 *args.toTypedArray(),
             )
         val page = rows.take(limit)
         val targets = orders.findTargets(page.map { it.orderId }.toSet())
-        return SetupRecoveryCasePage(
-            page.map { row ->
-                SetupRecoveryCaseItem(
-                    row.id,
-                    row.status,
-                    row.reason,
-                    row.updatedAt,
-                    display(targets[row.orderId]),
-                )
-            },
-            next(
-                scope,
-                rows.size > limit,
-                page.lastOrNull()?.id,
-            ),
-        )
+        val result =
+            SetupRecoveryCasePage(
+                page.map { row ->
+                    SetupRecoveryCaseItem(
+                        row.id,
+                        row.status,
+                        row.reason,
+                        row.updatedAt,
+                        display(targets[row.orderId]),
+                        row.canPropose,
+                    )
+                },
+                next(
+                    scope,
+                    rows.size > limit,
+                    page.lastOrNull()?.id,
+                ),
+            )
+        readAudit(actorId, "PAYMENT_SETUP_RECOVERY_CASES_READ", status?.name, result.items.size)
+        return result
     }
 
     fun proposals(
@@ -234,17 +252,45 @@ internal class PaymentSetupRecoveryDirectory(
             )
         val page = rows.take(limit)
         val targets = orders.findTargets(page.map { it.orderId }.toSet())
-        return SetupRepairProposalPage(
-            page.map {
-                SetupRepairProposalItem(
-                    it.proposal,
-                    display(targets[it.orderId]),
-                )
-            },
-            next(
-                scope,
-                rows.size > limit,
-                page.lastOrNull()?.proposal?.proposalId,
+        val result =
+            SetupRepairProposalPage(
+                page.map {
+                    SetupRepairProposalItem(
+                        it.proposal,
+                        display(targets[it.orderId]),
+                    )
+                },
+                next(
+                    scope,
+                    rows.size > limit,
+                    page.lastOrNull()?.proposal?.proposalId,
+                ),
+            )
+        readAudit(actorId, "PAYMENT_SETUP_REPAIR_PROPOSALS_READ", state?.name, result.items.size)
+        return result
+    }
+
+    private fun readAudit(
+        actor: UUID,
+        action: String,
+        state: String?,
+        count: Int,
+    ) {
+        audits.appendAll(
+            listOf(
+                AppendAuditRecordCommand(
+                    actorId = actor.toString(),
+                    actorType = AuditActorType.PLATFORM_OPERATOR,
+                    category = AuditCategory.FINANCIAL_TRANSACTION,
+                    action = action,
+                    targetType = "PAYMENT_SETUP_RECOVERY_DIRECTORY",
+                    targetId = UUID.nameUUIDFromBytes(action.toByteArray(Charsets.UTF_8)),
+                    occurredAt = clock.instant(),
+                    reason = "PAYMENT_SETUP_RECOVERY_REVIEW",
+                    afterSummary = mapOf("stateFilter" to (state ?: "ALL"), "resultCount" to count.toString()),
+                    correlationId = correlation.currentOrCreate(),
+                    sourceReference = "setup-directory:${UUID.randomUUID()}",
+                ),
             ),
         )
     }
@@ -317,6 +363,7 @@ internal class PaymentSetupRecoveryDirectory(
         val status: ReprocessingCaseStatus,
         val reason: String,
         val updatedAt: Instant,
+        val canPropose: Boolean,
     )
 
     private data class ProposalRow(
@@ -339,6 +386,7 @@ internal class PaymentSetupRecoveryDirectoryController(
     @GetMapping("/payment-setup-recovery-cases")
     fun cases(
         actor: OperatorActor,
+        @RequestParam(required = false) caseId: UUID?,
         @RequestParam(required = false) status: ReprocessingCaseStatus?,
         @RequestParam(required = false) @Size(
             min = 1,
@@ -348,6 +396,7 @@ internal class PaymentSetupRecoveryDirectoryController(
     ) = ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
         directory.cases(
             actor.actorId,
+            caseId,
             status,
             cursor,
             limit,

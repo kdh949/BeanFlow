@@ -133,3 +133,21 @@ ID 설명문은 대상을 찾는 업무를 남긴다. 브라우저 영구 ID 목
 ## Revisit Conditions
 
 외부 인사/참조 관리 연동, 데이터 대량 탐색, 새로운 개인정보 조회 범위 또는 금융 정책 변경이 필요할 때.
+
+### 업무별 선택 권한 보완 (2026-09-12)
+
+공용 매장 선택은 `/operations/store-targets`의 목적별 최소 id/name 응답을 사용한다. 소속 추가는 STORE_MEMBERSHIP_WRITE, 계정 관리는 MERCHANT_CREDENTIAL_MANAGE, 이의 조회는 SETTLEMENT_DISPUTE_READ, 포인트 정책 조회는 POINT_ACCRUAL_POLICY_READ를 사용한다. 환불은 기존 PLATFORM_OPERATOR 역할만으로 허용되는 업무이므로 REFUND 목적도 같은 역할 경계를 유지한다. 각 후속 명령은 기존 권한을 재검증한다.
+소속 추가의 `/operations/stores/{storeId}/memberships/account-target`는 Identity가 STORE_MEMBERSHIP_WRITE + 존재하는 매장 + 고정 조회 목적을 확인해 정확한 로그인 아이디의 accountId/loginId/displayName만 반환한다. 기존 MERCHANT_ACCOUNT_READ 보안 감사 action을 재사용하고 purpose/storeId를 기록하며 인증 상태·비밀번호·타 매장 소속은 읽거나 반환하지 않는다. 기존 소속 목록 조회 grant 없이도 추가 전용 화면에서 이 경로를 사용할 수 있다. 조회와 Audit는 하나의 짧은 DB transaction이며 외부 호출과 새 dependency/DDL은 없다.
+정책 변경의 KEY_REUSED와 MANUAL_REVIEW_REQUIRED는 확정 오류 안내로 종료하고 동일 키 자동 재시도 대상으로 보지 않는다. 네트워크·408·5xx·REQUEST_IN_PROGRESS 및 그 후 결과를 증명하지 못하는 권한 오류는 기존 요청을 유지한다.
+
+### 복구 큐 조회 감사와 생성 가능 상태 (2026-09-12)
+
+복구 Case/제안 목록은 PAYMENT_CANCELLATION_SETUP_REPAIR grant와 같은 짧은 transaction에서 각각 PAYMENT_SETUP_RECOVERY_CASES_READ / PAYMENT_SETUP_REPAIR_PROPOSALS_READ 금융 감사 action을 남긴다. 목적은 해당 큐 업무의 고정 PAYMENT_SETUP_RECOVERY_REVIEW이며 필터 상태와 결과 건수만 저장한다. 고객/주문/Provider 식별값과 검색 원문은 감사 payload에 넣지 않는다. 감사 저장 실패는 503이고 응답을 반환하지 않는다. 새 외부 호출이나 실행 엔진은 없다.
+Case 목록의 canPropose는 PAYMENT_CANCELLATION_SETUP + OPEN + resolution 없음으로 서버가 계산한다. caseId 필터는 주문 상세에서 연결된 건도 같은 기준으로 읽게 하며 cursor scope에 포함한다. 종료/처리 중 Case를 조회할 수는 있지만 제안 생성 대상으로 선택하지 않는다. 실제 명령에서 최신 상태를 다시 검증한다.
+복구 EXPIRED/STALE의 terminal 409 replay, 결과 조회 예약의 ORDER_STATE_CONFLICT/REPROCESSING_NOT_SAFE는 미확정 잠금을 해제하고 상세/목록을 갱신한다. replay 전에 실패하는 권한 철회는 이전 미확정 상태를 보존한다.
+
+### 상담 연결 표시와 후보 조회 보완
+
+- 연결 대상 표시는 SUBJECT_SEARCH와 주문의 추가 ORDER_READ를 한 predicate로 projection·감사·응답에 적용한다. 표시가 AVAILABLE이 아니면 본인확인·정정·긴급 열람·연결 해제·주문 조치의 새 대상을 선택하지 못하며, 권한 또는 원 소유자의 표시 프로필 보완을 안내한다.
+- 주문 후보 조회는 CASE_READ → CASE_WRITE → ORDER_READ → SUBJECT_SEARCH grant를 획득한 뒤 담당 활성 Case를 잠근다. 기존 Case 쓰기의 grant → Case 순서와 역전되지 않는다. 조회 결과와 개인정보 비포함 감사 기록은 동일 트랜잭션이다.
+- INTERNAL_REQUESTER의 호출자 CASE_WRITE 및 후보의 임의 ACTIVE grant 예외를 계약에 명시한다. 현재 운영자의 display는 누락 대신 MISSING_PROFILE을 포함해 항상 반환한다.

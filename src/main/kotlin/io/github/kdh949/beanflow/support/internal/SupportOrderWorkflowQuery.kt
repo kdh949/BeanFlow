@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.support.internal
 
+import io.github.kdh949.beanflow.fulfillment.api.PickupSlotQueryOperations
+import io.github.kdh949.beanflow.fulfillment.api.PickupSlotView
 import io.github.kdh949.beanflow.identity.api.StoreAccessOperations
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
@@ -10,6 +12,7 @@ import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.MerchantActor
 import io.github.kdh949.beanflow.shared.api.OperatorActor
+import io.github.kdh949.beanflow.support.internal.domain.SupportActionPolicy
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionRequestState
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionType
 import io.github.kdh949.beanflow.support.internal.domain.SupportCaseState
@@ -31,6 +34,10 @@ internal data class SupportOrderContextResource(
     val storeId: UUID,
     val state: SupportOrderState,
     val version: Long,
+)
+
+internal data class SupportPickupSlotList(
+    val items: List<PickupSlotView>,
 )
 
 internal enum class SupportOrderWorkflowAction { REVISE, DECIDE_SUPPORT_MANAGER, REASSIGN, EXECUTE, ADVANCE_RESOLUTION }
@@ -67,6 +74,7 @@ internal class SupportOrderWorkflowQuery(
     private val permissions: OperatorPermissionAuthorization,
     private val storeAccess: StoreAccessOperations,
     private val clock: Clock,
+    private val pickupSlots: PickupSlotQueryOperations,
 ) {
     @Transactional
     fun order(
@@ -77,6 +85,35 @@ internal class SupportOrderWorkflowQuery(
         authorization.authorizeTarget(actorId, caseId, orderId)
         val order = ordering.findOrderSnapshots(setOf(orderId)).singleOrNull() ?: missing()
         return SupportOrderContextResource(order.orderId, order.storeId, order.state, order.version)
+    }
+
+    @Transactional
+    fun orderPickupSlots(
+        actorId: UUID,
+        caseId: UUID,
+        orderId: UUID,
+    ): SupportPickupSlotList {
+        val current = order(actorId, caseId, orderId)
+        return SupportPickupSlotList(pickupSlots.listOpenSlots(current.storeId, clock.instant()))
+    }
+
+    @Transactional
+    fun requestPickupSlots(
+        actorId: UUID,
+        requestId: UUID,
+    ): SupportPickupSlotList {
+        val current = workflow(actorId, requestId).order ?: denied()
+        return SupportPickupSlotList(pickupSlots.listOpenSlots(current.storeId, clock.instant()))
+    }
+
+    @Transactional
+    fun storePickupSlots(
+        actorId: UUID,
+        storeId: UUID,
+        requestId: UUID,
+    ): SupportPickupSlotList {
+        storeRequest(actorId, storeId, requestId)
+        return SupportPickupSlotList(pickupSlots.listOpenSlots(storeId, clock.instant()))
     }
 
     @Transactional
@@ -161,7 +198,8 @@ internal class SupportOrderWorkflowQuery(
         if (request.action !in DIRECT_ACTIONS || order.state != SupportOrderState.ACCEPTED ||
             request.state !in
             (EXECUTOR_STATES + SupportActionRequestState.AWAITING_SUPPORT_MANAGER + SupportActionRequestState.AWAITING_OPERATIONS) ||
-            !clock.instant().isBefore(revision.expiresAt) || order.version != revision.targetVersion
+            !clock.instant().isBefore(revision.expiresAt) || order.version != revision.targetVersion ||
+            revision.policyVersion != SupportActionPolicy.POLICY_VERSION
         ) {
             throw DomainFailure(FailureCode.RESOURCE_STATE_CONFLICT, "Current request cannot receive store confirmation")
         }
@@ -208,6 +246,32 @@ internal class SupportOrderWorkflowController(
         @PathVariable orderId: UUID,
     ): ResponseEntity<SupportOrderContextResource> =
         ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(query.order(actor.actorId, caseId, orderId))
+
+    @GetMapping("/api/v1/support/cases/{caseId}/orders/{orderId}/pickup-slots")
+    @PreAuthorize("isAuthenticated()")
+    fun orderPickupSlots(
+        actor: OperatorActor,
+        @PathVariable caseId: UUID,
+        @PathVariable orderId: UUID,
+    ): ResponseEntity<SupportPickupSlotList> =
+        ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(query.orderPickupSlots(actor.actorId, caseId, orderId))
+
+    @GetMapping("/api/v1/support/action-requests/{requestId}/pickup-slots")
+    @PreAuthorize("isAuthenticated()")
+    fun requestPickupSlots(
+        actor: OperatorActor,
+        @PathVariable requestId: UUID,
+    ): ResponseEntity<SupportPickupSlotList> =
+        ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(query.requestPickupSlots(actor.actorId, requestId))
+
+    @GetMapping("/api/v1/stores/{storeId}/support-order-change-requests/{requestId}/pickup-slots")
+    @PreAuthorize("isAuthenticated()")
+    fun storePickupSlots(
+        actor: MerchantActor,
+        @PathVariable storeId: UUID,
+        @PathVariable requestId: UUID,
+    ): ResponseEntity<SupportPickupSlotList> =
+        ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(query.storePickupSlots(actor.actorId, storeId, requestId))
 
     @GetMapping("/api/v1/support/action-requests/{requestId}/workflow")
     @PreAuthorize("isAuthenticated()")

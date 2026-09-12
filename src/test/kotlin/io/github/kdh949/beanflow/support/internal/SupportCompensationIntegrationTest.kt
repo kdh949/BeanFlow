@@ -36,6 +36,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -467,6 +468,17 @@ internal class SupportCompensationIntegrationTest
                     ),
                 )
             assertThat(created.band.name).isEqualTo("HIGH")
+            val operationsActor =
+                jwt()
+                    .jwt { it.subject(operationsId.toString()) }
+                    .authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))
+            mockMvc
+                .perform(get("/api/v1/operations/support-action-requests/${created.actionRequestId}/review").with(operationsActor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.compensation.benefitType").value("COUPON"))
+                .andExpect(jsonPath("$.compensation.terms.responsibility").value("SHARED"))
+                .andExpect(jsonPath("$.compensation.couponTemplate.templateId").value(GOODWILL_COUPON_TEMPLATE_ID.toString()))
+                .andExpect(jsonPath("$.compensation.verificationSessionId").doesNotExist())
             mockMvc
                 .perform(
                     get("/api/v1/support/compensations/${created.compensationRequestId}/workflow").with(

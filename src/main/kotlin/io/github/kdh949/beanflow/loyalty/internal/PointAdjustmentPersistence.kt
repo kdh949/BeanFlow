@@ -90,6 +90,7 @@ internal data class PointAdjustmentRetentionPurgeResult(
 @Service
 internal class PointAdjustmentIdempotencyRetentionService(
     private val records: PointAdjustmentIdempotencyJpaRepository,
+    private val preparations: PointAdjustmentPreparationRepository,
 ) {
     @Transactional
     fun purgeDue(
@@ -100,7 +101,8 @@ internal class PointAdjustmentIdempotencyRetentionService(
         val ids = records.findDueIds(now, PageRequest.of(0, chunkSize))
         val oldestDueAt = records.findAllById(ids).minOfOrNull(PointAdjustmentIdempotencyEntity::retentionExpiresAt)
         if (ids.isNotEmpty()) records.deleteAllByIdInBatch(ids)
-        return PointAdjustmentRetentionPurgeResult(ids.size, oldestDueAt)
+        val closed = preparations.purgeClosed(now.minus(Duration.ofDays(90)), chunkSize - ids.size)
+        return PointAdjustmentRetentionPurgeResult(ids.size + closed, oldestDueAt)
     }
 
     private companion object {
