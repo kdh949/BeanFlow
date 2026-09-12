@@ -95,6 +95,24 @@ internal class AuditRecordTest
         }
 
         @Test
+        fun `valid nanosecond timestamp is not mistaken for a phone number`() {
+            transactionTemplate.executeWithoutResult {
+                operations.appendAll(listOf(command(after = mapOf("expiresAt" to "2026-09-12T12:00:00.123456789Z"))))
+            }
+            assertThat(count()).isOne()
+        }
+
+        @Test
+        fun `raw phone accompanying a timestamp is still rejected`() {
+            assertThatThrownBy {
+                transactionTemplate.executeWithoutResult {
+                    operations.appendAll(listOf(command(after = mapOf("note" to "2026-09-12T12:00:00Z 010-1234-5678"))))
+                }
+            }.isInstanceOfSatisfying(DomainFailure::class.java) { assertThat(it.code).isEqualTo(FailureCode.INVALID_REQUEST) }
+            assertThat(count()).isZero()
+        }
+
+        @Test
         fun `opaque UUID summary is not mistaken for a phone number`() {
             val phoneShapedUuid = "abcde010-1234-5678-8abc-123456789abc"
 

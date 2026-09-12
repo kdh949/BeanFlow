@@ -26,7 +26,7 @@ export function SupportCompensationIncidentPicker({ caseId, sessionId, orderId, 
   const [registering, setRegistering] = useState(false), [occurred, setOccurred] = useState(""), [confirmed, setConfirmed] = useState(false), [validation, setValidation] = useState("");
   const cursor = cursors[cursors.length - 1];
   const read = useResource(useCallback(async () => unwrap(await operationsApi.GET("/support/cases/{caseId}/compensation-incidents", { params: { path: { caseId }, query: { verificationSessionId: sessionId, orderId, incidentId: filter, cursor, limit: 20 } } })), [caseId, sessionId, orderId, filter, cursor]));
-  const command = useSupportCommand(() => undefined);
+  const command = useSupportCommand(`compensation-incident:${caseId}`, () => undefined);
   const ownBusy = command.busy || command.pending, blocked = disabled || ownBusy;
   useEffect(() => { onBusyChange(ownBusy); return () => onBusyChange(false); }, [ownBusy, onBusyChange]);
   function register() {

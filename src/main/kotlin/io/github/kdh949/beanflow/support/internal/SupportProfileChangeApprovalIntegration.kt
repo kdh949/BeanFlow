@@ -101,8 +101,10 @@ internal interface SupportActionReassignmentProjectionUpdater {
 }
 
 @Service
-internal class SupportProfileChangeReassignmentProjectionUpdater(
+internal class SupportActionReassignmentProjectionService(
     private val changes: SupportProfileChangeJpaRepository,
+    private val resolutions: PostAcceptanceResolutionJpaRepository,
+    private val steps: PostAcceptanceResolutionStepJpaRepository,
 ) : SupportActionReassignmentProjectionUpdater {
     @Transactional(propagation = Propagation.MANDATORY)
     override fun update(
@@ -111,6 +113,19 @@ internal class SupportProfileChangeReassignmentProjectionUpdater(
         actorId: UUID,
         occurredAt: Instant,
     ) {
+        if (action == SupportActionType.POST_ACCEPTANCE_RESOLUTION) {
+            val observed = resolutions.findBySupportActionRequestId(requestId) ?: return
+            val resolution = resolutions.findLockedById(observed.id) ?: notFound()
+            val domain = resolution.toDomain(steps.findByResolutionIdOrderByStepTypeAsc(resolution.id))
+            try {
+                domain.reassignExecutor(actorId, occurredAt)
+            } catch (_: IllegalStateException) {
+                throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "Started Resolution cannot be reassigned")
+            }
+            resolution.apply(domain)
+            resolutions.saveAndFlush(resolution)
+            return
+        }
         if (action != SupportActionType.PROFILE_CHANGE) return
         val entity = changes.findByActionRequestId(requestId) ?: notFound()
         entity.executorActorId = actorId

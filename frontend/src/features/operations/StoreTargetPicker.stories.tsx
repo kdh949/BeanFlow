@@ -5,10 +5,10 @@ import { delay, http, HttpResponse } from "msw";
 import { selectionStore, storeSelectionHandler } from "../../../.storybook/storeSelectionFixtures";
 import { StoreTargetPicker } from "./StoreTargetPicker";
 
-const path = "/api/v1/operations/stores";
+const path = "/api/v1/operations/store-targets";
 const meta = {
   title: "Patterns/Operations/Store selection", component: StoreTargetPicker, tags: ["autodocs"],
-  args: { value: null, onValueChange: fn() },
+  args: { purpose: "DISPUTE", value: null, onValueChange: fn() },
   render: function Render(args) {
     const [value, setValue] = useState(args.value);
     return <StoreTargetPicker {...args} value={value} onValueChange={next => { setValue(next); args.onValueChange(next); }} />;
@@ -25,7 +25,7 @@ async function search(canvas: Canvas) {
 export const SelectAndChange: Story = { play: async ({ canvas, args }) => {
   await search(canvas);
   await userEvent.click(await canvas.findByRole("button", { name: "빈플로우 성수점 선택" }));
-  await expect(args.onValueChange).toHaveBeenLastCalledWith(selectionStore);
+  await expect(args.onValueChange).toHaveBeenLastCalledWith({ storeId: selectionStore.storeId, name: selectionStore.name });
   await expect(canvas.getByText("선택한 매장")).toBeVisible();
   await expect(canvas.queryByText(selectionStore.storeId)).not.toBeInTheDocument();
   await userEvent.click(canvas.getByRole("button", { name: "다른 매장 찾기" }));
@@ -66,3 +66,8 @@ export const LateResponseIgnored: Story = { beforeEach: () => { releaseFirst = u
   await waitFor(() => expect(returned).toHaveBeenCalled());
   await expect(canvas.queryByText("빈플로우 성수점")).not.toBeInTheDocument();
 } };
+
+export const DisputePermissionOnly: Story = {
+  parameters: { msw: { handlers: [http.get(path, ({ request }) => { expect(new URL(request.url).searchParams.get("purpose")).toBe("DISPUTE"); return HttpResponse.json({ items: [{ storeId: selectionStore.storeId, name: selectionStore.name }] }); }), http.get("/api/v1/operations/stores", () => { throw new Error("Identity read must not be requested"); })] } },
+  play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("button", { name: "매장 찾기" })); await userEvent.click(await canvas.findByRole("button", { name: `${selectionStore.name} 선택` })); await expect(canvas.getByRole("button", { name: "다른 매장 찾기" })).toBeVisible(); },
+};

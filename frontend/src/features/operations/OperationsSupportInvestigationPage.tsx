@@ -13,8 +13,7 @@ import { useResource } from "../shared/useResource";
 import { useExpired } from "../support/useSupportExpiry";
 import { useSupportCommand } from "../support/useSupportCommand";
 import { ProfileFields, useProfileValues } from "../support/SupportProfileChangeWorkspace";
-type Profile = components["schemas"]["SupportProfileWorkflowResource"];
-type Compensation = components["schemas"]["SupportCompensationWorkflowResource"];
+type Compensation = components["schemas"]["OperationsSupportCompensationReview"];
 type Decision = components["schemas"]["OperationsSupportInvestigationDecision"];
 const investigationStates: Record<string, string> = { OPEN: "검토 중", APPROVED: "승인", DENIED: "반려", RETURNED: "수정 요청", ESCALATED: "추가 조사", EXPIRED: "만료", STALE: "조건 변경" };
 const approvalStates: Record<string, string> = { AWAITING_SUPPORT_MANAGER: "상담 승인 대기", AWAITING_OPERATIONS: "운영 검토 대기", READY_FOR_EXECUTION: "실행 준비", REVISION_REQUIRED: "수정 필요", REASSIGNMENT_REQUIRED: "담당자 재배정 필요", DENIED: "반려", MANUAL_REVIEW: "수동 확인 필요", STALE: "조건 변경", EXPIRED: "만료", EXECUTED: "실행 완료" };
@@ -32,25 +31,19 @@ export function OperationsSupportInvestigationPage() {
 }
 function Investigation({ id, onBusyChange }: { id: string; onBusyChange: (busy: boolean) => void }) {
   const read = useResource(useCallback(async () => {
-    const request = unwrap(await operationsApi.GET("/support/action-requests/{requestId}", { params: { path: { requestId: id } } }));
+    const { request, profile, compensation } = unwrap(await operationsApi.GET("/operations/support-action-requests/{requestId}/review", { params: { path: { requestId: id } } }));
     const workflow = unwrap(await operationsApi.GET("/operations/investigations", { params: { query: { supportActionRequestId: id, revisionNumber: request.revisionNumber } } }));
-    if (workflow.investigation.supportActionRequestId !== id || workflow.investigation.revisionNumber !== request.revisionNumber) throw stale();
-    let profile: Profile | null = null, compensation: Compensation | null = null;
+    if (request.requestId !== id || workflow.investigation.supportActionRequestId !== id || workflow.investigation.revisionNumber !== request.revisionNumber) throw stale();
     if (workflow.canDecide && request.state === "AWAITING_OPERATIONS") {
-      if (request.action === "PROFILE_CHANGE") {
-        profile = unwrap(await operationsApi.GET("/support/profile-changes/{profileChangeId}/workflow", { params: { path: { profileChangeId: request.targetId } } }));
-        if (profile.approval?.requestId !== id || profile.approval.revisionNumber !== request.revisionNumber || profile.approval.requestVersion !== request.requestVersion || profile.profileChange.payloadDigest !== request.actionPayloadDigest || profile.currentProfileVersion !== request.targetVersion) throw stale();
-      } else if (request.action === "GOODWILL_COMPENSATION") {
-        compensation = unwrap(await operationsApi.GET("/support/compensations/{compensationRequestId}/workflow", { params: { path: { compensationRequestId: request.targetId } } }));
-        if (compensation.approval?.requestId !== id || compensation.approval.revisionNumber !== request.revisionNumber || compensation.approval.requestVersion !== request.requestVersion || compensation.request.payloadDigest !== request.actionPayloadDigest || compensation.currentTargetVersion !== request.targetVersion) throw stale();
-      }
+      if (request.action === "PROFILE_CHANGE" && (!profile || profile.payloadDigest !== request.actionPayloadDigest || profile.currentProfileVersion !== request.targetVersion)) throw stale();
+      if (request.action === "GOODWILL_COMPENSATION" && (!compensation || compensation.payloadDigest !== request.actionPayloadDigest || compensation.currentTargetVersion !== request.targetVersion)) throw stale();
     }
     return { request, workflow, profile, compensation };
   }, [id]));
-  const value = read.state.status === "ready" ? read.state.value : null, profile = value?.profile?.profileChange;
+  const value = read.state.status === "ready" ? read.state.value : null, profile = value?.profile;
   const raw = useProfileValues(`${id}:${profile?.purpose}:${value?.request.requestVersion}:${read.state.status}`);
   const [digest, setDigest] = useState(""), [checked, setChecked] = useState(false), [decision, setDecision] = useState<Decision>("APPROVE"), [reason, setReason] = useState(""), [evidence, setEvidence] = useState(""), [preparing, setPreparing] = useState(false), [error, setError] = useState<unknown>(null), [result, setResult] = useState<components["schemas"]["OperationsSupportInvestigationDecisionResource"] | null>(null);
-  const preparingRef = useRef(false), command = useSupportCommand(() => { raw.clear(); setChecked(false); });
+  const preparingRef = useRef(false), command = useSupportCommand(`operations-investigation:${id}`, () => { raw.clear(); setChecked(false); });
   const busy = preparing || command.busy || command.pending;
   useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
   useEffect(() => { let live = true; setDigest(""); if (profile && validProfileValues(profile.purpose, raw.values)) void profileDigest(profile.subjectId, profile.expectedProfileVersion, profile.purpose, raw.values).then(hash => { if (live) setDigest(hash); }, failure => { if (live) setError(failure); }); return () => { live = false; }; }, [profile?.subjectId, profile?.purpose, profile?.expectedProfileVersion, raw.values]);
@@ -82,10 +75,10 @@ function Investigation({ id, onBusyChange }: { id: string; onBusyChange: (busy: 
   </section>;
 }
 function CompensationReview({ value, checked, onChecked, disabled }: { value: Compensation; checked: boolean; onChecked: (value: boolean) => void; disabled: boolean }) {
-  return <div className="management-workspace"><h3>고객 보상 조건</h3><p>{value.request.benefitType === "POINT" ? "포인트" : "쿠폰"} {won.format(value.request.amountKrw)}</p><p>비용 책임 · {{ PLATFORM: "플랫폼", STORE: "매장", SHARED: "분담", UNDETERMINED: "미확정" }[value.terms.responsibility]} · 플랫폼 {value.terms.platformShareBps / 100}% · 매장 {value.terms.storeShareBps / 100}%</p>
+  return <div className="management-workspace"><h3>고객 보상 조건</h3><p>{value.benefitType === "POINT" ? "포인트" : "쿠폰"} {won.format(value.amountKrw)}</p><p>비용 책임 · {{ PLATFORM: "플랫폼", STORE: "매장", SHARED: "분담", UNDETERMINED: "미확정" }[value.terms.responsibility]} · 플랫폼 {value.terms.platformShareBps / 100}% · 매장 {value.terms.storeShareBps / 100}%</p>
     {value.terms.evidenceBasis ? <p>비용 근거 · {{ STORE_CONSENT: "매장 동의", OPERATIONS_FINDING: "운영 조사 결과", CONTRACTUAL_RULE: "계약 규칙" }[value.terms.evidenceBasis]}</p> : null}
     {value.couponTemplate ? <p>쿠폰 사용 기한 {value.couponTemplate.validityDays}일 · 최소 사용 금액 {won.format(value.couponTemplate.minimumEligibleSubtotalKrw)}</p> : null}
-    <dl className="detail-list"><dt>사고 ID</dt><dd className="support-case-reference">{value.request.incidentId}</dd><dt>관련 주문</dt><dd className="support-case-reference">{value.request.orderId ?? "관련 주문 없음"}</dd>{value.terms.costEvidenceDigest ? <><dt>비용 근거 해시</dt><dd className="support-case-reference">{value.terms.costEvidenceDigest}</dd></> : null}</dl><Checkbox label="보상 혜택과 비용 조건을 확인했습니다" checked={checked} onCheckedChange={onChecked} disabled={disabled} /></div>;
+    <dl className="detail-list"><dt>사고 ID</dt><dd className="support-case-reference">{value.incidentId}</dd><dt>관련 주문</dt><dd className="support-case-reference">{value.orderId ?? "관련 주문 없음"}</dd>{value.terms.costEvidenceDigest ? <><dt>비용 근거 해시</dt><dd className="support-case-reference">{value.terms.costEvidenceDigest}</dd></> : null}</dl><Checkbox label="보상 혜택과 비용 조건을 확인했습니다" checked={checked} onCheckedChange={onChecked} disabled={disabled} /></div>;
 }
 
 function InvestigationQueue({ disabled, onSelect }: { disabled: boolean; onSelect: (requestId: string) => void }) {
