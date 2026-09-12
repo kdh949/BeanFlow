@@ -330,3 +330,9 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - Passed: frontend unit 250개, boundary 10개, copy 11개, typecheck, check:design, Storybook/앱 빌드, Sites 4개, Tabs MCP 4개(a11y 포함), Docs smoke 119개, 문서/OpenAPI 검사.
 - #175 CI의 동의 선택 Story 실패는 재조회 완료 전 getByRole 검사로 확인했다. #176에 이미 검증된 findByRole 보완을 #175(9fee15c)로 가져왔으며 동일 Story의 MCP를 재확인했다. #176–#178은 파일 내용이 동일한 채 부모 이력만 연결했다.
 - Not run: 이 슬라이스의 서버 테스트(서버 변경 없음), 운영 DB 변경, 배포. 최신 원격 CI는 push 후 확인한다.
+
+### #180–#181 검증 문서·상담 현황 통합 (2026-09-12)
+
+- #180은 문서 전용 변경을 부모와 통합하고 문서/OpenAPI 검사 통과 후 게시했다.
+- #181은 담당자별 현황과 목록 필터를 부모의 권한·명령 유지 변경과 통합했다. Passed: 상담 PostgreSQL 12 + runtime parity 1 = 13개, frontend unit 250개, boundary 10개, copy 11개, typecheck, check:design, Storybook/앱 빌드, Sites 4개, MCP 12개(a11y 포함), Docs smoke 120개, 문서/OpenAPI 검사.
+- Not run: #180 서버/화면 테스트(문서만 변경), 운영 DB 변경, 배포. 최신 원격 CI는 push 후 확인한다.
