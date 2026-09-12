@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.support.internal
 import io.github.kdh949.beanflow.support.internal.domain.CustomerInquiry
 import io.github.kdh949.beanflow.support.internal.domain.CustomerInquiryCategory
 import io.github.kdh949.beanflow.support.internal.domain.InquiryMessageAuthor
+import io.github.kdh949.beanflow.support.internal.domain.SupportCaseState
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import java.sql.ResultSet
@@ -75,6 +76,16 @@ internal class CustomerInquiryRepository(
             { rs, _ -> inquiry(rs) },
             *args.toTypedArray(),
         )
+    }
+
+    fun caseStates(ids: Set<UUID>): Map<UUID, SupportCaseState> {
+        if (ids.isEmpty()) return emptyMap()
+        return jdbc
+            .query(
+                "SELECT id, state FROM support_case WHERE id IN (${ids.joinToString(",") { "?" }})",
+                { rs, _ -> rs.getObject("id", UUID::class.java) to SupportCaseState.valueOf(rs.getString("state")) },
+                *ids.toTypedArray(),
+            ).toMap()
     }
 
     fun insert(value: CustomerInquiry) {

@@ -7,9 +7,10 @@ import { StoreMembershipsWorkspace } from "./StoreMembershipsWorkspace";
 const original = { accountDisplayName: "성수점 점주", accountLoginId: "owner01", membershipId: "96000000-0000-4000-8000-000000000001", accountId: "96000000-0000-4000-8000-000000000002", storeId: ids.store, role: "OWNER", status: "ACTIVE", version: 1, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z" };
 let current = { ...original };
 const handlers = [
+  http.get("/api/v1/operations/stores/:storeId/memberships/account-target", ({ request }) => { expect(request.headers.get("X-Access-Reason")).toBeTruthy(); return HttpResponse.json({ accountId: "96000000-0000-4000-8000-000000000003", loginId: "staff01", displayName: "신규 직원" }); }),
   http.get("/api/v1/operations/stores/:storeId/memberships", () => HttpResponse.json({ items: [current], nextCursor: null })),
   http.get("/api/v1/operations/stores/:storeId/memberships/:accountId", () => HttpResponse.json(current)),
-  http.get("/api/v1/operations/merchant-accounts", ({ request }) => { expect(request.headers.get("X-Access-Reason")).toBeTruthy(); return HttpResponse.json({ merchantAccountId: "96000000-0000-4000-8000-000000000003", loginId: "staff01", displayName: "신규 직원", accountState: "ACTIVE", memberships: [] }); }),
+
   http.post("/api/v1/operations/stores/:storeId/memberships", async ({ request }) => { const body = await request.json() as typeof original; expect(body.accountId).toBe("96000000-0000-4000-8000-000000000003"); current = { ...original, ...body }; return HttpResponse.json(current, { status: 201 }); }),
   http.put("/api/v1/operations/stores/:storeId/memberships/:accountId", async ({ request }) => { const body = await request.json() as typeof original & { expectedVersion: number }; expect(body.expectedVersion).toBe(current.version); if (body.status === "REVOKED") expect(body.role).toBe(current.role); current = { ...current, ...body, version: current.version + 1 }; return HttpResponse.json(current); }),
 ];
@@ -25,3 +26,9 @@ export const Forbidden: Story = { parameters: { msw: { handlers: [http.get("/api
 export const MembershipPagination: Story = { parameters: { msw: { handlers: [http.get("/api/v1/operations/stores/:storeId/memberships", ({ request }) => new URL(request.url).searchParams.has("cursor") ? HttpResponse.json({ items: [{ ...original, role: "STAFF" }], nextCursor: null }) : HttpResponse.json({ items: [original], nextCursor: "memberships-next" })), ...handlers] } }, play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("button", { name: "다음 소속 목록" })); await expect(await canvas.findByText("직원")).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "이전 소속 목록" })); await expect(await canvas.findByText("점주")).toBeVisible(); } };
 
 export const MissingAccountLabel: Story = { parameters: { msw: { handlers: [http.get("/api/v1/operations/stores/:storeId/memberships", () => HttpResponse.json({ items: [{ ...original, accountDisplayName: null }], nextCursor: null }))] } }, play: async ({ canvas }) => { await expect(await canvas.findByRole("alert")).toBeVisible(); await expect(canvas.queryByText(original.accountId)).not.toBeInTheDocument(); } };
+
+export const MembershipWriteOnly: Story = {
+  args: { mode: "add" },
+  parameters: { msw: { handlers: [http.get("/api/v1/operations/merchant-accounts", () => { throw new Error("Credential read must not be requested"); }), http.get("/api/v1/operations/stores/:storeId/memberships", () => { throw new Error("Membership list read must not be requested"); }), ...handlers] } },
+  play: async ({ canvas }) => { await userEvent.type(canvas.getByLabelText("추가할 계정 로그인 ID"), "staff01"); await userEvent.selectOptions(canvas.getByLabelText("계정 조회 사유"), "STORE_MEMBERSHIP_ASSIGNMENT_REVIEW"); await userEvent.click(canvas.getByRole("button", { name: "소속 추가 대상 조회" })); await expect(await canvas.findByText("신규 직원 · staff01")).toBeVisible(); await userEvent.type(canvas.getByLabelText("소속 추가 사유"), "직원 소속 추가"); await userEvent.click(canvas.getByRole("button", { name: "매장 소속 추가" })); await expect(await canvas.findByText("기존 계정에 매장 소속을 추가했습니다.")).toBeVisible(); },
+};

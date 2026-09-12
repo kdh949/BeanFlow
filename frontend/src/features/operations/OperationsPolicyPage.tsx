@@ -1,4 +1,4 @@
-import { useSearchParams } from "react-router";
+import { useBlocker, useSearchParams } from "react-router";
 import { PointCostIssuerPicker, currentPolicyIssuer, pointIssuerTypeLabels, type PointCostIssuerSelection } from "./PointCostIssuerPicker";
 import { PlatformCostOwnerWorkspace } from "./PlatformCostOwnerWorkspace";
 import { useSupportCommand } from "../support/useSupportCommand";
@@ -44,9 +44,14 @@ export function OperationsPolicyPage() {
   const requestedWorkspace = params.get("workspace");
   const workspace = workspaceItems.some(item => item.id === requestedWorkspace) ? requestedWorkspace! : "points";
   const [locked, setLocked] = useState(false);
+  const blocker = useBlocker(locked);
+  useEffect(() => {
+    if (!locked && blocker.state === "blocked") blocker.reset();
+  }, [locked, blocker]);
   return (
     <div className="console-page operations-policy-page">
       <PageHeading title="운영 정책 관리" />
+      {blocker.state === "blocked" ? <p role="status">진행 중인 업무를 유지했습니다. 처리 결과를 확인한 후 다시 이동해 주세요.</p> : null}
       <Tabs value={workspace} onValueChange={value => { if (!locked) setParams({ workspace: value }); }}>
         <TabList label="운영 정책 업무 선택">{workspaceItems.map(({ id, label, icon: Icon }) => <Tab key={id} value={id} disabled={locked}><Icon size={17} aria-hidden="true" /> {label}</Tab>)}</TabList>
         <TabPanel value="points"><PointPolicyWorkspace onBusyChange={setLocked} /><PointPolicyHistory /></TabPanel>
@@ -72,7 +77,7 @@ function PointPolicyWorkspace({ onBusyChange }: { onBusyChange: (busy: boolean) 
   const [loading, setLoading] = useState(false);
 
   const [error, setError] = useState<unknown>(null);
-  const command = useSupportCommand(() => undefined);
+  const command = useSupportCommand("operations-global-point-policy", () => undefined);
   const saving = command.busy, locked = command.busy || command.pending;
   const saveError = command.failure;
   useEffect(() => { onBusyChange(locked); return () => onBusyChange(false); }, [locked, onBusyChange]);

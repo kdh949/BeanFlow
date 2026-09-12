@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { authToken } from "../../auth/session";
 import { operationsApi } from "../../api/consoleClient";
 import { SupportWorkspacePage } from "./SupportWorkspacePage";
 
@@ -33,6 +34,7 @@ const supportCase = {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  authToken.set(`test.${btoa(JSON.stringify({ sub: "support-operator" }))}.fixture`);
 });
 
 afterEach(() => {

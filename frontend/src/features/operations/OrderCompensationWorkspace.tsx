@@ -41,8 +41,9 @@ export function OrderCompensationWorkspace({ onLockChange }: { onLockChange?: (l
       unresolved = false; setPending(null); intent.current.complete(); setReason("");
     } catch (error) {
       setFailure(error);
-      unresolved = unresolved || !(error instanceof ApiRequestError) || error.status >= 500 || error.status === 408 || error.code.startsWith("IDEMPOTENCY_");
-      if (unresolved) setPending(command); else intent.current.complete();
+      const terminal = error instanceof ApiRequestError && ["ORDER_STATE_CONFLICT", "REPROCESSING_NOT_SAFE", "IDEMPOTENCY_KEY_REUSED", "IDEMPOTENCY_MANUAL_REVIEW_REQUIRED"].includes(error.code);
+      unresolved = !terminal && (unresolved || !(error instanceof ApiRequestError) || error.status >= 500 || error.status === 408 || error.code === "IDEMPOTENCY_REQUEST_IN_PROGRESS");
+      if (unresolved) setPending(command); else { setPending(null); intent.current.complete(); }
     } finally { if (!unresolved) detail.reload(); submitting.current = false; setBusy(false); }
   }
   return <section className="management-workspace"><h2>주문 취소·거절 후속 처리</h2>

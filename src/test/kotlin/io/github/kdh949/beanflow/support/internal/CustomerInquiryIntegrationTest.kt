@@ -7,8 +7,10 @@ import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.support.internal.domain.CustomerInquiryCategory
 import io.github.kdh949.beanflow.support.internal.domain.InquiryMessageAuthor
 import io.github.kdh949.beanflow.support.internal.domain.SupportCaseState
+import jakarta.persistence.EntityManagerFactory
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.hibernate.SessionFactory
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -46,6 +48,7 @@ internal class CustomerInquiryIntegrationTest
         private val jdbc: JdbcTemplate,
         private val mvc: MockMvc,
         private val cleanup: SupportCaseIdempotencyRetentionCleanup,
+        private val entityManagerFactory: EntityManagerFactory,
     ) {
         private val customer = UUID.randomUUID()
         private val other = UUID.randomUUID()
@@ -146,6 +149,79 @@ internal class CustomerInquiryIntegrationTest
                     String::class.java,
                 )!!
             assertThat(commandText).doesNotContain("결제 내역", "추가로 확인")
+        }
+
+        @Test fun `committed public reply replays after assignment changes without creating another message`() {
+            val id = create().inquiryId
+            val claimed = service.claim(agent, id, "claim-inquiry-key", 0, "inquiry-test")
+            val version = service.supportDetail(agent, id, null).caseVersion!!
+            val result = service.supportMessage(agent, id, "lost-public-reply", 1, version, "확인 후 안내하겠습니다.", "inquiry-test")
+            caseService.assign(
+                AssignSupportCaseCommand(
+                    agent,
+                    claimed.caseId,
+                    "reassign-inquiry-key",
+                    secondAgent,
+                    version,
+                    "담당자 교대",
+                    "inquiry-test",
+                ),
+            )
+            assertThat(
+                service.supportMessage(
+                    agent,
+                    id,
+                    "lost-public-reply",
+                    1,
+                    version,
+                    "확인 후 안내하겠습니다.",
+                    "inquiry-test",
+                ),
+            ).isEqualTo(result)
+            assertThat(service.customerDetail(customer, id, null).messages).hasSize(2)
+            fails(FailureCode.ACCESS_DENIED) {
+                service.supportMessage(agent, id, "new-public-reply", 2, version, "새로운 답변입니다.", "inquiry-test")
+            }
+            jdbc.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
+                    "WHERE actor_id = ? AND permission = 'SUPPORT_CASE_WRITE'",
+                agent,
+            )
+            fails(FailureCode.ACCESS_DENIED) {
+                service.supportMessage(agent, id, "lost-public-reply", 1, version, "확인 후 안내하겠습니다.", "inquiry-test")
+            }
+        }
+
+        @Test fun `claimed inquiry page projects current case states without per-case Hibernate queries`() {
+            val ids =
+                (1..20).map { n ->
+                    val id =
+                        service
+                            .create(
+                                customer,
+                                "claimed-inquiry-$n",
+                                "상품 문의 $n",
+                                CustomerInquiryCategory.OTHER,
+                                "상품 확인 요청",
+                                null,
+                                "inquiry-test",
+                            ).inquiryId
+                    val claim = service.claim(agent, id, "claim-inquiry-$n", 0, "inquiry-test")
+                    jdbc.update("UPDATE support_case SET state = 'WAITING' WHERE id = ?", claim.caseId)
+                    id
+                }
+            val statistics = entityManagerFactory.unwrap(SessionFactory::class.java).statistics
+            val wasEnabled = statistics.isStatisticsEnabled
+            try {
+                statistics.isStatisticsEnabled = true
+                statistics.clear()
+                val page = service.customerList(customer, null)
+                assertThat(page.items.map { it.inquiryId }).containsExactlyInAnyOrderElementsOf(ids)
+                assertThat(page.items.map { it.state }).containsOnly(CustomerInquiryState.WAITING)
+                assertThat(statistics.prepareStatementCount).isZero()
+            } finally {
+                statistics.isStatisticsEnabled = wasEnabled
+            }
         }
 
         @Test fun `two agents can create only one assigned case for an inquiry`() {
