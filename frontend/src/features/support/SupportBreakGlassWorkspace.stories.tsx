@@ -21,7 +21,7 @@ export const Expired: Story = { beforeEach() { active(); current.request.expires
 export const PermissionLost: Story = { play: async ({ canvas, msw }) => { await canvas.findByRole("button", { name: "긴급 요청 상태 새로고침" }); msw.use(http.get("/api/v1/support/break-glass-requests/:id/workflow", () => HttpResponse.json({ code: "ACCESS_DENIED", correlationId: "BREAK-GLASS-REVOKED" }, { status: 403 }))); await userEvent.click(canvas.getByRole("button", { name: "긴급 요청 상태 새로고침" })); await expect(await canvas.findByText("문의 코드 BREAK-GLASS-REVOKED")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "긴급 열람 승인" })).not.toBeInTheDocument(); } };
 export const UnknownApproval: Story = { play: async ({ canvas, msw }) => { let key = "", calls = 0; msw.use(http.post("/api/v1/support/break-glass-requests/:id/approvals", async ({ request: httpRequest }) => { expect(await httpRequest.json()).toEqual({ decision: "DENY", expectedVersion: 0 }); calls++; if (calls === 1) { key = httpRequest.headers.get("Idempotency-Key")!; return HttpResponse.error(); } expect(httpRequest.headers.get("Idempotency-Key")).toBe(key); current = { ...current, request: { ...request, state: "DENIED", version: 1 }, allowedActions: [] }; return HttpResponse.json(current.request); })); await userEvent.click(await canvas.findByRole("button", { name: "긴급 열람 반려" })); await userEvent.click(await canvas.findByRole("button", { name: "같은 긴급 결정 확인" })); await expect(await canvas.findByText("열람 반려")).toBeVisible(); expect(calls).toBe(2); } };
 
-export const ChangedFieldNeedsConfirmation: Story = { args: { initialRequestId: undefined, supportCase: { ...supportCase, subjectLinks: [...supportCase.subjectLinks, { linkId: "store-link", subjectType: "STORE", subjectId: "store-subject" }] } }, play: async ({ canvas }) => {
+export const ChangedFieldNeedsConfirmation: Story = { args: { initialRequestId: undefined, supportCase: { ...supportCase, subjectLinks: [...supportCase.subjectLinks, { linkId: "store-link", subjectType: "STORE", subjectId: "store-subject", display: { state: "AVAILABLE", label: "빈플로우 시청점" } }] } }, play: async ({ canvas }) => {
   const confirmation = canvas.getByRole("checkbox", { name: "긴급 상황에서 이 필드가 꼭 필요함을 확인했습니다" });
   await userEvent.click(confirmation);
   await userEvent.selectOptions(canvas.getByLabelText("긴급 열람 필드"), "CUSTOMER_PRIMARY_EMAIL");
@@ -32,3 +32,15 @@ export const ChangedFieldNeedsConfirmation: Story = { args: { initialRequestId: 
   await expect(confirmation).not.toBeChecked();
   await expect(canvas.getByRole("button", { name: "긴급 열람 승인 요청" })).toBeDisabled();
 } };
+
+export const UnavailableTargetsCannotSelect: Story = {
+  args: { initialRequestId: undefined, supportCase: { ...supportCase, subjectLinks: ["REQUIRES_PERMISSION", "MISSING_PROFILE"].map((state, index) => ({ ...supportCase.subjectLinks[0]!, linkId: `99020000-0000-4000-8000-00000000000${index + 1}`, subjectId: `99020000-0000-4000-8000-00000000000${index + 1}`, display: { state } })) } },
+  play: async ({ canvas }) => {
+    const select = await canvas.findByLabelText("긴급 열람 대상");
+    const unavailable = [...(select as HTMLSelectElement).options].filter(option => option.value);
+    await expect(unavailable).toHaveLength(2);
+    for (const option of unavailable) await expect(option).toBeDisabled();
+    await expect(select).toHaveValue("");
+    await expect(canvas.getByRole("button", { name: "긴급 열람 승인 요청" })).toBeDisabled();
+  },
+};

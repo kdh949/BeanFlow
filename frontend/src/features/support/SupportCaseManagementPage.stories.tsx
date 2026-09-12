@@ -63,3 +63,8 @@ export const LostNoteSurvivesReentry: Story = { render: () => <ReopenCaseManagem
   await writeNote();
   await expect(await canvas.findByText("내부 노트를 추가했습니다")).toBeVisible();
 } };
+
+export const UnavailableTargetsCannotUnlink: Story = {
+  parameters: { msw: { handlers: [operatorDirectory, http.get("/api/v1/support/cases/:caseId", () => HttpResponse.json({ ...current, subjectLinks: ["REQUIRES_PERMISSION", "MISSING_PROFILE"].map((state, index) => ({ ...current.subjectLinks[0], linkId: `99020000-0000-4000-8000-00000000000${index + 1}`, subjectId: `99020000-0000-4000-8000-00000000000${index + 1}`, display: { state } })) }))] } },
+  play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "대상 연결" })); const select = canvas.getByLabelText("해제할 대상 연결") as HTMLSelectElement; for (const option of [...select.options].filter(option => option.value)) await expect(option).toBeDisabled(); await userEvent.type(canvas.getByLabelText("연결 해제 사유"), "대상 확인 전"); await expect(select).toHaveValue(""); await expect(canvas.getByRole("button", { name: "선택한 연결 해제" })).toBeDisabled(); },
+};

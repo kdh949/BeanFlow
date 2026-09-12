@@ -1,4 +1,4 @@
-import { supportSubjectLabel } from "./supportCaseLabels";
+import { supportSubjectLabel, isSupportSubjectSelectable, type SupportSubjectDisplaySource } from "./supportCaseLabels";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import type { components } from "../../api/schema";
@@ -11,7 +11,7 @@ import { useResource } from "../shared/useResource";
 import { useExpired } from "./useSupportExpiry";
 import { useSupportCommand } from "./useSupportCommand";
 import { personalFieldLabels, personalFieldsBySubject, verificationPurposeLabels } from "./supportSecurityLabels";
-type Case = { caseId: string; state: string; subjectLinks: readonly { linkId: string; subjectId: string; subjectType: string }[] };
+type Case = { caseId: string; state: string; subjectLinks: readonly (SupportSubjectDisplaySource & { linkId: string; subjectId: string; subjectType: string })[] };
 type Field = components["schemas"]["SupportPersonalDataField"];
 type Reason = components["schemas"]["BreakGlassReasonCode"];
 type Reveal = components["schemas"]["BreakGlassRevealResource"];
@@ -30,8 +30,8 @@ export function SupportBreakGlassWorkspace({ supportCase, initialRequestId, onBu
 }
 function CreateRequest({ supportCase, onCreated, onBusyChange }: { supportCase: Case; onCreated: (id: string) => void; onBusyChange: (busy: boolean) => void }) {
   const links = supportCase.subjectLinks.filter(link => ["CUSTOMER", "STORE", "DELIVERY"].includes(link.subjectType));
-  const [linkId, setLinkId] = useState(links[0]?.linkId ?? ""), [selected, setField] = useState<Field | null>(null), [reason, setReason] = useState<Reason>("IMMEDIATE_SAFETY"), [checked, setChecked] = useState(false);
-  const link = links.find(item => item.linkId === linkId), fields = link ? personalFieldsBySubject[link.subjectType as keyof typeof personalFieldsBySubject] : [], field = selected && fields.includes(selected) ? selected : fields[0];
+  const [linkId, setLinkId] = useState(links.find(isSupportSubjectSelectable)?.linkId ?? ""), [selected, setField] = useState<Field | null>(null), [reason, setReason] = useState<Reason>("IMMEDIATE_SAFETY"), [checked, setChecked] = useState(false);
+  const link = links.find(item => item.linkId === linkId && isSupportSubjectSelectable(item)), fields = link ? personalFieldsBySubject[link.subjectType as keyof typeof personalFieldsBySubject] : [], field = selected && fields.includes(selected) ? selected : fields[0];
   const command = useSupportCommand(`break-glass-create:${supportCase.caseId}`, () => {}), busy = command.busy || command.pending;
   useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
   function submit() {
@@ -39,7 +39,7 @@ function CreateRequest({ supportCase, onCreated, onBusyChange }: { supportCase: 
     const caseId = supportCase.caseId, body = { subjectLinkId: linkId, field, purpose: reasons[reason].purpose, reasonCode: reason };
     command.submit(JSON.stringify({ caseId, body }), async key => { const result = unwrap(await operationsApi.POST("/support/cases/{caseId}/break-glass-requests", { params: { path: { caseId }, header: { "Idempotency-Key": key } }, body })); onCreated(result.requestId); }, () => {});
   }
-  return <div className="surface-card management-card management-workspace"><h3>긴급 열람 요청 작성</h3>{links.length ? <><SelectField label="긴급 열람 대상" value={linkId} onValueChange={value => { setLinkId(value); setField(null); setChecked(false); }} disabled={busy}>{links.map(item => <option key={item.linkId} value={item.linkId}>{supportSubjectLabel(item)}</option>)}</SelectField><SelectField label="긴급 열람 필드" value={field ?? ""} onValueChange={value => { setField(value as Field); setChecked(false); }} disabled={busy}>{fields.map(item => <option key={item} value={item}>{personalFieldLabels[item]}</option>)}</SelectField><SelectField label="긴급 열람 사유" value={reason} onValueChange={value => setReason(value as Reason)} disabled={busy}>{Object.entries(reasons).map(([value, descriptor]) => <option key={value} value={value}>{descriptor.label}</option>)}</SelectField><Checkbox label="긴급 상황에서 이 필드가 꼭 필요함을 확인했습니다" checked={checked} onCheckedChange={setChecked} disabled={busy} /><Button disabled={busy || !checked || ["RESOLVED", "CLOSED"].includes(supportCase.state)} onClick={submit}>긴급 열람 승인 요청</Button></> : <EmptyState title="긴급 열람할 대상이 없습니다" description="상담에 고객·매장·배송 담당자를 먼저 연결해 주세요." />}{command.failure ? <ErrorState error={command.failure} /> : null}{command.pending ? <InlineNotice tone="warning" title="긴급 요청 결과를 확인하지 못했습니다" description="같은 요청으로 등록 결과를 확인해 주세요." action={<Button loading={command.busy} onClick={() => void command.retry()}>같은 긴급 요청 확인</Button>} /> : null}</div>;
+  return <div className="surface-card management-card management-workspace"><h3>긴급 열람 요청 작성</h3>{links.some(link => !isSupportSubjectSelectable(link)) ? <p>표시 정보 조회 권한과 등록된 대상 프로필을 확인해 주세요.</p> : null}{links.length ? <><SelectField label="긴급 열람 대상" value={link?.linkId ?? ""} onValueChange={value => { setLinkId(value); setField(null); setChecked(false); }} disabled={busy}><option value="">표시 정보를 확인한 대상 선택</option>{links.map(item => <option key={item.linkId} value={item.linkId} disabled={!isSupportSubjectSelectable(item)}>{supportSubjectLabel(item)}</option>)}</SelectField><SelectField label="긴급 열람 필드" value={field ?? ""} onValueChange={value => { setField(value as Field); setChecked(false); }} disabled={busy}>{fields.map(item => <option key={item} value={item}>{personalFieldLabels[item]}</option>)}</SelectField><SelectField label="긴급 열람 사유" value={reason} onValueChange={value => setReason(value as Reason)} disabled={busy}>{Object.entries(reasons).map(([value, descriptor]) => <option key={value} value={value}>{descriptor.label}</option>)}</SelectField><Checkbox label="긴급 상황에서 이 필드가 꼭 필요함을 확인했습니다" checked={checked} onCheckedChange={setChecked} disabled={busy} /><Button disabled={busy || !link || !checked || ["RESOLVED", "CLOSED"].includes(supportCase.state)} onClick={submit}>긴급 열람 승인 요청</Button></> : <EmptyState title="긴급 열람할 대상이 없습니다" description="상담에 고객·매장·배송 담당자를 먼저 연결해 주세요." />}{command.failure ? <ErrorState error={command.failure} /> : null}{command.pending ? <InlineNotice tone="warning" title="긴급 요청 결과를 확인하지 못했습니다" description="같은 요청으로 등록 결과를 확인해 주세요." action={<Button loading={command.busy} onClick={() => void command.retry()}>같은 긴급 요청 확인</Button>} /> : null}</div>;
 }
 function Inspection({ id, caseId, onBusyChange }: { id: string; caseId?: string; onBusyChange: (busy: boolean) => void }) {
   const read = useResource(useCallback(async () => { const workflow = unwrap(await operationsApi.GET("/support/break-glass-requests/{requestId}/workflow", { params: { path: { requestId: id } } })); if (caseId && workflow.request.caseId !== caseId) throw new ApiRequestError(409, "RESOURCE_STATE_CONFLICT", "현재 상담의 긴급 요청이 아닙니다"); return workflow; }, [id, caseId]));

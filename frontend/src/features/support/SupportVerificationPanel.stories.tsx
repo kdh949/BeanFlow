@@ -37,3 +37,8 @@ export const ExpiredChallengeAllowsReissue: Story = { play: async ({ canvas, msw
   await userEvent.selectOptions(channel, "REGISTERED_PHONE");
   await expect(canvas.getByRole("button", { name: "인증 요청 발급" })).toBeEnabled();
 } };
+
+export const UnavailableTargetsCannotSelect: Story = {
+  args: { links: ["REQUIRES_PERMISSION", "MISSING_PROFILE"].map((state, index) => ({ ...meta.args.links[0]!, linkId: `99020000-0000-4000-8000-00000000000${index + 1}`, subjectId: `99020000-0000-4000-8000-00000000000${index + 1}`, display: { state: state as "REQUIRES_PERMISSION" | "MISSING_PROFILE" } })) },
+  play: async ({ canvas }) => { const select = canvas.getByLabelText("본인확인 대상") as HTMLSelectElement; for (const option of [...select.options].filter(option => option.value)) await expect(option).toBeDisabled(); await expect(select).toHaveValue(""); await expect(canvas.getByRole("button", { name: "본인확인 시작" })).toBeDisabled(); },
+};

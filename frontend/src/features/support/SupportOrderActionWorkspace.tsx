@@ -1,4 +1,4 @@
-import { supportSubjectLabel } from "./supportCaseLabels";
+import { supportSubjectLabel, isSupportSubjectSelectable, type SupportSubjectDisplaySource } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -16,7 +16,7 @@ import { SupportResolutionWorkspace } from "./SupportResolutionWorkspace";
 import { useExpired } from "./useSupportExpiry";
 import { useSupportCommand } from "./useSupportCommand";
 
-type Case = { caseId: string; state: string; subjectLinks: readonly { subjectType: string; subjectId: string; relationship: string }[] };
+type Case = { caseId: string; state: string; subjectLinks: readonly (SupportSubjectDisplaySource & { subjectType: string; subjectId: string; relationship: string })[] };
 type Verification = { sessionId: string; state: string; actionScope: string; purpose: string; expiresAt: string };
 type Request = components["schemas"]["SupportActionRequestResource"];
 type Workflow = components["schemas"]["SupportOrderWorkflowResource"];
@@ -48,7 +48,7 @@ export function SupportOrderActionPage() {
 
 function CreateOrderRequest({ supportCase, verification, onCreated, revision, onBusyChange }: { onBusyChange?: (value: boolean) => void; supportCase: Case; verification?: Verification | null; onCreated: (id: string) => void; revision?: Request }) {
   const orders = supportCase.subjectLinks.filter(link => link.subjectType === "ORDER" && link.relationship === "RELATED_ORDER");
-  const [orderId, setOrderId] = useState(revision?.targetId ?? orders[0]?.subjectId ?? "");
+  const [orderId, setOrderId] = useState(revision?.targetId ?? orders.find(isSupportSubjectSelectable)?.subjectId ?? "");
   const [action, setAction] = useState<OrderChangeAction | "POST_ACCEPTANCE_RESOLUTION">(revision?.action === "POST_ACCEPTANCE_RESOLUTION" ? "POST_ACCEPTANCE_RESOLUTION" : revision?.action === "PICKUP_RESCHEDULE" ? "PICKUP_RESCHEDULE" : "ORDER_CANCELLATION");
   const [resolutionDraft, setResolutionDraft] = useState<ResolutionDraft>(initialResolutionDraft);
   const [reasonCode, setReasonCode] = useState<CancellationReason>("CHANGED_MIND");
@@ -57,13 +57,14 @@ function CreateOrderRequest({ supportCase, verification, onCreated, revision, on
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [evaluating, setEvaluating] = useState(false); const [preparing, setPreparing] = useState(false); const [error, setError] = useState<unknown>(null);
   const generation = useRef(0);
-  const orderRead = useResource(useCallback(async () => orderId ? unwrap(await operationsApi.GET("/support/cases/{caseId}/orders/{orderId}", { params: { path: { caseId: supportCase.caseId, orderId } } })) : null, [orderId, supportCase.caseId]));
+  const selectedOrder = orders.find(link => link.subjectId === orderId && isSupportSubjectSelectable(link));
+  const orderRead = useResource(useCallback(async () => selectedOrder ? unwrap(await operationsApi.GET("/support/cases/{caseId}/orders/{orderId}", { params: { path: { caseId: supportCase.caseId, orderId } } })) : null, [orderId, selectedOrder, supportCase.caseId]));
   const command = useSupportCommand(`order-request:${revision?.requestId ?? supportCase.caseId}`, () => { setEvaluation(null); orderRead.reload(); });
   const verificationExpired = useExpired(verification?.expiresAt), evaluationExpired = useExpired(evaluation?.expiresAt);
   const active = !["RESOLVED", "CLOSED"].includes(supportCase.state);
   const verified = verification?.state === "VERIFIED" && verification.actionScope === "SUPPORT_ACTION" && verification.purpose === "CASE_RESOLUTION" && !verificationExpired;
   useEffect(() => { generation.current++; setEvaluation(null); }, [action, orderId, verification?.sessionId, verification?.state]);
-  const current = orderRead.state.status === "ready" ? orderRead.state.value : null;
+  const current = selectedOrder && orderRead.state.status === "ready" ? orderRead.state.value : null;
   const disabled = command.busy || command.pending || preparing || evaluating;
   useEffect(() => { onBusyChange?.(disabled); return () => onBusyChange?.(false); }, [disabled, onBusyChange]);
   async function evaluate() {
@@ -94,7 +95,7 @@ function CreateOrderRequest({ supportCase, verification, onCreated, revision, on
   if (!orders.length) return <EmptyState title="연결된 주문이 없습니다" description="상담 관리에서 관련 주문을 연결한 뒤 요청해 주세요." action={<ButtonLink to={`/support/cases/${supportCase.caseId}`}>상담 대상 연결</ButtonLink>} />;
   return <div className="surface-card management-card management-workspace">
     <h3>{revision ? "새 승인안 작성" : "새 주문 변경 요청"}</h3>
-    <SelectField label="연결된 주문" value={orderId} disabled={!!revision || disabled} onValueChange={setOrderId}>{orders.map(link => <option key={link.subjectId} value={link.subjectId}>{supportSubjectLabel(link)}</option>)}</SelectField>
+    {orders.some(link => !isSupportSubjectSelectable(link)) ? <p>표시 정보 조회 권한과 등록된 대상 프로필을 확인해 주세요.</p> : null}<SelectField label="연결된 주문" value={selectedOrder?.subjectId ?? ""} disabled={!!revision || disabled} onValueChange={setOrderId}><option value="">표시 정보를 확인한 주문 선택</option>{orders.map(link => <option key={link.subjectId} value={link.subjectId} disabled={!isSupportSubjectSelectable(link)}>{supportSubjectLabel(link)}</option>)}</SelectField>
     <SelectField label="주문 변경 업무" value={action} disabled={!!revision || disabled} onValueChange={value => { setAction(value as typeof action); setSlotId(""); }}>{Object.entries({ ...orderActionLabels, POST_ACCEPTANCE_RESOLUTION: " 수락 후 해결" }).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>
     {orderRead.state.status === "loading" ? <LoadingState label="현재 주문 정보를 읽는 중" /> : orderRead.state.status === "failed" ? <ErrorState error={orderRead.state.error} retry={orderRead.reload} /> : current ? <>
       <p>현재 주문 <StatusText state={current.state} /> · 버전 {current.version}</p>

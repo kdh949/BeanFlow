@@ -301,7 +301,7 @@ paths:
       tags: [Operations]
       operationId: listOperatorCandidates
       summary: 조직 로그인 이름으로 상담 담당자 선택
-      description: SUPPORT_CASE_READ 또는 SUPPORT_CASE_ASSIGN의 현재 grant를 확인한다. CASE_FILTER는 이력 조회용으로 철회된 Case 쓰기 권한도 포함하며, 나머지 목적은 현재 Case 쓰기 및 목적별 실행 grant가 모두 있는 계정만 반환한다. 표시 이름은 서명된 최근 로그인 관측 정보이며 명령 권한이 아니다.
+      description: SUPPORT_CASE_READ 또는 SUPPORT_CASE_ASSIGN의 현재 grant를 확인한다. INTERNAL_REQUESTER만 호출자에게 SUPPORT_CASE_WRITE를 요구하며 현재 ACTIVE grant가 하나 이상 있는 관측 계정을 후보로 반환한다. CASE_FILTER는 이력 조회용으로 철회된 Case 쓰기 권한도 포함하며, 그 외 목적은 현재 Case 쓰기 및 목적별 실행 grant가 모두 있는 계정만 반환한다. 표시 이름은 서명된 최근 로그인 관측 정보이며 명령 권한이 아니다.
       security: [{ bearerAuth: [] }]
       parameters:
         - in: query
@@ -13138,12 +13138,13 @@ components:
     OperatorActor:
       type: object
       additionalProperties: false
-      required: [actorType, operatorId, roles]
+      required: [actorType, operatorId, roles, display]
       description: Keycloak 기반으로 인증된 현재 운영자(operator)를 나타내는 actor 정보입니다.
       example:
         actorType: OPERATOR
         operatorId: 3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f
         roles: [SETTLEMENT_REVIEWER]
+        display: { state: MISSING_PROFILE }
       properties:
         display: { $ref: '#/components/schemas/OperatorDisplay' }
         actorType: { const: OPERATOR }

@@ -7,9 +7,15 @@ export const subjectLabels: Record<components["schemas"]["SupportSubjectType"], 
 export const relationshipLabels: Record<components["schemas"]["SupportSubjectRelationship"], string> = { REQUESTER: "요청자", AFFECTED_CUSTOMER: "관련 고객", AFFECTED_STORE: "관련 매장", RELATED_ORDER: "관련 주문", RELATED_DELIVERY: "관련 배송", OTHER: "기타" };
 
 /** Display metadata never substitutes for the subject identifier used by an authorized command. */
-export function supportSubjectLabel(link: { subjectType: string; display?: components["schemas"]["SupportSubjectDisplay"] }): string {
+export function supportSubjectLabel(link: SupportSubjectDisplaySource & { subjectType: string }): string {
   const subjectName = subjectLabels[link.subjectType as components["schemas"]["SupportSubjectType"]];
   if (link.display?.state === "AVAILABLE" && link.display.label) return `${subjectName} · ${link.display.label}`;
   const state = link.display?.state === "REQUIRES_PERMISSION" ? "표시 정보 조회 권한 필요" : "등록된 표시 정보 없음";
   return `${subjectName} · ${state}`;
+}
+
+export type SupportSubjectDisplaySource = { display?: { state: string; label?: string | null } };
+/** A command target must have an owner-provided display that the operator can distinguish. */
+export function isSupportSubjectSelectable(link: SupportSubjectDisplaySource | undefined): boolean {
+  return link?.display?.state === "AVAILABLE" && !!link.display.label?.trim();
 }

@@ -41,3 +41,15 @@ export const UndeterminedCost: Story = { args: { initialCompensationId: undefine
   await expect(await canvas.findByText("비용 책임을 먼저 확정해 주세요")).toBeVisible();
   await expect(canvas.queryByRole("button", { name: "평가한 보상 요청 등록" })).not.toBeInTheDocument();
 } };
+
+export const UnavailableTargetsCannotSelect: Story = {
+  args: { initialCompensationId: undefined, supportCase: { ...supportCase, subjectLinks: ["REQUIRES_PERMISSION", "MISSING_PROFILE"].map((state, index) => ({ ...supportCase.subjectLinks[0]!, linkId: `99020000-0000-4000-8000-00000000000${index + 1}`, subjectId: `99020000-0000-4000-8000-00000000000${index + 1}`, display: { state } })) } },
+  play: async ({ canvas }) => {
+    const select = await canvas.findByLabelText("보상 관련 주문");
+    const unavailable = [...(select as HTMLSelectElement).options].filter(option => option.value);
+    await expect(unavailable).toHaveLength(2);
+    for (const option of unavailable) await expect(option).toBeDisabled();
+    await expect(select).toHaveValue("");
+
+  },
+};

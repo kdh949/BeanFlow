@@ -278,3 +278,13 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - 응답 유실 후 같은 요청에 반환된 ORDER_STATE_CONFLICT/REPROCESSING_NOT_SAFE 및 EXPIRED/STALE 확정 오류는 잠금을 해제하고 최신 상태를 조회한다. 권한 상실로 결과가 불명인 경우에는 기존 요청을 유지한다.
 - Passed: PostgreSQL 복구 19 + runtime parity 1 = 20개, frontend unit 245개, boundary 10개, copy 11개, typecheck, check:design, build-storybook, build, Sites 4개, MCP Story 36개(a11y 포함), Docs smoke 111개, 문서/OpenAPI 검사.
 - Not run: 운영 DB 변경, 배포. 원격 CI와 리뷰 해결은 push 후 확인한다.
+
+### #173 상담 대상 표시·선택과 잠금 순서 (2026-09-12)
+
+- SUBJECT_SEARCH와 주문의 추가 ORDER_READ 조건을 projection·감사·표시에 공유했다. 현재 권한 철회 후 주문번호/매장명이 노출되지 않는다.
+- 주문 후보 조회는 모든 grant를 Case보다 먼저 잠근다. 실제 PostgreSQL에서 쓰기가 CASE_WRITE grant를 보유한 동안 후보 조회의 대기를 확인한 뒤 같은 상담에 노트를 추가하고, 두 요청이 deadlock 없이 끝남을 검증했다.
+- AVAILABLE 표시가 없는 대상을 본인확인·긴급 열람·정정·연결 해제·주문 조치·보상에서 새로 선택할 수 없게 했다. 기존 정정 대상이 표시 불가이면 다른 대상으로 자동 전환하지 않는다.
+- INTERNAL_REQUESTER 계약 예외와 항상 반환하는 OperatorActor.display를 문서/생성 타입에 반영했다.
+- Passed: PostgreSQL 주문/상담 11 + 운영자 목록 6 + runtime parity 1 = 18개, frontend unit 245개, boundary 10개, copy 11개, typecheck, check:design, Storybook/앱 빌드, Sites 4개, 관련 MCP 123개 및 정정 대상 회귀 1개 = 124개(a11y 포함), Docs smoke 113개, 문서/OpenAPI 검사. 표시 metadata가 빠진 기존 테스트 fixture와 실제 HTTP/null 응답 기대값을 보완했다.
+- #170은 terminal CI 후 원본 리뷰를 해결했다(누적 34개). #171 전체 CI에서 유효 나노초 시각이 감사 전화번호 검출에 걸리는 문제를 재현하여 부모 #170에 국소 수정했다. 감사 12 + 준비/조정 8 = 20개 및 문서 검사 통과 후 #171·#172로 전파한다.
+- Not run: 운영 DB 변경, 배포. 최신 원격 CI와 남은 리뷰 해결은 push 후 확인한다.

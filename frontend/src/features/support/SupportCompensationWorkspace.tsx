@@ -1,4 +1,4 @@
-import { supportSubjectLabel } from "./supportCaseLabels";
+import { supportSubjectLabel, isSupportSubjectSelectable, type SupportSubjectDisplaySource } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -13,7 +13,7 @@ import { useResource } from "../shared/useResource";
 import { useExpired } from "./useSupportExpiry";
 import { useSupportCommand } from "./useSupportCommand";
 
-type Case = { caseId: string; state: string; subjectLinks: readonly { subjectType: string; subjectId: string; relationship: string }[] };
+type Case = { caseId: string; state: string; subjectLinks: readonly (SupportSubjectDisplaySource & { subjectType: string; subjectId: string; relationship: string })[] };
 type Verification = { sessionId: string; state: string; subjectType: string; actionScope: string; purpose: string; expiresAt: string };
 type Workflow = components["schemas"]["SupportCompensationWorkflowResource"];
 type Evaluation = components["schemas"]["SupportCompensationEvaluationResource"];
@@ -54,14 +54,15 @@ function CommandResult({ command }: { command: ReturnType<typeof useSupportComma
 
 function CreateCompensation({ supportCase, verification, initialIncidentId, onCreated, onBusyChange }: { supportCase: Case; verification?: Verification | null; initialIncidentId?: string; onCreated: (id: string) => void; onBusyChange: (busy: boolean) => void }) {
   const orders = supportCase.subjectLinks.filter(link => link.subjectType === "ORDER" && link.relationship === "RELATED_ORDER");
-  const [orderId, setOrderId] = useState(orders[0]?.subjectId ?? ""), [incidentId, setIncidentId] = useState(initialIncidentId ?? "");
+  const [orderId, setOrderId] = useState(orders.find(isSupportSubjectSelectable)?.subjectId ?? ""), [incidentId, setIncidentId] = useState(initialIncidentId ?? "");
   const [benefit, setBenefit] = useState<Payload["benefitType"]>("POINT"), [amount, setAmount] = useState("");
   const [responsibility, setResponsibility] = useState<Payload["responsibility"]>("UNDETERMINED"), [share, setShare] = useState("");
   const [basis, setBasis] = useState<NonNullable<Payload["evidenceBasis"]>>("STORE_CONSENT"), [costEvidence, setCostEvidence] = useState(""), [evidence, setEvidence] = useState("");
   const [template, setTemplate] = useState<Template | null>(null);
   const [evaluation, setEvaluation] = useState<{ result: Evaluation; body: Payload } | null>(null), [preparing, setPreparing] = useState(false), [error, setError] = useState<unknown>(null);
   const sequence = useRef(0);
-  const order = useResource(useCallback(async () => orderId ? unwrap(await operationsApi.GET("/support/cases/{caseId}/orders/{orderId}", { params: { path: { caseId: supportCase.caseId, orderId } } })) : null, [supportCase.caseId, orderId]));
+  const selectedOrder = orders.find(link => link.subjectId === orderId && isSupportSubjectSelectable(link));
+  const order = useResource(useCallback(async () => selectedOrder ? unwrap(await operationsApi.GET("/support/cases/{caseId}/orders/{orderId}", { params: { path: { caseId: supportCase.caseId, orderId } } })) : null, [supportCase.caseId, orderId, selectedOrder]));
   const command = useSupportCommand(`compensation-create:${supportCase.caseId}`, () => { setEvaluation(null); order.reload(); });
   const busy = preparing || command.busy || command.pending;
   useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
@@ -78,7 +79,7 @@ function CreateCompensation({ supportCase, verification, initialIncidentId, onCr
     : sharedBps === null ? null : [sharedBps, 10000 - sharedBps] as const;
   const platformShare = shares?.[0] ?? null;
   const amountKrw = benefit === "COUPON" ? template?.amountKrw : /^\d+$/.test(amount) ? Number(amount) : undefined;
-  const valid = uuid(incidentId) && currentVersion !== undefined && amountKrw !== undefined && Number.isSafeInteger(amountKrw) && amountKrw > 0 && platformShare !== null && (!storeCost || !!costEvidence.trim()) && (benefit !== "COUPON" || (!!template && !!orderId));
+  const valid = (!orderId || !!selectedOrder) && uuid(incidentId) && currentVersion !== undefined && amountKrw !== undefined && Number.isSafeInteger(amountKrw) && amountKrw > 0 && platformShare !== null && (!storeCost || !!costEvidence.trim()) && (benefit !== "COUPON" || (!!template && !!orderId));
   async function evaluate() {
     if (!verified || !verification || !active || !valid || busy || amountKrw === undefined || currentVersion === undefined || platformShare === null) return;
     const generation = ++sequence.current; setPreparing(true); setError(null); setEvaluation(null);
@@ -100,7 +101,7 @@ function CreateCompensation({ supportCase, verification, initialIncidentId, onCr
     <h3>새 보상 요청</h3>
     {!active ? <InlineNotice tone="info" title="종결된 상담에서는 새 보상을 요청할 수 없습니다" description="필요하면 새 상담을 접수해 주세요." /> : !verified ? <InlineNotice tone="info" title="고객 본인확인이 필요합니다" description="상담 해결·업무 처리 목적의 고객 본인확인을 완료하거나 기존 세션을 조회해 주세요." /> : null}
     <TextField label="사고 ID" value={incidentId} onValueChange={setIncidentId} disabled={busy} required description="같은 사고를 다시 검토할 때도 기존 사고 ID를 사용합니다." />
-    <SelectField label="보상 관련 주문" value={orderId} onValueChange={setOrderId} disabled={busy}><option value="">관련 주문 없음</option>{orders.map(link => <option key={link.subjectId} value={link.subjectId}>{supportSubjectLabel(link)}</option>)}</SelectField>
+    {orders.some(link => !isSupportSubjectSelectable(link)) ? <p>표시 정보 조회 권한과 등록된 대상 프로필을 확인해 주세요.</p> : null}<SelectField label="보상 관련 주문" value={selectedOrder?.subjectId ?? ""} onValueChange={setOrderId} disabled={busy}><option value="">관련 주문 없음</option>{orders.map(link => <option key={link.subjectId} value={link.subjectId} disabled={!isSupportSubjectSelectable(link)}>{supportSubjectLabel(link)}</option>)}</SelectField>
     {order.state.status === "loading" ? <LoadingState label="현재 주문 조건을 읽는 중" /> : order.state.status === "failed" ? <ErrorState error={order.state.error} retry={order.reload} /> : order.state.value ? <p>현재 주문 <StatusText state={order.state.value.state} /></p> : null}
     <SelectField label="보상 혜택" value={benefit} onValueChange={value => setBenefit(value as typeof benefit)} disabled={busy}><option value="POINT">포인트</option><option value="COUPON">쿠폰</option></SelectField>
     {benefit === "POINT" ? <TextField label="보상 금액" type="number" min="1" step="1" value={amount} onValueChange={setAmount} disabled={busy} description="정수 원 단위로 입력합니다." /> : <CouponPicker disabled={busy} selected={template} onSelect={setTemplate} />}
