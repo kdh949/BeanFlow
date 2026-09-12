@@ -31,6 +31,7 @@ export const ExpiredChallengeAllowsReissue: Story = { play: async ({ canvas, msw
   await userEvent.click(canvas.getByRole("button", { name: "본인확인 현재 상태 조회" }));
   await expect(await canvas.findByLabelText("일회성 인증 코드")).toBeVisible();
   MockDate.set(edge);
+  await userEvent.click(canvas.getByRole("button", { name: "본인확인 새로고침" }));
   await waitFor(() => expect(canvas.queryByLabelText("일회성 인증 코드")).not.toBeInTheDocument(), { timeout: 3000 });
   await userEvent.selectOptions(canvas.getByLabelText("인증 수단"), "REGISTERED_PHONE");
   await expect(canvas.getByRole("button", { name: "인증 요청 발급" })).toBeEnabled();
