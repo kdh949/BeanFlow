@@ -114,7 +114,7 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 
 - [x] 원격 열린 PR과 미해결 reviewThreads 48건 수집 및 부모/head 고정.
 - [x] 별도 worktree와 Storybook MCP 준비, 컴포넌트 문서 조회.
-- [ ] #160–#163 수정·검증·원격 반영.
+- [x] #160–#163 수정·검증·원격 반영 및 리뷰 16건 해결.
 - [ ] #164–#170 수정·검증·원격 반영.
 - [ ] #171–#177 수정·검증·원격 반영.
 - [ ] #178–#184 부모 반영과 전체 검증.
@@ -182,6 +182,19 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - 재배정 회귀 테스트의 최초 배정 이력 누락을 보완한 후 다시 통과했다.
 - #161 CI 재실행과 #163 CI가 통과해 #160–#163 리뷰 총 16개를 답변·해결했다.
 - #165 원격 CI와 리뷰 해결은 대기 중이다.
+
+### #166 로컬 검증
+
+- 운영 조사 grant 전용 최소 승인안 조회를 제공해 광범위한 상담 조회 권한 없이 기존 검토 화면을 사용한다.
+  원문·본인확인 세션·상담 내용은 응답하지 않으며, 결정 명령의 현재 권한·승인안 재검증은 유지한다.
+- 긴급 열람 승인은 요청자의 현재 배정과 활성 대상 연결을 재검증한다. 화면의 대상·필드 변경은 확인 체크를 초기화한다.
+- Passed: PostgreSQL 긴급 열람·프로필 정정·보상·운영 조사 47개, frontend unit 245개,
+  boundary 10개, copy 11개, 영향 Storybook 30개, Docs 103 entries/47 state surfaces,
+  typecheck, check:design, build-storybook, build, test:sites 4개, verify-docs, Spotless.
+- 최초 컴파일의 nullable entity getter 사용과 Runtime OpenAPI 검사기의 참조 따옴표 형식을 보완했다.
+  Runtime parity 1개 재실행도 Passed다.
+- #164·#165 CI의 인증 만료 Story는 상태 갱신 중 입력을 조회하던 race를 보완해 원격에 반영했다.
+  해당 Story의 로컬 재검증은 Passed, 원격 CI와 #164–#166 리뷰 해결은 대기 중이다.
 
 ## Surprises & Discoveries
 
