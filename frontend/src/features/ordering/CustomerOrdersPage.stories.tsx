@@ -1,5 +1,6 @@
+import { http, HttpResponse } from "msw";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, waitFor } from "storybook/test";
 import { apiError, orderListHandlers, orderSummary, pending, signedInHandlers } from "../../../.storybook/fixtures";
 import { CustomerOrdersPage } from "./CustomerOrdersPage";
 
@@ -69,4 +70,32 @@ export const RecoverableError: Story = {
 
 export const Loading: Story = {
   parameters: { msw: { handlers: [...signedInHandlers, pending("/api/v1/me/orders")] } },
+};
+
+export const LoadedPagesSurviveRefresh: Story = {
+  tags: ["!autodocs"],
+  parameters: { msw: { handlers: [...signedInHandlers, http.get("/api/v1/me/orders", ({ request }) => {
+    const second = new URL(request.url).searchParams.get("cursor") === "page-two";
+    return HttpResponse.json({ items: [{ ...orderSummary, orderReference: second ? "BF-2222-3333" : orderSummary.orderReference, itemSummary: second ? "두 번째 페이지 주문" : "첫 번째 페이지 주문" }], page: { nextCursor: second ? "page-three" : "page-two" } });
+  })] } },
+  play: async ({ canvas, msw }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: "주문 더 보기" }));
+    const row = await canvas.findByRole("link", { name: /두 번째 페이지 주문/ });
+    await waitFor(() => expect(canvas.getByRole("button", { name: "주문 더 보기" })).toBeEnabled());
+    await expect(document.visibilityState).toBe("visible");
+    let reads = 0;
+    let release!: () => void;
+    const wait = new Promise<void>(resolve => { release = resolve; });
+    msw.use(http.get("/api/v1/me/orders", async ({ request }) => {
+      ++reads; await wait;
+      const second = new URL(request.url).searchParams.get("cursor") === "page-two";
+      return HttpResponse.json({ items: [{ ...orderSummary, orderReference: second ? "BF-2222-3333" : orderSummary.orderReference, itemSummary: second ? "두 번째 페이지 주문" : "갱신한 첫 번째 주문" }], page: { nextCursor: second ? "page-three" : "page-two" } });
+    }));
+    try { window.dispatchEvent(new Event("focus")); await waitFor(() => expect(reads).toBe(1)); await expect(row).toBeInTheDocument(); }
+    finally { release(); }
+    await expect(await canvas.findByRole("link", { name: /갱신한 첫 번째 주문/ })).toBeVisible();
+    await expect(canvas.getByRole("link", { name: /두 번째 페이지 주문/ })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "주문 더 보기" })).toBeEnabled();
+    await expect(reads).toBe(2);
+  },
 };

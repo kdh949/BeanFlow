@@ -27,7 +27,7 @@ export function PointPolicyHistory({ storeId }: { storeId?: string }) {
   </section>;
 }
 export function PolicyVersionSummary({ version }: { version: Version }) {
-  return <article className="surface-card management-card"><h4>버전 {version.policyVersionId}</h4><p>{fullDateTime.format(new Date(version.effectiveAt))}</p><p>{version.state === "INHERIT_GLOBAL" ? "공통 정책 상속" : "전용 정책"}</p>
+  return <article className="surface-card management-card"><h4>버전 {version.policyVersionId}</h4><p>{fullDateTime.format(new Date(version.effectiveAt))}</p><p>{version.scopeType === "GLOBAL" ? "공통 정책" : version.state === "INHERIT_GLOBAL" ? "공통 정책 상속" : "매장 전용 정책"}</p>
     {version.state === "OVERRIDE" ? <dl className="detail-list"><div><dt>적립률</dt><dd>{version.accrualRateBps === undefined ? "확인할 수 없음" : `${(version.accrualRateBps / 100).toFixed(2)}%`}</dd></div><div><dt>반올림</dt><dd>{version.roundingMode === "FLOOR" ? "버림" : version.roundingMode === "HALF_UP" ? "반올림" : "확인할 수 없음"}</dd></div><div><dt>비용 주체</dt><dd>{version.issuerType} · {version.issuerReference}</dd></div><div><dt>유효기간</dt><dd>{version.validityDays}일 · {version.expiryRule === "EXACT_DURATION_FROM_COMPLETION" ? "정확한 시간" : version.expiryRule === "SEOUL_CALENDAR_DAYS_FROM_COMPLETION" ? "서울 달력일" : "확인할 수 없음"}</dd></div></dl> : <p>이 버전은 공통 정책 값을 복사하지 않습니다. 주문 시점의 공통 정책을 적용합니다.</p>}
     <p>{version.reason}</p><p className="support-case-reference">변경 담당: {version.actorReference}</p>
   </article>;

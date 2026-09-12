@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, waitFor } from "storybook/test";
 import { http, HttpResponse } from "msw";
 import MockDate from "mockdate";
 import type { components } from "../../api/schema";
@@ -18,7 +18,23 @@ async function read(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"])
 export const Propose: Story = { play: async ({ canvas }) => { await userEvent.type(canvas.getByLabelText("복구 제안 사유"), "누락 환불 기록 확인"); await userEvent.click(canvas.getByRole("button", { name: "복구 제안 생성" })); await expect(await canvas.findByText("복구 제안을 만들었습니다. 다른 담당자의 판정이 필요합니다.")).toBeVisible(); await expect(await canvas.findByText(original.proposalId)).toBeVisible(); } };
 export const Approve: Story = { play: async ({ canvas }) => { await read(canvas); await userEvent.type(await canvas.findByLabelText("복구 판정 사유"), "다른 담당자 검증 완료"); await userEvent.click(canvas.getByRole("button", { name: "복구 승인" })); await expect(await canvas.findByText("환불 결과 조회를 위한 복구가 실행되었습니다")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument(); } };
 export const SelfDecisionBlocked: Story = { beforeEach: () => { actor = proposer; }, play: async ({ canvas }) => { await read(canvas); await expect(await canvas.findByText("제안자와 다른 담당자가 판정해야 합니다")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument(); } };
-export const Expired: Story = { beforeEach: () => { MockDate.set("2026-09-11T00:30:00Z"); }, play: async ({ canvas }) => { await read(canvas); await expect(await canvas.findByText("복구 제안의 승인 기한이 지났습니다")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument(); } };
+export const Expired: Story = { beforeEach: () => { proposal = { ...original, state: "EXPIRED" }; }, play: async ({ canvas }) => { await read(canvas); await expect(await canvas.findByText("복구 제안의 승인 기한이 지났습니다")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument(); } };
 export const Stale: Story = { parameters: { msw: { handlers: [http.post("/api/v1/operations/reprocessing-repair-proposals/:id/decisions", () => { proposal = { ...proposal, state: "STALE" }; return HttpResponse.json({ code: "REPROCESSING_PROPOSAL_STALE", correlationId: "REPAIR-STALE" }, { status: 409 }); }), ...handlers] } }, play: async ({ canvas }) => { await read(canvas); await userEvent.type(await canvas.findByLabelText("복구 판정 사유"), "다른 담당자 검증 완료"); await userEvent.click(canvas.getByRole("button", { name: "복구 승인" })); await expect(await canvas.findByText("문의 코드 REPAIR-STALE")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument(); } };
 export const LostResponse: Story = { parameters: { msw: { handlers: [http.post("/api/v1/operations/reprocessing-repair-proposals/:id/decisions", ({ request }) => { if (!key) { key = request.headers.get("Idempotency-Key"); return HttpResponse.error(); } expect(request.headers.get("Idempotency-Key")).toBe(key); proposal = { ...proposal, state: "REJECTED" }; return HttpResponse.json(proposal); }), ...handlers] } }, play: async ({ canvas }) => { await read(canvas); await userEvent.type(await canvas.findByLabelText("복구 판정 사유"), "새 제안이 필요함"); await userEvent.click(canvas.getByRole("button", { name: "복구 반려" })); await expect(await canvas.findByRole("alert")).toBeVisible(); await userEvent.click(await canvas.findByRole("button", { name: "복구 반려" })); await expect(await canvas.findByText("반려됨")).toBeVisible(); } };
 export const Forbidden: Story = { parameters: { msw: { handlers: [http.get("/api/v1/operations/reprocessing-repair-proposals/:id", () => HttpResponse.json({ code: "ACCESS_DENIED" }, { status: 403 })), ...handlers] } }, play: async ({ canvas }) => { await read(canvas); await expect(await canvas.findByRole("alert")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument(); } };
+
+export const BrowserClockAhead: Story = { ...Approve, beforeEach: () => { MockDate.set("2026-09-12T00:00:00Z"); } };
+export const NewProposalClearsPreviousDecision: Story = { parameters: { msw: { handlers: [http.get("/api/v1/operations/reprocessing-repair-proposals/:id", ({ params }) => HttpResponse.json({ ...original, proposalId: params.id })), ...handlers] } }, play: async ({ canvas }) => {
+  await userEvent.type(canvas.getByLabelText("복구 제안 사유"), "누락 환불 기록 확인");
+  await userEvent.click(canvas.getByRole("button", { name: "복구 제안 생성" }));
+  await expect(await canvas.findByText("복구 제안을 만들었습니다. 다른 담당자의 판정이 필요합니다.")).toBeVisible();
+  await userEvent.type(await canvas.findByLabelText("복구 판정 사유"), "이전 제안에만 해당하는 사유");
+  await userEvent.clear(canvas.getByLabelText("복구 제안 ID"));
+  const nextId = "98000000-0000-4000-8000-000000000099";
+  await userEvent.type(canvas.getByLabelText("복구 제안 ID"), nextId);
+  await userEvent.click(canvas.getByRole("button", { name: "현재 복구 제안 조회" }));
+  await expect(await canvas.findByText(nextId)).toBeVisible();
+  await waitFor(() => expect(canvas.getByLabelText("복구 판정 사유")).toHaveValue(""));
+  await expect(canvas.queryByText("복구 제안을 만들었습니다. 다른 담당자의 판정이 필요합니다.")).not.toBeInTheDocument();
+  await expect(canvas.getByRole("button", { name: "복구 승인" })).toBeDisabled();
+} };
