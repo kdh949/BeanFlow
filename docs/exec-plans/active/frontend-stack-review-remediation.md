@@ -3,7 +3,7 @@
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
-> **Writes-Migration:** `false`
+> **Writes-Migration:** `true`
 > **Depends-On:** —
 > **Completed-At:** `—`
 
@@ -75,8 +75,13 @@ local transaction을 조정한다. Provider 호출을 새 DB transaction 안으�
 
 ## Data and Migration
 
-첫 단계는 스키마 변경이 없다. 이후 영속 복구 또는 인덱스가 필요하면 기존 모델의 재사용을
-먼저 검토하고, DDL 전에 ADR-072와 migration writer 상태를 확인해 이 절과 metadata를 갱신한다.
+#167의 전역 문의 정렬에 additive `V82_1` 인덱스를 추가한다. 기존 V82와 후속 V83–V86의
+번호·checksum을 보존하고 Flyway 정렬상 V82 다음에 적용한다. 이 작업은 사용자가 지정한 기존
+PR stack의 보완이며 새 독립 migration plan을 시작하지 않는다. 2026-09-12 현재 origin/main은
+`a6199c6`/V81이고 stack의 마지막 migration은 V86이다. 활성 BeanFlow 작업은 이 보완 작업이며,
+다른 worktree의 V33/V34 변경은 2026-08-08부터 남아 있는 변경으로 보존한다. 이 스택의
+migration writer는 이 작업 하나로 직렬화하며 V82→V82.1 업그레이드와 최종 전체 stack의
+V82→V82.1→V83–V86 순서를 fresh PostgreSQL Flyway에서 검증한다.
 
 ## API and Event Contracts
 
@@ -195,6 +200,19 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
   Runtime parity 1개 재실행도 Passed다.
 - #164·#165 CI의 인증 만료 Story는 상태 갱신 중 입력을 조회하던 race를 보완해 원격에 반영했다.
   해당 Story의 로컬 재검증은 Passed, 원격 CI와 #164–#166 리뷰 해결은 대기 중이다.
+
+### #167 로컬 검증
+
+- 현재 답변 grant를 확인한 뒤 저장된 replay를 우선하여 담당자 교대 후에도 기존 공개 답변 결과를 돌려준다.
+  새 답변은 현재 배정·Case 버전·상태를 검증한다. 목록은 페이지의 Case 상태를 한 번에 투영한다.
+- 고객 명령의 복구 키는 현재 고객 세션으로 구분하고 운영 토큰을 보내지 않는다.
+- Passed: 문의 통합 13개, 도메인 2개, 실행 계획/마이그레이션 1개, Runtime parity 1개,
+  frontend unit 245개, boundary 10개, copy 11개, 문의·라우트 Storybook 19개와 병합된 상담 Story 2개,
+  typecheck, check:design, build-storybook, build, test:sites 4개, verify-docs, Spotless.
+- 20,000개 문의(인수 10,000개)의 동일 fixture에서 첫·다음 페이지는 V82.1 적용 전 Seq Scan/Sort,
+  적용 후 idx_support_inquiry_global_page의 Index Scan으로 확인했다. 실제 운영 지연 개선 수치로 일반화하지 않는다.
+- 고객 세션 GET fixture가 없던 초기 Story 실패를 실제 /me 계약 fixture로 보완해 재검증했다.
+- Storybook Docs 105 entries/47 state surfaces도 Passed다. 원격 CI와 리뷰 해결은 대기 중이다.
 
 ## Surprises & Discoveries
 
