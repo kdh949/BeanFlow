@@ -3272,7 +3272,7 @@ paths:
         이미지 부재와 서명 실패를 구분합니다.
       parameters:
       - $ref: '#/components/parameters/StoreId'
-      - $ref: '#/components/parameters/AccessReason'
+      - $ref: '#/components/parameters/ValidatedAccessReason'
       responses:
         '200':
           description: 현재 이미지 또는 이미지 없음
@@ -3340,7 +3340,7 @@ paths:
       parameters:
       - $ref: '#/components/parameters/StoreId'
       - $ref: '#/components/parameters/MenuId'
-      - $ref: '#/components/parameters/AccessReason'
+      - $ref: '#/components/parameters/ValidatedAccessReason'
       responses:
         '200':
           description: 현재 이미지 또는 이미지 없음
@@ -7753,7 +7753,7 @@ paths:
       - Operations
       operationId: listStoreTargets
       summary: 업무별 최소 매장 목록 조회
-      description: 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
+      description: 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ, MEDIA=STORE_MEDIA_MANAGE. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
       security:
       - bearerAuth: []
       parameters:
@@ -7762,7 +7762,7 @@ paths:
         required: true
         schema:
           type: string
-          enum: [IDENTITY, TERMS, MEMBERSHIP, BRAND, POINT_POLICY]
+          enum: [IDENTITY, TERMS, MEMBERSHIP, BRAND, POINT_POLICY, MEDIA]
       - in: query
         name: query
         schema:
@@ -9589,7 +9589,7 @@ paths:
         20개씩 조회합니다. cursor는 actor/store/lifecycle에 바인딩되며 응답은 no-store입니다.
       parameters:
       - $ref: '#/components/parameters/StoreId'
-      - $ref: '#/components/parameters/AccessReason'
+      - $ref: '#/components/parameters/ValidatedAccessReason'
       - name: lifecycle
         in: query
         schema:
@@ -9898,6 +9898,14 @@ components:
         minimum: 1
         maximum: 20
         default: 10
+    ValidatedAccessReason:
+      in: header
+      name: X-Access-Reason
+      required: true
+      description: '이미지 조회 목적을 검증하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 합니다. 이 조회는 Audit 기록을 추가하거나 변경하지 않습니다.'
+      schema:
+        type: string
+        pattern: ^[^\u0000-\u001F\u007F]*[^\s\u0000-\u001F\u007F][^\u0000-\u001F\u007F]*$
     AccessReason:
       in: header
       name: X-Access-Reason

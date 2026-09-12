@@ -87,6 +87,7 @@ internal enum class StoreTargetPurpose(
     MEMBERSHIP(OperatorPermission.STORE_MEMBERSHIP_READ),
     BRAND(OperatorPermission.STORE_BRAND_MANAGE),
     POINT_POLICY(OperatorPermission.POINT_ACCRUAL_POLICY_READ),
+    MEDIA(OperatorPermission.STORE_MEDIA_MANAGE),
 }
 
 internal data class OperatorStoreTarget(

@@ -4884,7 +4884,7 @@ export interface paths {
         };
         /**
          * 업무별 최소 매장 목록 조회
-         * @description 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
+         * @description 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ, MEDIA=STORE_MEDIA_MANAGE. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
          */
         get: operations["listStoreTargets"];
         put?: never;
@@ -13231,6 +13231,8 @@ export interface components {
         MerchantAccountId: components["schemas"]["Identifier"];
         PointAccountId: components["schemas"]["Identifier"];
         BrandId: components["schemas"]["Identifier"];
+        /** @description 이미지 조회 목적을 검증하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 합니다. 이 조회는 Audit 기록을 추가하거나 변경하지 않습니다. */
+        ValidatedAccessReason: string;
         SettlementBatchId: components["schemas"]["Identifier"];
         SettlementItemId: components["schemas"]["Identifier"];
         SupportCaseId: components["schemas"]["Identifier"];
@@ -17003,8 +17005,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
-                "X-Access-Reason": components["parameters"]["AccessReason"];
+                /** @description 이미지 조회 목적을 검증하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 합니다. 이 조회는 Audit 기록을 추가하거나 변경하지 않습니다. */
+                "X-Access-Reason": components["parameters"]["ValidatedAccessReason"];
             };
             path: {
                 storeId: components["parameters"]["StoreId"];
@@ -17095,8 +17097,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
-                "X-Access-Reason": components["parameters"]["AccessReason"];
+                /** @description 이미지 조회 목적을 검증하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 합니다. 이 조회는 Audit 기록을 추가하거나 변경하지 않습니다. */
+                "X-Access-Reason": components["parameters"]["ValidatedAccessReason"];
             };
             path: {
                 storeId: components["parameters"]["StoreId"];
@@ -20423,7 +20425,7 @@ export interface operations {
     listStoreTargets: {
         parameters: {
             query: {
-                purpose: "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY";
+                purpose: "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY" | "MEDIA";
                 query?: string;
                 cursor?: string;
                 limit?: number;
@@ -21887,8 +21889,8 @@ export interface operations {
                 cursor?: string;
             };
             header: {
-                /** @description 운영자가 민감한 정보나 정책을 조회하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 하며 감사 기록에 남습니다. */
-                "X-Access-Reason": components["parameters"]["AccessReason"];
+                /** @description 이미지 조회 목적을 검증하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 합니다. 이 조회는 Audit 기록을 추가하거나 변경하지 않습니다. */
+                "X-Access-Reason": components["parameters"]["ValidatedAccessReason"];
             };
             path: {
                 storeId: components["parameters"]["StoreId"];

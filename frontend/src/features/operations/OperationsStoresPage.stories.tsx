@@ -92,3 +92,15 @@ export const BrandPermissionOnly: Story = { parameters: { msw: { handlers: onlyP
   await expect(await canvas.findByText("현재 소속 브랜드가 없습니다.")).toBeVisible();
   await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
 } };
+
+export const MediaPermissionOnly: Story = { parameters: { msw: { handlers: [
+  http.get("/api/v1/operations/stores/:storeId/image", () => HttpResponse.json({})),
+  http.get("/api/v1/operations/stores/:storeId/media-menus", () => HttpResponse.json({ items: [], nextCursor: null })),
+  ...onlyPurpose("MEDIA"),
+] } }, play: async ({ canvas }) => {
+  await userEvent.selectOptions(canvas.getByLabelText("매장 관리 목적"), "MEDIA");
+  await userEvent.click(await canvas.findByRole("button", { name: "성수 카페 관리" }));
+  await expect(await canvas.findByRole("heading", { name: "매장 대표 이미지" })).toBeVisible();
+  await expect(await canvas.findByText("해당 범위의 메뉴가 없습니다")).toBeVisible();
+  await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
+} };

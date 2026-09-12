@@ -6,7 +6,7 @@
 | 이의 검토·승인·기각 | No | No | No | Active `SETTLEMENT_DISPUTE_DECIDE` grant + reason + idempotency + expectedVersion + Audit | No |
 | 매장 이의 상세·철회 (`/stores/{storeId}/disputes/{disputeId}/**`) | No | ACTIVE same-store OWNER + CSRF(철회) | No | No | No |
 | 매장 목록·식별 정보·지역 코드 (`/operations/stores`, `/operations/stores/{id}/identity`, `/operations/store-regions`) | No | No | No | Active `STORE_IDENTITY_READ` grant | No |
-| 업무별 최소 매장 목록 (`/operations/store-targets`) | No | No | No | 목적별 Active grant: IDENTITY=`STORE_IDENTITY_READ`, TERMS=`STORE_SETTLEMENT_TERMS_READ`, MEMBERSHIP=`STORE_MEMBERSHIP_READ`, BRAND=`STORE_BRAND_MANAGE`, POINT_POLICY=`POINT_ACCRUAL_POLICY_READ`; 이름·ID만, Audit 없음 | No |
+| 업무별 최소 매장 목록 (`/operations/store-targets`) | No | No | No | 목적별 Active grant: IDENTITY=`STORE_IDENTITY_READ`, TERMS=`STORE_SETTLEMENT_TERMS_READ`, MEMBERSHIP=`STORE_MEMBERSHIP_READ`, BRAND=`STORE_BRAND_MANAGE`, POINT_POLICY=`POINT_ACCRUAL_POLICY_READ`, MEDIA=`STORE_MEDIA_MANAGE`; 이름·ID만, Audit 없음 | No |
 | 매장 개설·이름·좌표 교체 | No | No | No | Active `STORE_IDENTITY_WRITE` grant + reason + idempotency + expectedVersion(교체) + Audit | No |
 | 매장별 수수료 계약 목록·상세 | No | No | No | Active `STORE_SETTLEMENT_TERMS_READ` grant | No |
 | 미래 수수료 계약 버전 등록 | No | No | No | Active `STORE_SETTLEMENT_TERMS_WRITE` grant + reason + idempotency + expectedRevision + Audit | No |
@@ -47,6 +47,8 @@
 | 브랜드 조회 (`/operations/brands`, `/operations/brands/{brandId}`) | No | No | No | Active `STORE_BRAND_MANAGE` grant | No |
 | 매장 브랜드 지정·해제 (`/operations/stores/{storeId}/brand`) | No | No | No | Active `STORE_BRAND_MANAGE` grant + reason + idempotency + Audit | No |
 | 매장 지역 지정 (`/stores/{storeId}/region`) | No | ACTIVE owned store (`STORE_OWNER`) + reason + idempotency + Audit | No | No | No |
+| 운영팀 현재 매장·메뉴 이미지 GET (`/operations/stores/{storeId}/image`, `/operations/stores/{storeId}/menus/{menuId}/image`) | No | No | No | Active `STORE_MEDIA_MANAGE` grant + validated access reason; no Audit append | No |
+| 운영팀 이미지 대상 메뉴 목록 GET (`/operations/stores/{storeId}/media-menus`) | No | No | No | Active `STORE_MEDIA_MANAGE` grant + validated access reason; no Audit append | No |
 | 매장 이미지 변경 (`/stores/{storeId}/image`) | No | ACTIVE owned store (`OWNER`) + CSRF + Audit | No | Active `STORE_MEDIA_MANAGE` grant + access reason + Audit | No |
 | 메뉴 이미지 변경 (`/stores/{storeId}/menus/{menuId}/image`) | No | ACTIVE owned store (`OWNER`) + CSRF + Audit | ACTIVE assigned store (`STAFF`) + CSRF + Audit | Active `STORE_MEDIA_MANAGE` grant + access reason + Audit | No |
 | 검색 색인 재생성 (`/operations/search-index/rebuild`) | No | No | No | Active `STORE_BRAND_MANAGE` grant + reason + idempotency + Audit | No |

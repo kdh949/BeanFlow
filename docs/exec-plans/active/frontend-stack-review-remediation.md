@@ -214,6 +214,18 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - 고객 세션 GET fixture가 없던 초기 Story 실패를 실제 /me 계약 fixture로 보완해 재검증했다.
 - Storybook Docs 105 entries/47 state surfaces도 Passed다. 원격 CI와 리뷰 해결은 대기 중이다.
 
+### #168 로컬 검증
+
+- 이미지 GET와 메뉴 디렉터리는 검증용 접근 사유를 사용하며 Audit를 추가하지 않는 기존 계약을 명확히 했다.
+  이미지 변경의 기존 감사 계약은 유지한다.
+- 동명·동일 상태 메뉴의 구분 코드를 행·버튼 접근성 이름·선택된 편집기에 표시한다.
+- 이미지 단독 grant 목적을 기존 최소 매장 목록에 연결하고 공통 이미지 편집기에서도 기존 편집 중 이동 제한을 유지한다.
+- Passed: 이미지 조회 Controller 8개, 목적별 매장 관리 15개, Runtime parity 1개,
+  frontend unit 245개, boundary 10개, copy 11개, 영향 Storybook 46개,
+  typecheck, check:design, build-storybook, build, test:sites 4개, verify-docs, Spotless.
+- 최초 동명 메뉴 Story의 조회 대기를 보완했고, 이전 실패 결과가 남은 MCP 세션을 재시작해 46개 모두 통과를 확인했다.
+- Storybook Docs 108 entries/47 state surfaces도 Passed다. 원격 CI와 리뷰 해결은 대기 중이다.
+
 ## Surprises & Discoveries
 
 이미지 삭제는 후속 #168에서 코드가 보완돼 있으므로 #161 자체의 회귀와 함께 확인한다.
