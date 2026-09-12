@@ -60,6 +60,29 @@ S70/S80/S90/S100의 typed command가 최신 permission/verification/policy/targe
 raw action/evidence는 저장하지 않는다. 화면은 typed 입력으로 canonical digest를 계산하고 승인안의 digest와
 일치하는 내용을 확인한 뒤 명령한다. 조회 실패 시 이전 요청의 명령을 숨긴다.
 
+### Console review clarification (2026-09-12)
+
+픽업 후보는 고객 세션 API를 재사용하지 않고 현재 상담·주문, 승인 요청, 매장 동의 요청별
+권한 경계에서 Fulfillment의 `PickupSlotQueryOperations`를 호출한다. 상담·주문 조회는 현재
+배정과 활성 연결을, 승인 요청 조회는 기존 요청 가시성과 `SUPPORT_ORDER_READ`를, 매장 동의
+조회는 현재 same-store membership과 action/revision/policy/target/expiry를 검사한다. 조회는
+예약을 보장하지 않으며 실행은 기존 슬롯 잠금 아래에서 정원을 재검증한다.
+
+기존 S60 요청 조회와 workflow 조회는 승인 대기 만료 및 실행 권한 철회를 현재 상태로 반영하는
+read repair를 포함한다. 상태 전이·version·Audit는 같은 transaction에서 한 번만 commit하며,
+동일 상태 재조회는 중복 전이·감사를 만들지 않는다. 외부 실행이나 담당자 자동 대체는 없다.
+이는 순수 조회로 기술하지 않는다. 별도 범용 만료 worker를 추가하지 않으며 명령 시 재검증도 유지한다.
+
+### Console command identity (2026-09-12)
+
+비민감 상담 명령은 전송 전에 sessionStorage에 actor·업무·대상·정규 입력 fingerprint의 SHA-256과
+무작위 멱등 키만 기록한다. 입력 본문·사유·증빙·고객 식별자 원문·인증 proof·원문 열람 결과는
+보관하지 않는다. 같은 탭에서 화면을 다시 열거나 새로고침한 뒤 같은 입력을 제출하면 같은 키를
+재사용하며 서버가 현재 actor 권한과 원래 요청의 결과를 검증한다. 확인된 terminal 응답 이후에만
+해당 기록을 제거하고, 이전 미확정 요청 뒤의 권한 거절은 원래 작업의 미실행 증거로 사용하지 않는다.
+브라우저 저장 실패·손상은 명령 전송을 막는다. 브라우저 저장은 서버 권한·감사·멱등 원장을 대신하지 않는다.
+탭 종료까지 복구해야 하는 포인트 조정은 별도의 영속 복구 경계에서 다룬다.
+
 ## Alternatives Considered
 
 - UI/role boolean: every-request/object authorization을 만족하지 못해 기각.
