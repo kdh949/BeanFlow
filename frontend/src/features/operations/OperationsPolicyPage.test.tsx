@@ -157,6 +157,7 @@ it.each(["points", "cost-owners"])("retains %s command through back, forward and
   expect(screen.queryByText("다른 업무 화면")).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: retryName }));
   expect(await screen.findByText(workspace === "points" ? "버전 13 적용 중" : "검토된 비용 주체 등록 완료")).toBeVisible();
+  await waitFor(() => expect(screen.getByRole("tab", { name: "검색 색인" })).toBeEnabled());
   expect(write).toHaveBeenCalledTimes(2);
   expect(write.mock.calls[1]).toEqual(write.mock.calls[0]);
   await act(async () => { await router.navigate(1); });
