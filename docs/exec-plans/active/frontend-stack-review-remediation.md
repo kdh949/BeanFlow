@@ -323,3 +323,10 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - Passed: frontend unit 250개, boundary 10개, copy 11개, typecheck, check:design, Storybook/앱 빌드, Sites 4개, MCP 206개(a11y 포함), Docs smoke 119개, 문서/OpenAPI 검사.
 - #173·#174도 최신 CI 완료·성공 후 6개 리뷰에 답변하고 해결했다(누적 47개).
 - Not run: 이 슬라이스의 서버 테스트(서버 변경 없음), 운영 DB 변경, 배포. 최신 원격 CI는 push 후 확인한다.
+
+### #179 탭 표시 통합과 CI 회귀 보완 (2026-09-12)
+
+- 부모의 요청 잠금/복구를 선택 탭의 overflow 표시와 통합했다. 키보드 수동 활성화와 포커스 정책은 유지했다.
+- Passed: frontend unit 250개, boundary 10개, copy 11개, typecheck, check:design, Storybook/앱 빌드, Sites 4개, Tabs MCP 4개(a11y 포함), Docs smoke 119개, 문서/OpenAPI 검사.
+- #175 CI의 동의 선택 Story 실패는 재조회 완료 전 getByRole 검사로 확인했다. #176에 이미 검증된 findByRole 보완을 #175(9fee15c)로 가져왔으며 동일 Story의 MCP를 재확인했다. #176–#178은 파일 내용이 동일한 채 부모 이력만 연결했다.
+- Not run: 이 슬라이스의 서버 테스트(서버 변경 없음), 운영 DB 변경, 배포. 최신 원격 CI는 push 후 확인한다.
