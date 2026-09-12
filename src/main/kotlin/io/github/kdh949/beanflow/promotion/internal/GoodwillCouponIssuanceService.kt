@@ -82,14 +82,23 @@ internal interface GoodwillCouponIssuanceJpaRepository : JpaRepository<GoodwillC
 @Service
 internal class GoodwillCouponIssuanceService(
     private val templates: GoodwillCouponTemplateJpaRepository,
+    private val templateQuery: GoodwillCouponTemplateQuery,
     private val campaigns: CampaignJpaRepository,
     private val couponIssuances: CouponIssuanceJpaRepository,
     private val goodwillIssuances: GoodwillCouponIssuanceJpaRepository,
     private val identifiers: IdentifierSource,
 ) : GoodwillCouponOperations {
     @Transactional(readOnly = true)
+    override fun listTemplates(
+        afterId: UUID?,
+        limit: Int,
+    ): List<GoodwillCouponTemplateView> = templateQuery.findPage(afterId, limit)
+
+    @Transactional(readOnly = true)
     override fun findTemplate(templateId: UUID): GoodwillCouponTemplateView? =
-        templates.findById(templateId).orElse(null)?.let { GoodwillCouponTemplateView(it.id, it.fixedAmountKrw, it.validityDays) }
+        templates.findById(templateId).orElse(null)?.let {
+            GoodwillCouponTemplateView(it.id, it.fixedAmountKrw, it.validityDays, it.minimumEligibleSubtotalKrw)
+        }
 
     @Transactional(propagation = Propagation.MANDATORY)
     override fun issue(command: IssueGoodwillCouponCommand): GoodwillCouponIssuanceResult {

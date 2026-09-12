@@ -80,13 +80,18 @@ internal data class OperatorStoreIdentityPage(
 )
 
 internal enum class StoreTargetPurpose(
-    val permission: OperatorPermission,
+    val permission: OperatorPermission?,
 ) {
     IDENTITY(OperatorPermission.STORE_IDENTITY_READ),
     TERMS(OperatorPermission.STORE_SETTLEMENT_TERMS_READ),
     MEMBERSHIP(OperatorPermission.STORE_MEMBERSHIP_READ),
     BRAND(OperatorPermission.STORE_BRAND_MANAGE),
     POINT_POLICY(OperatorPermission.POINT_ACCRUAL_POLICY_READ),
+    MEDIA(OperatorPermission.STORE_MEDIA_MANAGE),
+    MEMBERSHIP_ASSIGNMENT(OperatorPermission.STORE_MEMBERSHIP_WRITE),
+    MERCHANT_ACCOUNT(OperatorPermission.MERCHANT_CREDENTIAL_MANAGE),
+    DISPUTE(OperatorPermission.SETTLEMENT_DISPUTE_READ),
+    REFUND(null),
 }
 
 internal data class OperatorStoreTarget(
@@ -140,7 +145,7 @@ internal class OperatorStoreIdentityService(
         cursor: String?,
         limit: Int,
     ): OperatorStoreTargetPage {
-        grants.requireActive(actorId, purpose.permission)
+        purpose.permission?.let { grants.requireActive(actorId, it) }
         val page = listPage(actorId, query, cursor, limit, "operator-store-targets:${purpose.name}")
         return OperatorStoreTargetPage(page.items.map { OperatorStoreTarget(it.storeId, it.name) }, page.nextCursor)
     }

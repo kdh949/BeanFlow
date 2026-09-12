@@ -94,6 +94,17 @@ internal class SupportProfilePayloadDigestTest {
         assertThat(request.binding.toString()).doesNotContain(evidence).contains("values=<redacted>")
     }
 
+    @Test
+    fun `browser approval vectors preserve UTF8 null framing and reset intent`() {
+        assertThat(SupportProfilePayloadDigest.digest(SUBJECT, 4, SupportProfileChangePayload.CustomerPrimaryPhone("010-1111-2222")))
+            .isEqualTo("d9ec1687bba3279ad5286ee7469d898e0a0b681952d39fbefadcd5ed6f5dc3a4")
+        assertThat(
+            SupportProfilePayloadDigest.digest(SUBJECT, 4, SupportProfileChangePayload.StorePublicProfile(null, null, "한글|설명", null)),
+        ).isEqualTo("bd7ce2ebc5cd9bd331864e0fe15a381b419922a47d5275f8b8178fc7bb2d50f2")
+        assertThat(SupportProfilePayloadDigest.digest(SUBJECT, 4, SupportProfileChangePayload.CustomerCredentialReset))
+            .isEqualTo("ff28749fd5cd3cf880f4e2c7c36b10f9856197da9d31f5b363d36f0e45ac87ab")
+    }
+
     private companion object {
         val SUBJECT: UUID = UUID.fromString("81000000-0000-0000-0000-000000000001")
         val CASE: UUID = UUID.fromString("81000000-0000-0000-0000-000000000002")

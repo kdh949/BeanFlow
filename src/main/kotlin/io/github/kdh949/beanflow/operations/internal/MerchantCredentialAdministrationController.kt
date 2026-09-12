@@ -42,6 +42,7 @@ internal data class MerchantCredentialReasonRequest(
 internal data class MerchantMembershipResponse(
     val storeId: UUID,
     val role: MerchantCredentialMembershipRole,
+    val storeName: String? = null,
 )
 
 internal data class MerchantAccountResponse(
@@ -165,7 +166,7 @@ internal class MerchantCredentialAdministrationController(
             accountState = accountState.name,
             lockedUntil = lockedUntil,
             temporaryPasswordExpiresAt = temporaryPasswordExpiresAt,
-            memberships = memberships.map { MerchantMembershipResponse(it.storeId, it.role) },
+            memberships = memberships.map { MerchantMembershipResponse(it.storeId, it.role, it.storeName) },
         )
 
     private fun actorId(actor: OperatorActor): UUID =

@@ -1,0 +1,12 @@
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, userEvent } from "storybook/test";
+import { http, HttpResponse, delay } from "msw";
+import { SupportCaseQueueSummary } from "./SupportCaseQueueSummary";
+const ready = http.get("/api/v1/support/case-queue/summary", () => HttpResponse.json({ active: 6, open: 1, inProgress: 2, waiting: 3, urgent: 1 }));
+const meta = { title: "Patterns/Support/Case queue summary", component: SupportCaseQueueSummary, tags: ["autodocs"], parameters: { a11y: { test: "error" }, msw: { handlers: [ready] }, docs: { story: { inline: false } } } } satisfies Meta<typeof SupportCaseQueueSummary>;
+export default meta; type Story = StoryObj<typeof meta>;
+export const CurrentAssignment: Story = { play: async ({ canvas }) => { await expect(await canvas.findByText("진행 중 6건")).toBeVisible(); await expect(canvas.getByText("긴급 1건")).toBeVisible(); } };
+export const Empty: Story = { parameters: { msw: { handlers: [http.get("/api/v1/support/case-queue/summary", () => HttpResponse.json({ active: 0, open: 0, inProgress: 0, waiting: 0, urgent: 0 }))] } }, play: async ({ canvas }) => { await expect(await canvas.findByText("진행 중 0건")).toBeVisible(); } };
+export const Loading: Story = { parameters: { msw: { handlers: [http.get("/api/v1/support/case-queue/summary", async () => { await delay("infinite"); })] } }, play: async ({ canvas }) => { await expect(await canvas.findByText("내 상담 현황을 확인하는 중")).toBeVisible(); } };
+export const Unavailable: Story = { parameters: { msw: { handlers: [http.get("/api/v1/support/case-queue/summary", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE" }, { status: 503 }))] } }, play: async ({ canvas, msw }) => { await expect(await canvas.findByRole("button", { name: "다시 시도" })).toBeVisible(); await expect(canvas.queryByText("진행 중 0건")).not.toBeInTheDocument(); msw.use(ready); await userEvent.click(canvas.getByRole("button", { name: "다시 시도" })); await expect(await canvas.findByText("진행 중 6건")).toBeVisible(); } };
+export const Forbidden: Story = { parameters: { msw: { handlers: [http.get("/api/v1/support/case-queue/summary", () => HttpResponse.json({ code: "ACCESS_DENIED" }, { status: 403 }))] } }, play: async ({ canvas }) => { await expect(await canvas.findByText("이 작업을 진행할 수 없습니다")).toBeVisible(); } };

@@ -4,6 +4,8 @@ import io.github.kdh949.beanflow.shared.api.ProtectedProfileExactQuery
 import java.util.UUID
 
 interface CustomerSupportProfileQueryOperations {
+    fun findMaskedNames(subjectIds: Set<UUID>): Map<UUID, String>
+
     fun findByExactIndexes(query: ProtectedProfileExactQuery): List<MaskedCustomerSupportProfile>
 }
 

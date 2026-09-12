@@ -1,4 +1,4 @@
-import { Heart, LifeBuoy, LogOut, ReceiptText, Sparkles, TicketCheck, TicketPercent } from "lucide-react";
+import { History, Heart, LifeBuoy, LogOut, ReceiptText, Sparkles, TicketCheck, TicketPercent } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ErrorState } from "../../../presentation/shared";
@@ -44,6 +44,7 @@ export function CustomerMyPage() {
         <Link className="surface-card my-link" to="/app/points"><Sparkles size={19} /><span>포인트</span></Link>
         <Link className="surface-card my-link" to="/app/coupons"><TicketPercent size={19} /><span>쿠폰</span></Link>
         <Link className="surface-card my-link" to="/app/events"><TicketCheck size={19} /><span>쿠폰 받기</span></Link>
+        <Link className="surface-card my-link" to="/app/recent-stores"><History size={19} /><span>최근 주문한 매장</span></Link>
         <Link className="surface-card my-link" to="/app/favorites"><Heart size={19} /><span>즐겨찾기 매장</span></Link>
         <Link className="surface-card my-link" to="/app/help"><LifeBuoy size={19} /><span>도움말</span></Link>
       </nav>

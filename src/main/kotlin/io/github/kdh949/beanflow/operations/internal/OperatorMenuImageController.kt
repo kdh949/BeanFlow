@@ -5,11 +5,14 @@ import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.OperatorActor
 import jakarta.validation.constraints.Size
+import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.DeleteMapping
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestHeader
@@ -26,6 +29,20 @@ import java.util.UUID
 internal class OperatorMenuImageController(
     private val service: OperatorMenuImageService,
 ) {
+    @GetMapping
+    @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
+    fun current(
+        actor: OperatorActor,
+        @PathVariable storeId: UUID,
+        @PathVariable menuId: UUID,
+        @RequestHeader("X-Access-Reason") @Size(min = 1, max = 200) reason: String,
+    ): ResponseEntity<OperatorStorefrontImageAuthoringResponse> =
+        ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
+            OperatorStorefrontImageAuthoringResponse(
+                service.current(actorId(actor), storeId, menuId, reason)?.let(OperatorStorefrontImageResponse::of),
+            ),
+        )
+
     @PutMapping(consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun replace(

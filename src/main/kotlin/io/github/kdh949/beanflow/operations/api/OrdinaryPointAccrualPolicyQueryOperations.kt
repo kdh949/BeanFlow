@@ -18,6 +18,7 @@ data class OrdinaryPointAccrualPolicyVersionView(
     val actorType: AuditActorType,
     val actorReference: String,
     val reason: String,
+    val scopeName: String? = null,
 )
 
 data class OrdinaryPointAccrualPolicyPage<T>(

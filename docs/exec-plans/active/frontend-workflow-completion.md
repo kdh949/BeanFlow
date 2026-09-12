@@ -51,7 +51,7 @@ Storybook HTTP MCP는 `frontend/`에서 실행하는 `http://localhost:6006/mcp`
 | H2 | 주문 조치 평가/요청/수정/승인/배정/실행 및 점주 동의(M14) | 상담 업무 관리 |
 | H3 | 수락 후 해결·보상 실행/결과/알림 재시도(M15) | 상담 후속 처리 |
 | H5 | 고객의 앱 내 문의 접수·목록/상세·고객 공개 답변과 상담 Case 연결(F15) | 고객 문의 연결 |
-| H4 | 고객/매장/배송 정보 정정·운영 결정·실행/알림과 긴급 열람(M16,M17) | 상담 후속 처리 |
+| H4 | 고객/매장/배송 정보 정정·운영 결정·실행/알림과 긴급 열람(M16,M17) | 상담 정보 정정·긴급 열람 |
 
 ### Non-goals
 
@@ -70,7 +70,8 @@ Support 목적별 검증·distinct approval 정책을 보존한다. 날짜는 As
 
 React route는 기존 typed API client와 feature controller를 통해 command/query를 호출하고 canonical
 디자인 시스템으로 표현한다. 서버 변경은 기존 application service/public port에서 조정하고 Controller가
-Repository를 직접 사용하지 않는다. 신규 DB schema는 계획하지 않는다. 승인·명령 접수와 비동기 외부 실행은
+Repository를 직접 사용하지 않는다. 공통 UI 수정에는 DB schema 변경이 없으며 H5의 V82는 별도
+[native inquiry plan](native-customer-support-inquiries.md)의 migration lease로 관리한다. 승인·명령 접수와 비동기 외부 실행은
 기존 별도 transaction을 유지한다. 조회 실패를 stale success/empty/0으로 대체하지 않는다.
 
 ## Alternatives Considered
@@ -147,16 +148,34 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 - [x] O2: 선택한 매장의 불변 정산 계약 목록/상세/미래 구간 등록과 기존 계정 소속 추가/역할 변경/철회/재활성화 구현. 조회 권한과 소속 변경 권한을 구분해 계정 exact 조회 또는 확인된 기존 ID를 사용한다. 연도를 포함한 계약 날짜, RESOURCE_STATE_CONFLICT 안내를 보완했다. 관련 Storybook 16개, 기존 PostgreSQL 계약 12개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 계약 폼·오류 상태와 가로 넘침 없음 확인.
 - [x] O3/F16: 브랜드 관리에 20개씩 이전/다음 커서를 연결하고 페이지 조회 실패 시 이전 결과를 제거했다. 생성·이름 변경 후 서버 정렬 목록을 다시 조회하며 결과를 별도 안내한다. 소속 매장이 있으면 이름도 바꿀 수 없다는 잘못된 설명과 사유 200자 제한을 수정했다. 관련 Storybook 4개, typecheck/check:design, 단위 224개와 boundary/copy 21개 Passed.
 - [x] O3/M12: 매장별 포인트 설정 목록/필터/커서, 실제 적용 정책 조회/변경, 공통·매장별 이력 구현. 불완전한 공통 정책을 0%로 표시하지 않고 편집을 차단한다. 관련 Storybook 16개 및 전체 393개, backend 정책/동시성/Runtime parity 8개, frontend 단위 224개와 boundary/copy 21개 Passed. typecheck/check:design/build/build-storybook/docs smoke(79 docs/47 states)/sites(4개), 문서 검증(18개) Passed. 390px 포인트 화면 넘침 없음 확인. 운영 PR 생성은 아래 이력에 기록한다.
-- [ ] R1–R3 이의/복구 구현·검증·커밋·PR.
-- [ ] H1–H2 상담 관리 구현·검증·커밋·PR.
-- [ ] H3–H4 상담 후속 처리 구현·검증·커밋·PR.
-- [ ] H5 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결 구현·검증·커밋·PR.
+- [x] R1: 점주 상세/철회/새 증빙 재접수와 운영 매장별 목록/검토/판정 구현. 명령 실패 후 현재 pending 판정을 다시 확인하며 상충 판정을 숨긴다. BR-22의 14개 달력 날짜 및 BR-24의 종결 건 재접수에 맞춰 예시 설명을 수정했다. 관련 Storybook 23개, PostgreSQL/도메인 19개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 판정 일부 처리 화면 넘침 없음 확인.
+- [x] R2: 알림/이벤트 수동 복구 목록·커서·원본 상세·1회 재시도·결과 확인 구현. 202 접수와 완료를 분리하고 UNKNOWN 재실행은 recoverable/차단 사유를 따른다. 관련 Storybook 13개, PostgreSQL 복구/동시성/부분 실패 19개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 결과 불명 화면 넘침 없음 확인.
+- [x] R3a: 주문 후속 처리 5단계·고객 취소 환불 LOOKUP 예약 및 복구 제안 생성/현재 조회/2인 판정 구현. 제안 조회 GET은 기존 grant와 DTO를 재사용하며 만료·자기 판정을 차단한다. 관련 Storybook 14개, PostgreSQL 복구 계약 14개와 Runtime parity 1개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. PaymentSetupIssue JSON Schema 6개 사례 및 390px 제안 화면 넘침 없음 확인.
+- [x] R3b: 감사 사유가 있는 포인트 계정/거래 커서 조회와 부호 있는 조정 구현. 양수 비용 주체·미래 만료를 추정하지 않고 직접 선택하며 음수 요청에서는 제거한다. 관련 Storybook 10개, PostgreSQL 조정/투영 18개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 390px 조정 폼과 만료 오류 화면 넘침 없음 확인.
+- [x] R3c: 운영 공개 주문 환불 미리보기/실행과 공통 품목 환불 화면 구현. 관련 Storybook 24개, PostgreSQL 환불 계약 17개와 Runtime parity 1개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. 390px 결과 불명 화면 넘침 없음 확인. 전체 Storybook MCP 434개, build/sites(4개) Passed. build-storybook 및 문서 화면 검사(85 docs/47 states) Passed. 기능별 커밋 완료. 이의·복구 PR 생성은 아래 이력에 기록한다.
+- [x] H1a: 상담 목록/필터/커서/모든 요청 유형 접수와 상태·배정·접촉·내부 노트·대상 연결 관리 구현. 명령 후 현재 상태를 재조회하고 응답 유실은 같은 요청으로 확인한다. 부분 접수 뒤 연결 실패도 생성된 Case 진입을 남긴다. 관련 Storybook 26개, PostgreSQL/도메인 14개, frontend 단위 224개와 boundary/copy 21개, typecheck/check:design Passed. 기존 토큰의 카드 여백을 재사용했으며 390px 화면에서 가로 넘침 없음 확인.
+- [x] H1b: 대상·목적·두 인증 수단/현재 조회/철회와 필드별 열람 요청·별도 승인자 검토·한시 열람 구현. 기존 권한의 Grant 메타데이터 GET을 추가했다. 관련 Storybook 24개, PostgreSQL 인증/권한·PII 비노출/Runtime parity 17개, frontend 단위 228개 및 boundary/copy 21개, typecheck/check:design/docs(18개) Passed. 창 이탈·늦은 원문 응답·권한 회수·만료를 검증했고 390px 검토 화면 넘침 없음 확인.
+- [x] H2: 현재 주문/요청 권한/매장 동의 대상 조회와 주문 조치 평가·생성·수정·별도 승인·재배정·실행, 점주 건별 동의·한시 위임 구현. typed 선택값과 canonical digest를 대조하고 기존 트랜잭션·정책 버전을 유지한다. PostgreSQL 평가·승인·실행/Runtime parity 20개 및 서버 digest 1개, frontend 단위 229개와 boundary/copy 21개 Passed. 전체 Storybook MCP 488개, typecheck/check:design/build/build-storybook/docs smoke(93 docs/47 states)/sites(4개), 문서 검증 18개 Passed. 상담·매장 동의의 모바일 렌더링과 가로 넘침 없음 확인. 상담 관리 PR 생성은 아래 이력에 기록한다.
+- [x] H3a: 수락 후 해결 승인안·현재 승인·실행 계획·5단계 상태/결과·환불 LOOKUP 재조정 구현. 생성된 Resolution ID를 다시 조회하고 소비된 승인안의 만료와 후속 처리를 구분한다. 실제 실행 권한과 달랐던 S60 재검사를 SUPPORT_RESOLUTION_EXECUTE로 맞췄다. PostgreSQL/도메인/승인/Runtime parity 및 서버 digest 34개, frontend 단위 231개와 boundary/copy 21개 Passed. 전체 실행 로그에서 497개 interaction 통과 후 최종 변경의 MCP 29개 interaction/a11y Passed. typecheck/check:design/build/sites(4개)/문서(18개) Passed. 390px 단계 화면 넘침 없음 확인. static Storybook과 문서 화면 전체 검사는 H3b–H4 후 PR 검증에서 실행한다.
+- [x] H3b: 고정 보상 폼을 혜택·비용 책임·분담·증빙 선택과 현재 승인/지급/알림 재시도로 교체했다. 현재 대기 중인 별도 승인자에게 비개인정보 검토 자료와 불변 쿠폰 조건을 제공하고 기존 GET 열람 범위를 유지한다. 새 요청은 같은 사고 ID를 유지한다. PostgreSQL/API/Runtime parity 18개, frontend 단위 231개와 boundary/copy 21개, 전체 511개 MCP interaction/a11y(8개 순차 묶음의 모든 응답) Passed. typecheck/check:design/build/sites 4개/문서 18개 Passed. 390px 보상 화면 넘침 없음 확인. 최종 정적 Storybook·98개 Docs/47개 상태 화면도 Passed.
+- [x] H4: 정보 정정·운영 결정·긴급 열람을 구현했다. 로컬 전체 Storybook MCP 546개, 단위 233개 및 boundary/copy 21개, build/design/docs/sites, 관련 backend/계약 검증 Passed. PR #166 (`feature/frontend-support-profile-access`, `fed14d7`)의 원격 CI 전체 Passed.
+- [x] H5: 내장 고객 문의 접수/상태/공개 답변과 Support Case 연결을 구현했다. #167 `bfb717c`의 로컬 검증과 원격 CI 전체 Passed. V82는 별도 inquiry plan의 migration lease를 유지한다.
+- [x] O4: 운영자 매장·메뉴 이미지 조회/메뉴 선택/교체/삭제와 감사 사유를 구현했다. 공유 편집 뷰에 인증별 어댑터를 연결하고 204 삭제를 성공으로 처리했다. backend 10개, frontend 233개 및 boundary/copy 21개, design/typecheck, 실제 MCP 전체 575개, 390px 가로 넘침 없음 Passed. 제품/정적 Storybook 빌드, sites 4개와 108개 Docs/47개 상태 화면도 Passed. 별도 PR을 생성한다.
+- [x] C6: recent-stores 조회를 고객 내 정보에 연결했다. 관련 Storybook 8개 및 최종 전체 MCP 582개, 기존 API integration 5개, frontend 233개와 boundary/copy 21개, typecheck/design Passed. 390px에서 이름 폭 220px, 핵심 상태 14px 및 가로 넘침 없음 확인. 최종 build/static Storybook/sites 4개/109개 Docs/47개 상태, 문서 18개도 Passed.
 - [ ] 전체 로컬 검증, 원격 CI 확인, 최종 diff/PR topology 검토.
+
+- 상담 관리 PR: https://github.com/kdh949/BeanFlow/pull/164 (`feature/frontend-support-management`, head `33122ac`, base `feature/frontend-dispute-recovery`). 세 커밋으로 접수·본인확인·주문 변경을 나눴다. 상담 노트 저장 뒤 재조회 완료를 기다리도록 CI 테스트를 별도 수정했다. 정확한 head의 원격 CI 전체가 통과했다.
 
 - 고객 PR: https://github.com/kdh949/BeanFlow/pull/160 (`feature/frontend-customer-consistency`, head `d777992`, base `main`). 후속 점주 branch: `feature/frontend-store-management`.
 - 고객 PR #160의 preflight/frontend/backend-build/6개 backend test shard/CodeQL 및 집계 build 원격 CI가 모두 통과했다.
 - 점주 PR: https://github.com/kdh949/BeanFlow/pull/161 (`feature/frontend-store-management`, head `753d28a`, base `feature/frontend-customer-consistency`). 운영 branch: `feature/frontend-operations-management`.
 - 점주 PR #161의 preflight/frontend/backend-build/6개 backend test shard 및 집계 build 원격 CI가 모두 통과했다.
+
+- 운영 PR: https://github.com/kdh949/BeanFlow/pull/162 (`feature/frontend-operations-management`, head `1577242`, base `feature/frontend-store-management`). 이의·복구 branch: `feature/frontend-dispute-recovery`.
+
+- 운영 PR #162의 preflight/frontend/backend-build/6개 backend test shard 및 집계 build 원격 CI가 모두 통과했다.
+
+- 이의·복구 PR: https://github.com/kdh949/BeanFlow/pull/163 (`feature/frontend-dispute-recovery`, head `e22a3c5`, base `feature/frontend-operations-management`). 상담 관리 branch: `feature/frontend-support-management`. 후속 수정 head `9bbdacb`의 원격 CI 전체 Passed.
 
 ## Surprises & Discoveries
 
@@ -170,17 +189,82 @@ Storybook docs, 실제 문의 채널에 대한 제품 정책을 갱신한다. �
 
 - 포인트 정책 OpenAPI의 discriminator mapping 누락과 global request의 required-only allOf 때문에 생성 타입이 실제 상태 값을 허용하지 않았다. 기존 서버 상태와 필드 제약을 명시하도록 계약을 보정하고 생성 타입 및 runtime parity를 검증했다. 제품 정책/서버 동작은 변경하지 않는다.
 
+- 실제 주문 후속 처리 DTO와 target에는 존재하는 paymentSetupIssue/setupReprocessingCaseId가 runtime 계약에서 누락되어 복구 진입을 생성 타입으로 사용할 수 없었다. runtime을 실제 응답과 맞추고, PaymentSetupIssue의 required-only anyOf를 명시적 allOf/anyOf로 정리했다. 두 오류 목록 중 적어도 하나는 비어 있지 않아야 하며 다른 목록은 실제 DTO처럼 빈 배열을 허용한다. 최초 경로 대조 실패는 저장소 검사기의 인용된 참조 표기로 보정한 후 통과했다.
+
+- R3c 초기 backend 검증은 Kotlin 증분 캐시 손상 경고와 Gradle heap 부족으로 컴파일 중단됐다. `-Pkotlin.incremental=false -Pkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" --max-workers=1`로 동일 테스트를 재실행해 통과했다. 로컬 진단 heap dump는 Git에 포함하지 않고 보존한다. 저장소 JVM 설정은 변경하지 않았다.
+
+- R3c 전체 Storybook은 실행 로그에서 434개 Passed였으나 MCP 완료 응답이 반환되지 않았다. 작업용 서버/보조 테스트 프로세스만 재시작하고 telemetry를 비활성화한 재실행에서 전체 434개 Passed 응답을 확인했다.
+
+- PR #163 최초 원격 frontend 검사는 준비/재조회 완료 전에 클릭하거나 단언한 4개 Storybook에서 실패했다. 버튼 활성화 및 실제 결과를 기다리도록 4개 story 파일을 보정했고 관련 5개 MCP 검증 Passed. `e22a3c5` 후속 커밋으로 원격 CI를 재실행한다.
+
 ## Decision Log
 
 - 2026-09-11: 보고된 결함과 현재 API의 미연결 업무를 구현하고 수직 슬라이스 커밋/업무 단위 PR로 분할한다.
 - 2026-09-11: 토큰·기존 컴포넌트 재사용을 우선하며 단순 시각 개선은 기존 정책 범위 안에서 진행한다.
 - 2026-09-11: C3 구성 조회는 메뉴 펼침 시 단일 메뉴 endpoint로 연결한다. 기존 메뉴별 500개 상한을 재사용하며 매장 전체 구성 전송과 N+1 초기 조회를 피한다.
-- 2026-09-11: 고객 도움말은 내장 Support 시스템에 연결한다. 고객 소유 문의 접수/진행 조회와 상담 Case 연결을 별도 H5/일곱 번째 PR로 구현한다. 내부 노트/본인 확인 자료는 공개하지 않는다. 관련 persistence 변경 필요성은 H5 계약 검토에서 결정한다.
+- 2026-09-11: 고객 도움말은 내장 Support 시스템에 연결한다. 고객 소유 문의 접수/진행 조회와 상담 Case 연결을 H4 다음 별도 H5 PR로 구현한다. 내부 노트/본인 확인 자료는 공개하지 않는다. 관련 persistence 변경 필요성은 H5 계약 검토에서 결정한다.
 
 ## Outcomes & Retrospective
 
-구현/검증 미완료. 이 문서는 완료 증거가 아니라 실행 계획이다.
+확인한 F01–F18, M01–M17과 추가 recent-stores/204 삭제 문제의 구현 및 로컬 검증을 완료했다.
+[최종 범위 대조](../../testing/frontend-workflow-coverage.md)에 대응 경로와 의도적 제외를 기록했다.
+원격 CI의 최신 결과는 각 PR head checks로 확인한다. merge/deploy와 실거래는 수행하지 않는다.
 
 ## Revision Notes
 
 - 2026-09-11: 초기 실행 범위와 단계·검증 경계 작성.
+
+- 2026-09-11: H3 금융 후속 처리와 H4 정보 정정·긴급 열람은 각자의 권한/민감정보 검증을 명확히 하기 위해 별도 PR로 분리한다. PR #164 head `33122ac`의 preflight/frontend/backend-build/6개 shard/집계 build 원격 CI가 모두 통과했다.
+
+- H3 전체 MCP 단일 호출에서 511개 통과 로그 이후 완료 이벤트 응답이 정지했다. 소유한 서버를 재시작하고 같은 511개 Storybook index를 70개 이하의 8개 묶음으로 순차 실행해 모든 interaction/a11y 통과 응답을 검증했다. 테스트 또는 접근성 검사를 생략하지 않았다.
+
+- 금융 후속 처리 PR: https://github.com/kdh949/BeanFlow/pull/165 (`feature/frontend-support-follow-up`, head `fcaa4cf`, base `feature/frontend-support-management`). 정보 정정·긴급 열람 branch: `feature/frontend-support-profile-access`.
+- H4a는 목적별 현재 profile context와 exact 승인 workflow, 운영 조사 조회·결정을 제공한다. 원문은 transient 입력 후 지우며 불명 명령은 같은 digest/멱등키의 재입력 확인만 허용한다. H4b는 기존 3인 분리 긴급 열람·사후 검토를 연결한다.
+
+- H4a 완료: 고객·매장·배달원 14개 목적의 typed 정정, 별도 승인, 재입력 digest 검증, 승인안 수정·재배정·실행·알림 재시도 및 운영 조사 결정을 연결했다. 상담의 `DELIVERY`와 프로필의 `RIDER`를 명시적으로 변환한다. 원문은 저장하지 않고 불명 명령은 digest·멱등키로만 보존한다.
+- H4a 검증: 정보 정정 통합 16개 Passed와 동일 구현의 운영 조사 6개·digest 5개·Runtime parity 1개 Passed. 추가한 배달원 fixture의 필수 마스킹 연락처·복합 FK 오류를 수정 후 16개 전체를 재실행했다. frontend 단위 233개, boundary/copy 21개, MCP interaction/a11y 52개, typecheck·디자인 검사(190 tokens, 97 story files, 53 routes), 앱·정적 Storybook build, Sites 4개, Docs 101개/47개 상태 화면, 문서 검사 18개 Passed. 모바일 390px에서 정보 정정·운영 검토 가로 넘침 없음과 본문 15px 토큰 확인. 전체 MCP는 H4b 후 최종 PR 검증에서 재실행한다.
+- PR #165 head `fcaa4cf`의 preflight/frontend/backend-build/6개 test shard/집계 build 원격 CI가 모두 통과했다.
+
+- H4b 완료: 긴급 한 필드 요청·별도 승인/반려·1회 열람·독립 사후 검토를 연결했다. 원문 없는 workflow GET은 현재 권한·배정·만료와 실제 사후 검토 결과를 제공한다. 원문은 60초·화면 이탈·만료·권한 상실에 지우며, 늦은 응답을 버리고 불명 열람을 자동 재요청하지 않는다. 종료된 Case의 사후 검토도 가능하다.
+- H4b 검증: PostgreSQL/API 5개·도메인 4개·Runtime parity 1개 Passed. 초기 조회의 read-only transaction과 권한 검사 잠금 충돌을 확인하고 정상 transaction으로 수정 후 10개 전부 재실행했다. 최종 frontend 단위 233개와 boundary/copy 21개, 전체 546개 MCP interaction/a11y, typecheck·디자인 검사(190 tokens, 99 story files, 54 routes), 앱·정적 Storybook build, Sites 4개, Docs 103개/47개 상태 화면, 문서 18개 Passed. 390px 긴급 열람 사후 검토 화면에서 가로 넘침 없음과 본문 15px 토큰 확인.
+
+- H4 마지막 검토에서 원 요청자의 실행 권한을 승인 요청 행 잠금 전에 확인하도록 순서를 맞췄다. 정정 통합 16개를 다시 실행해 Passed를 확인했다.
+
+- PR #165 (`feature/frontend-support-follow-up`, `fcaa4cf`)와 #166 (`feature/frontend-support-profile-access`, `fed14d7`) 원격 CI 전체 Passed. #166은 #165를 base로 한다.
+
+
+### O4 execution details
+
+운영 매장 관리에 기존 이미지 편집기(EXTEND)와 Tabs/SelectField/Button/FileField( REUSE),
+메뉴 선택 목록(COMPOSE)을 연결한다. Operations가 STORE_MEDIA_MANAGE와 사유를 확인하고
+Merchant public catalog/image port를 사용한다. 읽기는 grant lock을 포함하는 짧은 local transaction,
+서명은 기존 local 연산이며 외부 업로드/cleanup/동시 교체 정책은 ADR-115 그대로다.
+현재 이미지 GET 두 개와 최소 메뉴 목록 GET 하나를 target/runtime 계약에 추가한다.
+영향 파일: OperatorStore/MenuImage controller/service, 새 OperatorMediaMenuDirectory,
+StorefrontImageEditor, StoreMediaWorkspace, OperationsStoresPage와 각 story/계약 테스트.
+권한 회수·다른 매장 메뉴·필터/actor cursor·현재 이미지 없음·서명 실패·잘못된 파일·응답 유실을 검증한다.
+제품 정책 변경, schema migration, 새 dependency는 없다. 별도 이미지 UI 복제보다 기존 편집기 확장이
+유지보수와 디자인 준수에 유리하다. 점주 기본 모드에 대한 회귀 검증을 함께 수행한다.
+
+- H5 PR: https://github.com/kdh949/BeanFlow/pull/167 (`feature/frontend-customer-support`, `bfb717c`, base #166).
+  로컬 최종 문의/기존 상담/Runtime parity 22개 및 spotless Passed. 전체 565개 MCP/105개 Docs/47개 상태
+  화면과 frontend 전체 검증 Passed. 원격 CI 진행 중.
+
+
+### C6 final API inventory gap
+
+최종 runtime 254개 operation 대조에서 recent-stores의 직접 조회 동선 누락을 추가로 확인했다.
+BR-40의 결제 이후 eligible 주문, 중복 제거/현재 노출/정렬을 서버가 소유한다. `/app/recent-stores`를
+고객 인증 아래 lazy route로 연결하고 MyPage에서 진입한다. FavoriteStoresPage에서 확인한
+StoreCard/기존 목록 CSS(REUSE), PageHeading/Button/EmptyState/LoadingState/ErrorState(REUSE)를
+COMPOSE한다. 서버 계약·Aggregate·transaction·보존 정책은 변경하지 않는다. 반환된 현재 목록만
+표시하며 20개까지의 API 상한을 명시하고 조회 실패를 빈 목록으로 대체하지 않는다.
+영향 파일은 RecentStoresPage/story, MyPage/story, router와 이 계획이다. 새 design token/dependency와
+ADR 변경은 없다. story-first로 empty/loading/failure/refresh/long-name 및 390px를 검증하고 기존
+RecentStoreEndpointIntegrationTest도 실행한다. 기존 추천 목록만 사용하는 대안은 최근 순서 목록을
+직접 열 수 없으므로 별도 읽기 화면을 선택한다.
+
+- O4 PR: https://github.com/kdh949/BeanFlow/pull/168 (`feature/frontend-operations-media`, `5ab7cd0`, base #167).
+  로컬 전체 검증 Passed, 원격 CI 진행 중.
+
+- H5 PR #167 `bfb717c`: preflight/frontend/backend-build/6개 backend shard/집계 build 원격 CI 전체 Passed.

@@ -21,6 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -85,6 +86,97 @@ internal class OperationsSupportInvestigationIntegrationTest
             listOf(requesterId, managerId, operationsId, otherOperationsId).forEach {
                 grant(it, "OPERATIONS_SUPPORT_INVESTIGATION")
             }
+        }
+
+        @Test
+        fun `investigation queue requires both grants and pages minimal current revision metadata`() {
+            val first = seedRequest(withManager = true)
+            val investigationId = open(first)
+            open(seedRequest(withManager = true))
+            val path = "/api/v1/operations/investigation-queue"
+
+            fun actor(id: UUID) = jwt().jwt { it.subject(id.toString()) }.authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))
+            mockMvc.perform(get(path).with(actor(operationsId))).andExpect(status().isForbidden)
+            listOf(operationsId, otherOperationsId, requesterId).forEach { grant(it, "SUPPORT_CASE_READ") }
+            val body =
+                mockMvc
+                    .perform(get(path).with(actor(operationsId)).param("state", "OPEN").param("limit", "1"))
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.items[0].request.action").value("ORDER_CANCELLATION"))
+                    .andExpect(jsonPath("$.items[0].canDecide").value(true))
+                    .andReturn()
+                    .response.contentAsString
+            assertThat(body).doesNotContain("actionPayloadDigest", "evidenceDigest", "verificationSessionId")
+            val cursor =
+                tools.jackson.databind.json.JsonMapper
+                    .builder()
+                    .build()
+                    .readTree(body)
+                    .get("nextCursor")
+                    .asText()
+            mockMvc
+                .perform(
+                    get(path)
+                        .with(actor(operationsId))
+                        .param("state", "OPEN")
+                        .param("limit", "1")
+                        .param("cursor", cursor),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+            mockMvc
+                .perform(
+                    get(path).with(actor(otherOperationsId)).param("state", "OPEN").param("cursor", cursor),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    get(path).with(actor(operationsId)).param("state", "APPROVED").param("cursor", cursor),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    get(path).with(actor(requesterId)),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].canDecide").value(false))
+            jdbcTemplate.update(
+                "UPDATE operations_support_investigation_case SET opened_at = now() - interval '2 seconds', expires_at = now() - interval '1 second' WHERE id = ?",
+                investigationId,
+            )
+            mockMvc
+                .perform(
+                    get(path).with(actor(operationsId)).param("state", "OPEN"),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+            revoke(operationsId, "OPERATIONS_SUPPORT_INVESTIGATION")
+            mockMvc.perform(get(path).with(actor(operationsId))).andExpect(status().isForbidden)
+        }
+
+        @Test
+        fun `investigation read binds exact revision and current separate reviewer`() {
+            val binding = seedRequest(withManager = true)
+            val investigationId = open(binding)
+
+            fun read(
+                actorId: UUID,
+                revision: Int = 1,
+            ) = mockMvc.perform(
+                get(
+                    "/api/v1/operations/investigations",
+                ).param("supportActionRequestId", binding.requestId.toString())
+                    .param("revisionNumber", revision.toString())
+                    .with(jwt().jwt { it.subject(actorId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))),
+            )
+            read(operationsId)
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.investigation.investigationId").value(investigationId.toString()))
+                .andExpect(jsonPath("$.canDecide").value(true))
+            read(requesterId).andExpect(status().isOk).andExpect(jsonPath("$.canDecide").value(false))
+            read(managerId).andExpect(status().isOk).andExpect(jsonPath("$.canDecide").value(false))
+            read(operationsId, 2).andExpect(status().isNotFound)
+            read(operationsId, 0).andExpect(status().isBadRequest)
+            revoke(operationsId, "OPERATIONS_SUPPORT_INVESTIGATION")
+            read(operationsId).andExpect(status().isForbidden)
+            assertThat(state("operations_support_investigation_case", investigationId)).isEqualTo("OPEN")
         }
 
         @Test

@@ -52,6 +52,7 @@ internal class CustomerOrderQueryIntegrationTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val createOrders: CreateOrderUseCase,
+        private val supportOrders: io.github.kdh949.beanflow.ordering.api.CustomerSupportOrderOperations,
         private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val objectMapper: ObjectMapper,
         private val meterRegistry: MeterRegistry,
@@ -415,6 +416,25 @@ internal class CustomerOrderQueryIntegrationTest
                 .andExpect(jsonPath("$.items.length()").value(0))
                 .andExpect(jsonPath("$.page.nextCursor").doesNotExist())
             assertThat(states()).containsOnly("EXPIRED")
+        }
+
+        @Test
+        fun `support intake resolves only the customer owned opaque reference`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            val reference = create(fixture, "support-owned-reference")
+            val internalId =
+                jdbcTemplate.queryForObject(
+                    "SELECT id FROM ordering_order WHERE public_reference = ?",
+                    UUID::class.java,
+                    reference,
+                )
+            assertThat(supportOrders.resolveOwned(fixture.customerId, reference)).isEqualTo(internalId)
+            org.assertj.core.api.Assertions
+                .assertThatThrownBy { supportOrders.resolveOwned(UUID.randomUUID(), reference) }
+                .isInstanceOfSatisfying(io.github.kdh949.beanflow.shared.api.DomainFailure::class.java) {
+                    assertThat(it.code).isEqualTo(io.github.kdh949.beanflow.shared.api.FailureCode.RESOURCE_NOT_FOUND)
+                }
         }
 
         private fun create(

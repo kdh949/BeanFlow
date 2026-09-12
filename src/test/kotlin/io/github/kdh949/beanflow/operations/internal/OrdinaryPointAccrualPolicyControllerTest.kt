@@ -116,6 +116,7 @@ internal class OrdinaryPointAccrualPolicyControllerTest
                 .perform(get("$BASE/stores?state=OVERRIDE").with(operatorJwt()).header("X-Access-Reason", "Head list"))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.items[0].scopeReference").value(storeId.toString()))
+                .andExpect(jsonPath("$.items[0].scopeName").value("Policy HTTP store"))
             mockMvc
                 .perform(get("$BASE/stores/$storeId").with(operatorJwt()).header("X-Access-Reason", "Store current"))
                 .andExpect(status().isOk)
@@ -196,6 +197,11 @@ internal class OrdinaryPointAccrualPolicyControllerTest
         private fun insertStore(): UUID =
             UUID.randomUUID().also {
                 jdbcTemplate.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)", it)
+                jdbcTemplate.update(
+                    "INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code) " +
+                        "VALUES (?, 'Policy HTTP store', ST_GeogFromText('SRID=4326;POINT(127 37.5)'), '1168010100')",
+                    it,
+                )
             }
 
         private fun currentGlobalVersion(): Long =

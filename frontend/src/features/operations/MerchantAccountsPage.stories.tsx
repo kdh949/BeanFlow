@@ -1,3 +1,4 @@
+import { storeSelectionHandler } from "../../../.storybook/storeSelectionFixtures";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
 import { HttpResponse, http } from "msw";
@@ -10,7 +11,7 @@ const account = {
   loginId: "merchant01",
   displayName: "성수점 점주",
   accountState: "ACTIVE",
-  memberships: [{ storeId: ids.store, role: "OWNER" }],
+  memberships: [{ storeId: ids.store, role: "OWNER", storeName: "빈플로우 성수점" }],
 };
 
 const lookupAccount = http.get("/api/v1/operations/merchant-accounts", () => HttpResponse.json(account));
@@ -46,7 +47,7 @@ const meta = {
       story: { inline: false, height: "900px" },
     },
     routing: { surface: "ops", path: "/ops/merchant-accounts", initialEntry: "/ops/merchant-accounts" },
-    msw: { handlers: [lookupAccount, resetPassword, releaseLock, createAccount] },
+    msw: { handlers: [storeSelectionHandler, lookupAccount, resetPassword, releaseLock, createAccount] },
   },
 } satisfies Meta<typeof MerchantAccountsPage>;
 
@@ -63,13 +64,13 @@ async function lookup(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"
 export const ExactAccount: Story = {
   play: async ({ canvas }) => {
     await lookup(canvas);
-    await expect(canvas.getByText(ids.store)).toBeVisible();
+    await expect(canvas.getByText("빈플로우 성수점")).toBeVisible();
   },
 };
 
 export const LockedAccountReleased: Story = {
   parameters: {
-    msw: { handlers: [http.get("/api/v1/operations/merchant-accounts", () => HttpResponse.json({
+    msw: { handlers: [storeSelectionHandler, http.get("/api/v1/operations/merchant-accounts", () => HttpResponse.json({
       ...account,
       lockedUntil: "2026-08-24T09:00:00+09:00",
     })), resetPassword, releaseLock] },
@@ -87,7 +88,7 @@ export const NewAccountOneTimePassword: Story = {
     await userEvent.click(canvas.getByRole("tab", { name: "새 계정 발급" }));
     await userEvent.type(canvas.getByLabelText("새 로그인 ID"), "newmerchant");
     await userEvent.type(canvas.getByLabelText("표시 이름"), "신규 점주");
-    await userEvent.type(canvas.getByLabelText("첫 매장 ID"), ids.store);
+    await userEvent.click(canvas.getByRole("button", { name: "매장 찾기" })); await userEvent.click(await canvas.findByRole("button", { name: "빈플로우 성수점 선택" }));
     await userEvent.type(canvas.getByLabelText("발급 사유"), "신규 가맹 계약 승인");
     await userEvent.click(canvas.getByRole("button", { name: "점주 계정 발급" }));
     await expect(await canvas.findByText("NEW_PASSWORD_DEMO_0000000000001")).toBeVisible();
@@ -102,7 +103,7 @@ export const NewAccountOneTimePassword: Story = {
 export const ResetConflict: Story = {
   parameters: {
     msw: {
-      handlers: [
+      handlers: [storeSelectionHandler,
         lookupAccount,
         http.post("/api/v1/operations/merchant-accounts/:accountId/temporary-password-resets", () => HttpResponse.json({
           code: "TEMPORARY_PASSWORD_NOT_REPLAYABLE",
@@ -123,7 +124,7 @@ export const ResetConflict: Story = {
 
 export const ExactAccountNotFound: Story = {
   parameters: {
-    msw: { handlers: [http.get("/api/v1/operations/merchant-accounts", () => HttpResponse.json({
+    msw: { handlers: [storeSelectionHandler, http.get("/api/v1/operations/merchant-accounts", () => HttpResponse.json({
       code: "MERCHANT_ACCOUNT_NOT_FOUND",
       message: "점주 계정을 찾을 수 없습니다.",
       correlationId: "REQ-MERCHANT-404",
@@ -139,7 +140,7 @@ export const ExactAccountNotFound: Story = {
 
 export const QueryUnavailable: Story = {
   parameters: {
-    msw: { handlers: [http.get("/api/v1/operations/merchant-accounts", () => HttpResponse.json({
+    msw: { handlers: [storeSelectionHandler, http.get("/api/v1/operations/merchant-accounts", () => HttpResponse.json({
       code: "DEPENDENCY_UNAVAILABLE",
       message: "점주 계정 저장소를 사용할 수 없습니다.",
       correlationId: "REQ-MERCHANT-503",

@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.operations.internal
 
+import io.github.kdh949.beanflow.merchant.api.StoreIdentityOperations
 import io.github.kdh949.beanflow.merchant.api.StorePolicyScopeOperations
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
@@ -148,6 +149,7 @@ internal class MerchantCredentialAdministrationTransactions(
     private val authorization: OperatorPermissionAuthorization,
     private val advisoryLock: DatabaseAdvisoryLock,
     private val stores: StorePolicyScopeOperations,
+    private val storeIdentities: StoreIdentityOperations,
     private val identity: MerchantCredentialProvisioningPort,
     private val audits: AuditRecordOperations,
     private val correlationIds: CorrelationIdSource,
@@ -316,9 +318,11 @@ internal class MerchantCredentialAdministrationTransactions(
         val account =
             identity.findExact(loginId)
                 ?: throw DomainFailure(FailureCode.MERCHANT_ACCOUNT_NOT_FOUND, "Merchant account was not found")
+        val names = storeIdentities.names(account.memberships.map { it.storeId }.toSet())
+        val result = account.copy(memberships = account.memberships.map { it.copy(storeName = names.getValue(it.storeId)) })
         appendAudit(operatorId, "MERCHANT_ACCOUNT_READ", account, reason, now, "ACCOUNT_READ", "read:${UUID.randomUUID()}")
         entityManager.flush()
-        return account
+        return result
     }
 
     private fun lockAndRejectSecretReplay(

@@ -107,7 +107,7 @@ publication 후보 선택·결과 대사를 추가한다. 각 PR은 자체 Runti
 
 ### 업무별 최소 매장 탐색 (2026-09-12)
 
-`GET /operations/store-targets`는 IDENTITY, TERMS, MEMBERSHIP, BRAND, POINT_POLICY 목적별
+`GET /operations/store-targets`는 IDENTITY, TERMS, MEMBERSHIP, BRAND, POINT_POLICY, MEDIA 목적별
 현재 조회 grant(브랜드는 관리 grant)를 검증하고 `storeId`, `name`만 반환한다. 전체 식별 정보의
 `STORE_IDENTITY_READ`를 다른 업무의 필수 grant로 추가하지 않는다. 기존 `/operations/stores`의
 상세 목록 권한은 유지한다. 이름 검색·bounded page는 기존 Merchant 공개 조회 port를 사용하고,

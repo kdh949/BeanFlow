@@ -5,14 +5,15 @@ import { operationsApi } from "../../api/consoleClient";
 import { Button, EmptyState, LoadingState, PageHeading, Tab, TabList, TabPanel, Tabs, SelectField, TextAreaField, TextField } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
 import { useResource } from "../shared/useResource";
+import { StoreMediaWorkspace } from "./StoreMediaWorkspace";
 import { StoreTermsWorkspace } from "./StoreTermsWorkspace";
 import { StoreMembershipsWorkspace } from "./StoreMembershipsWorkspace";
 import { StorePointPolicyWorkspace } from "./StorePointPolicyWorkspace";
 
 type StoreIdentity = components["schemas"]["StoreIdentitySnapshot"];
 type Region = components["schemas"]["OperatorStoreRegion"];
-type StorePurpose = "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY";
-const purposeWorkspaces = { IDENTITY: "identity", TERMS: "terms", MEMBERSHIP: "memberships", BRAND: "identity", POINT_POLICY: "points" };
+type StorePurpose = "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY" | "MEDIA" | "MEMBERSHIP_ASSIGNMENT";
+const purposeWorkspaces = { IDENTITY: "identity", TERMS: "terms", MEMBERSHIP: "memberships", BRAND: "identity", POINT_POLICY: "points", MEDIA: "media", MEMBERSHIP_ASSIGNMENT: "memberships" };
 type Brand = components["schemas"]["Brand"];
 
 /** Store selection is shared by the operator's identity and store-scoped management work. */
@@ -28,7 +29,7 @@ export function OperationsStoresPage() {
   const stores = useResource(useCallback(async () => unwrap(await operationsApi.GET("/operations/store-targets", { params: { query: { purpose, query: query || undefined, cursor, limit: 20 } } })), [purpose, query, cursor]));
   return <div className="console-page">
     <PageHeading title="매장 관리" action={<Button onClick={() => { setCreating(true); setSelected(null); setNotice(""); }}>새 매장 등록</Button>} />
-    <SelectField label="매장 관리 목적" value={purpose} onValueChange={value => { setPurpose(value as StorePurpose); setSelected(null); setCreating(false); setCursors([undefined]); }}><option value="IDENTITY">식별정보 확인</option><option value="TERMS">정산 계약</option><option value="MEMBERSHIP">점주·직원 소속</option><option value="BRAND">브랜드 소속</option><option value="POINT_POLICY">포인트 정책</option></SelectField>
+    <SelectField label="매장 관리 목적" value={purpose} onValueChange={value => { setPurpose(value as StorePurpose); setSelected(null); setCreating(false); setCursors([undefined]); }}><option value="IDENTITY">식별정보 확인</option><option value="TERMS">정산 계약</option><option value="MEMBERSHIP">점주·직원 소속</option><option value="MEMBERSHIP_ASSIGNMENT">점주·직원 소속 추가</option><option value="BRAND">브랜드 소속</option><option value="POINT_POLICY">포인트 정책</option><option value="MEDIA">매장·메뉴 이미지</option></SelectField>
     <form className="button-row" onSubmit={event => { event.preventDefault(); if (query === search.trim() && !cursor) stores.reload(); else { setQuery(search.trim()); setCursors([undefined]); } }}>
       <TextField label="매장 이름 검색" value={search} onValueChange={setSearch} maxLength={200} />
       <Button type="submit" variant="secondary">매장 검색</Button>
@@ -48,12 +49,12 @@ function StoreWorkspace({ storeId, onChanged, purpose }: { storeId: string; onCh
   const identity = useResource(useCallback(async () => workspace === "identity" && purpose !== "BRAND" ? unwrap(await operationsApi.GET("/operations/stores/{storeId}/identity", { params: { path: { storeId } } })) : null, [storeId, workspace, purpose]));
   const [saved, setSaved] = useState(false);
   return <section className="management-workspace"><h2>선택한 매장</h2><p className="support-case-reference">{storeId}</p>
-    <Tabs value={workspace} onValueChange={setWorkspace}><TabList label="선택한 매장 업무"><Tab value="identity">식별정보·브랜드</Tab><Tab value="terms">정산 계약</Tab><Tab value="memberships">점주·직원 소속</Tab><Tab value="points">포인트 정책</Tab></TabList>
+    <Tabs value={workspace} onValueChange={setWorkspace}><TabList label="선택한 매장 업무"><Tab value="identity">식별정보·브랜드</Tab><Tab value="terms">정산 계약</Tab><Tab value="memberships">점주·직원 소속</Tab><Tab value="points">포인트 정책</Tab><Tab value="media">매장·메뉴 이미지</Tab></TabList>
     <TabPanel value="identity">
     {saved ? <p role="status">식별정보를 저장했습니다.</p> : null}
     {identity.state.status === "loading" ? <LoadingState label="현재 식별정보를 불러오는 중" /> : identity.state.status === "failed" ? <ErrorState error={identity.state.error} retry={identity.reload} /> : identity.state.value ? <div className="surface-card management-card"><IdentityForm key={identity.state.value.version} current={identity.state.value} onSaved={() => { setSaved(true); identity.reload(); onChanged(); }} onRefresh={() => { setSaved(false); identity.reload(); }} /></div> : null}
     <StoreBrandEditor storeId={storeId} />
-    </TabPanel><TabPanel value="terms"><StoreTermsWorkspace storeId={storeId} /></TabPanel><TabPanel value="memberships"><StoreMembershipsWorkspace storeId={storeId} /></TabPanel><TabPanel value="points"><StorePointPolicyWorkspace storeId={storeId} /></TabPanel></Tabs>
+    </TabPanel><TabPanel value="terms"><StoreTermsWorkspace storeId={storeId} /></TabPanel><TabPanel value="memberships"><StoreMembershipsWorkspace storeId={storeId} mode={purpose === "MEMBERSHIP_ASSIGNMENT" ? "add" : "manage"} /></TabPanel><TabPanel value="points"><StorePointPolicyWorkspace storeId={storeId} /></TabPanel><TabPanel value="media"><StoreMediaWorkspace storeId={storeId} /></TabPanel></Tabs>
   </section>;
 }
 

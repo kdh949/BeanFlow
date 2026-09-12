@@ -29,6 +29,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
+import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
@@ -84,6 +85,48 @@ internal class PaymentSetupRepairIntegrationTest
 
         @AfterEach
         fun cleanupFailureTrigger() = dropAuditFailureTrigger()
+
+        @Test
+        fun `proposal query verifies current repair grant and exposes no financial execution data`() {
+            val damaged = createMissingRefundCase("repair-query")
+            val created = propose(damaged.caseId, proposer, "repair-query-propose", "Review missing refund")
+            val path = "/api/v1/operations/reprocessing-repair-proposals/{proposalId}"
+            val response =
+                mockMvc
+                    .perform(get(path, damaged.proposalId()).with(operatorJwt(approver)))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.state").value("PENDING_APPROVAL"))
+                    .andExpect(jsonPath("$.proposedBy").value(proposer.toString()))
+                    .andReturn()
+                    .response
+            val mapper =
+                tools.jackson.databind.json.JsonMapper
+                    .builder()
+                    .build()
+            val createdJson = mapper.readTree(created.contentAsString)
+            val queriedJson = mapper.readTree(response.contentAsString)
+            for (field in listOf("createdAt", "expiresAt")) {
+                val original = Instant.parse(createdJson[field].asText())
+                val persisted = Instant.parse(queriedJson[field].asText())
+                assertThat(Duration.between(original, persisted).abs()).isLessThan(Duration.ofNanos(1000))
+                (createdJson as tools.jackson.databind.node.ObjectNode).remove(field)
+                (queriedJson as tools.jackson.databind.node.ObjectNode).remove(field)
+            }
+            assertThat(queriedJson).isEqualTo(createdJson)
+            assertThat(response.contentAsString).doesNotContain(damaged.providerKey, damaged.orderId.toString())
+            mockMvc
+                .perform(get(path, UUID.randomUUID()).with(operatorJwt(approver)))
+                .andExpect(status().isNotFound)
+            mockMvc
+                .perform(get(path, damaged.proposalId()).with(customerJwt(approver)))
+                .andExpect(status().isForbidden)
+            jdbcTemplate.update("DELETE FROM operations_operator_permission_grant WHERE actor_id = ?", approver)
+            mockMvc
+                .perform(get(path, damaged.proposalId()).with(operatorJwt(approver)))
+                .andExpect(status().isForbidden)
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isZero()
+            assertThat(paymentGateway.rejectionRefundLookupCalls.get()).isZero()
+        }
 
         @Test
         fun `different active operators restore the exact Refund for LOOKUP with atomic evidence and no provider call`() {
@@ -674,6 +717,180 @@ internal class PaymentSetupRepairIntegrationTest
             ).isEqualTo("MANUAL_REVIEW")
             assertThat(count("operations_customer_cancellation_refund_reconciliation_command")).isZero()
             assertThat(paymentGateway.rejectionRefundLookupCalls.get()).isZero()
+        }
+
+        @Test
+        fun `public order reference discovers current follow up with active grant and audit`() {
+            val damaged = createMissingRefundCase("public-order-discovery")
+            val reference = value("SELECT public_reference FROM ordering_order WHERE id = ?", damaged.orderId)
+            val path = "/api/v1/operations/order-compensations/{reference}"
+            mockMvc
+                .perform(get(path, reference).with(operatorJwt(approver)).header("X-Access-Reason", "ORDER_RECOVERY_REVIEW"))
+                .andExpect(status().isForbidden)
+            grantRead(approver)
+            mockMvc
+                .perform(get(path, reference.lowercase()).with(operatorJwt(approver)).header("X-Access-Reason", "ORDER_RECOVERY_REVIEW"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.order.publicReference").value(reference))
+                .andExpect(jsonPath("$.order.orderId").value(damaged.orderId.toString()))
+                .andExpect(jsonPath("$.order.storeName").isNotEmpty)
+                .andExpect(jsonPath("$.order.state").value("CANCELLED"))
+                .andExpect(jsonPath("$.followUp.setupReprocessingCaseId").value(damaged.caseId.toString()))
+                .andExpect(jsonPath("$.order.customerId").doesNotExist())
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record WHERE actor_id = ? AND action = 'ORDER_COMPENSATION_READ'",
+                    Long::class.java,
+                    approver.toString(),
+                ),
+            ).isEqualTo(1)
+            mockMvc.perform(get(path, reference).with(operatorJwt(approver))).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(get(path, damaged.orderId).with(operatorJwt(approver)).header("X-Access-Reason", "ORDER_RECOVERY_REVIEW"))
+                .andExpect(status().isBadRequest)
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isZero()
+            assertThat(paymentGateway.rejectionRefundLookupCalls.get()).isZero()
+        }
+
+        @Test
+        fun `repair directories bind cursors to actor and filters and expose order labels without financial data`() {
+            val first = createMissingRefundCase("directory-first")
+            val second = createMissingRefundCase("directory-second")
+            propose(first.caseId, proposer, "directory-propose-first", "Review missing refund")
+            propose(second.caseId, proposer, "directory-propose-second", "Review missing refund")
+            val mapper =
+                tools.jackson.databind.json.JsonMapper
+                    .builder()
+                    .build()
+            for (path in listOf("/api/v1/operations/payment-setup-recovery-cases", "/api/v1/operations/reprocessing-repair-proposals")) {
+                val response =
+                    mockMvc
+                        .perform(get(path).with(operatorJwt(approver)).param("limit", "1"))
+                        .andExpect(status().isOk)
+                        .andExpect(jsonPath("$.items.length()").value(1))
+                        .andExpect(jsonPath("$.items[0].order.publicReference").isNotEmpty)
+                        .andExpect(jsonPath("$.items[0].order.storeName").isNotEmpty)
+                        .andExpect(jsonPath("$.items[0].order.orderId").doesNotExist())
+                        .andReturn()
+                        .response.contentAsString
+                assertThat(response).doesNotContain(first.providerKey, first.sourceReference, first.orderId.toString())
+                val cursor = mapper.readTree(response)["nextCursor"].asText()
+                val next =
+                    mockMvc
+                        .perform(get(path).with(operatorJwt(approver)).param("limit", "1").param("cursor", cursor))
+                        .andExpect(status().isOk)
+                        .andExpect(jsonPath("$.items.length()").value(1))
+                        .andExpect(jsonPath("$.nextCursor").isEmpty)
+                        .andReturn()
+                        .response.contentAsString
+                assertThat(mapper.readTree(next)["items"][0]).isNotEqualTo(mapper.readTree(response)["items"][0])
+                mockMvc.perform(get(path).with(operatorJwt(reviewer)).param("cursor", cursor)).andExpect(status().isBadRequest)
+                val filter = if (path.endsWith("cases")) "status" else "state"
+                val value = if (filter == "status") "OPEN" else "PENDING_APPROVAL"
+                mockMvc
+                    .perform(get(path).with(operatorJwt(approver)).param(filter, value).param("cursor", cursor))
+                    .andExpect(status().isBadRequest)
+                mockMvc.perform(get(path).with(operatorJwt(approver)).param("limit", "101")).andExpect(status().isBadRequest)
+            }
+            mockMvc
+                .perform(
+                    get("/api/v1/operations/reprocessing-repair-proposals")
+                        .with(operatorJwt(approver))
+                        .param("caseId", second.caseId.toString())
+                        .param("state", "PENDING_APPROVAL"),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].proposal.caseId").value(second.caseId.toString()))
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ?",
+                approver,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/operations/payment-setup-recovery-cases").with(operatorJwt(approver)),
+                ).andExpect(status().isForbidden)
+            mockMvc
+                .perform(
+                    get("/api/v1/operations/reprocessing-repair-proposals").with(operatorJwt(approver)),
+                ).andExpect(status().isForbidden)
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isZero()
+            assertThat(paymentGateway.rejectionRefundLookupCalls.get()).isZero()
+        }
+
+        @Test
+        fun `repair directory reads audit purpose and count and fail closed on audit failure`() {
+            val damaged = createMissingRefundCase("directory-audit")
+            propose(damaged.caseId, proposer, "directory-audit-proposal", "Review missing refund")
+            for ((path, action) in listOf(
+                "/api/v1/operations/payment-setup-recovery-cases" to "PAYMENT_SETUP_RECOVERY_CASES_READ",
+                "/api/v1/operations/reprocessing-repair-proposals" to "PAYMENT_SETUP_REPAIR_PROPOSALS_READ",
+            )) {
+                mockMvc.perform(get(path).with(operatorJwt(approver))).andExpect(status().isOk)
+                val audit =
+                    jdbcTemplate.queryForMap(
+                        "SELECT reason, after_summary::text AS payload FROM operations_audit_record WHERE action = ?",
+                        action,
+                    )
+                assertThat(audit["reason"]).isEqualTo("PAYMENT_SETUP_RECOVERY_REVIEW")
+                assertThat(audit["payload"].toString())
+                    .contains("resultCount", "stateFilter")
+                    .doesNotContain(damaged.orderId.toString(), damaged.providerKey, damaged.sourceReference)
+                installAuditFailureTrigger()
+                try {
+                    mockMvc
+                        .perform(get(path).with(operatorJwt(approver)))
+                        .andExpect(status().isServiceUnavailable)
+                        .andExpect(jsonPath("$.items").doesNotExist())
+                } finally {
+                    dropAuditFailureTrigger()
+                }
+                assertThat(
+                    jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record WHERE action = ?", Long::class.java, action),
+                ).isOne()
+            }
+        }
+
+        @Test
+        fun `case filter exposes proposal eligibility from status and resolution`() {
+            val damaged = createMissingRefundCase("directory-eligibility")
+            val path = "/api/v1/operations/payment-setup-recovery-cases"
+            for ((state, resolution, eligible) in listOf(
+                Triple("OPEN", null, true),
+                Triple("OPEN", "REPAIRED", false),
+                Triple("RUNNING", null, false),
+                Triple("RESOLVED", "REPAIRED", false),
+                Triple("MANUAL_REVIEW", null, false),
+            )) {
+                jdbcTemplate.update(
+                    "UPDATE operations_reprocessing_case SET status = ?, resolution = ? WHERE id = ?",
+                    state,
+                    resolution,
+                    damaged.caseId,
+                )
+                mockMvc
+                    .perform(get(path).with(operatorJwt(approver)).param("caseId", damaged.caseId.toString()))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andExpect(jsonPath("$.items[0].canPropose").value(eligible))
+            }
+            mockMvc
+                .perform(get(path).with(operatorJwt(approver)).param("caseId", UUID.randomUUID().toString()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(0))
+        }
+
+        @Test
+        fun `malformed recovery ownership fails explicitly instead of returning an empty queue`() {
+            val damaged = createMissingRefundCase("directory-invalid-owner")
+            jdbcTemplate.update(
+                "UPDATE operations_reprocessing_case SET owner_reference = ? WHERE id = ?",
+                "order:------------------------------------:customer-cancellation:1:payment-setup",
+                damaged.caseId,
+            )
+            mockMvc
+                .perform(get("/api/v1/operations/payment-setup-recovery-cases").with(operatorJwt(approver)))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
         }
 
         private fun createMissingRefundCase(key: String): DamagedSetup {

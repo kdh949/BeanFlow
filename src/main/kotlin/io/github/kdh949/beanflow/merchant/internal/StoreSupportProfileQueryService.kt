@@ -18,6 +18,19 @@ internal class StoreSupportProfileQueryService(
     private val repository: StoreSupportProfileQueryRepository,
 ) : StoreSupportProfileQueryOperations {
     @Transactional(readOnly = true)
+    override fun findMaskedNames(subjectIds: Set<UUID>): Map<UUID, String> {
+        require(subjectIds.size <= 100)
+        if (subjectIds.isEmpty()) return emptyMap()
+        return try {
+            repository.findMaskedNames(subjectIds).onEach { (_, name) ->
+                if ('*' !in name) throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Support profile name projection is invalid")
+            }
+        } catch (failure: DataAccessException) {
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Support profile names are unavailable").also { it.initCause(failure) }
+        }
+    }
+
+    @Transactional(readOnly = true)
     override fun findByExactIndexes(query: ProtectedProfileExactQuery): List<MaskedStoreSupportProfile> =
         try {
             repository.findByExactIndexes(query).onEach(::requireMasked)
@@ -39,6 +52,16 @@ internal class StoreSupportProfileQueryService(
 internal class StoreSupportProfileQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
+    fun findMaskedNames(subjectIds: Set<UUID>): Map<UUID, String> {
+        val placeholders = subjectIds.joinToString(",") { "?" }
+        return jdbcTemplate
+            .query(
+                "SELECT store_id, masked_display_name FROM merchant_store_support_profile WHERE store_id IN ($placeholders)",
+                { rs, _ -> rs.getObject("store_id", UUID::class.java) to rs.getString("masked_display_name") },
+                *subjectIds.toTypedArray(),
+            ).toMap()
+    }
+
     fun findByExactIndexes(query: ProtectedProfileExactQuery): List<MaskedStoreSupportProfile> {
         val requested = query.indexes.joinToString(",") { "(?, ?)" }
         val matchedColumn =

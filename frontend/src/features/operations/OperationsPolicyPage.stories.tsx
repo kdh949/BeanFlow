@@ -1,5 +1,7 @@
+import { useLocation, useNavigate } from "react-router";
+import { Button } from "../../design-system";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { ids } from "../../../.storybook/fixtures";
 import { OperationsPolicyPage } from "./OperationsPolicyPage";
@@ -77,7 +79,7 @@ export const GlobalPointPolicy: Story = {
   },
 };
 export const IncompleteGlobalPolicy: Story = { parameters: { msw: { handlers: [http.get("/api/v1/operations/policies/ordinary-point-accrual/global", () => HttpResponse.json({ ...pointPolicy, accrualRateBps: undefined }))] } }, play: async ({ canvas }) => { await userEvent.selectOptions(canvas.getByLabelText("정책 조회 사유"), "POLICY_CHANGE_REVIEW"); await userEvent.click(canvas.getByRole("button", { name: "현재 적립 정책 조회" })); await expect(await canvas.findByText("정책 값을 확인하지 못했습니다")).toBeVisible(); await expect(canvas.queryByText("0.00%")).not.toBeInTheDocument(); await expect(canvas.queryByRole("button", { name: "새 적립 정책 적용" })).not.toBeInTheDocument(); } };
-export const StorePointPolicyEntry: Story = { play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("tab", { name: "매장별 포인트" })); await expect(canvas.getByLabelText("포인트를 관리할 매장 ID")).toBeVisible(); } };
+export const StorePointPolicyEntry: Story = { play: async ({ canvas }) => { await userEvent.click(canvas.getByRole("tab", { name: "매장별 포인트" })); await expect(canvas.getByRole("searchbox", { name: "매장 이름 검색" })).toBeVisible(); } };
 
 export const PointPolicyConflict: Story = {
   parameters: {
@@ -149,5 +151,90 @@ export const SearchIndexInProgress: Story = {
     await userEvent.type(canvas.getByLabelText("재생성 사유"), "매장 검색 색인 장애 복구");
     await userEvent.click(canvas.getByRole("button", { name: "검색 색인 재생성" }));
     await expect(await canvas.findByText("요청을 처리하고 있습니다")).toBeVisible();
+  },
+};
+
+export const CostOwnerRegistrationEntry: Story = { parameters: { routing: { path: "/ops/policies", initialEntry: "/ops/policies?workspace=cost-owners" }, msw: { handlers: [http.get("/api/v1/operations/point-cost-issuers", () => HttpResponse.json({ items: [], nextCursor: null, canRegisterPlatform: true }))] } }, play: async ({ canvas }) => { await expect(await canvas.findByLabelText("플랫폼 비용 주체 이름")).toBeVisible(); await expect(canvas.getByRole("tab", { name: "포인트 비용 주체" })).toHaveAttribute("aria-selected", "true"); } };
+export const LostPointPolicyKeepsIssuer: Story = { play: async ({ canvas, msw }) => {
+  const keys: string[] = []; const bodies: unknown[] = [];
+  msw.use(http.patch("/api/v1/operations/policies/ordinary-point-accrual/global", async ({ request }) => { keys.push(request.headers.get("Idempotency-Key")!); bodies.push(await request.json()); if (keys.length === 1) return HttpResponse.error(); expect(keys[1]).toBe(keys[0]); expect(bodies[1]).toEqual(bodies[0]); return HttpResponse.json({ ...pointPolicy, policyVersionId: 13 }); }));
+  await loadPoint(canvas); await userEvent.type(canvas.getByLabelText("변경 사유"), "비용 책임 유지 확인"); await userEvent.click(canvas.getByRole("button", { name: "새 적립 정책 적용" }));
+  await canvas.findByRole("button", { name: "같은 공통 정책 변경 결과 확인" }); await expect(canvas.getByRole("button", { name: "비용 주체 변경" })).toBeDisabled(); await expect(canvas.getByLabelText("적립률(%)")).toBeDisabled(); await expect(canvas.getByRole("tab", { name: "포인트 비용 주체" })).toBeDisabled(); await expect(canvas.getByRole("button", { name: "현재 적립 정책 조회" })).toBeDisabled();
+  await userEvent.click(canvas.getByRole("button", { name: "같은 공통 정책 변경 결과 확인" })); await expect(await canvas.findByText("버전 13 적용 중")).toBeVisible();
+} };
+
+export const LostThenDeniedPolicyKeepsTarget: Story = { play: async ({ canvas, msw }) => {
+  const submitted: { key: string | null; body: unknown }[] = [];
+  msw.use(http.patch("/api/v1/operations/policies/ordinary-point-accrual/global", async ({ request }) => {
+    submitted.push({ key: request.headers.get("Idempotency-Key"), body: await request.json() });
+    if (submitted.length === 1) return HttpResponse.error();
+    expect(submitted.at(-1)).toEqual(submitted[0]);
+    if (submitted.length === 2) return HttpResponse.json({ code: "ACCESS_DENIED", correlationId: "POLICY-RETRY-DENIED" }, { status: 403 });
+    return HttpResponse.json({ ...pointPolicy, policyVersionId: 13 });
+  }));
+  await loadPoint(canvas); await userEvent.type(canvas.getByLabelText("변경 사유"), "비용 책임 유지 확인");
+  await userEvent.click(canvas.getByRole("button", { name: "새 적립 정책 적용" }));
+  await userEvent.click(await canvas.findByRole("button", { name: "같은 공통 정책 변경 결과 확인" }));
+  await canvas.findByText("문의 코드 POLICY-RETRY-DENIED");
+  await expect(canvas.getByRole("button", { name: "비용 주체 변경" })).toBeDisabled();
+  await expect(canvas.getByRole("tab", { name: "매장별 포인트" })).toBeDisabled();
+  await userEvent.click(canvas.getByRole("button", { name: "같은 공통 정책 변경 결과 확인" }));
+  await expect(await canvas.findByText("버전 13 적용 중")).toBeVisible();
+} };
+
+export const LostStorePolicyKeepsWorkspace: Story = { play: async ({ canvas, msw }) => {
+  msw.use(
+    http.get("/api/v1/operations/store-targets", () => HttpResponse.json({ items: [{ storeId: ids.store, name: "빈플로우 성수점" }], nextCursor: null })),
+    http.get("/api/v1/operations/policies/ordinary-point-accrual/stores/:storeId", () => HttpResponse.json({ storeId: ids.store, selectionSource: "GLOBAL_NO_OVERRIDE", effectivePolicy: pointPolicy })),
+    http.patch("/api/v1/operations/policies/ordinary-point-accrual/stores/:storeId", () => HttpResponse.error()),
+  );
+  await userEvent.click(canvas.getByRole("tab", { name: "매장별 포인트" }));
+  await userEvent.click(canvas.getByRole("button", { name: "매장 찾기" }));
+  await userEvent.click(await canvas.findByRole("button", { name: "빈플로우 성수점 선택" }));
+  await userEvent.selectOptions(canvas.getByLabelText("매장 포인트 조회 사유"), "POLICY_CHANGE_REVIEW");
+  await userEvent.click(canvas.getByRole("button", { name: "현재 매장 포인트 정책 조회" }));
+  await userEvent.type(await canvas.findByLabelText("매장 포인트 변경 사유"), "매장 정책 확인");
+  await userEvent.click(canvas.getByRole("button", { name: "매장 포인트 정책 저장" }));
+  await canvas.findByRole("button", { name: "같은 정책 변경 결과 확인" });
+  await expect(canvas.getByRole("button", { name: "다른 매장 찾기" })).toBeDisabled();
+  await expect(canvas.getByRole("tab", { name: "포인트 비용 주체" })).toBeDisabled();
+} };
+
+function PolicyHistoryHarness() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  return <><div className="button-row"><Button onClick={() => void navigate(-1)}>이전 방문 화면</Button><Button onClick={() => void navigate(1)}>다음 방문 화면</Button></div><p role="status">현재 업무 주소: {location.search}</p><OperationsPolicyPage /></>;
+}
+export const HistoryKeepsPendingPolicy: Story = {
+  render: () => <PolicyHistoryHarness />,
+  parameters: { routing: { path: "/ops/policies", initialEntry: "/ops/policies?workspace=brands" } },
+  play: async ({ canvas, msw }) => {
+    const keys: string[] = []; const bodies: unknown[] = [];
+    let release: () => void = () => { throw new Error("Request has not started"); };
+    msw.use(http.get("/api/v1/operations/point-cost-issuers", () => HttpResponse.json({ items: [], nextCursor: null, canRegisterPlatform: true })), http.patch("/api/v1/operations/policies/ordinary-point-accrual/global", async ({ request }) => {
+      keys.push(request.headers.get("Idempotency-Key")!); bodies.push(await request.json());
+      if (keys.length === 1) { await new Promise<void>(resolve => { release = resolve; }); return HttpResponse.error(); }
+      expect(keys[1]).toBe(keys[0]); expect(bodies[1]).toEqual(bodies[0]); return HttpResponse.json({ ...pointPolicy, policyVersionId: 13 });
+    }));
+    await userEvent.click(canvas.getByRole("tab", { name: "포인트 적립" }));
+    await userEvent.click(canvas.getByRole("tab", { name: "포인트 비용 주체" }));
+    await userEvent.click(canvas.getByRole("button", { name: "이전 방문 화면" }));
+    await loadPoint(canvas); await userEvent.type(canvas.getByLabelText("변경 사유"), "화면 이동에도 동일 변경 유지");
+    await userEvent.click(canvas.getByRole("button", { name: "새 적립 정책 적용" }));
+    await waitFor(() => expect(keys).toHaveLength(1));
+    await userEvent.click(canvas.getByRole("button", { name: "이전 방문 화면" }));
+    await expect(await canvas.findByText(/처리 결과를 확인한 후 다시 이동해 주세요/)).toBeVisible();
+    await expect(canvas.getByText("현재 업무 주소: ?workspace=points")).toBeVisible();
+    release();
+    await waitFor(() => expect(canvas.getByRole("button", { name: "같은 공통 정책 변경 결과 확인" })).toBeEnabled());
+    await userEvent.click(canvas.getByRole("button", { name: "다음 방문 화면" }));
+    await expect(canvas.getByText("현재 업무 주소: ?workspace=points")).toBeVisible();
+    await expect(canvas.getByLabelText("변경 사유")).toHaveValue("화면 이동에도 동일 변경 유지");
+    await userEvent.click(canvas.getByRole("button", { name: "같은 공통 정책 변경 결과 확인" }));
+    await expect(await canvas.findByText("버전 13 적용 중")).toBeVisible();
+    await waitFor(() => expect(canvas.getByRole("tab", { name: "포인트 비용 주체" })).toBeEnabled());
+    await userEvent.click(canvas.getByRole("button", { name: "다음 방문 화면" }));
+    await expect(await canvas.findByLabelText("플랫폼 비용 주체 이름")).toBeVisible();
+    await expect(canvas.getByText("현재 업무 주소: ?workspace=cost-owners")).toBeVisible();
   },
 };

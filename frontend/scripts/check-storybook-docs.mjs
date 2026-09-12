@@ -56,7 +56,7 @@ const expectedDocs = new Set([
 
 const statefulDocs = {
   "pages-operations-compensationlookup--docs": {
-    "pages-operations-compensationlookup--idle": "감사 조회 대기",
+    "pages-operations-compensationlookup--idle": "후속 처리 주문 번호",
     "pages-operations-compensationlookup--manual-review": "PROVIDER_TIMEOUT",
     "pages-operations-compensationlookup--successful-lookup": "완료",
     "pages-operations-compensationlookup--recoverable-error": "서비스 연결을 확인하고 있습니다",

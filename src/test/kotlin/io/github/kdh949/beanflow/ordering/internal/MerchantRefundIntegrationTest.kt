@@ -305,6 +305,90 @@ internal class MerchantRefundIntegrationTest
                 ).andExpect(status().isNotFound)
         }
 
+        @Test
+        fun `operator preview is read only and execution uses the same refund with operator audit and replay`() {
+            val order = paidOrder()
+            val actor = UUID.randomUUID()
+            val before = auditCount()
+            val preview = json(operatorRequest(actor, order, "refund-previews", selection(1)).andExpect(status().isOk))
+            assertThat(preview["lines"].single()["cashRefundKrw"].asLong()).isEqualTo(1_000)
+            assertThat(preview.toString()).doesNotContain("paymentId", "customerId", "orderLineId")
+            assertThat(refundCount()).isZero()
+            assertThat(auditCount()).isEqualTo(before)
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isZero()
+            paymentGateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("operator-preview-refund"))
+            val body = operatorRefundBody(preview["previewVersion"].asText())
+            val first = operatorRequest(actor, order, "refunds", body).andExpect(status().isOk).andReturn().response
+            val replay = operatorRequest(actor, order, "refunds", body).andExpect(status().isOk).andReturn().response
+            assertThat(replay.contentAsString).isEqualTo(first.contentAsString)
+            assertThat(refundCount()).isEqualTo(1)
+            assertThat(lastRefundAuditActorType()).isEqualTo("PLATFORM_OPERATOR")
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isEqualTo(1)
+        }
+
+        @Test
+        fun `operator selection requires a current preview after a merchant refund`() {
+            val order = paidOrder()
+            val actor = UUID.randomUUID()
+            val owner = merchantActor(order.storeId, "OWNER", "ACTIVE")
+            val preview = json(operatorRequest(actor, order, "refund-previews", selection(1)).andExpect(status().isOk))
+            paymentGateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("merchant-before-operator"))
+            refund(owner, order, selection(1), previewVersion(owner, order), "merchant-before-operator").andExpect(status().isOk)
+            operatorRequest(actor, order, "refunds", operatorRefundBody(preview["previewVersion"].asText()))
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("REFUND_PREVIEW_STALE"))
+            assertThat(refundCount()).isEqualTo(1)
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isEqualTo(1)
+        }
+
+        @Test
+        fun `operator cannot preview another stores reference or bypass actor authentication`() {
+            val order = paidOrder()
+            val actor = UUID.randomUUID()
+            operatorRequest(actor, order.copy(storeId = UUID.randomUUID()), "refund-previews", "{}")
+                .andExpect(status().isForbidden)
+            for (role in listOf("CUSTOMER", "MERCHANT", "STORE_STAFF")) {
+                operatorRequest(actor, order, "refund-previews", "{}", role).andExpect(status().isForbidden)
+                operatorRequest(actor, order, "refunds", operatorRefundBody("a".repeat(64)), role).andExpect(status().isForbidden)
+            }
+            assertThat(refundCount()).isZero()
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isZero()
+        }
+
+        @Test
+        fun `operator unresolved refund blocks fresh previews without creating another refund`() {
+            val order = paidOrder()
+            val actor = UUID.randomUUID()
+            val preview = json(operatorRequest(actor, order, "refund-previews", "{}").andExpect(status().isOk))
+            paymentGateway.enqueueRejectionRefund(GatewayRefundResult.Unknown("provider outcome unknown"))
+            operatorRequest(actor, order, "refunds", operatorRefundBody(preview["previewVersion"].asText()))
+                .andExpect(status().isAccepted)
+                .andExpect(jsonPath("$.state").value("UNKNOWN"))
+            operatorRequest(actor, order, "refund-previews", "{}")
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("REFUND_OUTCOME_UNRESOLVED"))
+            assertThat(refundCount()).isEqualTo(1)
+            assertThat(paymentGateway.rejectionRefundCalls.get()).isEqualTo(1)
+        }
+
+        private fun operatorRefundBody(version: String) =
+            """{"lines":[{"lineSequence":0,"quantity":1}],"previewVersion":"$version","reason":"고객 문의 확인 후 환불"}"""
+
+        private fun operatorRequest(
+            actor: UUID,
+            order: PaidOrder,
+            operation: String,
+            body: String,
+            role: String = "PLATFORM_OPERATOR",
+        ): ResultActions =
+            mockMvc.perform(
+                post("/api/v1/operations/stores/${order.storeId}/orders/${order.reference}/$operation")
+                    .with(jwt().jwt { it.subject(actor.toString()) }.authorities(SimpleGrantedAuthority("ROLE_$role")))
+                    .header("Idempotency-Key", "operator-refund-key-0001")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(body),
+            )
+
         private fun selection(quantity: Long) = """{"lines":[{"lineSequence":0,"quantity":$quantity}]}"""
 
         private fun preview(

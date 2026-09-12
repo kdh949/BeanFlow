@@ -94,6 +94,127 @@ internal class PostAcceptanceResolutionIntegrationTest
             gateway.reset()
         }
 
+        @Test
+        fun `planned resolution follows reassignment after executor permission revocation`() {
+            val fixture = seed(PostAcceptanceState.PREPARING, PostAcceptanceResolutionOutcome.NO_MONETARY_RESOLUTION, cashRefundKrw = 0)
+            val resolutionId = create(fixture, "plan-before-reassignment").andReturn().resolutionId()
+            val nextActor = UUID.randomUUID()
+            val actorPermissions =
+                mapOf(
+                    EXECUTOR_ID to listOf("SUPPORT_CASE_ASSIGN"),
+                    nextActor to listOf("SUPPORT_CASE_READ", "SUPPORT_CASE_WRITE", "SUPPORT_ACTION_EXECUTE", "SUPPORT_RESOLUTION_EXECUTE"),
+                )
+            actorPermissions.forEach { (actor, permissions) ->
+                permissions.forEach { permission ->
+                    jdbc.update(
+                        "INSERT INTO operations_operator_permission_grant " +
+                            "(actor_id, permission, state, granted_at, version, audit_source_reference) VALUES (?, ?, 'ACTIVE', now(), 1, ?)",
+                        actor,
+                        permission,
+                        "reassignment:${UUID.randomUUID()}",
+                    )
+                }
+            }
+            jdbc.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
+                    "WHERE actor_id = ? AND permission = 'SUPPORT_RESOLUTION_EXECUTE'",
+                EXECUTOR_ID,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.request.state").value("REASSIGNMENT_REQUIRED"))
+            mockMvc
+                .perform(
+                    post("/api/v1/support/action-requests/${fixture.requestId}/reassignments")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) })
+                        .header("Idempotency-Key", "planned-resolution-reassignment")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            """{"revisionNumber":1,"expectedRequestVersion":1,"expectedCaseVersion":0,"assigneeId":"$nextActor","reason":"실행 권한 회수 후 인계"}""",
+                        ),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.executorActorId").value(nextActor.toString()))
+            assertThat(value("SELECT command_actor_id::text FROM support_post_acceptance_resolution WHERE id = ?", resolutionId))
+                .isEqualTo(EXECUTOR_ID.toString())
+            mockMvc
+                .perform(
+                    post("/api/v1/support/post-acceptance-resolutions/$resolutionId/executions")
+                        .with(jwt().jwt { it.subject(nextActor.toString()) })
+                        .header("Idempotency-Key", "execute-reassigned-plan")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"expectedResolutionVersion":1,"expectedRequestVersion":2,"expectedOrderVersion":$ORDER_VERSION}"""),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.resolutionId").value(resolutionId.toString()))
+                .andExpect(jsonPath("$.state").value("RESOLVED"))
+            assertThat(value("SELECT executor_actor_id::text FROM support_post_acceptance_resolution WHERE id = ?", resolutionId))
+                .isEqualTo(nextActor.toString())
+        }
+
+        @Test
+        fun `workflow locates planned resolution and preserves authorized follow up after approval consumption`() {
+            val fixture = seed(PostAcceptanceState.PREPARING, PostAcceptanceResolutionOutcome.NO_MONETARY_RESOLUTION, cashRefundKrw = 0)
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions[0]").value("EXECUTE"))
+                .andExpect(jsonPath("$.resolutionId").isEmpty)
+                .andExpect(jsonPath("$.order.version").value(ORDER_VERSION))
+                .andExpect(jsonPath("$.order.customerId").doesNotExist())
+            val resolutionId = create(fixture, "workflow-planned-resolution").andReturn().resolutionId()
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.resolutionId").value(resolutionId.toString()))
+            execute(fixture, resolutionId, "workflow-consumed-resolution").andExpect(status().isOk)
+            jdbc.update(
+                "UPDATE support_action_revision SET expires_at = created_at + interval '1 microsecond' WHERE request_id = ?",
+                fixture.requestId,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.allowedActions[0]").value("ADVANCE_RESOLUTION"))
+                .andExpect(jsonPath("$.request.terminalResolutionId").value(resolutionId.toString()))
+            jdbc.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_RESOLUTION_EXECUTE'",
+                EXECUTOR_ID,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+        }
+
+        @Test
+        fun `resolution request permission cannot replace execution permission`() {
+            val fixture = seed(PostAcceptanceState.PREPARING, PostAcceptanceResolutionOutcome.NO_MONETARY_RESOLUTION, cashRefundKrw = 0)
+            jdbc.update(
+                "UPDATE operations_operator_permission_grant SET permission = 'SUPPORT_RESOLUTION_REQUEST' " +
+                    "WHERE actor_id = ? AND permission = 'SUPPORT_RESOLUTION_EXECUTE'",
+                EXECUTOR_ID,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.request.state").value("REASSIGNMENT_REQUIRED"))
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+            create(fixture, "request-only-cannot-execute").andExpect(status().isForbidden)
+        }
+
         @ParameterizedTest
         @EnumSource(PostAcceptanceState::class)
         fun `post acceptance state matrix resolves without rewriting order facts`(state: PostAcceptanceState) {
@@ -484,6 +605,16 @@ internal class PostAcceptanceResolutionIntegrationTest
                 caseId,
                 EXECUTOR_ID,
                 Timestamp.from(now),
+                Timestamp.from(now),
+            )
+            jdbc.update(
+                "INSERT INTO support_case_assignment_history " +
+                    "(id, support_case_id, sequence, previous_assignee_id, current_assignee_id, actor_id, case_version, occurred_at) " +
+                    "VALUES (?, ?, 0, NULL, ?, ?, 0, ?)",
+                UUID.randomUUID(),
+                caseId,
+                EXECUTOR_ID,
+                REQUESTER_ID,
                 Timestamp.from(now),
             )
             val customerLinkId = UUID.randomUUID()

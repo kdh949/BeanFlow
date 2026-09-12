@@ -18,6 +18,31 @@ RETRY_SCHEDULED | SUCCEEDED | NOT_REQUIRED | UNKNOWN | RECONCILING | MANUAL_REVI
 `UNDETERMINED`에서도 승인된 고객 Refund와 원혜택 restoration은 진행할 수 있지만 cost-attribution/
 Settlement step은 `BLOCKED`로 남는다. Store/Platform cost owner를 자동 추정하지 않는다.
 
+### Store confirmation query amendment (2026-09-11)
+
+매장 점주·직원은 자신의 ACCEPTED 주문에 대한 요청 ID로 현재 승인안의 작업·주문·버전·digest·만료만
+조회할 수 있다. 상담 내용, 본인확인 세션, 증거와 상담원 식별자는 이 조회에 포함하지 않는다.
+조회는 동의를 생성하거나 budget을 소비하지 않으며, 건별 동의 명령은 현재 binding과 서로 다른 actor를
+다시 검증한다. 화면에서 STORE 비용 책임을 명시 수락한 경우에만 동의 또는 한시 위임을 제출한다.
+
+### 상담 화면의 해결 후속 조회
+
+승인 workflow는 기존 조회 권한 안에서 생성된 Resolution ID와 현재 주문 버전을 반환한다.
+이미 소비된 승인안의 만료와 금융 후속 처리는 구분하며, 현재 Case 담당자·실행 권한을 가진
+실행자는 기존 Resolution의 진행 또는 안전한 환불 LOOKUP을 요청할 수 있다. 각 명령은
+현재 버전과 관계를 다시 검증한다. `SUPPORT_RESOLUTION_EXECUTE`를 가진 조회자는 기존 해결
+응답이 이미 노출하는 주문 ID·상태·버전의 현재 값만 조회할 수 있으며 개인정보는 반환하지 않는다.
+승인 요청의 실행 권한 재검사와 재배정도 S80 명령과 동일하게 `SUPPORT_RESOLUTION_EXECUTE`를
+검사한다. 요청 권한 `SUPPORT_RESOLUTION_REQUEST`는 실행 권한을 대신하지 않는다.
+화면은 금융 4단계와 고객 알림 상태를 구분한다.
+
+### Planned resolution reassignment amendment (2026-09-12)
+
+S60 실행자 재배정은 연결된 해결 건이 `PLANNED`인 경우 그 실행자도 같은 트랜잭션에서 변경한다.
+잠금 순서는 기존 첫 실행과 동일한 Request → SupportCase → Resolution이며, 원 계획 작성자
+`commandActorId` 및 승인 revision은 보존한다. 실행을 시작한 해결 건은 재배정할 수 없다.
+현재 실행 권한 회수로 `REASSIGNMENT_REQUIRED`가 된 경우에도 동일한 계획으로 복구할 수 있다.
+
 ## Alternatives Considered
 
 - 기존 customer endpoint impersonation: actor/audit/permission 오류로 기각.

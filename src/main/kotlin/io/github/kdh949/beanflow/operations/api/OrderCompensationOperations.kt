@@ -85,6 +85,18 @@ data class OperatorCompensationView(
     val setupReprocessingCaseId: UUID? = null,
 )
 
+data class OperatorOrderCompensationView(
+    val order: OrderInvestigationTarget,
+    val followUp: OperatorCompensationView,
+)
+
+data class ReadOperatorCompensationByReferenceCommand(
+    val actorId: UUID,
+    val orderReference: String,
+    val accessReason: String,
+    val now: Instant,
+)
+
 data class PaymentSetupIssue(
     val state: String = "SETUP_INCOMPLETE",
     val missingArtifacts: Set<PaymentCancellationSetupMissingArtifact> = emptySet(),
@@ -102,6 +114,8 @@ data class ReadOperatorCompensationCommand(
 
 interface OperatorCompensationQueryOperations {
     fun read(command: ReadOperatorCompensationCommand): OperatorCompensationView
+
+    fun readByReference(command: ReadOperatorCompensationByReferenceCommand): OperatorOrderCompensationView
 }
 
 data class OpenOrderCompensationCaseCommand(

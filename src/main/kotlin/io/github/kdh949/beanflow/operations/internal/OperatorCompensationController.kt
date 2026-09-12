@@ -2,11 +2,14 @@ package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationQueryOperations
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationView
+import io.github.kdh949.beanflow.operations.api.ReadOperatorCompensationByReferenceCommand
 import io.github.kdh949.beanflow.operations.api.ReadOperatorCompensationCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.OperatorActor
 import jakarta.validation.constraints.Size
+import org.springframework.http.CacheControl
+import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
@@ -46,4 +49,24 @@ internal class OperatorCompensationController(
         } catch (_: RuntimeException) {
             throw DomainFailure(FailureCode.ACCESS_DENIED, "Authenticated subject is not a valid operator actor ID")
         }
+}
+
+@Validated
+@RestController
+@RequestMapping("/api/v1/operations/order-compensations")
+internal class OperatorPublicCompensationController(
+    private val query: OperatorCompensationQueryOperations,
+    private val clock: Clock,
+) {
+    @GetMapping("/{orderReference}")
+    @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
+    fun get(
+        actor: OperatorActor,
+        @PathVariable @Size(min = 12, max = 12) orderReference: String,
+        @RequestHeader("X-Access-Reason") @Size(min = 1, max = 200) accessReason: String,
+    ) = ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
+        query.readByReference(
+            ReadOperatorCompensationByReferenceCommand(actor.actorId, orderReference, accessReason, clock.instant()),
+        ),
+    )
 }

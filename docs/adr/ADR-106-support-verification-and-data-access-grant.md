@@ -108,6 +108,14 @@ reason, proof, raw/ciphertext/digest/provider reference는 label이나 log에 �
 상용 KYC/identity Provider 선정, fraud/abuse 데이터, verification completion rate, legal/privacy review 또는
 multi-region challenge/reveal 요구가 확정될 때.
 
+## 2026-09-11: 승인 인계와 현재 상태 조회
+
+`GET /support/data-access-grants/{grantId}`는 원문 없는 Grant 메타데이터와 요청자/승인자 역할만 반환한다.
+요청자는 현재 Case 담당 및 REQUEST/위험 등급별 REVEAL 권한을, 다른 담당자는 APPROVE 권한을 요구한다.
+활성 Case와 연결을 다시 확인하며, 만료된 ACTIVE는 조회 시 EXPIRED로 투영한다. 조회는 열람 예산이나
+감사상 원문 접근을 만들지 않으며 `no-store`를 유지한다. 기존 승인과 원문 열람 명령의 권한 경계를 넓히지 않는다.
+화면은 현재 버전으로 별도 승인자 결정을 보내며 원문 응답을 재요청용 상태에 보관하지 않는다.
+
 ## Related Decisions
 
 ADR-009, ADR-022, ADR-069, ADR-081, ADR-082, ADR-083, ADR-084, ADR-089.

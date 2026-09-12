@@ -66,6 +66,15 @@ internal class ProtectedSupportProfileQueryIntegrationTest
         }
 
         @Test
+        fun `masked names use only explicitly requested owner identifiers`() {
+            val absent = UUID.randomUUID()
+            assertThat(customers.findMaskedNames(setOf(customerId, absent))).containsExactlyEntriesOf(mapOf(customerId to "홍*동"))
+            assertThat(stores.findMaskedNames(setOf(storeId, absent))).containsExactlyEntriesOf(mapOf(storeId to "빈*우"))
+            assertThat(couriers.findMaskedNames(setOf(courierId, absent))).hasSize(1).containsKey(courierId)
+            assertThat(customers.findMaskedNames(emptySet())).isEmpty()
+        }
+
+        @Test
         fun `each owner returns only masked projections for the exact digest and version`() {
             val query = ProtectedProfileExactQuery(ExactSearchCriterionType.EMAIL, listOf(BlindIndex(3, digest)), 21)
 

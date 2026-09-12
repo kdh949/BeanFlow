@@ -124,7 +124,12 @@ internal interface BreakGlassRequestJpaRepository : JpaRepository<BreakGlassRequ
     ): UUID?
 }
 
-internal interface BreakGlassDecisionJpaRepository : JpaRepository<BreakGlassDecisionEntity, UUID>
+internal interface BreakGlassDecisionJpaRepository : JpaRepository<BreakGlassDecisionEntity, UUID> {
+    fun findByRequestIdAndDecisionType(
+        requestId: UUID,
+        decisionType: String,
+    ): BreakGlassDecisionEntity?
+}
 
 internal interface SecurityNotificationIntentJpaRepository : JpaRepository<SecurityNotificationIntentEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)

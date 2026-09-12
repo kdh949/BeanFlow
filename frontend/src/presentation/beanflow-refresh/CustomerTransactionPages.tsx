@@ -147,6 +147,7 @@ export function RefreshCustomerOrderDetailPage() {
         {order.status === "PENDING_PAYMENT" ? <ButtonLink variant="brand" block to={`/app/orders/${order.orderReference}/checkout`}>결제 확인·이어하기</ButtonLink> : null}
         {order.allowedActions.includes("CANCEL") ? <RefreshCancelAction order={order} onDone={reload} /> : null}
         {order.allowedActions.includes("REORDER") ? <RefreshReorderAction order={order} /> : null}
+        <ButtonLink block variant="secondary" to={`/app/support/new?orderReference=${encodeURIComponent(order.orderReference)}`}>이 주문 문의하기</ButtonLink>
         <Button block variant="ghost" onClick={reload}><RefreshCw size={16} />새로고침</Button>
       </div>
     </div>

@@ -49,6 +49,30 @@ internal class SupportCaseIdempotencyRetentionCleanup(
     private companion object {
         const val MAX_BATCH_SIZE = 1_000
     }
+
+    @Transactional
+    fun deleteExpiredInquiryCommands(
+        now: Instant,
+        batchSize: Int,
+    ): Int {
+        require(batchSize in 1..MAX_BATCH_SIZE)
+        return jdbcTemplate
+            .queryForObject(
+                """WITH candidates AS (
+                SELECT actor_id, operation, idempotency_key FROM support_customer_inquiry_command
+                WHERE expires_at <= ? ORDER BY expires_at, actor_id, operation, idempotency_key
+                FOR UPDATE SKIP LOCKED LIMIT ?
+            ), deleted AS (
+                DELETE FROM support_customer_inquiry_command command USING candidates
+                WHERE command.actor_id = candidates.actor_id AND command.operation = candidates.operation
+                  AND command.idempotency_key = candidates.idempotency_key RETURNING command.actor_id
+            ) SELECT count(*) FROM deleted""",
+                Long::class.java,
+                Timestamp.from(now),
+                batchSize,
+            )!!
+            .toInt()
+    }
 }
 
 @Component
@@ -64,5 +88,6 @@ internal class SupportCaseIdempotencyRetentionWorker(
     )
     fun cleanupExpired() {
         cleanup.deleteExpired(clock.instant(), batchSize)
+        cleanup.deleteExpiredInquiryCommands(clock.instant(), batchSize)
     }
 }

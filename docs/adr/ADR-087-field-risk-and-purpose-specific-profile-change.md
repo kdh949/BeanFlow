@@ -48,6 +48,19 @@ Audit 또는 Support response에 저장하지 않는다. Profile/Audit commit �
 correlation을 보존하고 `PROCESSING` claim lease를 사용한다. delivery owner commit 뒤 acknowledgement 전 장애는 만료
 claim reconciliation이 같은 logical source의 기존 delivery id에 재결합하며 owner profile write를 반복하지 않는다.
 
+### 상담 화면의 현재 조건 조회 (2026-09-11)
+
+현재 Case 담당자와 active subject link, 목적에 해당하는 지속 권한을 확인한 뒤 profile context 조회는
+소유 모듈의 현재 버전·목적·위험 등급·필요 인증 수준만 제공한다. 현재 원문을 반환하거나 수정하지 않는다.
+기존 정정 건의 workflow는 기존 열람 권한에 따라 마스킹 결과와 exact 승인안, 현재 Case/owner version,
+허용된 명령을 제공한다. 현재 검증·권한·별도 승인과 owner version은 모든 쓰기에서 다시 확인한다.
+운영 조사는 exact Support request/revision으로 조회하고 현재 독립된 reviewer만 결정할 수 있다.
+
+브라우저는 입력 원문을 제출·화면 이탈 후 지우고 URL/storage에 기록하지 않는다. 응답이 불명확하면
+원문 대신 같은 요청의 해시와 멱등키를 유지하며, 동일 내용을 재입력한 경우에만 같은 명령을 확인한다.
+R3/R4 승인 후 실행에도 기존 정책대로 typed 값을 다시 입력하고 고정된 digest와 대조한다.
+알림 계약은 서버의 `NOT_REQUESTED`·`PROCESSING`을 포함하여 미요청·처리 중·접수·재시도를 구분한다.
+
 ## Alternatives Considered
 
 - Support-owned JSON profile: source-of-truth divergence로 기각.

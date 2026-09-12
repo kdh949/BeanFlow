@@ -18,6 +18,7 @@ import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -71,6 +72,31 @@ internal class SupportActionEvaluationIntegrationTest
             grant("SUPPORT_ORDER_READ")
             grant("SUPPORT_ACTION_REQUEST")
             grant("SUPPORT_ORDER_CANCEL")
+        }
+
+        @Test
+        fun `order context enforces current assigned case and link without personal fields`() {
+            val path = "/api/v1/support/cases/$caseId/orders/$orderId"
+            val response =
+                mockMvc
+                    .perform(get(path).with(jwt().jwt { it.subject(actorId.toString()) }))
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.orderId").value(orderId.toString()))
+                    .andExpect(jsonPath("$.storeId").value(fixture.storeId.toString()))
+                    .andExpect(jsonPath("$.state").value("PENDING_PAYMENT"))
+                    .andExpect(jsonPath("$.version").value(0))
+                    .andReturn()
+                    .response.contentAsString
+            assertThat(response).doesNotContain("customerId", "phone", "email", "verification")
+            jdbcTemplate.update("UPDATE support_case SET current_assignee_id = ? WHERE id = ?", UUID.randomUUID(), caseId)
+            mockMvc.perform(get(path).with(jwt().jwt { it.subject(actorId.toString()) })).andExpect(status().isForbidden)
+            jdbcTemplate.update("UPDATE support_case SET current_assignee_id = ? WHERE id = ?", actorId, caseId)
+            jdbcTemplate.update(
+                "UPDATE support_case_subject_link SET unlinked_at = now(), unlinked_by_actor_id = linked_by_actor_id, unlink_case_version = 1, unlink_reason = 'INCORRECT_LINK' WHERE id = ?",
+                orderLinkId,
+            )
+            mockMvc.perform(get(path).with(jwt().jwt { it.subject(actorId.toString()) })).andExpect(status().isForbidden)
         }
 
         @Test

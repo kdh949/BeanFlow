@@ -62,6 +62,10 @@ export const StoreBusinessTabs: Story = {
   play: async ({ canvas }) => { await open(canvas); await userEvent.click(canvas.getByRole("tab", { name: "정산 계약" })); await expect(await canvas.findByText("등록된 정산 계약이 없습니다")).toBeVisible(); await userEvent.click(canvas.getByRole("tab", { name: "점주·직원 소속" })); await expect(await canvas.findByText("등록된 소속이 없습니다")).toBeVisible(); },
 };
 export const StorePointPolicyTab: Story = { play: async ({ canvas }) => { await open(canvas); await userEvent.click(canvas.getByRole("tab", { name: "포인트 정책" })); await expect(canvas.getByRole("button", { name: "현재 매장 포인트 정책 조회" })).toBeVisible(); } };
+export const StoreMediaTab: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/operations/stores/:storeId/image", () => HttpResponse.json({})), http.get("/api/v1/operations/stores/:storeId/media-menus", () => HttpResponse.json({ items: [], nextCursor: null })), ...handlers] } },
+  play: async ({ canvas }) => { await open(canvas); await userEvent.click(canvas.getByRole("tab", { name: "매장·메뉴 이미지" })); await expect(await canvas.findByRole("heading", { name: "매장 대표 이미지" })).toBeVisible(); await expect(await canvas.findByText("해당 범위의 메뉴가 없습니다")).toBeVisible(); },
+};
 
 const onlyPurpose = (purpose: string) => [
   http.get("/api/v1/operations/store-targets", ({ request }) => new URL(request.url).searchParams.get("purpose") === purpose ? HttpResponse.json({ items: [{ storeId: ids.store, name: initial.name }], nextCursor: null }) : HttpResponse.json({ code: "ACCESS_DENIED" }, { status: 403 })),
@@ -88,3 +92,20 @@ export const BrandPermissionOnly: Story = { parameters: { msw: { handlers: onlyP
   await expect(await canvas.findByText("현재 소속 브랜드가 없습니다.")).toBeVisible();
   await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
 } };
+
+export const MediaPermissionOnly: Story = { parameters: { msw: { handlers: [
+  http.get("/api/v1/operations/stores/:storeId/image", () => HttpResponse.json({})),
+  http.get("/api/v1/operations/stores/:storeId/media-menus", () => HttpResponse.json({ items: [], nextCursor: null })),
+  ...onlyPurpose("MEDIA"),
+] } }, play: async ({ canvas }) => {
+  await userEvent.selectOptions(canvas.getByLabelText("매장 관리 목적"), "MEDIA");
+  await userEvent.click(await canvas.findByRole("button", { name: "성수 카페 관리" }));
+  await expect(await canvas.findByRole("heading", { name: "매장 대표 이미지" })).toBeVisible();
+  await expect(await canvas.findByText("해당 범위의 메뉴가 없습니다")).toBeVisible();
+  await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
+} };
+
+export const MembershipAssignmentPermissionOnly: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/operations/store-targets", ({ request }) => new URL(request.url).searchParams.get("purpose") === "MEMBERSHIP_ASSIGNMENT" ? HttpResponse.json({ items: [{ storeId: ids.store, name: "소속 추가 대상 매장" }] }) : HttpResponse.json({ code: "ACCESS_DENIED" }, { status: 403 })), http.get("/api/v1/operations/stores/:storeId/identity", () => { throw new Error("Identity grant is not part of assignment"); }), http.get("/api/v1/operations/stores/:storeId/memberships", () => { throw new Error("Read grant is not part of assignment"); })] } },
+  play: async ({ canvas }) => { await userEvent.selectOptions(canvas.getByLabelText("매장 관리 목적"), "MEMBERSHIP_ASSIGNMENT"); await userEvent.click(await canvas.findByRole("button", { name: "소속 추가 대상 매장 관리" })); await expect(await canvas.findByLabelText("추가할 계정 로그인 ID")).toBeVisible(); },
+};
