@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, waitFor } from "storybook/test";
 import { http, HttpResponse } from "msw";
 import { ids } from "../../../.storybook/fixtures";
 import { StorePointPolicyWorkspace } from "./StorePointPolicyWorkspace";
@@ -20,3 +20,17 @@ export const RestoreInheritance: Story = { beforeEach: () => { head = { ...polic
 export const Conflict: Story = { parameters: { msw: { handlers: [http.patch("/api/v1/operations/policies/ordinary-point-accrual/stores/:storeId", () => HttpResponse.json({ code: "ORDER_STATE_CONFLICT" }, { status: 409 })), ...handlers] } }, play: async ({ canvas }) => { await load(canvas); await userEvent.type(canvas.getByLabelText("매장 포인트 변경 사유"), "명시적 공통 상속"); await userEvent.click(canvas.getByRole("button", { name: "매장 포인트 정책 저장" })); await expect(await canvas.findByText("현재 상태와 요청이 맞지 않습니다")).toBeVisible(); } };
 export const Forbidden: Story = { parameters: { msw: { handlers: [http.get("/api/v1/operations/policies/ordinary-point-accrual/stores/:storeId", () => HttpResponse.json({ code: "ACCESS_DENIED" }, { status: 403 }))] } }, play: async ({ canvas }) => { await userEvent.selectOptions(canvas.getByLabelText("매장 포인트 조회 사유"), "POLICY_CHANGE_REVIEW"); await userEvent.click(canvas.getByRole("button", { name: "현재 매장 포인트 정책 조회" })); await expect(await canvas.findByRole("alert")).toBeVisible(); await expect(canvas.queryByText("실제 적립률 0.00%")).not.toBeInTheDocument(); await expect(canvas.queryByRole("button", { name: "매장 포인트 정책 저장" })).not.toBeInTheDocument(); } };
 export const LostResponse: Story = { parameters: { msw: { handlers: [http.patch("/api/v1/operations/policies/ordinary-point-accrual/stores/:storeId", async ({ request }) => { if (!key) { key = request.headers.get("Idempotency-Key"); return HttpResponse.error(); } expect(request.headers.get("Idempotency-Key")).toBe(key); head = { ...policy, state: "INHERIT_GLOBAL", scopeType: "STORE", policyVersionId: 13 }; return HttpResponse.json(head); }), ...handlers] } }, play: async ({ canvas }) => { await load(canvas); await userEvent.type(canvas.getByLabelText("매장 포인트 변경 사유"), "공통 정책 상속 확인"); await userEvent.click(canvas.getByRole("button", { name: "매장 포인트 정책 저장" })); await expect(await canvas.findByRole("alert")).toBeVisible(); await expect(canvas.getByLabelText("매장 포인트 변경 사유")).toBeDisabled(); await expect(canvas.getByRole("button", { name: "현재 매장 포인트 정책 조회" })).toBeDisabled(); await userEvent.click(canvas.getByRole("button", { name: "같은 정책 변경 결과 확인" })); await expect(await canvas.findByText("명시적으로 공통 정책 상속")).toBeVisible(); } };
+
+let terminalCalls = 0;
+export const KeyReusedAfterLostResponse: Story = {
+  beforeEach: () => { terminalCalls = 0; },
+  parameters: { msw: { handlers: [http.patch("/api/v1/operations/policies/ordinary-point-accrual/stores/:storeId", ({ request }) => {
+    terminalCalls++; if (terminalCalls === 1) { key = request.headers.get("Idempotency-Key"); return HttpResponse.error(); }
+    expect(request.headers.get("Idempotency-Key")).toBe(key); return HttpResponse.json({ code: "IDEMPOTENCY_KEY_REUSED", correlationId: "POLICY-KEY-REUSED" }, { status: 409 });
+  }), ...handlers] } },
+  play: async ({ canvas }) => { await load(canvas); await userEvent.type(canvas.getByLabelText("매장 포인트 변경 사유"), "정책 변경 확인"); await userEvent.click(canvas.getByRole("button", { name: "매장 포인트 정책 저장" })); await userEvent.click(await canvas.findByRole("button", { name: "같은 정책 변경 결과 확인" })); await expect(await canvas.findByText("문의 코드 POLICY-KEY-REUSED")).toBeVisible(); await waitFor(() => expect(canvas.getByLabelText("매장 포인트 변경 사유")).toBeEnabled()); await expect(canvas.queryByRole("button", { name: "같은 정책 변경 결과 확인" })).not.toBeInTheDocument(); },
+};
+export const ManualReviewIsTerminal: Story = {
+  parameters: { msw: { handlers: [http.patch("/api/v1/operations/policies/ordinary-point-accrual/stores/:storeId", () => HttpResponse.json({ code: "IDEMPOTENCY_MANUAL_REVIEW_REQUIRED", correlationId: "POLICY-MANUAL-REVIEW" }, { status: 409 })), ...handlers] } },
+  play: async ({ canvas }) => { await load(canvas); await userEvent.type(canvas.getByLabelText("매장 포인트 변경 사유"), "정책 확인"); await userEvent.click(canvas.getByRole("button", { name: "매장 포인트 정책 저장" })); await expect(await canvas.findByText("문의 코드 POLICY-MANUAL-REVIEW")).toBeVisible(); await waitFor(() => expect(canvas.getByLabelText("매장 포인트 변경 사유")).toBeEnabled()); await expect(canvas.queryByRole("button", { name: "같은 정책 변경 결과 확인" })).not.toBeInTheDocument(); },
+};

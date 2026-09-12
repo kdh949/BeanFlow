@@ -259,3 +259,12 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - Passed: PostgreSQL 조정 17 + 준비/재진입/경합/원자 rollback 8 + runtime API parity 1 + Modulith 1 = 27개. 프론트엔드 단위 245개, typecheck, 디자인 검사, Storybook/앱 빌드, Sites 4개, Docs smoke 110개, 관련 MCP Story 30개(a11y 포함), 문서/OpenAPI 검사. 초기 타입·Story fixture/대기·구조 오류를 수정한 뒤 통과했다.
 - Not run: 실제 운영 DB 변경, 배포. #170 원격 CI와 리뷰 해결은 push 후 확인한다.
 - #160–#168의 33개 원본 리뷰는 해당 head의 terminal CI 후 간결한 수정 답변과 함께 해결했다. #169는 CI 완료(변경 없는 backend job은 SKIPPED), 원본 리뷰 없음.
+
+### #171 업무별 대상 선택과 정책 명령 오류 (2026-09-12)
+
+- 공용 매장 picker를 목적별 최소 목록으로 전환했다. 소속 추가·점주 계정 관리·이의 조회·환불은 각 기존 업무 권한만 사용한다. 소속 추가는 STORE_MEMBERSHIP_WRITE 전용 화면과 정확 계정 projection으로 기존 목록 READ·credential 관리 grant 없이 완료한다.
+- 조회와 보안 Audit는 같은 트랜잭션이며 불필요한 인증/타 매장 소속을 조회하거나 반환하지 않는다. 새 DDL/production dependency 없음.
+- 정책 KEY_REUSED/MANUAL_REVIEW_REQUIRED는 확정 오류로 안내하고 잠금을 해제한다. 기존 불명 결과와 REQUEST_IN_PROGRESS는 같은 요청을 유지한다.
+- Passed: PostgreSQL 소속 8 + 최소 매장 권한/커서 19 + runtime parity 1 = 28개. 프론트엔드 단위 245개, typecheck, 디자인 검사, Storybook/앱 빌드, Sites 4개, Docs smoke 111개, 관련 MCP 77개 및 #170 재시도 보완 포함 총 102개(a11y 포함), 문서/OpenAPI 검사.
+- #170 CI의 응답 대기 전 버튼 클릭 race를 2a002f4에서 보완했다. 활성화 이후 클릭하며 원래 payload/key 검증은 유지한다. 새 CI 결과를 확인한 뒤 리뷰를 해결한다.
+- Not run: 운영 DB 변경, 배포. #171 원격 CI와 리뷰 해결은 push 후 확인한다.
