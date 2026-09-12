@@ -4,7 +4,7 @@ import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
 import { StorefrontImageEditorView } from "../shared/StorefrontImageEditorView";
 
 /** Merchant image authoring uses only the session client and merchant CSRF. */
-export function StorefrontImageEditor({ storeId, menuId, label }: { storeId: string; menuId?: string; label: string }) {
+export function StorefrontImageEditor({ storeId, menuId, label, onBusyChange }: { storeId: string; menuId?: string; label: string; onBusyChange?: (busy: boolean) => void }) {
   const loadImage = useCallback(async () => menuId
     ? unwrap(await merchantApi.GET("/stores/{storeId}/menus/{menuId}/image", { params: { path: { storeId, menuId } } }))
     : unwrap(await merchantApi.GET("/stores/{storeId}/image", { params: { path: { storeId } } })), [storeId, menuId]);
@@ -22,5 +22,5 @@ export function StorefrontImageEditor({ storeId, menuId, label }: { storeId: str
       else unwrap(await merchantApi.PUT("/stores/{storeId}/image", { params: { path: { storeId }, header }, body, bodySerializer: () => form }));
     }
   }, [storeId, menuId]);
-  return <StorefrontImageEditorView label={label} loadImage={loadImage} changeImage={changeImage} />;
+  return <StorefrontImageEditorView onBusyChange={onBusyChange} label={label} loadImage={loadImage} changeImage={changeImage} />;
 }

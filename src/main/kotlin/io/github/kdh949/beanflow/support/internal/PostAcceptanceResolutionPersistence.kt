@@ -52,7 +52,7 @@ internal class PostAcceptanceResolutionEntity(
     @Column(name = "command_actor_id", nullable = false)
     val commandActorId: UUID,
     @Column(name = "executor_actor_id", nullable = false)
-    val executorActorId: UUID,
+    var executorActorId: UUID,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40)
     val outcome: PostAcceptanceResolutionOutcome,
@@ -116,6 +116,7 @@ internal class PostAcceptanceResolutionEntity(
         )
 
     fun apply(domain: PostAcceptanceResolutionCase) {
+        executorActorId = domain.executorActorId
         state = domain.state
         updatedAt = domain.updatedAt
         version = domain.version

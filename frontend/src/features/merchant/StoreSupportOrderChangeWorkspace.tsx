@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { components } from "../../api/schema";
 import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
-import { customerApi } from "../../api/customerClient";
 import { unwrap } from "../../api/client";
 import { Button, Checkbox, EmptyState, InlineNotice, LoadingState, SelectField, TextField } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
@@ -15,6 +14,11 @@ const policyVersion = "support-order-change-policy/2026-08-12/v1";
 type Target = components["schemas"]["StoreSupportOrderChangeRequestResource"];
 type Authorization = components["schemas"]["SupportOrderChangeAuthorizationResource"];
 
+async function merchantJournalActor() {
+  const actor = unwrap(await merchantApi.GET("/merchant/me"));
+  return `merchant:${actor.merchantId}`;
+}
+
 /** Store actors accept the exact request or an explicitly bounded delegation, with store cost responsibility. */
 export function StoreSupportOrderChangeWorkspace({ storeId }: { storeId: string }) {
   const [type, setType] = useState<"CONFIRMATION" | "DELEGATION">("CONFIRMATION");
@@ -24,10 +28,11 @@ export function StoreSupportOrderChangeWorkspace({ storeId }: { storeId: string 
   const [digest, setDigest] = useState(""); const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false), [failure, setFailure] = useState<unknown>(null);
   const [result, setResult] = useState<Authorization | null>(null); const [clock, setClock] = useState(Date.now());
-  const command = useSupportCommand(() => { setAccepted(false); setTarget(null); });
+  const command = useSupportCommand(`store-consent:${storeId}`, () => { setAccepted(false); setTarget(null); }, merchantJournalActor);
   const blocked = command.busy || command.pending || loading;
   const effectiveAction = target?.action ?? action;
-  const slots = useResource(useCallback(async () => target?.action === "PICKUP_RESCHEDULE" ? unwrap(await customerApi.GET("/stores/{storeId}/pickup-slots", { params: { path: { storeId } } })) : null, [storeId, target?.action]));
+  const pickupRequestId = target?.action === "PICKUP_RESCHEDULE" ? target.requestId : null;
+  const slots = useResource(useCallback(async () => pickupRequestId ? unwrap(await merchantApi.GET("/stores/{storeId}/support-order-change-requests/{requestId}/pickup-slots", { params: { path: { storeId, requestId: pickupRequestId } } })) : null, [storeId, pickupRequestId]));
   useEffect(() => { let live = true; setDigest(""); if (target && (target.action === "ORDER_CANCELLATION" || slotId)) void orderChangeDigest(target.action, target.orderId, reasonCode, slotId).then(value => { if (live) setDigest(value); }); return () => { live = false; }; }, [target, reasonCode, slotId]);
   useEffect(() => { if (!target) return; const timer = window.setTimeout(() => setClock(Date.now()), Math.max(0, new Date(target.expiresAt).getTime() - Date.now()) + 1); return () => window.clearTimeout(timer); }, [target]);
   const current = !!target && new Date(target.expiresAt).getTime() > Math.max(clock, Date.now());

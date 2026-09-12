@@ -25,7 +25,6 @@ export function PaymentRepairWorkspace({ caseId, onLockChange }: { caseId?: stri
   const [revision, setRevision] = useState(0);
   const submitting = useRef(false);
   const intent = useRef(new SubmissionIntent());
-  const [, tick] = useState(0);
   const locked = busy || pending !== null;
   useEffect(() => { onLockChange?.(locked); }, [locked, onLockChange]);
   const detail = useResource(useCallback(async () => {
@@ -38,14 +37,6 @@ export function PaymentRepairWorkspace({ caseId, onLockChange }: { caseId?: stri
   }, [request]));
   const current = detail.state.status === "ready" ? detail.state.value : null;
   const proposal = current?.proposal;
-  const expired = proposal ? Date.now() >= Date.parse(proposal.expiresAt) : false;
-  useEffect(() => {
-    if (!proposal || proposal.state !== "PENDING_APPROVAL") return;
-    const remaining = Date.parse(proposal.expiresAt) - Date.now();
-    if (remaining <= 0) return;
-    const timer = window.setTimeout(() => tick(value => value + 1), Math.min(remaining + 1, 2_147_483_647));
-    return () => window.clearTimeout(timer);
-  }, [proposal]);
   async function create() {
     const target = caseId ?? selectedCase?.caseId;
     if (locked || !target || !reason.trim()) return;
@@ -53,7 +44,7 @@ export function PaymentRepairWorkspace({ caseId, onLockChange }: { caseId?: stri
     await submit({ kind: "create", target, body, key: intent.current.keyFor(JSON.stringify({ kind: "create", target, ...body })) });
   }
   async function decide(decision: "APPROVE" | "REJECT") {
-    if (locked || !proposal || !current || expired || proposal.state !== "PENDING_APPROVAL" || current.actor.operatorId === proposal.proposedBy || !decisionReason.trim()) return;
+    if (locked || !proposal || !current || proposal.state !== "PENDING_APPROVAL" || current.actor.operatorId === proposal.proposedBy || !decisionReason.trim()) return;
     const body = { decision, reason: decisionReason.trim() };
     await submit({ kind: "decide", target: proposal.proposalId, body, key: intent.current.keyFor(JSON.stringify({ kind: "decide", target: proposal.proposalId, ...body })) });
   }
@@ -64,7 +55,7 @@ export function PaymentRepairWorkspace({ caseId, onLockChange }: { caseId?: stri
     try {
       if (command.kind === "create") {
         const result = unwrap(await operationsApi.POST("/operations/reprocessing-cases/{caseId}/repair-proposals", { params: { path: { caseId: command.target }, header: { "Idempotency-Key": command.key } }, body: command.body }));
-        setCreated(true); setReason(""); setRequest({ id: result.proposalId });
+        setCreated(true); setReason(""); setDecisionReason(""); setRequest({ id: result.proposalId });
         setSelectedProposal(selectedCase ? { proposal: result, order: selectedCase.order } : null);
       } else {
         unwrap(await operationsApi.POST("/operations/reprocessing-repair-proposals/{proposalId}/decisions", { params: { path: { proposalId: command.target }, header: { "Idempotency-Key": command.key } }, body: command.body }));
@@ -81,12 +72,12 @@ export function PaymentRepairWorkspace({ caseId, onLockChange }: { caseId?: stri
     {!caseId ? <RecoveryCases disabled={locked} revision={revision} selected={selectedCase} onSelect={item => { setSelectedCase(item); setReason(""); setFailure(null); setCreated(false); }} /> : <p>위 주문에서 확인된 환불 처리 정보의 복구를 검토합니다.</p>}
     <form className="surface-card management-card" onSubmit={event => { event.preventDefault(); void create(); }}><fieldset className="catalog-fieldset" disabled={locked}><legend>복구 제안 생성</legend>{selectedCase ? <p>선택한 주문: {selectedCase.order.storeName} · {selectedCase.order.publicReference}</p> : null}<TextField label="복구 제안 사유" value={reason} onValueChange={setReason} maxLength={500} required /><Button type="submit" loading={busy} disabled={!(caseId ?? selectedCase?.caseId) || !reason.trim()}>복구 제안 생성</Button></fieldset></form>
     {created ? <p role="status">복구 제안을 만들었습니다. 다른 담당자의 판정이 필요합니다.</p> : null}
-    <RepairProposals caseId={caseId} disabled={locked} revision={revision} onSelect={item => { setSelectedProposal(item); setRequest({ id: item.proposal.proposalId }); setDecisionReason(""); setFailure(null); }} />
+    <RepairProposals caseId={caseId} disabled={locked} revision={revision} onSelect={item => { setSelectedProposal(item); setRequest({ id: item.proposal.proposalId }); setDecisionReason(""); setFailure(null); setCreated(false); }} />
     {pending ? <section className="surface-card management-card"><InlineNotice tone="warning" title="복구 요청 결과를 확인하지 못했습니다" description="대상과 요청 내용을 유지합니다. 같은 요청으로 결과를 확인해 주세요." /><Button loading={busy} onClick={() => void submit(pending)}>같은 복구 요청 결과 확인</Button></section> : null}
     {failure ? <ErrorState error={failure} /> : null}
     {detail.state.status === "loading" ? <LoadingState label="현재 복구 제안과 담당자를 확인하는 중" /> : detail.state.status === "failed" ? <ErrorState error={detail.state.error} retry={locked ? undefined : detail.reload} /> : current && proposal ? <>
       <article className="surface-card management-card"><h3>현재 복구 제안</h3><StatusText state={proposal.state} label={labels[proposal.state]} />{selectedProposal ? <p>{selectedProposal.order.storeName} · {selectedProposal.order.publicReference}</p> : null}<p>누락된 취소 환불 기록을 복구하고 기존 환불의 결과 조회를 준비합니다.</p><dl className="detail-list"><div><dt>제안자</dt><dd>{proposal.proposedBy === current.actor.operatorId ? "내가 만든 제안" : "다른 담당자의 제안"}</dd></div><div><dt>생성</dt><dd>{fullDateTime.format(new Date(proposal.createdAt))}</dd></div><div><dt>승인 기한</dt><dd>{fullDateTime.format(new Date(proposal.expiresAt))}</dd></div>{proposal.decidedAt ? <div><dt>판정</dt><dd>{fullDateTime.format(new Date(proposal.decidedAt))}</dd></div> : null}</dl><p>문의 코드 {proposal.correlationId}</p></article>
-      {proposal.state === "EXECUTED" ? <InlineNotice title="환불 결과 조회를 위한 복구가 실행되었습니다" description="실제 환불 완료 여부는 주문 후속 처리에서 다시 확인해 주세요." /> : proposal.state === "PENDING_APPROVAL" ? expired ? <InlineNotice title="복구 제안의 승인 기한이 지났습니다" description="현재 복구 건을 다시 확인하고 새 제안을 준비해 주세요." /> : proposal.proposedBy === current.actor.operatorId ? <InlineNotice title="제안자와 다른 담당자가 판정해야 합니다" description="다른 권한 있는 담당자가 승인 대기 목록에서 검토할 수 있습니다." /> : <section className="surface-card management-card"><h3>다른 담당자의 복구 판정</h3><TextField label="복구 판정 사유" value={decisionReason} onValueChange={setDecisionReason} maxLength={500} disabled={locked} required /><div className="button-row"><Button disabled={locked || !decisionReason.trim()} onClick={() => void decide("APPROVE")}>복구 승인</Button><Button variant="secondary" disabled={locked || !decisionReason.trim()} onClick={() => void decide("REJECT")}>복구 반려</Button></div></section> : null}
+      {proposal.state === "EXECUTED" ? <InlineNotice title="환불 결과 조회를 위한 복구가 실행되었습니다" description="실제 환불 완료 여부는 주문 후속 처리에서 다시 확인해 주세요." /> : proposal.state === "EXPIRED" ? <InlineNotice title="복구 제안의 승인 기한이 지났습니다" description="현재 복구 건을 다시 확인하고 새 제안을 준비해 주세요." /> : proposal.state === "PENDING_APPROVAL" ? proposal.proposedBy === current.actor.operatorId ? <InlineNotice title="제안자와 다른 담당자가 판정해야 합니다" description="다른 권한 있는 담당자가 승인 대기 목록에서 검토할 수 있습니다." /> : <section className="surface-card management-card"><h3>다른 담당자의 복구 판정</h3><TextField label="복구 판정 사유" value={decisionReason} onValueChange={setDecisionReason} maxLength={500} disabled={locked} required /><div className="button-row"><Button disabled={locked || !decisionReason.trim()} onClick={() => void decide("APPROVE")}>복구 승인</Button><Button variant="secondary" disabled={locked || !decisionReason.trim()} onClick={() => void decide("REJECT")}>복구 반려</Button></div></section> : null}
       <Button variant="ghost" disabled={locked} onClick={detail.reload}>복구 제안 상태 다시 확인</Button>
     </> : null}
   </section>;
