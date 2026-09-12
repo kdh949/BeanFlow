@@ -113,7 +113,7 @@ function ProfileInspection({ id, supportCase, verification, onBusyChange }: { id
   const value = read.state.status === "ready" ? read.state.value : null, profile = value?.profileChange, approval = value?.approval;
   const raw = useProfileValues(`${profile?.purpose}:${profile?.version}:${read.state.status}`);
   const [digest, setDigest] = useState(""), [decision, setDecision] = useState<"APPROVE" | "DENY" | "RETURN_FOR_REVISION">("APPROVE"), [reason, setReason] = useState(""), [message, setMessage] = useState(""), [assignee, setAssignee] = useState(""), [assignmentReason, setAssignmentReason] = useState(""), [revising, setRevising] = useState(false), [revisionBusy, setRevisionBusy] = useState(false);
-  const sensitive = useSensitiveSupportCommand(), command = useSupportCommand(() => { raw.clear(); read.reload(); });
+  const sensitive = useSensitiveSupportCommand(), command = useSupportCommand(`profile-change:${id}`, () => { raw.clear(); read.reload(); });
   const busy = sensitive.busy || command.busy, frozen = busy || !!sensitive.pending || command.pending || revisionBusy;
   useEffect(() => { onBusyChange(frozen); return () => onBusyChange(false); }, [frozen, onBusyChange]);
   const expired = useExpired(value?.verificationExpiresAt);

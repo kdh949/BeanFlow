@@ -21,7 +21,7 @@ export function SupportDataAccessWorkspace({ session, initialGrantId }: { sessio
   const [lookup, setLookup] = useState(initialGrantId ?? "");
   const [grantId, setGrantId] = useState(initialGrantId ?? "");
   const [opened, setOpened] = useState(0);
-  const command = useSupportCommand(() => {});
+  const command = useSupportCommand(`data-access-request:${session?.caseId ?? ""}`, () => {});
   const sessionValid = session?.state === "VERIFIED" && session.actionScope === "PERSONAL_DATA_REVEAL" && Date.parse(session.expiresAt) > Date.now();
   const available = session ? personalFieldsBySubject[session.subjectType] : [];
   function requestGrant() {
@@ -54,7 +54,7 @@ function GrantInspection({ grantId }: { grantId: string }) {
   const current = read.state.status === "ready" ? read.state.value : null;
   const grant = current?.grant;
   const expired = grant?.expiresAt ? Date.parse(grant.expiresAt) <= Date.now() : false;
-  const command = useSupportCommand(() => read.reload());
+  const command = useSupportCommand(`data-access-approval:${grantId}`, () => read.reload());
   const busy = command.busy || revealBusy;
   const blocked = busy || command.pending;
   const selected = fields ?? grant?.fields ?? [];
