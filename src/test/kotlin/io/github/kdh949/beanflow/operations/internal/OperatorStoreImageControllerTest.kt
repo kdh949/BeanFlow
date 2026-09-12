@@ -25,7 +25,9 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.time.Instant
@@ -83,6 +85,39 @@ internal class OperatorStoreImageControllerTest(
 
         assertThat(jdbc.queryForObject("SELECT image_sha256 FROM merchant_store WHERE id = ?", String::class.java, storeId)).isNull()
         assertThat(jdbc.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java)).isZero()
+    }
+
+    @Test
+    fun `current store image requires grant reason and preserves absence and signing failure`() {
+        val storeId = seedStore()
+        val auth = jwt().jwt { it.subject(actorId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))
+        val path = "/api/v1/operations/stores/$storeId/image"
+        mockMvc.perform(get(path).with(auth).header("X-Access-Reason", "media review")).andExpect(status().isForbidden)
+        grant()
+        mockMvc.perform(get(path).with(auth)).andExpect(status().isBadRequest)
+        mockMvc
+            .perform(get(path).with(auth).header("X-Access-Reason", "media review"))
+            .andExpect(status().isOk)
+            .andExpect(header().string("Cache-Control", "no-store"))
+            .andExpect(jsonPath("$.image").doesNotExist())
+        stubStorage(storeId)
+        request(storeId, "media correction").andExpect(status().isOk)
+        mockMvc
+            .perform(get(path).with(auth).header("X-Access-Reason", "media review"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.image.url").value(SIGNED_URL))
+        `when`(storage.access(PREPARED.thumbnailKey)).thenThrow(
+            io.github.kdh949.beanflow.shared.api.DomainFailure(
+                io.github.kdh949.beanflow.shared.api.FailureCode.DEPENDENCY_UNAVAILABLE,
+                "signing unavailable",
+            ),
+        )
+        mockMvc
+            .perform(get(path).with(auth).header("X-Access-Reason", "media review"))
+            .andExpect(status().isServiceUnavailable)
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM operations_audit_record", Int::class.java)).isEqualTo(1)
+        jdbc.update("UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ?", actorId)
+        mockMvc.perform(get(path).with(auth).header("X-Access-Reason", "media review")).andExpect(status().isForbidden)
     }
 
     private fun request(

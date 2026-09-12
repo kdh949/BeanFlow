@@ -222,6 +222,9 @@ export function CustomerHelpPage() {
     <div className="customer-page">
       <PageHeading title="도움이 필요하신가요?" />
       <section className="surface-card help-card">
+        <h2>고객지원</h2>
+        <p>문의 내용을 남기면 상담원이 확인합니다. 로그인 후 내 문의에서 답변과 처리 상태를 확인할 수 있어요.</p>
+        <div className="button-row"><ButtonLink to="/app/support/new">문의 접수하기</ButtonLink><ButtonLink variant="secondary" to="/app/support">내 문의와 답변</ButtonLink></div>
         <strong>결제·환불 문의</strong>
         <p>결제 결과를 확인 중이라면 같은 결제를 반복하지 말고 주문 상태를 새로고침해 주세요. 문의할 때 화면의 문의 코드와 주문 번호를 알려주세요. 카드 번호나 인증 정보는 보내지 마세요.</p>
       </section>

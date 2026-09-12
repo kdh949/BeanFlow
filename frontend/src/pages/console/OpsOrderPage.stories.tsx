@@ -24,7 +24,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Idle: Story = {
   play: async ({ canvas }) => {
-    await expect(canvas.getByText("감사 조회 대기")).toBeVisible();
+    await expect(canvas.getByLabelText("후속 처리 주문 번호")).toBeVisible();
   },
 };
 
@@ -38,9 +38,9 @@ export const ManualReview: Story = {
 };
 
 async function submitLookup(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) {
-  await userEvent.type(canvas.getByLabelText("주문 ID"), "40000000-0000-4000-8000-000000000001");
-  await userEvent.type(canvas.getByLabelText("접근 사유"), "compensation recovery review");
-  await userEvent.click(canvas.getByRole("button", { name: "조회" }));
+  await userEvent.type(canvas.getByLabelText("후속 처리 주문 번호"), "BF-7K9M-2P4R");
+  await userEvent.selectOptions(canvas.getByLabelText("주문 후속 처리 조회 사유"), "ORDER_RECOVERY_REVIEW");
+  await userEvent.click(canvas.getByRole("button", { name: "주문 후속 처리 조회" }));
 }
 
 export const SuccessfulLookup: Story = {
@@ -67,7 +67,7 @@ export const Loading: Story = {
 export const SuccessfulLookupInteraction: Story = {
   tags: ["!autodocs"],
   parameters: {
-    msw: { handlers: [http.get(/\/operations\/orders\/[^/]+\/compensation$/, () => HttpResponse.json({ compensation: compensationSucceeded }))] },
+    msw: { handlers: [http.get("/api/v1/operations/order-compensations/:reference", () => HttpResponse.json({ order: { orderId: "40000000-0000-4000-8000-000000000001", publicReference: "BF-7K9M-2P4R", storeId: "40000000-0000-4000-8000-000000000002", storeName: "성수점", state: "CANCELLED", createdAt: "2026-09-11T00:00:00Z" }, followUp: { compensation: compensationSucceeded } }))] },
   },
   play: async ({ canvas }) => {
     await submitLookup(canvas);

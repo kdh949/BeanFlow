@@ -30,6 +30,17 @@ internal class OperatorMenuImageService(
     private val storage: StorefrontImageStorageOperations,
     private val clock: Clock,
 ) {
+    @Transactional
+    fun current(
+        actorId: UUID,
+        storeId: UUID,
+        menuId: UUID,
+        reason: String,
+    ): StorefrontImageAccess? {
+        transactions.authorize(actorId, reason)
+        return images.find(storeId, menuId)?.let { storage.access(it.thumbnailKey) }
+    }
+
     fun replace(
         actorId: UUID,
         storeId: UUID,

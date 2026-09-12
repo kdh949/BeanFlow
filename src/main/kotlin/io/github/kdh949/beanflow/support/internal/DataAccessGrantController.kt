@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.validation.annotation.Validated
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -57,6 +58,13 @@ internal class DataAccessGrantController(
     private val service: DataAccessGrantApplicationService,
     private val correlationIds: CorrelationIdSource,
 ) {
+    @GetMapping("/data-access-grants/{grantId}")
+    @PreAuthorize("isAuthenticated()")
+    fun get(
+        actor: OperatorActor,
+        @PathVariable grantId: UUID,
+    ): ResponseEntity<DataAccessGrantInspectionResource> = noStore(HttpStatus.OK, service.get(actor.actorId(), grantId))
+
     @PostMapping("/cases/{caseId}/data-access-grants")
     @PreAuthorize("isAuthenticated()")
     fun request(

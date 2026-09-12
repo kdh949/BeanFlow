@@ -92,3 +92,24 @@ fields, validation bounds, response items/page shape, stable error mapping and o
 record the stable sort tuple and canonical filters for that endpoint before adding signed cursor behavior to ADR-070.
 No implementation Stage may reintroduce `SupportCommandRequest`, `SupportOperationResource` or an equivalent generic
 catch-all schema.
+
+## Native customer inquiries (ADR-126)
+
+Customer help and order details now open the authenticated native inquiry flow. These eight runtime operations
+extend the original S20–S100 operator inventory; they do not expose internal Case notes or verification data.
+
+| Operations | Access and result |
+|---|---|
+| `GET /me/support-inquiries`, `GET /me/support-inquiries/{inquiryId}` | Customer session, actor-owned list/detail, public messages only; other owners receive 404. |
+| `POST /me/support-inquiries`, `POST /me/support-inquiries/{inquiryId}/messages` | Customer session + CSRF, idempotency key; title/content policy, optional owned order, exact inquiry version. |
+| `GET /support/inquiries`, `GET /support/inquiries/{inquiryId}` | Current SUPPORT_CASE_READ; unclaimed/all filters, signed pagination, current claim/reply capabilities. |
+| `POST /support/inquiries/{inquiryId}/claims` | Current SUPPORT_CASE_WRITE, exact inquiry version and idempotency key; atomically create an actually assigned Case and subject links. |
+| `POST /support/inquiries/{inquiryId}/messages` | Current SUPPORT_CASE_WRITE and Case assignee, exact inquiry/Case versions; explicitly public reply. |
+
+Lists/messages use actor-bound signed cursors and 20-row pages. Successful responses are no-store.
+`RECEIVED` means intake exists without a Case; subsequent states come from the linked Case.
+Resolved/closed Cases reject new public messages. Case detail includes optional `customerInquiryId` to open
+its separate public conversation. Transactional Audit failure rolls back intake, claim and message writes.
+V82 stores immutable inquiry identity/public messages and 90-day metadata-only command replay records.
+Inquiry retention snapshots the existing SUPPORT_CASE policy; this change does not implement the future
+S110 retention execution surface or external message delivery.

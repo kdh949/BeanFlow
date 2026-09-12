@@ -79,6 +79,72 @@ internal class SupportActionRequestIntegrationTest
         }
 
         @Test
+        fun `operator pickup queries use current Case or visible request without customer authentication`() {
+            val actor = jwt().jwt { it.subject(requesterId.toString()) }
+            val path = "/api/v1/support/cases/$caseId/orders/$orderId/pickup-slots"
+            mockMvc
+                .perform(get(path).with(actor))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.items").isArray)
+            mockMvc
+                .perform(get(path.replace(caseId.toString(), UUID.randomUUID().toString())).with(actor))
+                .andExpect(status().isNotFound)
+            val id = requestId(createRequest("pickup-visible-request").andReturn().response.contentAsString)
+            val requestPath = "/api/v1/support/action-requests/$id/pickup-slots"
+            mockMvc
+                .perform(get(requestPath).with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isArray)
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_ORDER_READ'",
+                requesterId,
+            )
+            mockMvc.perform(get(path).with(actor)).andExpect(status().isForbidden)
+            mockMvc.perform(get(requestPath).with(actor)).andExpect(status().isForbidden)
+        }
+
+        @Test
+        fun `workflow exposes only current separated actor commands and hides them after permission revoke`() {
+            val id = requestId(createRequest("workflow-create-001").andReturn().response.contentAsString)
+            val path = "/api/v1/support/action-requests/$id/workflow"
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.allowedActions[0]").value("REVISE"))
+                .andExpect(jsonPath("$.allowedActions.length()").value(1))
+                .andExpect(jsonPath("$.caseVersion").value(0))
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions[0]").value("DECIDE_SUPPORT_MANAGER"))
+                .andExpect(jsonPath("$.allowedActions.length()").value(1))
+            decideManager(id, managerId, "workflow-approve-001").andExpect(status().isOk)
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.hasItem("EXECUTE")))
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_ACTION_EXECUTE'",
+                requesterId,
+            )
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.request.state").value("REASSIGNMENT_REQUIRED"))
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("EXECUTE"))))
+            val auditCount = jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java)
+            val version = jdbcTemplate.queryForObject("SELECT version FROM support_action_request WHERE id = ?", Long::class.java, id)
+            mockMvc.perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) })).andExpect(status().isOk)
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java)).isEqualTo(auditCount)
+            assertThat(
+                jdbcTemplate.queryForObject("SELECT version FROM support_action_request WHERE id = ?", Long::class.java, id),
+            ).isEqualTo(version)
+            mockMvc.perform(get(path).with(jwt().jwt { it.subject(UUID.randomUUID().toString()) })).andExpect(status().isForbidden)
+        }
+
+        @Test
         fun `create exact replay and separated manager approval produce ready lineage`() {
             val first =
                 createRequest("create-action-001")

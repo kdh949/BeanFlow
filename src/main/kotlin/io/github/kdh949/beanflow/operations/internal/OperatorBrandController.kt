@@ -144,6 +144,13 @@ internal class OperatorBrandController(
             ),
         )
 
+    @GetMapping("/stores/{storeId}/brand")
+    @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
+    fun assignment(
+        actor: OperatorActor,
+        @PathVariable storeId: UUID,
+    ): StoreBrandResponse = StoreBrandResponse.of(service.assignment(actorId(actor), storeId))
+
     @PutMapping("/stores/{storeId}/brand")
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
     fun assign(

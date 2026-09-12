@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.discovery.internal
 
 import io.github.kdh949.beanflow.discovery.api.StoreCatalogQueryOperations
+import io.github.kdh949.beanflow.discovery.api.StoreMenuItemConfigurationView
 import io.github.kdh949.beanflow.discovery.api.StoreMenuItemView
 import io.github.kdh949.beanflow.discovery.api.StorePickupSlotView
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -14,6 +15,10 @@ import java.util.UUID
 
 internal data class StoreMenuListResponse(
     val items: List<StoreMenuItemView>,
+)
+
+internal data class StoreMenuConfigurationListResponse(
+    val items: List<StoreMenuItemConfigurationView>,
 )
 
 internal data class StorePickupSlotListResponse(
@@ -52,6 +57,12 @@ internal class StoreCatalogController(
     fun menus(
         @PathVariable storeId: UUID,
     ): StoreMenuListResponse = StoreMenuListResponse(queries.listMenus(storeId))
+
+    @GetMapping("/{storeId}/menus/{menuId}/configurations")
+    fun configurations(
+        @PathVariable storeId: UUID,
+        @PathVariable menuId: UUID,
+    ): StoreMenuConfigurationListResponse = StoreMenuConfigurationListResponse(queries.listConfigurations(storeId, menuId))
 
     @GetMapping("/{storeId}/pickup-slots")
     fun pickupSlots(

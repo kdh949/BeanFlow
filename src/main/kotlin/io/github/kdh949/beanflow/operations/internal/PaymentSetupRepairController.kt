@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.validation.annotation.Validated
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -68,6 +69,13 @@ internal class PaymentSetupRepairController(
     private val service: PaymentSetupRepairService,
     private val clock: Clock,
 ) {
+    @GetMapping("/reprocessing-repair-proposals/{proposalId}")
+    @PreAuthorize("hasRole('PLATFORM_OPERATOR')")
+    fun get(
+        actor: OperatorActor,
+        @PathVariable proposalId: UUID,
+    ): RepairProposal = service.get(actorId(actor), proposalId)
+
     @PostMapping("/reprocessing-cases/{caseId}/repair-proposals")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('PLATFORM_OPERATOR')")

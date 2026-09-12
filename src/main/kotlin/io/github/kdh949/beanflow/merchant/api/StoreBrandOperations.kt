@@ -111,6 +111,9 @@ data class BrandPage(
 )
 
 interface StoreBrandQueryOperations {
+    /** Null means the store does not exist; an existing unassigned store has null brand fields. */
+    fun findAssignment(storeId: UUID): StoreBrandAssignment?
+
     fun find(brandId: UUID): BrandSnapshot?
 
     /** Keyset page ordered by `(normalizedName ASC, brandId ASC)`. */

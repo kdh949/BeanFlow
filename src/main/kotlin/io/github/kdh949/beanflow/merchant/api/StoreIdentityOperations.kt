@@ -38,6 +38,9 @@ data class StoreIdentityChange(
 interface StoreIdentityOperations {
     fun get(storeId: UUID): StoreIdentitySnapshot
 
+    /** Current names for already-authorized targets; missing profiles are an explicit dependency failure. */
+    fun names(storeIds: Set<UUID>): Map<UUID, String>
+
     fun list(
         query: String?,
         afterId: UUID?,

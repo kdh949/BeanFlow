@@ -37,6 +37,12 @@ data class OneTimePaymentAttemptView(
     val correlationId: String,
 )
 
+data class OneTimePaymentCheckoutView(
+    val paymentId: UUID,
+    val approvalState: String,
+    val readyAttempt: OneTimePaymentAttemptView?,
+)
+
 data class ClaimOneTimePaymentConfirmationCommand(
     val actorId: UUID,
     val paymentId: UUID,
@@ -57,6 +63,13 @@ data class OneTimePaymentConfirmationClaim(
 )
 
 interface OneTimePaymentOperations {
+    /** Read the owned existing attempt; only READY/READY before expiry may reopen a payment window. */
+    fun checkout(
+        actorId: UUID,
+        orderId: UUID,
+        now: Instant,
+    ): OneTimePaymentCheckoutView?
+
     fun existing(command: PrepareOneTimePaymentCommand): OneTimePaymentAttemptView?
 
     fun prepare(command: PrepareOneTimePaymentCommand): OneTimePaymentAttemptView

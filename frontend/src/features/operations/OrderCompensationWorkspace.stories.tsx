@@ -1,0 +1,54 @@
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, userEvent, waitFor } from "storybook/test";
+import { http, HttpResponse } from "msw";
+import type { components } from "../../api/schema";
+import { OrderCompensationWorkspace } from "./OrderCompensationWorkspace";
+const orderId = "97000000-0000-4000-8000-000000000001";
+const orderReference = "BF-7K9M-2P4R";
+const order = { orderId, publicReference: orderReference, storeId: "97000000-0000-4000-8000-000000000003", storeName: "성수점", state: "CANCELLED", createdAt: "2026-09-11T00:00:00Z" };
+const original: components["schemas"]["RuntimeOperatorCompensationView"] = { compensation: { caseId: "97000000-0000-4000-8000-000000000002", trigger: "CUSTOMER_CANCELLATION", state: "MANUAL_REVIEW", updatedAt: "2026-09-11T00:00:00Z", benefitPolicies: [{ benefitType: "COUPON", policyVersionId: 1 }, { benefitType: "POINTS", policyVersionId: 2 }], steps: [{ type: "PAYMENT", state: "MANUAL_REVIEW", attemptCount: 4, lastErrorCode: "PROVIDER_TIMEOUT" }, { type: "PICKUP", state: "SUCCEEDED", attemptCount: 1 }, { type: "COUPON", state: "NOT_REQUIRED", attemptCount: 0 }, { type: "POINTS", state: "SUCCEEDED", attemptCount: 1 }, { type: "CUSTOMER_NOTIFICATION", state: "RETRY_SCHEDULED", attemptCount: 2 }] } };
+let current = original;
+let key: string | null = null;
+const handlers = [http.get("/api/v1/operations/payment-setup-recovery-cases", () => HttpResponse.json({ items: [{ caseId: "98000000-0000-4000-8000-000000000001", status: "OPEN", canPropose: true, reason: "PAYMENT_SETUP_INCOMPLETE", updatedAt: original.compensation.updatedAt, order }], nextCursor: null })), http.get("/api/v1/operations/reprocessing-repair-proposals", () => HttpResponse.json({ items: [], nextCursor: null })), http.get("/api/v1/operations/order-compensations/:reference", ({ request }) => { expect(request.headers.get("X-Access-Reason")).toBe("ORDER_RECOVERY_REVIEW"); return HttpResponse.json({ order, followUp: current }); }), http.post("/api/v1/operations/orders/:id/customer-cancellation-refund-reconciliations", async ({ request }) => { expect(await request.json()).toEqual({ reason: "결제사 확인 재개" }); expect(request.headers.get("Idempotency-Key")).toBeTruthy(); current = { compensation: { ...original.compensation, state: "UNKNOWN", steps: original.compensation.steps.map(step => step.type === "PAYMENT" ? { ...step, state: "UNKNOWN" } : step) } }; return HttpResponse.json({ operationId: orderId, orderId, cancellationOrderVersion: 8, state: "LOOKUP_SCHEDULED", scheduledAt: "2026-09-11T00:01:00Z" }, { status: 202 }); })];
+const meta = { title: "Patterns/Operations/Order compensation", component: OrderCompensationWorkspace, tags: ["autodocs"], beforeEach: () => { current = original; key = null; }, parameters: { a11y: { test: "error" }, msw: { handlers }, docs: { description: { component: "운영 전용 주문 후속 처리의 5개 단계를 확인하고 고객 취소 환불 LOOKUP 또는 누락 환불 복구 제안을 연결합니다." }, story: { inline: false, height: "1100px" } } } } satisfies Meta<typeof OrderCompensationWorkspace>;
+export default meta; type Story = StoryObj<typeof meta>;
+async function read(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) { await userEvent.type(canvas.getByLabelText("후속 처리 주문 번호"), orderReference); await userEvent.selectOptions(canvas.getByLabelText("주문 후속 처리 조회 사유"), "ORDER_RECOVERY_REVIEW"); await userEvent.click(canvas.getByRole("button", { name: "주문 후속 처리 조회" })); }
+export const Reconcile: Story = { play: async ({ canvas }) => { await read(canvas); await userEvent.type(await canvas.findByLabelText("환불 결과 재확인 사유"), "결제사 확인 재개"); await userEvent.click(canvas.getByRole("button", { name: "기존 환불 결과 조회 예약" })); await expect(await canvas.findByText("환불 결과 조회를 예약했습니다")).toBeVisible(); await expect(await canvas.findByRole("heading", { name: "고객 알림" })).toBeVisible(); await expect(canvas.queryByRole("button", { name: "기존 환불 결과 조회 예약" })).not.toBeInTheDocument(); } };
+export const MissingRefund: Story = { beforeEach: () => { current = { ...original, paymentSetupIssue: { state: "SETUP_INCOMPLETE", missingArtifacts: ["CANCELLATION_REFUND"], detectedAt: "2026-09-11T00:00:00Z", lastErrorCode: "PAYMENT_SETUP_INCOMPLETE" }, setupReprocessingCaseId: "98000000-0000-4000-8000-000000000001" }; }, play: async ({ canvas }) => { await read(canvas); await expect(await canvas.findByText("환불 처리 정보에 확인할 문제가 있습니다")).toBeVisible(); await expect(canvas.getByLabelText("복구 제안 사유")).toBeVisible(); await expect(canvas.queryByLabelText("환불 결과 재확인 사유")).not.toBeInTheDocument(); } };
+export const StoreRejection: Story = { beforeEach: () => { current = { compensation: { ...original.compensation, trigger: "STORE_REJECTION" } }; }, play: async ({ canvas }) => { await read(canvas); await expect(await canvas.findByText("매장 거절 후속 처리")).toBeVisible(); await expect(canvas.queryByLabelText("환불 결과 재확인 사유")).not.toBeInTheDocument(); } };
+export const LostResponse: Story = { parameters: { msw: { handlers: [http.post("/api/v1/operations/orders/:id/customer-cancellation-refund-reconciliations", ({ request }) => { if (!key) { key = request.headers.get("Idempotency-Key"); return HttpResponse.error(); } expect(request.headers.get("Idempotency-Key")).toBe(key); return HttpResponse.json({ operationId: orderId, orderId, cancellationOrderVersion: 8, state: "LOOKUP_SCHEDULED", scheduledAt: "2026-09-11T00:01:00Z" }, { status: 202 }); }), ...handlers] } }, play: async ({ canvas }) => { await read(canvas); await userEvent.type(await canvas.findByLabelText("환불 결과 재확인 사유"), "결제사 확인 재개"); await userEvent.click(canvas.getByRole("button", { name: "기존 환불 결과 조회 예약" })); await expect(await canvas.findByRole("alert")).toBeVisible(); await expect(canvas.getByLabelText("후속 처리 주문 번호")).toBeDisabled(); await expect(canvas.getByLabelText("환불 결과 재확인 사유")).toBeDisabled(); await userEvent.click(await canvas.findByRole("button", { name: "같은 환불 조회 예약 결과 확인" })); await expect(await canvas.findByText("환불 결과 조회를 예약했습니다")).toBeVisible(); } };
+export const Unavailable: Story = { parameters: { msw: { handlers: [http.get("/api/v1/operations/order-compensations/:reference", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE" }, { status: 503 }))] } }, play: async ({ canvas }) => { await read(canvas); await expect(await canvas.findByRole("alert")).toBeVisible(); await expect(canvas.queryByLabelText("환불 결과 재확인 사유")).not.toBeInTheDocument(); } };
+
+export const LostRepairKeepsOrder: Story = {
+  beforeEach: () => { current = { ...original, paymentSetupIssue: { state: "SETUP_INCOMPLETE", missingArtifacts: ["CANCELLATION_REFUND"], detectedAt: "2026-09-11T00:00:00Z", lastErrorCode: "PAYMENT_SETUP_INCOMPLETE" }, setupReprocessingCaseId: "98000000-0000-4000-8000-000000000001" }; },
+  parameters: { msw: { handlers: [http.post("/api/v1/operations/reprocessing-cases/:id/repair-proposals", ({ request }) => { if (!key) { key = request.headers.get("Idempotency-Key"); return HttpResponse.error(); } expect(request.headers.get("Idempotency-Key")).toBe(key); return HttpResponse.json({ code: "ACCESS_DENIED" }, { status: 403 }); }), ...handlers] } },
+  play: async ({ canvas }) => {
+    await read(canvas);
+    await userEvent.type(await canvas.findByLabelText("복구 제안 사유"), "누락된 환불 검토");
+    await userEvent.click(canvas.getByRole("button", { name: "복구 제안 생성" }));
+    await expect(await canvas.findByText("복구 요청 결과를 확인하지 못했습니다")).toBeVisible();
+    await expect(canvas.getByLabelText("후속 처리 주문 번호")).toBeDisabled();
+    await userEvent.click(canvas.getByRole("button", { name: "같은 복구 요청 결과 확인" }));
+    await expect(await canvas.findByRole("alert")).toBeVisible();
+    await expect(canvas.getByLabelText("후속 처리 주문 번호")).toBeDisabled();
+  },
+};
+
+function reconcileFailureAfterLoss(code: string, status: number): Story {
+  return { parameters: { msw: { handlers: [http.post("/api/v1/operations/orders/:id/customer-cancellation-refund-reconciliations", async ({ request }) => {
+    expect(await request.json()).toEqual({ reason: "결제사 확인 재개" });
+    if (!key) { key = request.headers.get("Idempotency-Key"); return HttpResponse.error(); }
+    expect(request.headers.get("Idempotency-Key")).toBe(key);
+    if (status === 409) current = { compensation: { ...original.compensation, state: "SUCCEEDED", steps: original.compensation.steps.map(step => ({ ...step, state: "SUCCEEDED" })) } };
+    return HttpResponse.json({ code, correlationId: code }, { status });
+  }), ...handlers] } }, play: async ({ canvas }) => {
+    await read(canvas); await userEvent.type(await canvas.findByLabelText("환불 결과 재확인 사유"), "결제사 확인 재개"); await userEvent.click(canvas.getByRole("button", { name: "기존 환불 결과 조회 예약" }));
+    const retry = await canvas.findByRole("button", { name: "같은 환불 조회 예약 결과 확인" }); await waitFor(() => expect(retry).toBeEnabled()); await userEvent.click(retry);
+    await expect(await canvas.findByText(`문의 코드 ${code}`)).toBeVisible();
+    if (status === 409) { await waitFor(() => expect(canvas.getByLabelText("후속 처리 주문 번호")).toBeEnabled()); await expect(canvas.queryByRole("button", { name: "같은 환불 조회 예약 결과 확인" })).not.toBeInTheDocument(); await expect(canvas.queryByText("환불 결과 조회를 예약했습니다")).not.toBeInTheDocument(); }
+    else { await expect(canvas.getByLabelText("후속 처리 주문 번호")).toBeDisabled(); await expect(canvas.getByRole("button", { name: "같은 환불 조회 예약 결과 확인" })).toBeVisible(); }
+  } };
+}
+export const StateConflictAfterLossUnlocks: Story = reconcileFailureAfterLoss("ORDER_STATE_CONFLICT", 409);
+export const UnsafeAfterLossUnlocks: Story = reconcileFailureAfterLoss("REPROCESSING_NOT_SAFE", 409);
+export const RevokedAfterLossRemainsUnknown: Story = reconcileFailureAfterLoss("ACCESS_DENIED", 403);

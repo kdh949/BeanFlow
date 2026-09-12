@@ -161,6 +161,34 @@ internal class StoreImageEndpointIntegrationTest(
         assertThat(auditActions(storeId)).containsExactly("STORE_IMAGE_DELETED")
     }
 
+    @Test
+    fun `OWNER reads absent and present images without another write and STAFF cannot read`() {
+        val storeId = seedStore()
+        val owner = signIn("image.read.owner", storeId, "OWNER")
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/image").cookie(owner.session))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.image").doesNotExist())
+        stubStorage(storeId)
+        replace(owner, storeId).andExpect(status().isOk)
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/image").cookie(owner.session))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.image.url").value(SIGNED_URL))
+        assertThat(auditActions(storeId)).containsExactly("STORE_IMAGE_UPDATED")
+        val staff = signIn("image.read.staff", storeId, "STAFF")
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/image").cookie(staff.session))
+            .andExpect(status().isForbidden)
+        doThrow(DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "signing failed"))
+            .`when`(storage)
+            .access(PREPARED.thumbnailKey)
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/image").cookie(owner.session))
+            .andExpect(status().isServiceUnavailable)
+        assertThat(auditActions(storeId)).containsExactly("STORE_IMAGE_UPDATED")
+    }
+
     private fun stubStorage(storeId: UUID) {
         `when`(storage.normalize(anyValue())).thenReturn(NORMALIZED)
         `when`(storage.store(StorefrontImageTarget.STORE, storeId, NORMALIZED)).thenReturn(PREPARED)

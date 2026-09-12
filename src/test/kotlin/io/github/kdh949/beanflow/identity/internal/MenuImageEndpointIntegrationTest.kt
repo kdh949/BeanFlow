@@ -143,6 +143,28 @@ internal class MenuImageEndpointIntegrationTest(
         ).containsExactly("MENU_IMAGE_DELETED")
     }
 
+    @Test
+    fun `STAFF reads current menu images while another stores menu remains hidden`() {
+        val storeId = seedStore()
+        val menuId = seedMenu(storeId)
+        val session = signIn("menu.image.read", storeId, "STAFF")
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/menus/$menuId/image").cookie(session.session))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.image").doesNotExist())
+        stubStorage(menuId)
+        replace(session, storeId, menuId).andExpect(status().isOk)
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/menus/$menuId/image").cookie(session.session))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.image.url").value(SIGNED_URL))
+        val foreignMenu = seedMenu(seedStore())
+        mockMvc
+            .perform(get("/api/v1/stores/$storeId/menus/$foreignMenu/image").cookie(session.session))
+            .andExpect(status().isNotFound)
+        verify(storage, times(1)).store(StorefrontImageTarget.MENU, menuId, NORMALIZED)
+    }
+
     private fun replace(
         session: MerchantSession,
         storeId: UUID,

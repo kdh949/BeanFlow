@@ -1,6 +1,6 @@
 import type { components } from "../../api/schema";
 
-export type PaymentAttempt = components["schemas"]["OneTimePaymentAttempt"];
+export type PaymentAttempt = Omit<components["schemas"]["OneTimePaymentAttempt"], "orderId"> & { orderId?: string; orderReference?: string };
 
 const KEY_PREFIX = "beanflow.payment-attempt.";
 

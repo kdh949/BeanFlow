@@ -296,6 +296,36 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/operator-directory:
+    get:
+      tags: [Operations]
+      operationId: listOperatorCandidates
+      summary: 조직 로그인 이름으로 상담 담당자 선택
+      description: SUPPORT_CASE_READ 또는 SUPPORT_CASE_ASSIGN의 현재 grant를 확인한다. INTERNAL_REQUESTER만 호출자에게 SUPPORT_CASE_WRITE를 요구하며 현재 ACTIVE grant가 하나 이상 있는 관측 계정을 후보로 반환한다. CASE_FILTER는 이력 조회용으로 철회된 Case 쓰기 권한도 포함하며, 그 외 목적은 현재 Case 쓰기 및 목적별 실행 grant가 모두 있는 계정만 반환한다. 표시 이름은 서명된 최근 로그인 관측 정보이며 명령 권한이 아니다.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: purpose
+          schema: { $ref: '#/components/schemas/OperatorSelectionPurpose' }
+        - in: query
+          name: query
+          schema: { type: string, maxLength: 100 }
+        - in: query
+          name: cursor
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 표시 가능한 담당자와 이름 미등록 계정 수
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperatorDirectoryPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
   /operations/me:
     get:
       tags: [Identity]
@@ -468,6 +498,55 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/orders/{orderReference}/checkout:
+    get:
+      tags: [Ordering]
+      operationId: getPublicCheckout
+      summary: 공개 주문번호로 현재 결제 가능 여부 조회
+      security: [{ customerSession: [] }]
+      description: |
+        소유 주문의 만료를 반영하고 Payment owner 상태를 조회합니다. 내부 orderId는 반환하지 않습니다.
+        canPay는 예약 유효/PENDING_PAYMENT/양수 결제액이며, Payment가 없거나 기존 Payment와 attempt가
+        모두 READY일 때만 true입니다. readyAttempt는 동일 준비 정보이며 새 Payment를 만들지 않습니다.
+        UNKNOWN, 확인 중 또는 종료 상태는 readyAttempt를 반환하지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/OrderReference"
+      responses:
+        "200":
+          description: 현재 주문과 결제 가능 여부
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicCheckout" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /me/orders/{orderReference}/payment-attempts:
+    post:
+      tags: [Ordering]
+      operationId: preparePublicCheckoutPayment
+      summary: 공개 주문번호로 일회성 결제 준비
+      security: [{ customerSession: [] }]
+      description: |
+        기존 Order/Payment 잠금과 멱등 결제 준비를 사용합니다. 서버 금액만 사용하며 내부 orderId를
+        반환하지 않습니다. 서버 시각 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만
+        준비 정보를 반환합니다. 그 외 상태는 409이며 현재 결제 결과를 조회해야 합니다.
+      parameters:
+        - $ref: "#/components/parameters/OrderReference"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CustomerCsrfToken"
+      responses:
+        "200":
+          description: 준비되거나 재생된 결제 시도
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicOneTimePaymentAttempt" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /me/orders/{orderReference}/cancellations:
     post:
@@ -915,6 +994,24 @@ paths:
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
   /stores/{storeId}/image:
+    get:
+      tags: [Merchant]
+      operationId: getStoreImageForAuthoring
+      summary: 현재 매장 편집 이미지 조회
+      security: [{ merchantSession: [] }]
+      description: OWNER 권한과 대상 소속을 확인하고 현재 thumbnail의 한시 URL을 반환합니다. 이미지 없음과 조회 실패를 구분하며 pointer나 Audit를 변경하지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+      responses:
+        "200":
+          description: 현재 선택적 이미지
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StorefrontImageAuthoring" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
     put:
       tags: [Merchant]
       operationId: replaceStoreImage
@@ -1155,6 +1252,36 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /stores/{storeId}/menus/{menuId}/configurations:
+    get:
+      tags: [Discovery]
+      operationId: listStoreMenuConfigurations
+      summary: 메뉴의 현재 판매 구성 조회
+      security: [{ customerSession: [] }]
+      description: |
+        ACTIVE same-store 메뉴의 ACTIVE 구성을 configurationId 순으로 반환합니다.
+        available은 구성 소유 상태이며 메뉴와 모든 선택 옵션도 판매 가능해야 합니다.
+        메뉴별 기존 authoring 상한 500개를 넘으면 503이며 목록을 잘라 반환하지 않습니다.
+        다른 매장 메뉴와 보관 메뉴는 404입니다. 조회는 가격 또는 예약 보장이 아닙니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MenuId"
+      responses:
+        "200":
+          description: 현재 판매 구성
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    maxItems: 500
+                    items: { $ref: "#/components/schemas/CustomerMenuConfiguration" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/menus/{menuId}/trade-content:
     get:
       tags: [Merchant]
@@ -1239,6 +1366,25 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/menus/{menuId}/image:
+    get:
+      tags: [Merchant]
+      operationId: getMenuImageForAuthoring
+      summary: 현재 메뉴 편집 이미지 조회
+      security: [{ merchantSession: [] }]
+      description: OWNER 또는 STAFF 권한과 대상 소속을 확인하고 현재 thumbnail의 한시 URL을 반환합니다. 이미지 없음과 조회 실패를 구분하며 pointer나 Audit를 변경하지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/MenuId"
+      responses:
+        "200":
+          description: 현재 선택적 이미지
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StorefrontImageAuthoring" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
     put:
       tags: [Merchant]
       operationId: replaceMenuImage
@@ -2091,6 +2237,30 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /operations/order-compensations/{orderReference}:
+    get:
+      tags: [Operations]
+      operationId: getOrderCompensationByReference
+      summary: 공개 주문번호로 주문 후속 처리 조회
+      description: ORDER_COMPENSATION_READ grant와 조회 사유를 확인하고 공개 주문번호를 정확 조회한다. 기존 보상 조사와 감사 transaction 안에서 최소 주문 표시 정보를 함께 반환한다. 공개 주문번호는 권한 증명이 아니다.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: orderReference
+          required: true
+          schema: { type: string, minLength: 12, maxLength: 12 }
+        - $ref: '#/components/parameters/AccessReason'
+      responses:
+        '200':
+          description: 선택한 주문과 실제 후속 처리 상태
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperatorOrderCompensationView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
   /operations/orders/{orderId}/compensation:
     get:
       tags: [Operations]
@@ -2200,6 +2370,88 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/DependencyUnavailable"
+  /operations/payment-setup-recovery-cases:
+    get:
+      tags: [Operations]
+      operationId: listPaymentSetupRecoveryCases
+      summary: 주문별 환불 복구 건 목록
+      description: PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다. 고정 목적 PAYMENT_SETUP_RECOVERY_REVIEW와 필터 상태·결과 건수의 금융 감사 기록을 같은 transaction에 저장한다. 감사 실패도 503이다. Case 조회 action은 PAYMENT_SETUP_RECOVERY_CASES_READ, 제안은 PAYMENT_SETUP_REPAIR_PROPOSALS_READ다.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: caseId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: status
+          schema: { type: string, enum: [OPEN, RUNNING, RESOLVED, MANUAL_REVIEW] }
+        - in: query
+          name: cursor
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 현재 권한으로 선택할 수 있는 복구 목록
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SetupRecoveryCasePage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /operations/reprocessing-repair-proposals:
+    get:
+      tags: [Operations]
+      operationId: listPaymentSetupRepairProposals
+      summary: 환불 복구 제안 목록
+      description: PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다. 고정 목적 PAYMENT_SETUP_RECOVERY_REVIEW와 필터 상태·결과 건수의 금융 감사 기록을 같은 transaction에 저장한다. 감사 실패도 503이다. Case 조회 action은 PAYMENT_SETUP_RECOVERY_CASES_READ, 제안은 PAYMENT_SETUP_REPAIR_PROPOSALS_READ다.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: caseId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: state
+          schema: { type: string, enum: [PENDING_APPROVAL, EXECUTED, REJECTED, EXPIRED, STALE] }
+        - in: query
+          name: cursor
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 현재 권한으로 선택할 수 있는 복구 목록
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SetupRepairProposalPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /operations/reprocessing-repair-proposals/{proposalId}:
+    get:
+      tags: [Operations]
+      operationId: getCustomerCancellationSetupRepairProposal
+      summary: 누락 환불 복구 제안의 현재 상태 조회
+      description: 활성 PLATFORM_OPERATOR와 PAYMENT_CANCELLATION_SETUP_REPAIR grant가 필요하다. 제안자·만료·현재 판정만 반환하며 고객 정보와 외부 결제 식별값은 노출하지 않는다. 조회는 만료 처리나 복구 실행을 수행하지 않는다.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: proposalId
+          required: true
+          schema: { $ref: '#/components/schemas/Identifier' }
+      responses:
+        '200':
+          description: 현재 복구 제안
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RepairProposal' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
   /operations/reprocessing-repair-proposals/{proposalId}/decisions:
     post:
       tags: [Operations]
@@ -2537,6 +2789,9 @@ paths:
                 - $ref: '#/components/schemas/ChangeStoreOrdinaryPointAccrualInheritanceRequest'
               discriminator:
                 propertyName: state
+                mapping:
+                  OVERRIDE: '#/components/schemas/ChangeStoreOrdinaryPointAccrualOverrideRequest'
+                  INHERIT_GLOBAL: '#/components/schemas/ChangeStoreOrdinaryPointAccrualInheritanceRequest'
       responses:
         '200':
           description: 매장 포인트 정책 변경 결과
@@ -3012,6 +3267,30 @@ paths:
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
   /operations/stores/{storeId}/brand:
+    get:
+      tags: [Operations]
+      operationId: getStoreBrand
+      summary: (운영팀) 매장 현재 브랜드 조회
+      description: 활성 STORE_BRAND_MANAGE 권한이 필요합니다. 미지정은 null, 없는 매장은 404이며 조회는 감사·검색 색인·명령 원장을 변경하지 않습니다.
+      parameters:
+        - $ref: '#/components/parameters/StoreId'
+      responses:
+        '200':
+          description: 매장 현재 브랜드
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreBrand'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
     put:
       tags:
         - Operations
@@ -3098,6 +3377,33 @@ paths:
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
   /operations/stores/{storeId}/image:
+    get:
+      tags:
+      - Operations
+      operationId: getStoreImageByOperator
+      summary: (운영팀) 매장 대표 이미지 조회
+      description: PLATFORM_OPERATOR, 활성 STORE_MEDIA_MANAGE와 X-Access-Reason을 확인합니다. no-store이며
+        이미지 부재와 서명 실패를 구분합니다.
+      parameters:
+      - $ref: '#/components/parameters/StoreId'
+      - $ref: '#/components/parameters/ValidatedAccessReason'
+      responses:
+        '200':
+          description: 현재 이미지 또는 이미지 없음
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorefrontImageAuthoring'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
     put:
       tags: [Operations]
       operationId: replaceStoreImageByOperator
@@ -3138,6 +3444,34 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '503': { $ref: '#/components/responses/DependencyUnavailable' }
   /operations/stores/{storeId}/menus/{menuId}/image:
+    get:
+      tags:
+      - Operations
+      operationId: getMenuImageByOperator
+      summary: (운영팀) 메뉴 이미지 조회
+      description: PLATFORM_OPERATOR, 활성 STORE_MEDIA_MANAGE와 X-Access-Reason을 확인합니다. no-store이며
+        이미지 부재와 서명 실패를 구분합니다.
+      parameters:
+      - $ref: '#/components/parameters/StoreId'
+      - $ref: '#/components/parameters/MenuId'
+      - $ref: '#/components/parameters/ValidatedAccessReason'
+      responses:
+        '200':
+          description: 현재 이미지 또는 이미지 없음
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorefrontImageAuthoring'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
     put:
       tags: [Operations]
       operationId: replaceMenuImageByOperator
@@ -3392,6 +3726,106 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /operations/point-adjustment-preparations:
+    post:
+      tags: [Operations, Loyalty]
+      operationId: preparePointAdjustment
+      summary: 포인트 조정 준비
+      description: |
+        현재 운영자 본인의 미확인 조정만 다룹니다. POINT_ACCOUNT_READ가 필요하며 준비와 활성 기록 조회는 CUSTOMER_ACCOUNT_SEARCH도 필요합니다. 준비는 POINT_ADJUSTMENT를 추가로 확인합니다.
+        계정과 요청 본문은 서버에 고정하며 preparationId를 기존 조정 API의 Idempotency-Key로 사용합니다. 운영자별 미확인 기록은 하나이며, 다른 조정은 409로 차단합니다.
+        PREPARED 취소와 기존 조정 실행은 계정 잠금으로 직렬화합니다. APPLIED는 결과 확인만 가능하고 금전 변경을 취소하지 않습니다. 기대 상태가 달라지면 409입니다.
+        응답은 no-store이며 조회와 상태 변경에 감사 기록을 남깁니다. 미확인 기록은 유지하고 확인·취소한 기록은 90일 후 정리합니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreparePointAdjustmentRequest"
+      responses:
+        '200':
+          description: 운영자 본인의 조정 준비 또는 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PointAdjustmentPreparationView"
+        '400':
+          $ref: "#/components/responses/BadRequest"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '503':
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/point-adjustment-preparations/current:
+    get:
+      tags: [Operations, Loyalty]
+      operationId: getCurrentPointAdjustmentPreparation
+      summary: 미확인 포인트 조정 복구
+      description: |
+        현재 운영자 본인의 미확인 조정만 다룹니다. POINT_ACCOUNT_READ가 필요하며 준비와 활성 기록 조회는 CUSTOMER_ACCOUNT_SEARCH도 필요합니다. 준비는 POINT_ADJUSTMENT를 추가로 확인합니다.
+        계정과 요청 본문은 서버에 고정하며 preparationId를 기존 조정 API의 Idempotency-Key로 사용합니다. 운영자별 미확인 기록은 하나이며, 다른 조정은 409로 차단합니다.
+        PREPARED 취소와 기존 조정 실행은 계정 잠금으로 직렬화합니다. APPLIED는 결과 확인만 가능하고 금전 변경을 취소하지 않습니다. 기대 상태가 달라지면 409입니다.
+        응답은 no-store이며 조회와 상태 변경에 감사 기록을 남깁니다. 미확인 기록은 유지하고 확인·취소한 기록은 90일 후 정리합니다.
+      responses:
+        '200':
+          description: 운영자 본인의 조정 준비 또는 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentPointAdjustmentPreparation"
+        '400':
+          $ref: "#/components/responses/BadRequest"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '503':
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/point-adjustment-preparations/{preparationId}:
+    delete:
+      tags: [Operations, Loyalty]
+      operationId: dismissPointAdjustmentPreparation
+      summary: 미적용 조정 취소 또는 적용 결과 확인
+      description: |
+        현재 운영자 본인의 미확인 조정만 다룹니다. POINT_ACCOUNT_READ가 필요하며 준비와 활성 기록 조회는 CUSTOMER_ACCOUNT_SEARCH도 필요합니다. 준비는 POINT_ADJUSTMENT를 추가로 확인합니다.
+        계정과 요청 본문은 서버에 고정하며 preparationId를 기존 조정 API의 Idempotency-Key로 사용합니다. 운영자별 미확인 기록은 하나이며, 다른 조정은 409로 차단합니다.
+        PREPARED 취소와 기존 조정 실행은 계정 잠금으로 직렬화합니다. APPLIED는 결과 확인만 가능하고 금전 변경을 취소하지 않습니다. 기대 상태가 달라지면 409입니다.
+        응답은 no-store이며 조회와 상태 변경에 감사 기록을 남깁니다. 미확인 기록은 유지하고 확인·취소한 기록은 90일 후 정리합니다.
+      parameters:
+        - name: preparationId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DismissPointAdjustmentPreparationRequest"
+      responses:
+        '204':
+          description: 취소 또는 결과 확인 완료 (같은 기대 상태의 재호출 포함)
+        '400':
+          $ref: "#/components/responses/BadRequest"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '503':
+          $ref: "#/components/responses/DependencyUnavailable"
   /operations/point-accounts/{accountId}/adjustments:
     post:
       tags: [Operations, Loyalty]
@@ -3608,6 +4042,67 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /operations/stores/{storeId}/orders/{orderReference}/refund-previews:
+    post:
+      tags: [Payment]
+      operationId: previewOperationsStoreOrderRefund
+      summary: Preview a server-calculated line and quantity refund without side effects
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/OrderReference"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MerchantRefundPreviewRequest" }
+      responses:
+        "200":
+          description: Current preview; no Refund, Audit, Provider, or Loyalty write was made
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRefundPreview" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/stores/{storeId}/orders/{orderReference}/refunds:
+    post:
+      tags: [Payment]
+      operationId: refundOperationsStoreOrderByReference
+      summary: Execute a refund from an exact fresh preview
+      x-beanflow-contract-status: TARGET
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+        - $ref: "#/components/parameters/OrderReference"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MerchantRefundRequest" }
+      responses:
+        "200":
+          description: Refund reached a definitive successful state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRefundResult" }
+        "202":
+          description: Provider outcome is still processing, unknown, or reconciling
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRefundResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /stores/{storeId}/orders/{orderReference}/refund-previews:
     post:
       tags: [Payment]
@@ -3827,6 +4322,40 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /support/work-items:
+    get:
+      tags: [Support]
+      operationId: listSupportWorkItems
+      summary: 기존 상담 업무 요청을 현재 조회 권한으로 탐색
+      description: 업무별 기존 inspection 권한과 상태 갱신을 재사용합니다. 행별 가시성 필터와 마지막 권한 재검사를 거치며, 조회 구간에 보이는 항목이 없어도 nextCursor가 있으면 계속 탐색할 수 있습니다. 원문 열람·승인·실행은 수행하지 않습니다.
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/SupportWorkKind" }
+        - name: caseId
+          in: query
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 2048 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: 권한이 확인된 기존 업무 요청의 표시 정보
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportWorkPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/searches:
     post:
       tags: [Support]
@@ -3863,6 +4392,111 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/SupportSearchRateLimited" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/case-queue/summary:
+    get:
+      tags: [Support]
+      operationId: getSupportCaseQueueSummary
+      summary: 현재 담당자의 진행 중 상담 현황
+      description: SUPPORT_CASE_READ 필요. 현재 actor에게 배정된 OPEN/IN_PROGRESS/WAITING만 집계하며 RESOLVED/CLOSED는 제외한다. urgent는 진행 중 긴급 건수다.
+      responses:
+        "200":
+          description: Current assignment counts
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportCaseQueueSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/orders/{orderId}/overview:
+    get:
+      tags: [Support]
+      operationId: getSupportLinkedOrderOverview
+      summary: 담당 상담에 연결된 주문의 품목과 금액 조회
+      description: SUPPORT_CASE_READ와 SUPPORT_ORDER_READ, 현재 담당자의 활성 Case와 활성 ORDER 링크가 필요하다. 조회 전후 권한/링크를 재확인한다. Ordering의 주문 당시 금액이며 현재 결제·환불 상태를 추정하지 않는다.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - name: caseId
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+      responses:
+        "200":
+          description: Linked order overview
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportOrderOverview" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/approval-tasks:
+    get:
+      tags: [Support]
+      operationId: listSupportApprovalTasks
+      summary: 현재 담당자의 통합 승인함
+      description: 종류별 승인/검토 grant와 기존 workflow 객체 권한을 적용한다. REVIEW는 현재 검토 판정이 있는 요청, VISIBLE은 같은 권한으로 조회 가능한 요청이다. 목록은 승인 성공을 보장하지 않는다. 생성 시각·요청 ID·종류 내림차순, actor/종류/모드에 결합된 15분 cursor. 최대 limit개 후보를 검사하므로 items가 비어도 nextCursor가 존재할 수 있다. 명시적 객체 권한 거절만 필터링하고 의존성 실패는 오류로 반환한다.
+      parameters:
+        - name: kind
+          in: query
+          schema: { $ref: "#/components/schemas/SupportApprovalKind" }
+        - name: view
+          in: query
+          schema: { type: string, enum: [REVIEW, VISIBLE], default: REVIEW }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Authorized approval candidates
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportApprovalPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/approval-tasks/{kind}/{requestId}/history:
+    get:
+      tags: [Support]
+      operationId: getSupportApprovalHistory
+      summary: 선택한 승인 요청의 결정 이력
+      description: 종류별 승인 권한과 기존 객체 조회 권한을 전후 재검증한다. 주문 변경은 action request ID, 보상/정보 정정은 해당 요청에 연결된 정확한 action request의 전체 revision 결정만 반환한다. 원문 사유·개인정보 payload는 반환하지 않는다. 결정 시각/이력 ID 내림차순, actor/종류/요청에 결합된 15분 cursor.
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/SupportApprovalKind" }
+        - name: requestId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Bounded decision history
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportApprovalHistoryPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/cases:
     post:
@@ -3903,9 +4537,19 @@ paths:
       summary: 필터에 고정된 커서로 SupportCase 목록 조회
       description: |
         openedAt 내림차순, 동률 시 Case ID 내림차순으로 정렬됩니다. 서명된 커서는 조회 시점의 state,
-        assigneeId 필터에 고정되며 15분 뒤 만료되고, interactions나 notes는 엔티티 컬렉션으로 함께
+        assigneeId·category·priority 필터에 고정되며 15분 뒤 만료되고, interactions나 notes는 엔티티 컬렉션으로 함께
         로드하지 않습니다. 만료되었거나 필터가 바뀐 커서로 재요청하면 400을 반환합니다.
       parameters:
+        - name: category
+          in: query
+          schema: { $ref: "#/components/schemas/SupportInquiryCategory" }
+        - name: priority
+          in: query
+          schema: { $ref: "#/components/schemas/SupportCasePriority" }
+        - name: mine
+          in: query
+          description: 현재 로그인 담당자만 조회. 다른 assigneeId와 함께 지정하면 400.
+          schema: { type: boolean, default: false }
         - name: state
           in: query
           required: false
@@ -4341,6 +4985,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/DataAccessGrantResource"
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/data-access-grants/{grantId}:
+    get:
+      tags: [Support]
+      operationId: inspectSupportDataAccessGrant
+      summary: 제한형 열람 요청의 현재 범위와 승인 상태 조회
+      description: 원문 없이 현재 Grant와 요청자/별도 승인자 역할을 반환합니다. 활성 Case와 연결 및 기존 요청자 또는 승인자 권한을 재확인합니다.
+      parameters:
+        - $ref: "#/components/parameters/DataAccessGrantId"
+      responses:
+        "200":
+          description: Current grant metadata; no reveal budget is consumed
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataAccessGrantInspectionResource"
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -4799,6 +5466,86 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /operations/customers/{customerId}/point-account:
+    get:
+      tags: [Operations, Loyalty]
+      operationId: resolveOperationsCustomerPointAccount
+      summary: (운영팀) 선택 고객의 포인트 계정 연결
+      description: >-
+        POINT_ACCOUNT_READ active grant와 고정 조회 사유를 확인하고 Loyalty가 소유한 고객-계정 관계를 조회한다.
+        관계 조회와 PII_ACCESS 감사가 같은 transaction에서 성공해야 no-store 응답을 반환한다.
+        고객의 계정이 없으면 POINT_ACCOUNT_INTEGRITY_FAILURE(503)이며 생성하거나 0 잔액으로 대체하지 않는다.
+        반환 ID를 사용하는 후속 조회·조정은 각각 기존 권한을 독립적으로 확인한다.
+      x-beanflow-contract-status: TARGET
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Identifier'
+        - name: X-Access-Reason
+          in: header
+          required: true
+          schema:
+            type: string
+            enum: [POINT_ACCOUNT_INVESTIGATION]
+      responses:
+        '200':
+          description: 선택한 고객의 포인트 계정 식별자
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsCustomerPointAccountResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/customer-searches:
+    post:
+      tags: [Operations, Identity]
+      operationId: searchOperationsCustomers
+      summary: (운영팀) 포인트 조사 대상 고객 검색
+      description: >-
+        CUSTOMER_ACCOUNT_SEARCH active grant와 POINT_ACCOUNT_INVESTIGATION 사유로 가입 고객 login ID를
+        BR-34 규칙에 따라 정확 검색한다. 결과는 0~1개이며 login ID와 표시 이름을 마스킹한다.
+        query parameter는 금지한다. 권한·검색·접근 감사 저장이 같은 transaction에서 성공한 경우에만
+        no-store 응답을 반환한다. 검색 권한은 포인트 읽기나 조정을 허용하지 않는다.
+      x-beanflow-contract-status: TARGET
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationsCustomerSearchRequest'
+      responses:
+        '200':
+          description: 정확 검색 결과. 일치하는 가입 고객이 없으면 items는 빈 배열이다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsCustomerSearchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /operations/merchant-accounts:
     get:
       tags:
@@ -6645,6 +7392,7 @@ paths:
     post:
       tags:
         - Support
+      security: [{ merchantSession: [] }]
       operationId: createSupportOrderChangeAuthorization
       summary: (스토어) 고객센터 주문 변경 승인·권한 부여
       description: |
@@ -6661,6 +7409,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/StoreId'
         - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/MerchantCsrfToken'
       requestBody:
         required: true
         content:
@@ -7441,6 +8190,59 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DisputeManagementRequest'
+  /operations/store-targets:
+    get:
+      tags:
+      - Operations
+      operationId: listStoreTargets
+      summary: 업무별 최소 매장 목록 조회
+      description: 목적별 현재 grant를 검증하고 매장 이름과 ID만 반환한다. IDENTITY=STORE_IDENTITY_READ, TERMS=STORE_SETTLEMENT_TERMS_READ, MEMBERSHIP=STORE_MEMBERSHIP_READ, BRAND=STORE_BRAND_MANAGE, POINT_POLICY=POINT_ACCRUAL_POLICY_READ, MEDIA=STORE_MEDIA_MANAGE, MEMBERSHIP_ASSIGNMENT=STORE_MEMBERSHIP_WRITE, MERCHANT_ACCOUNT=MERCHANT_CREDENTIAL_MANAGE, DISPUTE=SETTLEMENT_DISPUTE_READ, REFUND=기존 PLATFORM_OPERATOR 역할만 확인. 개인정보 없는 목록에는 Audit를 남기지 않으며 후속 상세와 명령 권한은 별도로 검증한다. cursor는 actor, purpose, 검색어에 묶인다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: purpose
+        required: true
+        schema:
+          type: string
+          enum: [IDENTITY, TERMS, MEMBERSHIP, BRAND, POINT_POLICY, MEDIA, MEMBERSHIP_ASSIGNMENT, MERCHANT_ACCOUNT, DISPUTE, REFUND]
+      - in: query
+        name: query
+        schema:
+          type: string
+          maxLength: 200
+      - in: query
+        name: cursor
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 운영자 매장 목록 조회
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorStoreTargetPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
   /operations/stores:
     get:
       tags:
@@ -7973,6 +8775,42 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /operations/stores/{storeId}/memberships/account-target:
+    get:
+      tags: [Identity, Operations]
+      operationId: findMembershipAccountTarget
+      summary: 소속 추가 목적의 기존 계정 정확 조회
+      description: PLATFORM_OPERATOR와 STORE_MEMBERSHIP_WRITE만 필요하며 현재 매장을 확인한다. accountId/loginId/displayName만 반환하고 인증 상태나 타 매장 소속은 노출하지 않는다. no-store이며 MERCHANT_ACCOUNT_READ 감사 기록의 purpose=MEMBERSHIP_ASSIGNMENT와 storeId를 같은 트랜잭션에 저장한다.
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: loginId
+          in: query
+          required: true
+          schema: {type: string, minLength: 3, maxLength: 64}
+        - name: X-Access-Reason
+          in: header
+          required: true
+          schema: {type: string, enum: [STORE_MEMBERSHIP_ASSIGNMENT_REVIEW]}
+      responses:
+        '200':
+          description: 정확히 일치하는 계정의 최소 표시 정보
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MembershipAccountTarget"
+        '400':
+          $ref: "#/components/responses/BadRequest"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '503':
+          $ref: "#/components/responses/DependencyUnavailable"
   /operations/stores/{storeId}/memberships:
     get:
       tags:
@@ -8397,6 +9235,1226 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RetryPublicationRequest'
+  /support/cases/{caseId}/order-candidates/{orderReference}:
+    get:
+      tags: [Support]
+      operationId: findSupportOrderCandidate
+      summary: 담당 상담의 연결 후보를 공개 주문번호로 정확 조회
+      description: 현재 담당자와 활성 Case, CASE_READ/WRITE, ORDER_READ, SUBJECT_SEARCH 권한 및 기존 검색 rate guard를 확인합니다. 최소 주문 표시와 감사가 같은 transaction이며 실행 권한을 부여하지 않습니다.
+      parameters:
+        - $ref: "#/components/parameters/SupportCaseId"
+        - name: orderReference
+          in: path
+          required: true
+          schema: { type: string, minLength: 12, maxLength: 12 }
+      responses:
+        "200":
+          description: 실제 주문의 최소 연결 후보
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportOrderDisplay" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/cases/{caseId}/orders/{orderId}/pickup-slots:
+    get:
+      tags:
+      - Support
+      operationId: listSupportOrderPickupSlots
+      summary: 상담 주문 픽업 후보 조회
+      description: 현재 Case 배정, 활성 주문 연결, SUPPORT_CASE_READ와 SUPPORT_ORDER_READ를 검증한다. 고객 세션은 필요하지 않으며 실행 시 정원을 재검증한다.
+      parameters:
+      - $ref: '#/components/parameters/SupportCaseId'
+      - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickupSlotList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /support/cases/{caseId}/orders/{orderId}:
+    get:
+      tags:
+      - Support
+      operationId: getSupportOrderContext
+      summary: 상담에 연결된 주문의 현재 상태와 버전입니다
+      description: 담당 상담 건의 활성 주문 연결과 SUPPORT_CASE_READ, SUPPORT_ORDER_READ를 확인하고 소유 시스템에서 현재 주문 상태와 버전을 조회합니다.
+      parameters:
+      - $ref: '#/components/parameters/SupportCaseId'
+      - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: 상담에 연결된 주문의 현재 상태와 버전입니다. 개인정보는 포함하지 않습니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportOrderContextResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /support/action-requests/{requestId}/pickup-slots:
+    get:
+      tags:
+      - Support
+      operationId: listSupportRequestPickupSlots
+      summary: 상담 승인 요청 픽업 후보 조회
+      description: 현재 요청 가시성 및 SUPPORT_CASE_READ와 SUPPORT_ORDER_READ를 검증한다. workflow와 같은 만료 및 권한 철회 read repair를 포함하며 실제 주문 변경은 실행하지 않는다.
+      parameters:
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      responses:
+        '200':
+          description: 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickupSlotList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /support/action-requests/{requestId}/workflow:
+    get:
+      tags:
+      - Support
+      operationId: getSupportOrderWorkflow
+      summary: 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다
+      description: 기존 요청 조회 권한으로 현재 승인안과 실행 담당 권한을 재검증합니다. 승인 대기 만료 및 실행 권한 철회는 기존 S60 트랜잭션에서 상태·버전·감사로 반영하며 반복 조회는 추가 전이를 만들지 않습니다. 개인정보나 action 원문은 반환하지 않습니다.
+      parameters:
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      responses:
+        '200':
+          description: 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportOrderWorkflowResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /stores/{storeId}/support-order-change-requests/{requestId}/pickup-slots:
+    get:
+      tags:
+      - Support
+      security: [{ merchantSession: [] }]
+      operationId: listStoreSupportRequestPickupSlots
+      summary: 매장 상담 동의 픽업 후보 조회
+      description: 현재 same-store OWNER 또는 STAFF와 동의 대상의 action, revision, 정책 버전, 주문 버전, 만료를 검증한다. 고객 세션은 필요하지 않다.
+      parameters:
+      - $ref: '#/components/parameters/StoreId'
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      responses:
+        '200':
+          description: 현재 권한으로 확인한 해당 매장의 픽업 후보입니다. 정원은 실행할 때 다시 검증합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickupSlotList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /stores/{storeId}/support-order-change-requests/{requestId}:
+    get:
+      tags:
+      - Support
+      security: [{ merchantSession: [] }]
+      operationId: getStoreSupportOrderChangeRequest
+      summary: 소속 매장의 수락된 주문에 대한 건별 동의 대상입니다
+      description: 활성 점주 또는 직원이 소속 매장의 ACCEPTED 주문에 대한 유효 승인안만 조회합니다. 동의 생성이나 사용 횟수 소비는 없습니다.
+      parameters:
+      - $ref: '#/components/parameters/StoreId'
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      responses:
+        '200':
+          description: 소속 매장의 수락된 주문에 대한 건별 동의 대상입니다. 상담원과 본인확인 식별자 및 증거를 제외합니다.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreSupportOrderChangeRequestResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /support/compensations/{compensationRequestId}/workflow:
+    get:
+      tags:
+      - Support
+      operationId: getSupportCompensationWorkflow
+      summary: (고객센터) 보상 검토 및 실행 업무 조회
+      description: 현재 Case·대상 연결과 별도 승인 권한을 검사한 뒤 보상에 고정된 조건과 가능한 명령을 조회합니다. 조회는 발급하지
+        않으며 원문 개인정보를 포함하지 않습니다.
+      parameters:
+      - $ref: '#/components/parameters/SupportCompensationRequestId'
+      responses:
+        '200':
+          description: 고객 보상 요청 조회 결과
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCompensationWorkflowResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /support/compensation-coupon-templates:
+    get:
+      tags:
+      - Support
+      operationId: listSupportCompensationCouponTemplates
+      summary: (고객센터) 불변 보상 쿠폰 템플릿 목록
+      description: 상담 보상 요청 권한으로 불변 템플릿의 정액·유효기간·최소 사용 금액을 1~50개씩 조회합니다. 선택 후 실제 평가·발급
+        시 조건을 다시 검증합니다.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        description: 직전 페이지의 nextCursor입니다.
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        required: false
+        description: 페이지당 항목 수입니다.
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
+      responses:
+        '200':
+          description: 고객 보상 요청 조회 결과
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCompensationCouponTemplatePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /support/cases/{caseId}/profile-contexts/{linkId}:
+    get:
+      tags:
+      - Support
+      operationId: getSupportProfileContext
+      summary: (고객센터) 정보 정정 대상의 현재 조건
+      description: 현재 Case 담당자·대상 연결과 정정 목적 권한을 검사하고 원문 없이 현재 owner version과 필요한 인증
+        수준을 조회합니다.
+      parameters:
+      - $ref: '#/components/parameters/SupportCaseId'
+      - $ref: '#/components/parameters/SupportSubjectLinkId'
+      - name: purpose
+        in: query
+        required: true
+        description: 필드 위험 정책에 따른 정정 목적입니다.
+        schema:
+          type: string
+          enum:
+          - CUSTOMER_DISPLAY_NAME
+          - CUSTOMER_LEGAL_NAME_TYPO
+          - CUSTOMER_PRIMARY_PHONE
+          - CUSTOMER_CREDENTIAL_RESET
+          - STORE_PUBLIC_PROFILE
+          - STORE_OPERATIONS_CONTACT
+          - STORE_REPRESENTATIVE
+          - STORE_SETTLEMENT_ACCOUNT
+          - STORE_ACCESS_REREGISTRATION
+          - COURIER_DISPLAY_NAME
+          - COURIER_RELAY_CONTACT
+          - COURIER_PROVIDER_IDENTITY
+          - COURIER_PAYOUT_REFERENCE
+          - COURIER_PROVIDER_REREGISTRATION
+      responses:
+        '200':
+          description: 정보 정정 목적에 필요한 현재 프로필 조건
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportProfileContextResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /support/profile-changes/{profileChangeId}/workflow:
+    get:
+      tags:
+      - Support
+      operationId: getSupportProfileWorkflow
+      summary: (고객센터) 정보 정정 승인 및 실행 업무 조회
+      description: 현재 읽기 권한으로 정정과 승인안 연결 및 가능한 명령을 조회합니다. 원문 또는 인증 증거를 반환하지 않습니다.
+      parameters:
+      - $ref: '#/components/parameters/SupportProfileChangeId'
+      responses:
+        '200':
+          description: 정보 정정의 현재 승인 및 실행 조건
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportProfileWorkflowResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/investigations:
+    get:
+      tags:
+      - Operations
+      operationId: getOperationsSupportInvestigationWorkflow
+      summary: (운영) 승인안의 조사 조회
+      description: 지속된 운영 조사 권한으로 exact Support request/revision을 조회합니다. 현재 다른 검토자에게만
+        결정 가능 여부를 제공합니다.
+      parameters:
+      - name: supportActionRequestId
+        in: query
+        required: true
+        description: 검토할 상담 승인 요청입니다.
+        schema:
+          $ref: '#/components/schemas/Identifier'
+      - name: revisionNumber
+        in: query
+        required: true
+        description: 검토할 정확한 승인안 번호입니다.
+        schema:
+          type: integer
+          minimum: 1
+      responses:
+        '200':
+          description: 현재 승인안에 연결된 운영 조사
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsSupportInvestigationWorkflowResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /support/break-glass-requests/{requestId}/workflow:
+    get:
+      tags:
+      - Support
+      operationId: getBreakGlassWorkflow
+      summary: (고객센터) 긴급 열람 요청의 현재 업무 조회
+      description: 현재 요청자·별도 승인자·독립 사후 검토자가 자신의 지속 권한으로 원문 없는 요청과 가능한 명령을 조회합니다. 만료·종료·권한
+        회수는 원문 표시와 새 열람을 제한합니다.
+      parameters:
+      - $ref: '#/components/parameters/BreakGlassRequestId'
+      responses:
+        '200':
+          description: 긴급 열람 요청과 현재 권한·기간 조건
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BreakGlassWorkflowResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
+  /me/support-inquiries:
+    get:
+      tags:
+      - Support
+      operationId: listCustomerSupportInquiries
+      summary: 내 문의 목록
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - customerSession: []
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInquiryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Support
+      operationId: createCustomerSupportInquiry
+      summary: 고객 문의 접수
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - customerSession: []
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CustomerCsrfToken'
+      responses:
+        '201':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InquiryCommandResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerInquiryRequest'
+  /me/support-inquiries/{inquiryId}:
+    get:
+      tags:
+      - Support
+      operationId: getCustomerSupportInquiry
+      summary: 내 문의와 공개 답변
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - customerSession: []
+      parameters:
+      - in: path
+        name: inquiryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: messageCursor
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInquiryDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/support-inquiries/{inquiryId}/messages:
+    post:
+      tags:
+      - Support
+      operationId: appendCustomerInquiryMessage
+      summary: 내 문의에 추가 메시지
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - customerSession: []
+      parameters:
+      - in: path
+        name: inquiryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CustomerCsrfToken'
+      responses:
+        '201':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InquiryCommandResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InquiryMessageRequest'
+  /support/inquiries:
+    get:
+      tags:
+      - Support
+      operationId: listSupportInquiries
+      summary: 상담 접수함
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+      - in: query
+        name: unclaimed
+        schema:
+          type: boolean
+          default: true
+      responses:
+        '200':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInquiryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /support/inquiries/{inquiryId}:
+    get:
+      tags:
+      - Support
+      operationId: getSupportInquiry
+      summary: 상담 접수 및 공개 대화 문맥
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: inquiryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: messageCursor
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportInquiryDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /support/inquiries/{inquiryId}/claims:
+    post:
+      tags:
+      - Support
+      operationId: claimSupportInquiry
+      summary: 문의 인수와 상담 연결
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: inquiryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InquiryClaimResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InquiryClaimRequest'
+  /support/inquiries/{inquiryId}/messages:
+    post:
+      tags:
+      - Support
+      operationId: appendSupportInquiryMessage
+      summary: 담당 상담원의 공개 답변
+      description: BR-55 / ADR-126. 로그인 고객의 소유권 또는 현재 상담 권한을 확인합니다. 공개 메시지만 포함하며 내부
+        메모나 본인 확인 자료는 반환하지 않습니다. 목록과 메시지는 최신순 20개와 actor/filter에 바인딩된 cursor를 제공합니다.
+        쓰기는 90일 동일 키 replay를 지원하며 같은 키의 다른 본문은 409입니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: inquiryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: 현재 조회 결과 또는 내구 저장된 명령 결과. 거래 실행 완료를 의미하지 않습니다.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InquiryCommandResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 필수 저장 또는 상담 문맥을 확인할 수 없음. 성공이나 빈 결과로 대체하지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupportInquiryMessageRequest'
+  /operations/stores/{storeId}/media-menus:
+    get:
+      tags:
+      - Operations
+      operationId: listOperatorMediaMenus
+      summary: (운영팀) 이미지 관리용 메뉴 목록
+      description: STORE_MEDIA_MANAGE와 X-Access-Reason으로 같은 매장의 ACTIVE/ARCHIVED 메뉴를
+        20개씩 조회합니다. cursor는 actor/store/lifecycle에 바인딩되며 응답은 no-store입니다.
+      parameters:
+      - $ref: '#/components/parameters/StoreId'
+      - $ref: '#/components/parameters/ValidatedAccessReason'
+      - name: lifecycle
+        in: query
+        schema:
+          $ref: '#/components/schemas/MenuCatalogLifecycle'
+          default: ACTIVE
+      - name: cursor
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 메뉴 선택 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorMediaMenuPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /stores/{storeId}/support-order-change-requests:
+    get:
+      tags:
+      - Support
+      operationId: listStoreSupportOrderChangeRequests
+      summary: 소속 매장의 현재 주문 변경 동의 대상을 공개 주문번호로 탐색
+      parameters:
+      - $ref: '#/components/parameters/StoreId'
+      - &s4paths001
+        name: cursor
+        in: query
+        schema:
+          type: string
+          maxLength: 2048
+      - &s4paths002
+        name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 소속 매장의 현재 주문 변경 동의 대상을 공개 주문번호로 탐색
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreOrderChangeCandidatePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+      security:
+      - merchantSession: []
+  /support/action-requests/{requestId}/store-consents:
+    get:
+      tags:
+      - Support
+      operationId: listSupportOrderConsents
+      summary: 현재 실행 승인안에 유효한 매장 동의와 위임을 조회
+      parameters:
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      - *s4paths001
+      - *s4paths002
+      responses:
+        '200':
+          description: 현재 실행 승인안에 유효한 매장 동의와 위임을 조회
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportOrderConsentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/investigation-queue:
+    get:
+      tags:
+      - Operations
+      operationId: listOperationsSupportInvestigations
+      summary: 현재 승인안의 운영 검토 목록 조회
+      parameters:
+      - name: state
+        in: query
+        schema:
+          $ref: '#/components/schemas/OperationsSupportInvestigationState'
+      - *s4paths001
+      - *s4paths002
+      responses:
+        '200':
+          description: 현재 승인안의 운영 검토 목록 조회
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsInvestigationPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /support/cases/{caseId}/compensation-incidents:
+    get:
+      tags:
+      - Support
+      operationId: listSupportCompensationIncidents
+      summary: 검증된 고객과 주문의 기존 보상 사고 선택
+      parameters:
+      - name: incidentId
+        in: query
+        description: 재검토 링크에서 받은 기존 사고만 확인
+        schema:
+          $ref: "#/components/schemas/Identifier"
+      - $ref: '#/components/parameters/SupportCaseId'
+      - name: verificationSessionId
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/Identifier'
+      - name: orderId
+        in: query
+        schema:
+          $ref: '#/components/schemas/Identifier'
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          maxLength: 2048
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 현재 권한으로 확인한 보상 사고
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCompensationIncidentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    post:
+      tags:
+      - Support
+      operationId: registerSupportCompensationIncident
+      summary: 고객과 주문에 묶인 별개 사고를 멱등 등록
+      parameters:
+      - $ref: '#/components/parameters/SupportCaseId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterSupportCompensationIncidentRequest'
+      responses:
+        '201':
+          description: 현재 권한으로 확인한 보상 사고
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCompensationIncidentResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/point-cost-issuers:
+    get:
+      tags:
+      - Operations
+      operationId: listPointCostIssuers
+      summary: 목적별 현재 권한으로 이름과 실제 출처가 있는 비용 주체 선택
+      parameters:
+      - name: purpose
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - POLICY
+          - ADJUSTMENT
+      - name: type
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - PLATFORM
+          - BRAND
+          - STORE
+      - name: query
+        in: query
+        schema:
+          type: string
+          maxLength: 200
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          maxLength: 2048
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 명명된 포인트 비용 주체
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PointCostIssuerPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/platform-point-cost-owners:
+    post:
+      tags:
+      - Operations
+      operationId: registerPlatformPointCostOwner
+      summary: 정책 변경 권한으로 플랫폼 비용 주체의 불변 이름과 참조를 등록
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterPlatformPointCostOwnerRequest'
+      responses:
+        '201':
+          description: 명명된 포인트 비용 주체
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PointCostIssuerResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/support-action-requests/{requestId}/review:
+    get:
+      tags:
+      - Operations
+      operationId: getOperationsSupportRequestReview
+      summary: 운영 검토 전용 권한으로 현재 상담 승인안의 최소 조건을 조회합니다
+      description: PLATFORM_OPERATOR 역할과 OPERATIONS_SUPPORT_INVESTIGATION grant를 요구합니다. OPERATIONS 승인 경로만 허용하며 상담 열람 권한은 요구하지 않습니다. 현재 승인안 해시·버전과
+        정정 목적 또는 보상 비용 조건만 반환합니다. 원문·본인확인 세션·상담 내용은 반환하지 않으며 상태·감사를 변경하지 않습니다. 승인 명령은 현재 권한과 바인딩을 다시 검증합니다.
+      parameters:
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '200':
+          description: 현재 운영 검토 조건
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsSupportRequestReviewResource'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -8646,6 +10704,14 @@ components:
         minimum: 1
         maximum: 20
         default: 10
+    ValidatedAccessReason:
+      in: header
+      name: X-Access-Reason
+      required: true
+      description: '이미지 조회 목적을 검증하는 업무 사유입니다. 앞뒤 공백을 제외한 1~200자를 보내야 합니다. 이 조회는 Audit 기록을 추가하거나 변경하지 않습니다.'
+      schema:
+        type: string
+        pattern: ^[^\u0000-\u001F\u007F]*[^\s\u0000-\u001F\u007F][^\u0000-\u001F\u007F]*$
     AccessReason:
       in: header
       name: X-Access-Reason
@@ -8934,6 +11000,1185 @@ components:
         type: string
         const: no-store
   schemas:
+    OperationsCustomerPointAccountResponse:
+      type: object
+      additionalProperties: false
+      required: [customerId, accountId]
+      properties:
+        customerId:
+          $ref: '#/components/schemas/Identifier'
+        accountId:
+          $ref: '#/components/schemas/Identifier'
+    OperationsCustomerSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [loginId, reasonCode]
+      properties:
+        loginId:
+          type: string
+          maxLength: 100
+          description: 앞뒤 공백 제거와 ASCII 대문자 소문자 변환 후 BR-34의 5~32자 사용자명으로 정확 검색한다.
+        reasonCode:
+          type: string
+          enum: [POINT_ACCOUNT_INVESTIGATION]
+    OperationsCustomerSearchItem:
+      type: object
+      additionalProperties: false
+      required: [customerId, maskedLoginId, maskedDisplayName]
+      properties:
+        customerId:
+          $ref: '#/components/schemas/Identifier'
+        maskedLoginId:
+          type: string
+          description: 첫 글자와 고정 마스킹으로 표시한 login ID.
+        maskedDisplayName:
+          type: string
+          description: 기존 개인정보 표시 정책으로 마스킹한 가입 고객 표시 이름.
+    OperationsCustomerSearchResult:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 1
+          items:
+            $ref: '#/components/schemas/OperationsCustomerSearchItem'
+    OperatorMediaMenu:
+      type: object
+      additionalProperties: false
+      required:
+      - menuId
+      - name
+      - lifecycle
+      properties:
+        menuId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        lifecycle:
+          $ref: '#/components/schemas/MenuCatalogLifecycle'
+    OperatorMediaMenuPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/OperatorMediaMenu'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+    CustomerInquiryCategory:
+      type: string
+      enum:
+      - ORDER_STATUS
+      - PICKUP_RESCHEDULE
+      - ORDER_CANCELLATION
+      - PAYMENT_OR_REFUND
+      - COUPON_OR_POINT
+      - CUSTOMER_PROFILE
+      - DELIVERY_STATUS
+      - ACCOUNT_RECOVERY
+      - PRIVACY
+      - SAFETY
+      - OTHER
+    CustomerInquiryState:
+      type: string
+      enum:
+      - RECEIVED
+      - OPEN
+      - IN_PROGRESS
+      - WAITING
+      - RESOLVED
+      - CLOSED
+    InquiryMessageAuthor:
+      type: string
+      enum:
+      - CUSTOMER
+      - SUPPORT
+    CustomerInquirySummary:
+      type: object
+      additionalProperties: false
+      required:
+      - inquiryId
+      - title
+      - category
+      - state
+      - orderReference
+      - version
+      - createdAt
+      properties:
+        inquiryId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        category:
+          $ref: '#/components/schemas/CustomerInquiryCategory'
+        state:
+          $ref: '#/components/schemas/CustomerInquiryState'
+        orderReference:
+          anyOf:
+          - type: string
+          - type: 'null'
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+    InquiryMessage:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - author
+      - content
+      - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        author:
+          $ref: '#/components/schemas/InquiryMessageAuthor'
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CustomerInquiryPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerInquirySummary'
+        nextCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+    CustomerInquiryDetail:
+      type: object
+      additionalProperties: false
+      required:
+      - inquiry
+      - messages
+      - nextMessageCursor
+      - canReply
+      properties:
+        inquiry:
+          $ref: '#/components/schemas/CustomerInquirySummary'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/InquiryMessage'
+        nextMessageCursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+        canReply:
+          type: boolean
+    SupportInquiryDetail:
+      type: object
+      additionalProperties: false
+      required:
+      - detail
+      - caseId
+      - caseVersion
+      - canClaim
+      - canReply
+      properties:
+        detail:
+          $ref: '#/components/schemas/CustomerInquiryDetail'
+        caseId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        caseVersion:
+          anyOf:
+          - type: integer
+            format: int64
+            minimum: 0
+          - type: 'null'
+        canClaim:
+          type: boolean
+        canReply:
+          type: boolean
+    CreateCustomerInquiryRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - title
+      - category
+      - content
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        category:
+          $ref: '#/components/schemas/CustomerInquiryCategory'
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        orderReference:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+    InquiryMessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - expectedVersion
+      - content
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    SupportInquiryMessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - expectedVersion
+      - expectedCaseVersion
+      - content
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        expectedCaseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    InquiryClaimRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - expectedVersion
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    InquiryCommandResult:
+      type: object
+      additionalProperties: false
+      required:
+      - inquiryId
+      - messageId
+      properties:
+        inquiryId:
+          type: string
+          format: uuid
+        messageId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+    InquiryClaimResult:
+      type: object
+      additionalProperties: false
+      required:
+      - inquiryId
+      - caseId
+      properties:
+        inquiryId:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+    OperationsSupportActionReview:
+      type: object
+      additionalProperties: false
+      required:
+      - requestId
+      - caseId
+      - action
+      - targetId
+      - revisionNumber
+      - requestVersion
+      - state
+      - actionPayloadDigest
+      - targetVersion
+      - evidenceDigest
+      properties:
+        requestId:
+          $ref: '#/components/schemas/Identifier'
+          description: 해당 요청 자원을 가리키는 UUID 식별자입니다.
+        caseId:
+          $ref: '#/components/schemas/Identifier'
+          description: 해당 케이스 자원을 가리키는 UUID 식별자입니다.
+        action:
+          $ref: '#/components/schemas/SupportActionType'
+          description: 요청하거나 수행한 작업 유형입니다.
+        targetId:
+          $ref: '#/components/schemas/Identifier'
+          description: 해당 작업 대상 자원을 가리키는 UUID 식별자입니다.
+        revisionNumber:
+          type: integer
+          minimum: 1
+          description: 실행하거나 조회할 승인 요청 내용의 번호입니다. 1부터 시작합니다.
+        requestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 동시 변경 확인에 사용하는 요청 리소스 버전입니다.
+        state:
+          $ref: '#/components/schemas/SupportActionRequestState'
+          description: 요청의 현재 승인·실행 상태입니다.
+        actionPayloadDigest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: 승인 대상 요청 내용이 바뀌지 않았는지 확인하는 SHA-256 해시값입니다.
+        targetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 요청이 연결된 주문 대상 버전입니다.
+        evidenceDigest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다.
+    OperationsSupportProfileReview:
+      type: object
+      additionalProperties: false
+      required:
+      - subjectId
+      - purpose
+      - expectedProfileVersion
+      - payloadDigest
+      - currentProfileVersion
+      properties:
+        subjectId:
+          $ref: '#/components/schemas/Identifier'
+        purpose:
+          type: string
+          enum:
+          - CUSTOMER_DISPLAY_NAME
+          - CUSTOMER_LEGAL_NAME_TYPO
+          - CUSTOMER_PRIMARY_PHONE
+          - CUSTOMER_CREDENTIAL_RESET
+          - STORE_PUBLIC_PROFILE
+          - STORE_OPERATIONS_CONTACT
+          - STORE_REPRESENTATIVE
+          - STORE_SETTLEMENT_ACCOUNT
+          - STORE_ACCESS_REREGISTRATION
+          - COURIER_DISPLAY_NAME
+          - COURIER_RELAY_CONTACT
+          - COURIER_PROVIDER_IDENTITY
+          - COURIER_PAYOUT_REFERENCE
+          - COURIER_PROVIDER_REREGISTRATION
+        expectedProfileVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        payloadDigest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        currentProfileVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 소유 모듈의 프로필 버전입니다.
+    OperationsSupportCompensationReview:
+      type: object
+      additionalProperties: false
+      required:
+      - incidentId
+      - orderId
+      - benefitType
+      - amountKrw
+      - payloadDigest
+      - terms
+      - currentTargetVersion
+      - couponTemplate
+      properties:
+        incidentId:
+          $ref: '#/components/schemas/Identifier'
+          description: 해당 사고 자원을 가리키는 UUID 식별자입니다.
+        orderId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: 해당 주문 자원을 가리키는 UUID 식별자입니다.
+        benefitType:
+          $ref: '#/components/schemas/SupportCompensationBenefitType'
+          description: 혜택 유형입니다.
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 요청 또는 거래에 적용되는 정수 원(KRW) 단위 금액입니다.
+        payloadDigest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: 요청 생성 당시 정규 요청 내용의 SHA-256 해시값입니다.
+        terms:
+          $ref: '#/components/schemas/SupportCompensationTermsResource'
+        currentTargetVersion:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+          description: 현재 주문 버전입니다. 주문 없는 요청은 0이며 조회 불가능한 주문은 null입니다.
+        couponTemplate:
+          description: 쿠폰 보상에 고정된 할인·유효기간·최소 사용 금액입니다. 포인트 보상은 null입니다.
+          oneOf:
+          - $ref: '#/components/schemas/GoodwillCouponTemplateView'
+          - type: 'null'
+    OperationsSupportRequestReviewResource:
+      type: object
+      additionalProperties: false
+      required:
+      - request
+      - profile
+      - compensation
+      properties:
+        request:
+          $ref: '#/components/schemas/OperationsSupportActionReview'
+        profile:
+          oneOf:
+          - $ref: '#/components/schemas/OperationsSupportProfileReview'
+          - type: 'null'
+        compensation:
+          oneOf:
+          - $ref: '#/components/schemas/OperationsSupportCompensationReview'
+          - type: 'null'
+    BreakGlassWorkflowAction:
+      type: string
+      enum:
+      - DECIDE
+      - REVEAL
+      - REVIEW
+      description: 현재 계정에서 가능한 긴급 열람 명령입니다. 모든 쓰기에서 재검증합니다.
+      example: DECIDE
+    BreakGlassWorkflowResource:
+      type: object
+      additionalProperties: false
+      description: 원문 없이 현재 긴급 열람 요청·권한·기간과 가능한 업무를 제공합니다. 저장된 ACTIVE 요청도 만료 시 새 열람을 허용하지
+        않습니다.
+      required:
+      - request
+      - allowedActions
+      - canViewRevealedValue
+      - postReview
+      properties:
+        request:
+          $ref: '#/components/schemas/BreakGlassResource'
+        allowedActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/BreakGlassWorkflowAction'
+          description: 현재 가능한 승인·열람·독립 사후 검토입니다.
+        canViewRevealedValue:
+          type: boolean
+          description: 요청자가 이미 응답받은 원문을 현재 권한·배정·기간 안에서 계속 표시할 수 있는지입니다. 이 조회는 원문을 반환하지
+            않습니다.
+        postReview:
+          description: 원문 없이 반환하는 실제 사후 검토 결과입니다. 추가 검토 필요와 정책 준수 확인을 구분합니다.
+          oneOf:
+          - type: object
+            additionalProperties: false
+            required:
+            - decision
+            - reasonCode
+            - decidedAt
+            properties:
+              decision:
+                type: string
+                enum:
+                - CONFIRMED
+                - ESCALATED
+              reasonCode:
+                type: string
+                maxLength: 32
+                pattern: ^[A-Z][A-Z0-9_]*$
+              decidedAt:
+                $ref: '#/components/schemas/DateTime'
+          - type: 'null'
+      example:
+        request:
+          requestId: a1b2c3d4-e5f6-4708-8a9b-0c1d2e3f4a5b
+          caseId: b6f2a1d0-4c3e-4a1b-9f7d-2e8a1c9b0d3f
+          subjectLinkId: 9d8c7b6a-5f4e-4d3c-8b2a-1e0f9d8c7b6a
+          subjectType: CUSTOMER
+          subjectId: 5c4b3a29-1807-46f5-9e4d-3c2b1a0f9e8d
+          field: CUSTOMER_PRIMARY_PHONE
+          purpose: SAFETY_RESPONSE
+          reasonCode: IMMEDIATE_SAFETY
+          state: APPROVAL_PENDING
+          requestedAt: '2026-08-15T09:30:00Z'
+          expiresAt: null
+          version: 0
+        allowedActions:
+        - DECIDE
+        canViewRevealedValue: false
+        postReview: null
+    SupportProfileContextResource:
+      type: object
+      additionalProperties: false
+      description: 현재 상담 담당자가 정정 목적에 필요한 권한으로 조회하는 비개인정보 프로필 조건입니다. 원문은 반환하지 않습니다.
+      required:
+      - caseId
+      - subjectLinkId
+      - subjectId
+      - subjectType
+      - purpose
+      - riskClass
+      - requiredVerificationLevel
+      - currentProfileVersion
+      properties:
+        caseId:
+          $ref: '#/components/schemas/Identifier'
+        subjectLinkId:
+          $ref: '#/components/schemas/Identifier'
+        subjectId:
+          $ref: '#/components/schemas/Identifier'
+        subjectType:
+          type: string
+          enum:
+          - CUSTOMER
+          - STORE
+          - RIDER
+        purpose:
+          type: string
+          enum:
+          - CUSTOMER_DISPLAY_NAME
+          - CUSTOMER_LEGAL_NAME_TYPO
+          - CUSTOMER_PRIMARY_PHONE
+          - CUSTOMER_CREDENTIAL_RESET
+          - STORE_PUBLIC_PROFILE
+          - STORE_OPERATIONS_CONTACT
+          - STORE_REPRESENTATIVE
+          - STORE_SETTLEMENT_ACCOUNT
+          - STORE_ACCESS_REREGISTRATION
+          - COURIER_DISPLAY_NAME
+          - COURIER_RELAY_CONTACT
+          - COURIER_PROVIDER_IDENTITY
+          - COURIER_PAYOUT_REFERENCE
+          - COURIER_PROVIDER_REREGISTRATION
+        riskClass:
+          type: string
+          enum:
+          - R1
+          - R2
+          - R3
+          - R4
+        requiredVerificationLevel:
+          $ref: '#/components/schemas/VerificationLevel'
+        currentProfileVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 소유 모듈 프로필 버전입니다. 쓰기 전에 다시 검증합니다.
+      example:
+        caseId: 83000000-0000-4000-8000-000000000001
+        subjectLinkId: 83000000-0000-4000-8000-000000000001
+        subjectId: 83000000-0000-4000-8000-000000000001
+        subjectType: CUSTOMER
+        purpose: CUSTOMER_DISPLAY_NAME
+        riskClass: R1
+        requiredVerificationLevel: BASIC
+        currentProfileVersion: 0
+    SupportProfileWorkflowAction:
+      type: string
+      description: 현재 계정의 정보 정정 가능 명령입니다. 모든 쓰기에서 범위·인증·승인·버전을 다시 확인합니다.
+      enum:
+      - REVISE
+      - DECIDE_SUPPORT_MANAGER
+      - REASSIGN
+      - EXECUTE
+      - RETRY_NOTIFICATION
+      example: EXECUTE
+    SupportProfileWorkflowResource:
+      type: object
+      additionalProperties: false
+      description: 정보 정정 건의 마스킹 결과와 정확한 승인안 및 현재 조건입니다.
+      required:
+      - profileChange
+      - approval
+      - caseVersion
+      - currentProfileVersion
+      - verificationExpiresAt
+      - allowedActions
+      properties:
+        profileChange:
+          $ref: '#/components/schemas/SupportProfileChangeResource'
+        approval:
+          oneOf:
+          - $ref: '#/components/schemas/SupportActionRequestResource'
+          - type: 'null'
+        caseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 상담 버전입니다.
+        currentProfileVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 소유 모듈의 프로필 버전입니다.
+        verificationExpiresAt:
+          $ref: '#/components/schemas/DateTime'
+        allowedActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportProfileWorkflowAction'
+          description: 현재 가능한 업무입니다.
+      example:
+        profileChange:
+          profileChangeId: 83000000-0000-4000-8000-000000000001
+          caseId: 83000000-0000-4000-8000-000000000001
+          subjectType: CUSTOMER
+          subjectId: 83000000-0000-4000-8000-000000000001
+          purpose: CUSTOMER_DISPLAY_NAME
+          riskClass: R1
+          requesterActorId: 83000000-0000-4000-8000-000000000001
+          executorActorId: 83000000-0000-4000-8000-000000000001
+          verificationSessionId: 83000000-0000-4000-8000-000000000001
+          expectedProfileVersion: 0
+          currentProfileVersion: 1
+          payloadDigest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          actionRequestId: null
+          state: EXECUTED
+          notificationState: ACCEPTED
+          notificationFailureCode: null
+          maskedBefore: 김*수
+          maskedAfter: 김*원
+          version: 1
+          createdAt: '2026-09-11T09:00:00Z'
+          updatedAt: '2026-09-11T09:01:00Z'
+          notifications:
+          - targetKind: CURRENT
+            channel: PHONE
+            state: ACCEPTED
+            deliveryId: 83000000-0000-4000-8000-000000000001
+            failureCode: null
+            attempts: 1
+        approval: null
+        caseVersion: 2
+        currentProfileVersion: 1
+        verificationExpiresAt: '2026-09-11T09:15:00Z'
+        allowedActions: []
+    OperationsSupportInvestigationSnapshot:
+      type: object
+      additionalProperties: false
+      description: 고정된 상담 승인안의 운영 조사 메타데이터입니다. 개인정보와 증빙 원문은 없습니다.
+      required:
+      - investigationId
+      - supportActionRequestId
+      - supportActionRevisionId
+      - revisionNumber
+      - state
+      - openedAt
+      - expiresAt
+      - decidedByActorId
+      - decidedAt
+      - version
+      properties:
+        investigationId:
+          $ref: '#/components/schemas/Identifier'
+        supportActionRequestId:
+          $ref: '#/components/schemas/Identifier'
+        supportActionRevisionId:
+          $ref: '#/components/schemas/Identifier'
+        revisionNumber:
+          type: integer
+          minimum: 1
+          description: 조사에 고정된 승인안 번호입니다.
+        state:
+          type: string
+          enum:
+          - OPEN
+          - APPROVED
+          - DENIED
+          - RETURNED
+          - ESCALATED
+          - EXPIRED
+          - STALE
+          description: 운영 조사 처리 상태입니다.
+        openedAt:
+          $ref: '#/components/schemas/DateTime'
+        expiresAt:
+          $ref: '#/components/schemas/DateTime'
+        decidedByActorId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: 결정한 별도 운영자입니다.
+        decidedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: 결정 시각입니다.
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 조사 버전입니다.
+      example:
+        investigationId: 83000000-0000-4000-8000-000000000001
+        supportActionRequestId: 83000000-0000-4000-8000-000000000001
+        supportActionRevisionId: 83000000-0000-4000-8000-000000000001
+        revisionNumber: 1
+        state: OPEN
+        openedAt: '2026-09-11T09:00:00Z'
+        expiresAt: '2026-09-11T09:15:00Z'
+        decidedByActorId: null
+        decidedAt: null
+        version: 0
+    OperationsSupportInvestigationWorkflowResource:
+      type: object
+      additionalProperties: false
+      description: 현재 별도 검토자의 운영 조사와 결정 가능 여부입니다.
+      required:
+      - investigation
+      - canDecide
+      properties:
+        investigation:
+          $ref: '#/components/schemas/OperationsSupportInvestigationSnapshot'
+        canDecide:
+          type: boolean
+          description: 현재 권한·상태·시간 및 요청자·승인자·실행자 분리를 만족하는지입니다. 결정 시 재검증합니다.
+      example:
+        investigation:
+          investigationId: 83000000-0000-4000-8000-000000000001
+          supportActionRequestId: 83000000-0000-4000-8000-000000000001
+          supportActionRevisionId: 83000000-0000-4000-8000-000000000001
+          revisionNumber: 1
+          state: OPEN
+          openedAt: '2026-09-11T09:00:00Z'
+          expiresAt: '2026-09-11T09:15:00Z'
+          decidedByActorId: null
+          decidedAt: null
+          version: 0
+        canDecide: true
+    SupportCompensationWorkflowAction:
+      type: string
+      description: 현재 계정과 승인 상태에서 가능한 보상 명령입니다. 실행 시 모든 조건을 다시 검증합니다.
+      enum:
+      - EXECUTE
+      - RETRY_NOTIFICATION
+      - DECIDE_SUPPORT_MANAGER
+      - REASSIGN
+      example: EXECUTE
+    SupportCompensationTermsResource:
+      type: object
+      additionalProperties: false
+      description: 보상 요청에 고정된 비용 책임과 증빙 해시입니다. 원문과 고객 개인정보는 반환하지 않습니다.
+      required:
+      - responsibility
+      - evidenceBasis
+      - costEvidenceDigest
+      - platformShareBps
+      - storeShareBps
+      - evidenceDigest
+      - targetVersion
+      properties:
+        responsibility:
+          $ref: '#/components/schemas/SupportCompensationResponsibility'
+        evidenceBasis:
+          oneOf:
+          - $ref: '#/components/schemas/SupportCompensationEvidenceBasis'
+          - type: 'null'
+        costEvidenceDigest:
+          type:
+          - string
+          - 'null'
+          pattern: ^[0-9a-f]{64}$
+          description: 비용 근거의 해시입니다.
+        platformShareBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: 플랫폼 부담 비율입니다. 10000이 100%입니다.
+        storeShareBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: 매장 부담 비율입니다. 10000이 100%입니다.
+        evidenceDigest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: 보상 요청 증빙의 해시입니다.
+        targetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 요청에 고정된 주문 버전이며 주문 없는 요청은 0입니다.
+      example: &id001
+        responsibility: PLATFORM
+        evidenceBasis: null
+        costEvidenceDigest: null
+        platformShareBps: 10000
+        storeShareBps: 0
+        evidenceDigest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        targetVersion: 4
+    SupportCompensationApprovalResource:
+      type: object
+      additionalProperties: false
+      description: 보상 명령에 연결된 현재 승인안과 재배정에 필요한 상담 버전입니다.
+      required:
+      - requestId
+      - revisionNumber
+      - requestVersion
+      - state
+      - caseVersion
+      - executorActorId
+      properties:
+        requestId:
+          $ref: '#/components/schemas/Identifier'
+        revisionNumber:
+          type: integer
+          minimum: 1
+          description: 현재 승인안 번호입니다.
+        requestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 승인 요청 버전입니다.
+        state:
+          $ref: '#/components/schemas/SupportActionRequestState'
+        caseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 현재 상담 건 버전입니다.
+        executorActorId:
+          $ref: '#/components/schemas/Identifier'
+      example: &id002
+        requestId: 1124ff76-72c2-54be-a3f4-6ac8a8a982e4
+        revisionNumber: 1
+        requestVersion: 0
+        state: AWAITING_SUPPORT_MANAGER
+        caseVersion: 2
+        executorActorId: 75000000-0000-4000-8000-000000000001
+    SupportCompensationWorkflowResource:
+      type: object
+      additionalProperties: false
+      description: 보상 검토·실행·알림 재시도를 위한 현재 조회입니다. 기존 관계와 현재 대기 중인 별도 승인자의 권한을 검사합니다.
+      required:
+      - request
+      - terms
+      - approval
+      - currentTargetVersion
+      - verificationExpiresAt
+      - allowedActions
+      - couponTemplate
+      properties:
+        request:
+          $ref: '#/components/schemas/SupportCompensationResource'
+        terms:
+          $ref: '#/components/schemas/SupportCompensationTermsResource'
+        approval:
+          oneOf:
+          - $ref: '#/components/schemas/SupportCompensationApprovalResource'
+          - type: 'null'
+        currentTargetVersion:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+          description: 현재 주문 버전입니다. 주문 없는 요청은 0이며 조회 불가능한 주문은 null입니다.
+        verificationExpiresAt:
+          $ref: '#/components/schemas/DateTime'
+        allowedActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportCompensationWorkflowAction'
+          description: 현재 계정에서 가능한 명령입니다.
+        couponTemplate:
+          description: 쿠폰 보상에 고정된 할인·유효기간·최소 사용 금액입니다. 포인트 보상은 null입니다.
+          oneOf:
+          - $ref: '#/components/schemas/GoodwillCouponTemplateView'
+          - type: 'null'
+      example:
+        request:
+          compensationRequestId: 0b4d4945-83a6-5143-bc9d-dbe9d6e95c17
+          supportCaseId: 1dd90c33-a153-5c9c-895b-1ae00f028d1b
+          incidentId: 31edc1c3-4c2d-57b2-abd1-dd7badf9b274
+          orderId: 74131bb9-688f-5370-8042-21015b3cd43a
+          storeId: 5273704d-f924-59e0-8883-827535fb86ad
+          benefitType: POINT
+          amountKrw: 3000
+          couponTemplateId: null
+          policyVersionId: 00af5133-9c81-55d9-9fc7-b8a2db4d5c84
+          band: MEDIUM
+          approvalRoute: SUPPORT_MANAGER
+          actionRequestId: 1124ff76-72c2-54be-a3f4-6ac8a8a982e4
+          state: AWAITING_APPROVAL
+          payloadDigest: c5f3e1d9b7a5c3e2f0d8b6a4c2e1f9d7b5a3c1e0f8d6b4a2c9e7f5d3b1a0c8e6
+          terminalBenefitId: null
+          benefitIssuedAt: null
+          notificationDeliveryId: null
+          notificationState: null
+          notificationFailureCode: null
+          version: 0
+          createdAt: '2026-08-15T15:20:00+09:00'
+          updatedAt: '2026-08-15T15:41:00+09:00'
+        terms:
+          responsibility: PLATFORM
+          evidenceBasis: null
+          costEvidenceDigest: null
+          platformShareBps: 10000
+          storeShareBps: 0
+          evidenceDigest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          targetVersion: 4
+        approval:
+          requestId: 1124ff76-72c2-54be-a3f4-6ac8a8a982e4
+          revisionNumber: 1
+          requestVersion: 0
+          state: AWAITING_SUPPORT_MANAGER
+          caseVersion: 2
+          executorActorId: 75000000-0000-4000-8000-000000000001
+        currentTargetVersion: 4
+        verificationExpiresAt: '2026-09-11T09:15:00Z'
+        allowedActions:
+        - DECIDE_SUPPORT_MANAGER
+        couponTemplate: null
+    GoodwillCouponTemplateView:
+      type: object
+      additionalProperties: false
+      description: Promotion이 소유한 불변 정액 보상 쿠폰의 사용 조건입니다.
+      required:
+      - templateId
+      - amountKrw
+      - validityDays
+      - minimumEligibleSubtotalKrw
+      properties:
+        templateId:
+          $ref: '#/components/schemas/Identifier'
+        amountKrw:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 정액 할인 금액입니다.
+        validityDays:
+          type: integer
+          minimum: 1
+          description: 발급 후 유효한 일수입니다.
+        minimumEligibleSubtotalKrw:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 쿠폰 사용에 필요한 최소 적격 주문 금액입니다.
+      example: &id003
+        templateId: 90000000-0000-4000-8000-000000000001
+        amountKrw: 3000
+        validityDays: 30
+        minimumEligibleSubtotalKrw: 0
+    SupportCompensationCouponTemplatePage:
+      type: object
+      additionalProperties: false
+      description: 템플릿 ID 오름차순으로 조회하는 보상 쿠폰 목록입니다. 마지막 항목 ID가 다음 커서입니다.
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/GoodwillCouponTemplateView'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: 다음 페이지 커서입니다. null이면 마지막 페이지입니다.
+      example:
+        items:
+        - *id003
+        nextCursor: null
+    SupportOrderContextResource:
+      type: object
+      additionalProperties: false
+      description: 상담에 연결된 주문의 현재 상태와 버전입니다. 개인정보는 포함하지 않습니다.
+      required:
+      - orderId
+      - storeId
+      - state
+      - version
+      properties:
+        orderId:
+          $ref: '#/components/schemas/Identifier'
+        storeId:
+          $ref: '#/components/schemas/Identifier'
+        state:
+          type: string
+          enum:
+          - PENDING_PAYMENT
+          - PAID
+          - ACCEPTED
+          - PREPARING
+          - READY
+          - COMPLETED
+          - REJECTED
+          - EXPIRED
+          - CANCELLED
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+      example:
+        orderId: 74131bb9-688f-5370-8042-21015b3cd43a
+        storeId: f33f27d6-8e6c-5712-8567-154b01cbb087
+        state: PAID
+        version: 2
+    SupportOrderWorkflowAction:
+      type: string
+      description: 현재 권한과 상태에서 사용할 수 있는 상담 주문 명령입니다. 실행 시 다시 검증합니다.
+      enum:
+      - REVISE
+      - DECIDE_SUPPORT_MANAGER
+      - REASSIGN
+      - EXECUTE
+      - ADVANCE_RESOLUTION
+      example: EXECUTE
+    StoreSupportOrderChangeRequestResource:
+      type: object
+      additionalProperties: false
+      description: 소속 매장의 수락된 주문에 대한 건별 동의 대상입니다. 상담원과 본인확인 식별자 및 증거를 제외합니다.
+      required:
+      - requestId
+      - orderId
+      - action
+      - revisionNumber
+      - requestVersion
+      - targetVersion
+      - actionPayloadDigest
+      - expiresAt
+      - policyVersion
+      properties:
+        requestId:
+          $ref: '#/components/schemas/Identifier'
+        orderId:
+          $ref: '#/components/schemas/Identifier'
+        action:
+          type: string
+          enum:
+          - ORDER_CANCELLATION
+          - PICKUP_RESCHEDULE
+        revisionNumber:
+          type: integer
+          minimum: 1
+        requestVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        targetVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        actionPayloadDigest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        expiresAt:
+          $ref: '#/components/schemas/DateTime'
+        policyVersion:
+          $ref: '#/components/schemas/SupportOrderChangePolicyVersion'
+      example:
+        requestId: 47fb7c92-195e-51a5-929c-6a6b891f764b
+        orderId: 74131bb9-688f-5370-8042-21015b3cd43a
+        action: ORDER_CANCELLATION
+        revisionNumber: 1
+        requestVersion: 2
+        targetVersion: 3
+        actionPayloadDigest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        expiresAt: '2026-09-11T09:15:00Z'
+        policyVersion: support-order-change-policy/2026-08-12/v1
+    SupportOrderWorkflowResource:
+      type: object
+      additionalProperties: false
+      description: 기존 요청 조회 권한으로 현재 승인안과 상담 버전 및 사용 가능한 명령을 조회합니다.
+      required:
+      - request
+      - caseVersion
+      - order
+      - allowedActions
+      - resolutionId
+      properties:
+        resolutionId:
+          type: [string, 'null']
+          format: uuid
+          description: 이 승인안으로 이미 생성된 수락 후 해결 건의 ID입니다.
+        request:
+          $ref: '#/components/schemas/SupportActionRequestResource'
+        caseVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        allowedActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportOrderWorkflowAction'
+        order:
+          oneOf:
+          - $ref: '#/components/schemas/SupportOrderContextResource'
+          - type: 'null'
+      example:
+        resolutionId: null
+        request:
+          requestId: 47fb7c92-195e-51a5-929c-6a6b891f764b
+          caseId: f33f27d6-8e6c-5712-8567-154b01cbb087
+          action: ORDER_CANCELLATION
+          targetId: 74131bb9-688f-5370-8042-21015b3cd43a
+          requesterActorId: ada402dd-641a-56cd-813b-6cdb4e480aba
+          executorActorId: da65f7ad-15b2-5ed0-a6b8-c6d24b0340b1
+          revisionNumber: 2
+          state: READY_FOR_EXECUTION
+          approvalRoute: SUPPORT_MANAGER
+          actionPayloadDigest: b4e2d0c8a6f4b2d1e9c7a5f3d1b0e8c6a4f2d0b8e6c4a2f1d9b7e5c3a1f0d8b6
+          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
+          policyVersion: support-action-policy/2026-08-12/v1
+          targetVersion: 7
+          amountKrw: 9000
+          evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
+          expiresAt: '2026-08-15T15:30:00+09:00'
+          requestVersion: 4
+          approvalSteps:
+          - stepType: SUPPORT_MANAGER
+            state: APPROVED
+            decidedByActorId: 2aea279d-0121-5ff0-a3c5-981e7074bfbd
+            decidedAt: '2026-08-15T15:10:00+09:00'
+          terminalExecutionId: null
+          terminalResolutionId: null
+          terminalCompensationId: null
+          terminalProfileChangeId: null
+        order: null
+        caseVersion: 2
+        allowedActions:
+        - EXECUTE
     ManualRecoveryCaseView:
       type: object
       additionalProperties: false
@@ -9189,6 +12434,13 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+    MembershipAccountTarget:
+      type: object
+      required: [accountId, loginId, displayName]
+      properties:
+        accountId: {type: string, format: uuid}
+        loginId: {type: string}
+        displayName: {type: string}
     ManagedStoreMembership:
       type: object
       additionalProperties: false
@@ -9202,6 +12454,12 @@ components:
       - createdAt
       - updatedAt
       properties:
+        accountDisplayName:
+          type: [string, "null"]
+          description: 현재 계정 표시 이름. 소속 목록과 상세 조회에서 제공하며 명령 응답에는 생략할 수 있습니다.
+        accountLoginId:
+          type: [string, "null"]
+          description: 소속 대상 계정의 로그인 아이디. 소속 조회에서 제공됩니다.
         membershipId:
           type: string
           format: uuid
@@ -9548,6 +12806,29 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+    OperatorStoreTarget:
+      type: object
+      additionalProperties: false
+      required: [storeId, name]
+      properties:
+        storeId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+    OperatorStoreTargetPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorStoreTarget'
+        nextCursor:
+          type: string
+          nullable: true
+          maxLength: 2048
     OperatorStoreIdentityPage:
       type: object
       additionalProperties: false
@@ -10273,16 +13554,48 @@ components:
         merchantId: { $ref: "#/components/schemas/Identifier" }
         displayName: { type: string, minLength: 1, maxLength: 100 }
         accountState: { type: string, enum: [INITIAL_PASSWORD, ACTIVE] }
+    OperatorDisplay:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state: { type: string, enum: [AVAILABLE, MISSING_PROFILE] }
+        loginName: { type: [string, 'null'], minLength: 1, maxLength: 200 }
+        observedAt: { type: [string, 'null'], format: date-time }
+    OperatorSelectionPurpose:
+      type: string
+      enum: [CASE_FILTER, INTERNAL_REQUESTER, CASE_ASSIGNMENT, ORDER_CANCELLATION, PICKUP_RESCHEDULE, POST_ACCEPTANCE_RESOLUTION, COMPENSATION, PROFILE_CHANGE]
+      default: CASE_ASSIGNMENT
+    OperatorCandidate:
+      type: object
+      additionalProperties: false
+      required: [operatorId, loginName, observedAt]
+      properties:
+        operatorId: { $ref: '#/components/schemas/Identifier' }
+        loginName: { type: string, minLength: 1, maxLength: 200 }
+        observedAt: { $ref: '#/components/schemas/DateTime' }
+    OperatorDirectoryPage:
+      type: object
+      additionalProperties: false
+      required: [items, missingProfileCount]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OperatorCandidate' }
+        nextCursor: { type: [string, 'null'] }
+        missingProfileCount: { type: integer, format: int64, minimum: 0 }
     OperatorActor:
       type: object
       additionalProperties: false
-      required: [actorType, operatorId, roles]
+      required: [actorType, operatorId, roles, display]
       description: Keycloak 기반으로 인증된 현재 운영자(operator)를 나타내는 actor 정보입니다.
       example:
         actorType: OPERATOR
         operatorId: 3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f
         roles: [SETTLEMENT_REVIEWER]
+        display: { state: MISSING_PROFILE }
       properties:
+        display: { $ref: '#/components/schemas/OperatorDisplay' }
         actorType: { const: OPERATOR }
         operatorId: { $ref: "#/components/schemas/Identifier" }
         roles:
@@ -10572,6 +13885,16 @@ components:
         preparingAt: { $ref: "#/components/schemas/DateTime" }
         readyAt: { $ref: "#/components/schemas/DateTime" }
         completedAt: { $ref: "#/components/schemas/DateTime" }
+    PublicCheckout:
+      type: object
+      additionalProperties: false
+      required: [order, canPay]
+      properties:
+        order: { $ref: "#/components/schemas/CustomerOrderDetail" }
+        canPay: { type: boolean }
+        paymentId: { $ref: "#/components/schemas/Identifier" }
+        paymentState: { type: string }
+        readyAttempt: { $ref: "#/components/schemas/PublicOneTimePaymentAttempt" }
     CustomerOrderDetail:
       type: object
       additionalProperties: false
@@ -10588,6 +13911,7 @@ components:
         pickupNumber: { type: string, minLength: 1, maxLength: 32 }
         storeName: { type: string, minLength: 1, maxLength: 200 }
         status: { $ref: "#/components/schemas/OrderState" }
+        reservationExpiresAt: { $ref: "#/components/schemas/DateTime" }
         orderedAt: { $ref: "#/components/schemas/DateTime" }
         pickupWindowStart: { $ref: "#/components/schemas/DateTime" }
         pickupWindowEnd: { $ref: "#/components/schemas/DateTime" }
@@ -11062,6 +14386,14 @@ components:
           format: uri
           description: 비공개 AIStor 썸네일 객체의 presigned GET URL입니다.
         expiresAt: { $ref: "#/components/schemas/DateTime" }
+    StorefrontImageAuthoring:
+      type: object
+      additionalProperties: false
+      properties:
+        image:
+          anyOf:
+            - $ref: "#/components/schemas/StorefrontImage"
+            - type: "null"
     StorefrontImageUploadRequest:
       type: object
       additionalProperties: false
@@ -11672,6 +15004,9 @@ components:
         - storeId
         - role
       properties:
+        storeName:
+          type: [string, "null"]
+          description: 현재 공개 매장 이름. 계정 조회의 소속 목록에서 제공됩니다.
         storeId:
           $ref: '#/components/schemas/Identifier'
           description: 해당 매장 자원을 가리키는 UUID 식별자입니다.
@@ -12002,6 +15337,17 @@ components:
           $ref: "#/components/schemas/CustomerStoreDisplay"
         image:
           $ref: "#/components/schemas/StorefrontImage"
+    CustomerMenuConfiguration:
+      type: object
+      required: [configurationId, optionIds, available]
+      properties:
+        configurationId: { type: string, format: uuid }
+        optionIds:
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          items: { type: string, format: uuid }
+        available: { type: boolean }
     MenuList:
       type: object
       additionalProperties: false
@@ -13003,6 +16349,26 @@ components:
         updatedAt:
           $ref: '#/components/schemas/DateTime'
           description: 리소스가 마지막으로 변경된 시각입니다.
+    OrderInvestigationTarget:
+      type: object
+      additionalProperties: false
+      required: [orderId, publicReference, storeId, storeName, state, createdAt]
+      properties:
+        orderId: { $ref: '#/components/schemas/Identifier' }
+        publicReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
+        storeId: { $ref: '#/components/schemas/Identifier' }
+        storeName: { type: string }
+        state:
+          type: string
+          enum: [PENDING_PAYMENT, PAID, ACCEPTED, PREPARING, READY, COMPLETED, REJECTED, EXPIRED, CANCELLED]
+        createdAt: { $ref: '#/components/schemas/DateTime' }
+    OperatorOrderCompensationView:
+      type: object
+      additionalProperties: false
+      required: [order, followUp]
+      properties:
+        order: { $ref: '#/components/schemas/OrderInvestigationTarget' }
+        followUp: { $ref: '#/components/schemas/OperatorCompensationView' }
     OperatorCompensationView:
       type: object
       additionalProperties: false
@@ -13020,22 +16386,35 @@ components:
       additionalProperties: false
       description: Operator-only integrity issue; never returned in customer or store representations
       required: [state, detectedAt, lastErrorCode]
-      anyOf:
-        - required: [missingArtifacts]
-        - required: [invariantViolations]
+      allOf:
+        - anyOf:
+            - required: [missingArtifacts]
+              properties:
+                missingArtifacts:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    enum: [CANCELLATION_REFUND, PAYMENT_RECOVERY_SNAPSHOT]
+            - required: [invariantViolations]
+              properties:
+                invariantViolations:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    enum: [SOURCE_MISMATCH, AMOUNT_TIE_OUT_MISMATCH]
       properties:
         state:
           const: SETUP_INCOMPLETE
         missingArtifacts:
           type: array
-          minItems: 1
           uniqueItems: true
           items:
             type: string
             enum: [CANCELLATION_REFUND, PAYMENT_RECOVERY_SNAPSHOT]
         invariantViolations:
           type: array
-          minItems: 1
           uniqueItems: true
           items:
             type: string
@@ -13191,6 +16570,55 @@ components:
           minLength: 1
           maxLength: 500
           description: 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다.
+    RepairOrderDisplay:
+      type: object
+      additionalProperties: false
+      required: [publicReference, storeName, state, createdAt]
+      properties:
+        publicReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
+        storeName: { type: string }
+        state:
+          type: string
+          enum: [PENDING_PAYMENT, PAID, ACCEPTED, PREPARING, READY, COMPLETED, REJECTED, EXPIRED, CANCELLED]
+        createdAt: { $ref: '#/components/schemas/DateTime' }
+    SetupRecoveryCaseItem:
+      type: object
+      additionalProperties: false
+      required: [caseId, status, reason, updatedAt, order, canPropose]
+      properties:
+        canPropose:
+          type: boolean
+          description: 현재 Case가 OPEN이고 resolution이 없는 경우만 true이며 명령은 최신 상태를 다시 검증한다.
+        caseId: { $ref: '#/components/schemas/Identifier' }
+        status: { type: string, enum: [OPEN, RUNNING, RESOLVED, MANUAL_REVIEW] }
+        reason: { type: string }
+        updatedAt: { $ref: '#/components/schemas/DateTime' }
+        order: { $ref: '#/components/schemas/RepairOrderDisplay' }
+    SetupRecoveryCasePage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SetupRecoveryCaseItem' }
+        nextCursor: { type: [string, "null"] }
+    SetupRepairProposalItem:
+      type: object
+      additionalProperties: false
+      required: [proposal, order]
+      properties:
+        proposal: { $ref: '#/components/schemas/RepairProposal' }
+        order: { $ref: '#/components/schemas/RepairOrderDisplay' }
+    SetupRepairProposalPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SetupRepairProposalItem' }
+        nextCursor: { type: [string, "null"] }
     RepairProposal:
       type: object
       additionalProperties: false
@@ -13388,6 +16816,9 @@ components:
         - actorReference
         - reason
       properties:
+        scopeName:
+          type: [string, "null"]
+          description: 현재 매장 이름. 매장 정책 목록 조회에서 제공되며 감사 버전 snapshot은 변경하지 않습니다.
         policyVersionId:
           type: integer
           format: int64
@@ -13652,6 +17083,11 @@ components:
         - type: object
           required:
             - expectedPolicyVersionId
+          properties:
+            expectedPolicyVersionId:
+              type: integer
+              format: int64
+              minimum: 1
       description: |
         모든 매장에 기본으로 적용되는 포인트 적립 정책을 변경하는 요청입니다. `expectedPolicyVersionId`로 현재 정책이 다른 운영자에 의해 먼저 바뀌지 않았는지 확인합니다.
       example:
@@ -13860,6 +17296,51 @@ components:
         state:
           type: string
           enum: [READY, CONFIRMING, APPROVED, FAILED, UNKNOWN, RECONCILING, MANUAL_REVIEW]
+        providerOrderId:
+          type: string
+          minLength: 6
+          maxLength: 64
+        customerKey:
+          type: string
+          minLength: 1
+          maxLength: 64
+        orderName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        amount:
+          $ref: "#/components/schemas/OneTimePaymentAmount"
+        method:
+          type: string
+          const: CARD
+        successUrl:
+          type: string
+          format: uri
+        failUrl:
+          type: string
+          format: uri
+        expiresAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+        correlationId:
+          type: string
+          minLength: 1
+    PublicOneTimePaymentAttempt:
+      type: object
+      additionalProperties: false
+      required:
+        [paymentId, orderReference, state, providerOrderId, customerKey, orderName, amount, method, successUrl, failUrl, expiresAt, updatedAt, correlationId]
+      properties:
+        paymentId:
+          $ref: "#/components/schemas/Identifier"
+        orderReference:
+          type: string
+          pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
+        state:
+          type: string
+          enum: [READY]
+          description: 서버 기준 Payment와 attempt가 모두 READY이고 예약이 유효할 때만 반환한다.
         providerOrderId:
           type: string
           minLength: 6
@@ -14589,6 +18070,47 @@ components:
           maxLength: 200
           pattern: .*\S.*
           description: 포인트 비용을 부담하는 플랫폼, 브랜드 또는 매장을 가리키는 식별값입니다.
+    PreparePointAdjustmentRequest:
+      type: object
+      required: [accountId, request]
+      properties:
+        accountId: {type: string, format: uuid}
+        request:
+          $ref: "#/components/schemas/PointAdjustmentRequest"
+    DismissPointAdjustmentPreparationRequest:
+      type: object
+      required: [expectedState]
+      properties:
+        expectedState: {type: string, enum: [PREPARED, APPLIED]}
+    CurrentPointAdjustmentPreparation:
+      type: object
+      required: [preparation]
+      properties:
+        preparation:
+          oneOf:
+            - $ref: "#/components/schemas/PointAdjustmentPreparationView"
+            - type: 'null'
+    PointAdjustmentPreparationView:
+      type: object
+      required: [preparationId, accountId, customer, request, state, canExecute, result]
+      properties:
+        preparationId: {type: string, format: uuid}
+        accountId: {type: string, format: uuid}
+        customer:
+          type: object
+          required: [customerId, maskedLoginId, maskedDisplayName]
+          properties:
+            customerId: {type: string, format: uuid}
+            maskedLoginId: {type: string}
+            maskedDisplayName: {type: string}
+        request:
+          $ref: "#/components/schemas/PointAdjustmentRequest"
+        state: {type: string, enum: [PREPARED, APPLIED]}
+        canExecute: {type: boolean}
+        result:
+          oneOf:
+            - $ref: "#/components/schemas/PointAdjustmentResult"
+            - type: 'null'
     PointAdjustmentRequest:
       type: object
       additionalProperties: false
@@ -15314,6 +18836,17 @@ components:
           uniqueItems: true
           items:
             $ref: "#/components/schemas/SupportPersonalDataField"
+    DataAccessGrantInspectionResource:
+      type: object
+      additionalProperties: false
+      required: [grant, viewerRole]
+      description: 활성 권한을 확인한 열람 승인 메타데이터이며 개인정보 원문을 포함하지 않습니다.
+      properties:
+        grant:
+          $ref: "#/components/schemas/DataAccessGrantResource"
+        viewerRole:
+          type: string
+          enum: [REQUESTER, APPROVER]
     DataAccessGrantResource:
       type: object
       additionalProperties: false
@@ -15774,6 +19307,12 @@ components:
             linkedAt: "2026-08-15T09:01:00Z"
             caseVersion: 2
       properties:
+        category: { $ref: "#/components/schemas/SupportInquiryCategory" }
+        assigneeDisplay: { $ref: '#/components/schemas/OperatorDisplay' }
+        customerInquiryId:
+          type: string
+          format: uuid
+          description: 내장 고객 문의와 연결된 경우 공개 대화로 돌아갈 문의 ID. 내부 메모를 공개하지 않습니다.
         caseId:
           $ref: "#/components/schemas/Identifier"
         state:
@@ -15807,6 +19346,8 @@ components:
         version: 3
         openedAt: "2026-08-15T09:00:00Z"
       properties:
+        category: { $ref: "#/components/schemas/SupportInquiryCategory" }
+        assigneeDisplay: { $ref: '#/components/schemas/OperatorDisplay' }
         caseId:
           $ref: "#/components/schemas/Identifier"
         state:
@@ -15821,6 +19362,84 @@ components:
           minimum: 0
         openedAt:
           $ref: "#/components/schemas/DateTime"
+    SupportOrderOverview:
+      type: object
+      required: [orderId, publicReference, storeName, state, version, orderedAt, pickupWindowStart, pickupWindowEnd, subtotalKrw, couponDiscountKrw, pointsAppliedKrw, payableKrw, currency, lines]
+      properties:
+        orderId: { $ref: "#/components/schemas/Identifier" }
+        publicReference: { type: string }
+        storeName: { type: string }
+        state: { $ref: "#/components/schemas/OrderState" }
+        version: { type: integer, format: int64 }
+        orderedAt: { type: string, format: date-time }
+        pickupWindowStart: { type: string, format: date-time }
+        pickupWindowEnd: { type: string, format: date-time }
+        subtotalKrw: { type: integer, format: int64 }
+        couponDiscountKrw: { type: integer, format: int64 }
+        pointsAppliedKrw: { type: integer, format: int64 }
+        payableKrw: { type: integer, format: int64 }
+        currency: { type: string, enum: [KRW] }
+        lines:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [sequence, menuName, quantity, amountKrw]
+            properties:
+              sequence: { type: integer }
+              menuName: { type: string }
+              quantity: { type: integer, format: int64 }
+              amountKrw: { type: integer, format: int64 }
+    SupportApprovalKind:
+      type: string
+      enum: [DATA_ACCESS, BREAK_GLASS, ORDER_ACTION, COMPENSATION, PROFILE_CHANGE]
+    SupportApprovalItem:
+      type: object
+      required: [kind, requestId, caseId, caseCategory, caseOpenedAt, purpose, state, createdAt, reviewAction]
+      properties:
+        kind: { $ref: "#/components/schemas/SupportApprovalKind" }
+        requestId: { $ref: "#/components/schemas/Identifier" }
+        caseId: { $ref: "#/components/schemas/Identifier" }
+        caseCategory: { $ref: "#/components/schemas/SupportInquiryCategory" }
+        caseOpenedAt: { type: string, format: date-time }
+        purpose: { type: string }
+        state: { type: string }
+        createdAt: { type: string, format: date-time }
+        reviewAction: { type: [string, 'null'], enum: [DECIDE, REVIEW, null] }
+    SupportApprovalPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SupportApprovalItem" } }
+        nextCursor: { type: [string, 'null'] }
+    SupportApprovalDecisionItem:
+      type: object
+      required: [eventId, step, state, occurredAt, revisionNumber, actorDisplay]
+      properties:
+        eventId: { $ref: "#/components/schemas/Identifier" }
+        step: { type: string }
+        state: { type: string }
+        occurredAt: { type: string, format: date-time }
+        revisionNumber: { type: [integer, 'null'] }
+        actorDisplay:
+          anyOf:
+            - $ref: "#/components/schemas/OperatorDisplay"
+            - type: 'null'
+    SupportApprovalHistoryPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SupportApprovalDecisionItem" } }
+        nextCursor: { type: [string, 'null'] }
+    SupportCaseQueueSummary:
+      type: object
+      required: [active, open, inProgress, waiting, urgent]
+      properties:
+        active: { type: integer, format: int64, minimum: 0 }
+        open: { type: integer, format: int64, minimum: 0 }
+        inProgress: { type: integer, format: int64, minimum: 0 }
+        waiting: { type: integer, format: int64, minimum: 0 }
+        urgent: { type: integer, format: int64, minimum: 0 }
     SupportCasePage:
       type: object
       additionalProperties: false
@@ -15945,6 +19564,48 @@ components:
           type: integer
           format: int64
           minimum: 0
+    SupportWorkKind:
+      type: string
+      enum: [VERIFICATION, DATA_ACCESS, ORDER_ACTION, COMPENSATION, PROFILE_CHANGE, BREAK_GLASS]
+    SupportWorkItem:
+      type: object
+      additionalProperties: false
+      required: [requestId, kind, caseId, caseCategory, caseOpenedAt, purpose, state, createdAt]
+      properties:
+        requestId: { $ref: "#/components/schemas/Identifier" }
+        kind: { $ref: "#/components/schemas/SupportWorkKind" }
+        caseId: { $ref: "#/components/schemas/Identifier" }
+        caseCategory: { $ref: "#/components/schemas/SupportInquiryCategory" }
+        caseOpenedAt: { $ref: "#/components/schemas/DateTime" }
+        purpose: { type: string, minLength: 1 }
+        state: { type: string, minLength: 1 }
+        createdAt: { $ref: "#/components/schemas/DateTime" }
+        expiresAt: { type: [string, "null"], format: date-time }
+    SupportWorkPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/SupportWorkItem" }
+        nextCursor: { type: [string, "null"] }
+    SupportSubjectDisplay:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state: { type: string, enum: [AVAILABLE, MISSING_PROFILE, REQUIRES_PERMISSION] }
+        label: { type: [string, "null"] }
+    SupportOrderDisplay:
+      type: object
+      additionalProperties: false
+      required: [orderId, publicReference, storeName, state]
+      properties:
+        orderId: { $ref: "#/components/schemas/Identifier" }
+        publicReference: { type: string, minLength: 12, maxLength: 12 }
+        storeName: { type: string }
+        state: { $ref: "#/components/schemas/OrderState" }
     SupportSubjectLink:
       type: object
       additionalProperties: false
@@ -15958,6 +19619,7 @@ components:
         linkedAt: "2026-08-15T09:01:00Z"
         caseVersion: 2
       properties:
+        display: { $ref: "#/components/schemas/SupportSubjectDisplay" }
         linkId:
           $ref: "#/components/schemas/Identifier"
         subjectType:
@@ -16593,6 +20255,8 @@ components:
             decidedAt: '2026-08-15T15:10:00+09:00'
         terminalExecutionId: null
         terminalResolutionId: null
+        terminalCompensationId: null
+        terminalProfileChangeId: null
       required:
         - requestId
         - caseId
@@ -16614,6 +20278,8 @@ components:
         - approvalSteps
         - terminalExecutionId
         - terminalResolutionId
+        - terminalCompensationId
+        - terminalProfileChangeId
       properties:
         requestId:
           $ref: '#/components/schemas/Identifier'
@@ -16692,6 +20358,14 @@ components:
             - 'null'
           format: uuid
           description: 주문 변경 작업이 완료됐을 때 생성된 실행 ID입니다. 아직 실행되지 않았으면 `null`입니다.
+        terminalCompensationId:
+          type: [string, 'null']
+          format: uuid
+          description: 완료된 고객 보상 요청 식별자입니다.
+        terminalProfileChangeId:
+          type: [string, 'null']
+          format: uuid
+          description: 완료된 정보 정정 요청 식별자입니다.
         terminalResolutionId:
           type:
             - string
@@ -16878,6 +20552,7 @@ components:
         - BENEFIT_ISSUED
         - NOTIFICATION_RETRY
         - NOTIFICATION_ACCEPTED
+        - NOTIFICATION_SKIPPED
     PostAcceptanceResolutionStepResource:
       type: object
       additionalProperties: false
@@ -17432,12 +21107,14 @@ components:
           $ref: "#/components/schemas/Identifier"
     SupportActionType:
       type: string
-      description: 고객센터가 요청할 수 있는 주문 취소, 픽업 시간 변경, 수락 후 문제 해결 작업입니다.
+      description: 주문 변경·수락 후 해결·보상·정보 정정의 승인 요청 유형입니다. 유형별 전용 명령으로 요청합니다.
       example: ORDER_CANCELLATION
       enum:
         - ORDER_CANCELLATION
         - PICKUP_RESCHEDULE
         - POST_ACCEPTANCE_RESOLUTION
+        - GOODWILL_COMPENSATION
+        - PROFILE_CHANGE
     SupportActionApprovalRoute:
       type: string
       description: 주문 변경 또는 고객 보상 요청이 거쳐야 하는 승인 순서입니다. 승인 없음, 고객센터 관리자, 운영팀 또는 순차 승인을 구분합니다.
@@ -17870,36 +21547,138 @@ components:
     SupportProfileChangeResource:
       type: object
       additionalProperties: false
-      description: Raw before/after values, verification proof, evidence and secrets are deliberately excluded.
-      required: [profileChangeId, caseId, subjectType, subjectId, purpose, riskClass, requesterActorId, executorActorId, verificationSessionId, expectedProfileVersion, currentProfileVersion, payloadDigest, actionRequestId, state, notificationState, notificationFailureCode, maskedBefore, maskedAfter, version, createdAt, updatedAt, notifications]
+      description: Raw before/after values, verification proof, evidence and secrets are
+        deliberately excluded.
+      required:
+      - profileChangeId
+      - caseId
+      - subjectType
+      - subjectId
+      - purpose
+      - riskClass
+      - requesterActorId
+      - executorActorId
+      - verificationSessionId
+      - expectedProfileVersion
+      - currentProfileVersion
+      - payloadDigest
+      - actionRequestId
+      - state
+      - notificationState
+      - notificationFailureCode
+      - maskedBefore
+      - maskedAfter
+      - version
+      - createdAt
+      - updatedAt
+      - notifications
       properties:
-        profileChangeId: { $ref: "#/components/schemas/Identifier" }
-        caseId: { $ref: "#/components/schemas/Identifier" }
-        subjectType: { type: string, enum: [CUSTOMER, STORE, RIDER] }
-        subjectId: { $ref: "#/components/schemas/Identifier" }
+        profileChangeId:
+          $ref: '#/components/schemas/Identifier'
+        caseId:
+          $ref: '#/components/schemas/Identifier'
+        subjectType:
+          type: string
+          enum:
+          - CUSTOMER
+          - STORE
+          - RIDER
+        subjectId:
+          $ref: '#/components/schemas/Identifier'
         purpose:
           type: string
-          enum: [CUSTOMER_DISPLAY_NAME, CUSTOMER_LEGAL_NAME_TYPO, CUSTOMER_PRIMARY_PHONE, CUSTOMER_CREDENTIAL_RESET, STORE_PUBLIC_PROFILE, STORE_OPERATIONS_CONTACT, STORE_REPRESENTATIVE, STORE_SETTLEMENT_ACCOUNT, STORE_ACCESS_REREGISTRATION, COURIER_DISPLAY_NAME, COURIER_RELAY_CONTACT, COURIER_PROVIDER_IDENTITY, COURIER_PAYOUT_REFERENCE, COURIER_PROVIDER_REREGISTRATION]
-        riskClass: { type: string, enum: [R1, R2, R3, R4] }
-        requesterActorId: { $ref: "#/components/schemas/Identifier" }
-        executorActorId: { $ref: "#/components/schemas/Identifier" }
-        verificationSessionId: { $ref: "#/components/schemas/Identifier" }
-        expectedProfileVersion: { type: integer, format: int64, minimum: 0 }
-        currentProfileVersion: { type: [integer, "null"], format: int64, minimum: 0 }
-        payloadDigest: { type: string, pattern: "^[0-9a-f]{64}$" }
-        actionRequestId: { type: [string, "null"], format: uuid }
-        state: { type: string, enum: [AWAITING_APPROVAL, READY_FOR_EXECUTION, EXECUTED] }
-        notificationState: { type: string, enum: [PENDING, ACCEPTED, RETRY_SCHEDULED, MANUAL_REVIEW] }
-        notificationFailureCode: { type: [string, "null"], pattern: "^[A-Z0-9_]{1,80}$" }
-        maskedBefore: { type: [string, "null"], maxLength: 1000 }
-        maskedAfter: { type: [string, "null"], maxLength: 1000 }
-        version: { type: integer, format: int64, minimum: 0 }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
+          enum:
+          - CUSTOMER_DISPLAY_NAME
+          - CUSTOMER_LEGAL_NAME_TYPO
+          - CUSTOMER_PRIMARY_PHONE
+          - CUSTOMER_CREDENTIAL_RESET
+          - STORE_PUBLIC_PROFILE
+          - STORE_OPERATIONS_CONTACT
+          - STORE_REPRESENTATIVE
+          - STORE_SETTLEMENT_ACCOUNT
+          - STORE_ACCESS_REREGISTRATION
+          - COURIER_DISPLAY_NAME
+          - COURIER_RELAY_CONTACT
+          - COURIER_PROVIDER_IDENTITY
+          - COURIER_PAYOUT_REFERENCE
+          - COURIER_PROVIDER_REREGISTRATION
+        riskClass:
+          type: string
+          enum:
+          - R1
+          - R2
+          - R3
+          - R4
+        requesterActorId:
+          $ref: '#/components/schemas/Identifier'
+        executorActorId:
+          $ref: '#/components/schemas/Identifier'
+        verificationSessionId:
+          $ref: '#/components/schemas/Identifier'
+        expectedProfileVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        currentProfileVersion:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        payloadDigest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        actionRequestId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        state:
+          type: string
+          enum:
+          - AWAITING_APPROVAL
+          - READY_FOR_EXECUTION
+          - EXECUTED
+        notificationState:
+          type: string
+          enum:
+          - NOT_REQUESTED
+          - PENDING
+          - PROCESSING
+          - ACCEPTED
+          - RETRY_SCHEDULED
+          - MANUAL_REVIEW
+          description: 원문 변경 후 알림의 미요청·처리 중·접수·재시도 상태를 구분합니다.
+        notificationFailureCode:
+          type:
+          - string
+          - 'null'
+          pattern: ^[A-Z0-9_]{1,80}$
+        maskedBefore:
+          type:
+          - string
+          - 'null'
+          maxLength: 1000
+        maskedAfter:
+          type:
+          - string
+          - 'null'
+          maxLength: 1000
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
         notifications:
           type: array
           maxItems: 4
-          items: { $ref: "#/components/schemas/SupportProfileChangeNotificationResource" }
+          items:
+            $ref: '#/components/schemas/SupportProfileChangeNotificationResource'
     CourierPayoutReferenceProfileChangeExecutionRequest:
       type: object
       additionalProperties: false
@@ -18378,6 +22157,7 @@ components:
             - SUCCEEDED
             - RETRY_SCHEDULED
             - MANUAL_REVIEW
+            - NOTIFICATION_SKIPPED
             - null
           description: 혜택 발급 후 독립 알림 전달 상태이며 아직 요청되지 않았으면 null입니다.
         notificationFailureCode:
@@ -18820,3 +22600,248 @@ components:
         binding:
           $ref: '#/components/schemas/ProfileChangeRevisionBinding'
           description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+    StoreOrderChangeCandidate:
+      type: object
+      required:
+      - requestId
+      - orderReference
+      - action
+      - revisionNumber
+      - createdAt
+      - expiresAt
+      properties:
+        requestId: &s4schemas002
+          $ref: '#/components/schemas/Identifier'
+        orderReference:
+          type: string
+        action:
+          $ref: '#/components/schemas/SupportActionType'
+        revisionNumber:
+          type: integer
+        createdAt: &s4schemas001
+          type: string
+          format: date-time
+        expiresAt: *s4schemas001
+    StoreOrderChangeCandidatePage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreOrderChangeCandidate'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+    SupportOrderConsentCandidate:
+      type: object
+      required:
+      - authorizationId
+      - authorizationType
+      - authorizedAt
+      - expiresAt
+      - remainingUses
+      properties:
+        authorizationId: *s4schemas002
+        authorizationType:
+          $ref: '#/components/schemas/SupportOrderChangeAuthorizationType'
+        authorizedAt: *s4schemas001
+        expiresAt: *s4schemas001
+        remainingUses:
+          type: integer
+          minimum: 1
+    SupportOrderConsentPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportOrderConsentCandidate'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+    SupportInvestigationDisplay:
+      type: object
+      required:
+      - requestId
+      - action
+      - caseCategory
+      - caseOpenedAt
+      - revisionNumber
+      properties:
+        requestId: *s4schemas002
+        action:
+          $ref: '#/components/schemas/SupportActionType'
+        caseCategory:
+          $ref: '#/components/schemas/SupportInquiryCategory'
+        caseOpenedAt: *s4schemas001
+        revisionNumber:
+          type: integer
+    OperationsInvestigationCandidate:
+      type: object
+      required:
+      - investigationId
+      - request
+      - state
+      - openedAt
+      - expiresAt
+      - canDecide
+      properties:
+        investigationId: *s4schemas002
+        request:
+          $ref: '#/components/schemas/SupportInvestigationDisplay'
+        state:
+          $ref: '#/components/schemas/OperationsSupportInvestigationState'
+        openedAt: *s4schemas001
+        expiresAt: *s4schemas001
+        canDecide:
+          type: boolean
+    OperationsInvestigationPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationsInvestigationCandidate'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+    SupportCompensationIncidentResource:
+      type: object
+      required:
+      - incidentId
+      - category
+      - occurredAt
+      - createdAt
+      - source
+      - benefitIssued
+      properties:
+        incidentId:
+          $ref: '#/components/schemas/Identifier'
+        category:
+          $ref: '#/components/schemas/SupportInquiryCategory'
+        occurredAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+          enum:
+          - REGISTERED
+          - EXISTING_COMPENSATION
+        benefitIssued:
+          type: boolean
+    SupportCompensationIncidentPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportCompensationIncidentResource'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+    RegisterSupportCompensationIncidentRequest:
+      type: object
+      required:
+      - verificationSessionId
+      - orderId
+      - occurredAt
+      properties:
+        verificationSessionId:
+          $ref: '#/components/schemas/Identifier'
+        orderId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        occurredAt:
+          type: string
+          format: date-time
+    PointCostIssuerResource:
+      type: object
+      required:
+      - issuerType
+      - issuerReference
+      - displayName
+      - source
+      - sourcePolicyVersion
+      properties:
+        issuerType:
+          type: string
+          enum:
+          - PLATFORM
+          - BRAND
+          - STORE
+        issuerReference:
+          type: string
+          maxLength: 240
+        displayName:
+          type: string
+        source:
+          type: string
+          enum:
+          - STORE_PROFILE
+          - BRAND_PROFILE
+          - REGISTERED_PLATFORM
+          - GLOBAL_POLICY
+        sourcePolicyVersion:
+          type:
+          - integer
+          - 'null'
+          format: int64
+    PointCostIssuerPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      - canRegisterPlatform
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PointCostIssuerResource'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+        canRegisterPlatform:
+          type: boolean
+    RegisterPlatformPointCostOwnerRequest:
+      type: object
+      required:
+      - name
+      - reason
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500

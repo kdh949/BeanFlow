@@ -83,6 +83,12 @@ pattern인 `DomainStatusText`가 담당합니다.
 
 ## Typography
 
+본문은 `--fs-body` 15px, 입력·강조 본문은 `--fs-body-lg` 16px, 보조 본문은
+`--fs-body-sm` 14px를 사용합니다. `--fs-caption`은 14px이며 폼 라벨·상태·시간·금액처럼
+사용자의 판단에 필요한 보조 정보에 적용합니다. `--fs-micro` 12px는 알림 점처럼 비핵심 장식에만
+사용하고 주문 상태·문의 코드·픽업 시간에는 사용하지 않습니다. 글자 확대 때문에 내용이 잘리면
+글자를 축소하지 않고 행 배치와 줄바꿈을 조정합니다.
+
 <div className="foundation-card">
   <p className="foundation-type-display">A-142</p>
   <p className="foundation-type-title">좋은 커피는 기다리지 않아도 돼요.</p>

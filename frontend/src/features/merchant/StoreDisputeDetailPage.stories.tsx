@@ -1,56 +1,16 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
+import { http, HttpResponse } from "msw";
+import { ids, merchantSignedInHandlers } from "../../../.storybook/fixtures";
 import { StoreDisputeDetailPage } from "./StoreDisputeDetailPage";
+const disputeId = "92000000-0000-4000-8000-000000000001";
+const original = { disputeId, storeId: ids.store, settlementItemId: "91000000-0000-4000-8000-000000000001", state: "UNDER_REVIEW", version: 1, expectedAdjustmentKrw: 3500, heldAmountKrw: 3500, reason: "부분 환불 조정액 확인", evidenceReferences: ["support-evidence://original"], filedAt: "2026-09-10T00:00:00Z", decidedAt: null, settlementAdjustmentId: null, pendingDecision: null };
+let record = original;
+const handlers = [...merchantSignedInHandlers, http.get("/api/v1/stores/:storeId/disputes/:disputeId", ({ params }) => { expect(params.storeId).toBe(ids.store); return HttpResponse.json(record); }), http.post("/api/v1/stores/:storeId/disputes/:disputeId/withdrawals", async ({ request }) => { expect(request.headers.get("X-BEANFLOW-CSRF")).toBeTruthy(); expect(request.headers.get("Idempotency-Key")).toBeTruthy(); expect(await request.json()).toMatchObject({ expectedVersion: 1, reason: "정산 반영 확인" }); record = { ...original, state: "WITHDRAWN", version: 2 }; return HttpResponse.json(record); })];
+const meta = { title: "Pages/Store/Dispute detail", component: StoreDisputeDetailPage, tags: ["autodocs"], beforeEach: () => { record = original; }, parameters: { a11y: { test: "error" }, routing: { path: "/store/disputes/:disputeId", initialEntry: `/store/disputes/${disputeId}?storeId=${ids.store}` }, msw: { handlers }, docs: { description: { component: "API의 점주 상세·철회와 기존 새 증빙 재접수 기능을 연결합니다. 기간과 1회 제한은 서버에서 검증합니다." }, story: { inline: false, height: "1100px" } } } } satisfies Meta<typeof StoreDisputeDetailPage>;
+export default meta; type Story = StoryObj<typeof meta>;
+export const Withdraw: Story = { play: async ({ canvas }) => { await userEvent.type(await canvas.findByLabelText("처리 사유"), "정산 반영 확인"); await userEvent.click(canvas.getByRole("button", { name: "이의제기 철회" })); await expect(await canvas.findByText("처리 요청을 완료했습니다.")).toBeVisible(); } };
+export const Refile: Story = { beforeEach: () => { record = { ...original, state: "ACCEPTED" }; }, parameters: { msw: { handlers: [...handlers, http.post("/api/v1/settlement-items/:itemId/disputes", async ({ request }) => { expect(await request.json()).toMatchObject({ previousDisputeId: disputeId, expectedAdjustmentKrw: record.expectedAdjustmentKrw, evidenceReferences: ["support-evidence://new"] }); return HttpResponse.json({ disputeId: "new-dispute", settlementItemId: original.settlementItemId, state: "FILED", heldAmountKrw: 3500, currency: "KRW", filedAt: original.filedAt }, { status: 201 }); })] } }, play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("button", { name: "새 증빙으로 재접수" })); await userEvent.type(canvas.getByLabelText("사유"), "추가 환불 자료 확인"); await userEvent.type(canvas.getByLabelText("증빙 위치 (한 줄에 하나)"), "support-evidence://new"); await userEvent.click(canvas.getByRole("button", { name: "이의제기 재접수" })); await expect(await canvas.findByText(/이의제기를 접수했습니다/)).toBeVisible(); await expect(canvas.getByRole("link", { name: "새 이의제기 확인" })).toHaveAttribute("href", `/store/disputes/new-dispute?storeId=${ids.store}`); } };
+export const MissingStore: Story = { parameters: { routing: { path: "/store/disputes/:disputeId", initialEntry: `/store/disputes/${disputeId}` } }, play: async ({ canvas }) => { await expect(await canvas.findByText("목록에서 매장과 이의제기를 선택해 주세요")).toBeVisible(); } };
 
-const rejected = {
-  disputeId: "dispute-demo-01",
-  settlementItemReference: "명세 BF-20260901-0084",
-  state: "REJECTED",
-  filedAt: "2026-09-01T11:20:00+09:00",
-  decidedAt: "2026-09-03T16:40:00+09:00",
-  expectedAdjustmentKrw: 8_400,
-  heldAmountKrw: 0,
-  reasonSummary: "부분 환불 조정액이 정산 명세에 반영되지 않았습니다.",
-  decisionSummary: "환불 성공 시각이 정산 확정 이후로 확인되어 다음 정산으로 이월됩니다.",
-  evidenceCount: 2,
-} as const;
-
-const meta = {
-  title: "Pages/Store/Dispute detail",
-  component: StoreDisputeDetailPage,
-  tags: ["autodocs"],
-  parameters: {
-    a11y: { test: "error" },
-    docs: { description: { component: "점주가 이의제기 내용과 검토 결과를 확인하고 다시 검토를 요청하는 화면입니다." }, story: { inline: false, height: "760px" } },
-    routing: { path: "/store/disputes/:disputeId", initialEntry: "/store/disputes/dispute-demo-01" },
-  },
-} satisfies Meta<typeof StoreDisputeDetailPage>;
-
-export default meta;
-type Story = StoryObj<typeof meta>;
-
-export const RejectedWithReappeal: Story = {
-  args: { scenario: "ready", dispute: rejected, onRequestReappeal: async () => undefined },
-  play: async ({ canvas }) => {
-    await expect(await canvas.findByRole("heading", { name: "이의제기 내용" })).toBeVisible();
-    await expect(canvas.getByText("검토 결과")).toBeVisible();
-    await userEvent.type(canvas.getByLabelText("다시 검토할 이유"), "환불 완료 시각과 명세 반영 시점을 다시 확인해 주세요.");
-    await userEvent.click(canvas.getByRole("button", { name: "다시 검토 요청" }));
-    await expect(canvas.getByRole("status")).toHaveTextContent("요청을 보냈습니다");
-  },
-};
-
-export const UnderReview: Story = {
-  args: { scenario: "ready", dispute: { ...rejected, state: "UNDER_REVIEW", decidedAt: null, decisionSummary: null } },
-  play: async ({ canvas }) => {
-    await expect(await canvas.findByText("검토 중입니다")).toBeVisible();
-    await expect(canvas.queryByRole("button", { name: "다시 검토 요청" })).not.toBeInTheDocument();
-  },
-};
-
-export const ContractPending: Story = {
-  args: { scenario: "contract-pending" },
-  play: async ({ canvas }) => {
-    await expect(await canvas.findByText("상세 내용을 준비하고 있습니다")).toBeVisible(); await expect(canvas.queryByRole("alert")).not.toBeInTheDocument();
-  },
-};
+export const NegativeRefile: Story = { ...Refile, beforeEach: () => { record = { ...original, state: "REJECTED", expectedAdjustmentKrw: -3500 }; } };

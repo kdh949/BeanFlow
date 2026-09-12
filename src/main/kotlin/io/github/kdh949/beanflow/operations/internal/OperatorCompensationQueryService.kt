@@ -10,11 +10,14 @@ import io.github.kdh949.beanflow.operations.api.CompensationSummary
 import io.github.kdh949.beanflow.operations.api.DetectPaymentCancellationSetupIssueCommand
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationQueryOperations
 import io.github.kdh949.beanflow.operations.api.OperatorCompensationView
+import io.github.kdh949.beanflow.operations.api.OperatorOrderCompensationView
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import io.github.kdh949.beanflow.operations.api.OperatorPermissionAuthorization
 import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
+import io.github.kdh949.beanflow.operations.api.OrderInvestigationOperations
 import io.github.kdh949.beanflow.operations.api.PaymentCancellationSetupIntegrityOperations
 import io.github.kdh949.beanflow.operations.api.PaymentSetupIssue
+import io.github.kdh949.beanflow.operations.api.ReadOperatorCompensationByReferenceCommand
 import io.github.kdh949.beanflow.operations.api.ReadOperatorCompensationCommand
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -32,7 +35,21 @@ internal class OperatorCompensationQueryService(
     private val identifierSource: IdentifierSource,
     private val setupQueries: PaymentCancellationSetupIntegrityQueryService,
     private val setupIntegrity: PaymentCancellationSetupIntegrityOperations,
+    private val orders: OrderInvestigationOperations,
 ) : OperatorCompensationQueryOperations {
+    @Transactional
+    override fun readByReference(command: ReadOperatorCompensationByReferenceCommand): OperatorOrderCompensationView {
+        val reason = normalizeAccessReason(command.accessReason)
+        authorization.requireActive(command.actorId, OperatorPermission.ORDER_COMPENSATION_READ)
+        val target =
+            orders.findByReference(command.orderReference)
+                ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
+        return OperatorOrderCompensationView(
+            target,
+            read(ReadOperatorCompensationCommand(command.actorId, target.orderId, reason, command.now)),
+        )
+    }
+
     @Transactional
     override fun read(command: ReadOperatorCompensationCommand): OperatorCompensationView {
         val reason = normalizeAccessReason(command.accessReason)

@@ -2572,10 +2572,64 @@
   초기값이며 실패 판정이나 재실행 허가가 아니다. 검증된 exact listener의 동일 source 동시 replay만
   불명 상태에서 허용하고, 나머지는 owner 결과 확인 전 재실행을 거절한다. 늦은 결과는 자기 시도에만
   반영하고 결과 불명 원장은 90일 cleanup에서 제외한다. [ADR-125](../adr/ADR-125-publication-unknown-execution-recovery.md)를 따른다.
+- **Store Discovery Amendment (2026-09-12):** 운영 업무 진입에 필요한 최소 매장 목록은 업무별
+  현재 조회 권한(브랜드는 관리 권한)으로 허용한다. 이름과 식별자만 반환하며 전체 식별 정보 조회
+  권한을 다른 업무에 암묵적으로 추가하지 않는다. 상세 조회와 명령의 기존 권한·감사 경계는 유지한다.
 - **Scope:** 재고 authoring은 제외한다. UI, 외부 지급, 자동 병합·배포는 포함하지 않는다.
 - **Revisit Conditions:** 별도 승인자 분리, 매장 self-service 개설 또는 관리 grant 운영 정책이 필요해질 때.
 - **Related:** [ADR-124](../adr/ADR-124-management-api-vertical-slices.md)
 
+
+---
+
+## BR-55 내장 고객지원 문의
+
+- **Status:** Accepted
+- **Decision Date:** 2026-09-11
+- **Decision:** 고객 도움말은 내장 고객지원으로 연결한다. 로그인 고객은 본인의 문의를 접수하고
+  공개 답변과 실제 상담 상태를 확인한다. 외부 이메일/채팅 채널을 대신 안내하지 않는다.
+- **Rules:** 담당자 없는 문의는 RECEIVED이며 상담원이 인수하면 기존 Case와 한 번만 연결한다.
+  공개 답변과 내부 메모/본인 확인/개인정보 열람 자료를 분리한다. 관련 주문은 고객 소유권을 확인한다.
+  본문 2,000자/제목 100자와 기존 민감 값 거부를 적용한다. 문의/답변은 거래의 실행 성공을 뜻하지 않는다.
+  RESOLVED/CLOSED에는 메시지를 추가하지 않고 새 문의를 접수한다. Case와 같은 보존 정책을 적용한다.
+- **Related:** [ADR-126](../adr/ADR-126-native-customer-support-inquiries.md)
+- **Revisit Conditions:** 익명 문의, 첨부, 외부 발송 또는 자동 배정이 필요할 때.
+
+---
+
+## BR-56 운영 포인트 업무의 고객 선택
+
+- **Status:** Accepted
+- **Decision Date:** 2026-09-11
+- **Decision:** 운영자는 가입 고객 login ID 정확 검색 결과에서 고객을 선택하고 포인트 계정을
+  자동 연결한다. 내부 customer/account ID를 직접 입력하거나 브라우저에 영구 목록으로 저장하지 않는다.
+- **Rules:** 검색은 BR-34 정규화, CUSTOMER_ACCOUNT_SEARCH active grant, 고정 포인트 조사 사유와
+  감사 기록을 요구한다. 응답은 고객 ID와 마스킹한 login/display name으로 제한한다. 포인트 연결/조회는
+  POINT_ACCOUNT_READ, 조정은 기존 POINT_ADJUSTMENT를 별도로 요구한다. 검색어는 감사/log에 남기지 않는다.
+  검색 결과와 선택은 React 메모리에만 두며 고객 변경 때 이전 상태를 제거한다. 결과 불명 조정은
+  대상/내용/key를 보존하여 재확인한다. 계정 누락·DB·감사 실패는 503이고 0P로 위장하지 않는다.
+- **Related:** [ADR-127](../adr/ADR-127-customer-selection-for-point-operations.md)
+- **Revisit Conditions:** 이름 부분 검색, 계정 다중화 또는 고객 수명주기가 변경될 때.
+
+---
+
+## BR-57 운영·상담 업무 대상 선택
+
+- **Status:** Accepted
+- **Decision Date:** 2026-09-11
+- **Decision:** 운영자·상담원·점주는 업무 대상을 서버 검색 결과나 권한 있는 요청 목록에서 선택한다.
+  내부 UUID를 미리 구해 입력하거나 담당자 사이에서 전달하는 것을 기본 업무 흐름으로 요구하지 않는다.
+- **Rules:** 매장명·공개 주문번호·현재 권한의 담당자와 최소 마스킹된 대상 표시를 사용한다. 목록 선택은
+  명령 권한이 아니며 기존 grant·Case/매장 소유권·본인확인·별도 승인·expected version을 다시 확인한다.
+  선택 정보는 브라우저 영구 저장하지 않는다. 불명 명령은 대상·내용·멱등 키를 보존한다. 실제 정보가 없는
+  담당자 이름, 비용 주체 또는 사고를 추측하지 않는다. 동일 사고의 중복 보상 제한을 유지한다.
+  담당자 표시는 인증된 조직 로그인 식별명의 최근 관측 정보이며 권한 증명이 아니다. 관측 정보가 없는
+  계정은 미등록으로 표시하고 조직 로그인 후 후보에 포함한다. 후보 자격은 현재 영속 grant로 확인한다.
+  플랫폼 포인트 비용 주체는 정책 변경 권한자가 업무상 이름·사유로 등록한다. 서버가 식별값을 발급하며
+  등록만으로 정책이나 포인트를 변경하지 않는다. 매장·브랜드는 기존 명부에서 선택하고, 과거 비용 참조는
+  실제 정책 출처를 표시해 유지한다. 기존 원장과 사고별 지급 제한을 새 식별값으로 재분류하지 않는다.
+- **Related:** [ADR-128](../adr/ADR-128-operation-target-selection-and-workflow-discovery.md)
+- **Revisit Conditions:** 검색 개인정보 범위, 외부 담당자/참조 시스템 또는 금융 정책을 변경할 때.
 
 ---
 
@@ -2720,3 +2774,10 @@
   exact approval consumption, old/new notification, OpenAPI와 failure/security test가 완료되기 전에는 허용하지 않는다.
 - Delivery fulfillment/provider automation과 retention automation은 threat model, owner model, OpenAPI와 failure tests가
   확정되기 전 노출하지 않는다.
+
+### BR-56 보완: 미확인 포인트 조정의 서버 복구 (2026-09-12)
+
+화면은 조정 전 서버 준비 기록을 생성한다. 브라우저 재진입 시 현재 액터의 미확인 기록을 먼저
+조회하고 기존 내용·키로만 결과를 확인한다. 조회 실패나 전송 중 새로고침은 새 금전 명령의
+허가가 아니다. 미실행 준비 취소 또는 반영 결과의 명시적 확인 전에는 새 조정을 막는다.
+브라우저의 고객·계정·본문 영구 저장 금지는 유지하며 복구 세부 계약은 ADR-066/127을 따른다.

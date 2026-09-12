@@ -5,6 +5,7 @@ import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
 import { coordinatesOf, useBrowserLocation } from "../../features/discovery/useBrowserLocation";
+import { useAttentionRefresh } from "../../features/shared/useAttentionRefresh";
 import { useResource } from "../../features/shared/useResource";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar, RefreshStoreCard } from "./RefreshShared";
 import { Button, ButtonLink, ChipButton, IconButton, SearchField, SelectField } from "../../design-system";
@@ -25,6 +26,8 @@ export function RefreshCustomerHomePage() {
   const coordinates = coordinatesOf(location);
   const activeOrders = useResource<CustomerOrderSummary[]>(useCallback(async () => unwrap(await customerApi.GET("/me/orders", { params: { query: { status: "ACTIVE", limit: 3 } } })).items, []));
   const recentOrders = useResource<CustomerOrderSummary[]>(useCallback(async () => unwrap(await customerApi.GET("/me/orders", { params: { query: { status: "PAST", limit: 1 } } })).items, []));
+  useAttentionRefresh(activeOrders.refresh, { intervalMs: 30_000 });
+  useAttentionRefresh(recentOrders.refresh);
   const recommendations = useResource<StoreRecommendation[]>(useCallback(async () => unwrap(await customerApi.GET("/me/store-recommendations", { params: { query: { limit: 6, ...(coordinates ?? {}) } } })).items, [coordinates]));
 
   return (

@@ -6,6 +6,7 @@
 | 이의 검토·승인·기각 | No | No | No | Active `SETTLEMENT_DISPUTE_DECIDE` grant + reason + idempotency + expectedVersion + Audit | No |
 | 매장 이의 상세·철회 (`/stores/{storeId}/disputes/{disputeId}/**`) | No | ACTIVE same-store OWNER + CSRF(철회) | No | No | No |
 | 매장 목록·식별 정보·지역 코드 (`/operations/stores`, `/operations/stores/{id}/identity`, `/operations/store-regions`) | No | No | No | Active `STORE_IDENTITY_READ` grant | No |
+| 업무별 최소 매장 목록 (`/operations/store-targets`) | No | No | No | 목적별 Active grant: IDENTITY=`STORE_IDENTITY_READ`, TERMS=`STORE_SETTLEMENT_TERMS_READ`, MEMBERSHIP=`STORE_MEMBERSHIP_READ`, BRAND=`STORE_BRAND_MANAGE`, POINT_POLICY=`POINT_ACCRUAL_POLICY_READ`, MEDIA=`STORE_MEDIA_MANAGE`; 이름·ID만, Audit 없음 | No |
 | 매장 개설·이름·좌표 교체 | No | No | No | Active `STORE_IDENTITY_WRITE` grant + reason + idempotency + expectedVersion(교체) + Audit | No |
 | 매장별 수수료 계약 목록·상세 | No | No | No | Active `STORE_SETTLEMENT_TERMS_READ` grant | No |
 | 미래 수수료 계약 버전 등록 | No | No | No | Active `STORE_SETTLEMENT_TERMS_WRITE` grant + reason + idempotency + expectedRevision + Audit | No |
@@ -46,6 +47,8 @@
 | 브랜드 조회 (`/operations/brands`, `/operations/brands/{brandId}`) | No | No | No | Active `STORE_BRAND_MANAGE` grant | No |
 | 매장 브랜드 지정·해제 (`/operations/stores/{storeId}/brand`) | No | No | No | Active `STORE_BRAND_MANAGE` grant + reason + idempotency + Audit | No |
 | 매장 지역 지정 (`/stores/{storeId}/region`) | No | ACTIVE owned store (`STORE_OWNER`) + reason + idempotency + Audit | No | No | No |
+| 운영팀 현재 매장·메뉴 이미지 GET (`/operations/stores/{storeId}/image`, `/operations/stores/{storeId}/menus/{menuId}/image`) | No | No | No | Active `STORE_MEDIA_MANAGE` grant + validated access reason; no Audit append | No |
+| 운영팀 이미지 대상 메뉴 목록 GET (`/operations/stores/{storeId}/media-menus`) | No | No | No | Active `STORE_MEDIA_MANAGE` grant + validated access reason; no Audit append | No |
 | 매장 이미지 변경 (`/stores/{storeId}/image`) | No | ACTIVE owned store (`OWNER`) + CSRF + Audit | No | Active `STORE_MEDIA_MANAGE` grant + access reason + Audit | No |
 | 메뉴 이미지 변경 (`/stores/{storeId}/menus/{menuId}/image`) | No | ACTIVE owned store (`OWNER`) + CSRF + Audit | ACTIVE assigned store (`STAFF`) + CSRF + Audit | Active `STORE_MEDIA_MANAGE` grant + access reason + Audit | No |
 | 검색 색인 재생성 (`/operations/search-index/rebuild`) | No | No | No | Active `STORE_BRAND_MANAGE` grant + reason + idempotency + Audit | No |
@@ -230,15 +233,19 @@ membership을 다시 확인한다. 따라서 membership이 없거나 revoke된 a
 기존 UUID 기반 `POST /payments/{paymentId}/refunds`는 Merchant Session 전용이고, 기존 Platform
 Operator branch는 `POST /operations/payments/{paymentId}/refunds`로 분리한다. 두 경로는 같은
 idempotency·Refund·Provider 불변식을 공유하며 상대 actor 인증을 fallback으로 받아들이지 않는다.
+운영 화면의 공개 번호 기반 `POST /operations/stores/{storeId}/orders/{orderReference}/refund-previews`와
+`.../refunds`도 동일한 Operator JWT `PLATFORM_OPERATOR` 역할을 요구한다. 매장과 주문 번호의
+일치를 확인하며, 실행은 기존 잠금·미리보기 버전·멱등성 검증과 운영 actor Audit을 재사용한다.
 
 정산 Batch/Item 조회와 이의제기 접수·store 목록은 MerchantActor와 Identity의 현재 `ACTIVE OWNER`
 membership을 요구한다. `STAFF`, revoked owner와 다른 매장 owner는 조회·접수할 수
 없다. 정산 명세는 수수료·혜택 원가·실지급액을 담으므로 `STAFF`에게 목록 조회도 열지 않는다.
 `GET /stores/{storeId}/disputes`는 `store_id`를 SQL predicate에 포함하고 cursor에 store와 state
 filter를 함께 서명한다. 응답에는 내부 재처리 case, worker 오류와 접수자 자격증명을 넣지 않으며,
-query 장애는 빈 목록이 아니라 `503`이다. 이의제기 판정은 현재 내부 Application Service/worker만 존재하고 공개 운영 endpoint나
-JWT permission surface가 없다. 향후 운영 판정 API를 만들 때는 전용 permission, actor Audit와
-결정 사유 계약을 먼저 확정한다.
+query 장애는 빈 목록이 아니라 `503`이다. 운영 목록/상세는 `SETTLEMENT_DISPUTE_READ`,
+검토 시작/판정은 `SETTLEMENT_DISPUTE_DECIDE` active grant를 요구한다.
+`/operations/settlement-disputes`의 Operator JWT 전용 경로는 현재 상태·버전, 결정 사유와
+멱등성을 검증하고 actor Audit을 남긴다. 결정 진행 중에는 같은 판정만 이어갈 수 있다.
 
 고객 주문 리소스는 존재하지 않으면 `404`, 다른 고객 소유이면 `403`을 반환한다. 조회와
 취소가 같은 코드를 사용하며 operation에 따라 갈리지 않는다(ADR-030). 고객 취소
@@ -310,3 +317,28 @@ Support Manager, Operations reviewer와 executor separation을 서버와 DB 제�
 
 JWT role이나 UI evaluation은 위 grant를 대체하지 않는다. 권한 row는 caller transaction에서 잠그므로 revoke와
 실행이 직렬화된다. Operations reviewer는 exact request를 반환할 뿐 Point/Coupon을 발급하지 않는다.
+
+### 상담 픽업 후보 조회 보완 (2026-09-12)
+
+- `/support/cases/{caseId}/orders/{orderId}/pickup-slots`: 현재 assigned Case·활성 ORDER link와
+  `SUPPORT_CASE_READ`·`SUPPORT_ORDER_READ`.
+- `/support/action-requests/{requestId}/pickup-slots`: 기존 요청 가시성과 `SUPPORT_CASE_READ`·
+  `SUPPORT_ORDER_READ`; workflow와 동일한 상태 갱신 경계.
+- `/stores/{storeId}/support-order-change-requests/{requestId}/pickup-slots`: 현재 same-store
+  OWNER/STAFF와 기존 동의 대상의 revision·policy·order version·expiry 검증.
+- 모두 no-store 응답이며 고객 세션을 요구하지 않는다. 후보 조회는 예약·명령 권한을 대신하지 않는다.
+
+### 운영 상담 승인안 최소 조회
+
+| API | Actor | Required grant | Scope / failure | Audit |
+|---|---|---|---|---|
+| GET /operations/support-action-requests/{requestId}/review | PLATFORM_OPERATOR | OPERATIONS_SUPPORT_INVESTIGATION | OPERATIONS 승인 경로 및 현재 request/target/digest/version 바인딩, 그 외 403/409 | 읽기 전용, append 없음 |
+
+### 포인트 조정 준비와 결과 복구
+
+`POST /operations/point-adjustment-preparations`는 PLATFORM_OPERATOR의 POINT_ACCOUNT_READ + CUSTOMER_ACCOUNT_SEARCH + POINT_ADJUSTMENT를 검증한다. `GET .../current`는 본인의 기록만 반환하며 POINT_ACCOUNT_READ, 활성 기록이 있으면 CUSTOMER_ACCOUNT_SEARCH도 검증한다. `canExecute`는 현재 POINT_ADJUSTMENT로 계산한다. 본문과 마스킹 고객 표시는 no-store이며 POINT_ADJUSTMENT_PREPARATION_READ 감사 기록을 남긴다.
+`DELETE .../{preparationId}`는 본인의 기록과 POINT_ACCOUNT_READ를 검증하며 기대 상태 PREPARED는 취소, APPLIED는 결과 확인이다. 준비/취소/확인은 각각 POINT_ADJUSTMENT_PREPARED / POINT_ADJUSTMENT_PREPARATION_DISMISSED 감사 기록을 남긴다. 기존 조정 실행의 POINT_ADJUSTMENT 검증과 금융 트랜잭션은 유지한다.
+
+소속 추가 전용 정확 계정 조회 `/operations/stores/{storeId}/memberships/account-target`는 STORE_MEMBERSHIP_WRITE + STORE_MEMBERSHIP_ASSIGNMENT_REVIEW로 accountId/loginId/displayName만 제공한다. MERCHANT_ACCOUNT_READ 감사 action을 purpose/storeId와 함께 기록한다. MERCHANT_CREDENTIAL_MANAGE와 기존 소속 목록 READ는 추가 전용 업무에 요구하지 않는다. 최소 매장 탐색의 MEMBERSHIP_ASSIGNMENT/MERCHANT_ACCOUNT/DISPUTE/REFUND 목적은 ADR-128의 기존 업무 권한만 검증한다.
+
+복구 큐 Case/제안 목록은 PAYMENT_CANCELLATION_SETUP_REPAIR와 고정 업무 목적 PAYMENT_SETUP_RECOVERY_REVIEW 아래, 각 PAYMENT_SETUP_RECOVERY_CASES_READ/PAYMENT_SETUP_REPAIR_PROPOSALS_READ 금융 Audit를 동일 transaction에 저장한다. 필터 상태/결과 건수만 기록하며 감사 실패는 조회 503으로 전파한다.

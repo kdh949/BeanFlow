@@ -13,6 +13,8 @@ import io.github.kdh949.beanflow.shared.internal.VaultTransitPersonalDataAdapter
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.Mockito
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -26,6 +28,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -80,6 +83,67 @@ internal class BreakGlassIntegrationTest
             grant(reviewerId, "PRIVACY_BREAK_GLASS_REVIEW")
         }
 
+        @ParameterizedTest
+        @ValueSource(strings = ["REASSIGNED", "UNLINKED"])
+        fun `approval rejects requests whose assignment or subject link changed`(change: String) {
+            val binding = seedBinding()
+            val requestId = request(binding)
+            if (change == "REASSIGNED") {
+                jdbcTemplate.update("UPDATE support_case SET current_assignee_id = ? WHERE id = ?", reviewerId, binding.caseId)
+            } else {
+                jdbcTemplate.update(
+                    "UPDATE support_case_subject_link SET unlinked_at = now(), unlinked_by_actor_id = ?, " +
+                        "unlink_reason = 'target no longer applies', unlink_case_version = 2 WHERE id = ?",
+                    requesterId,
+                    binding.linkId,
+                )
+            }
+            mockMvc
+                .perform(get("/api/v1/support/break-glass-requests/$requestId/workflow").with(operatorJwt(approverId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+            mockMvc
+                .perform(
+                    post("/api/v1/support/break-glass-requests/$requestId/approvals")
+                        .with(operatorJwt(approverId))
+                        .header("Idempotency-Key", "stale-break-glass-$change")
+                        .json("""{"decision":"APPROVE","expectedVersion":0}"""),
+                ).andExpect(if (change == "REASSIGNED") status().isForbidden else status().isConflict)
+            assertThat(
+                jdbcTemplate.queryForObject("SELECT state FROM support_break_glass_request WHERE id = ?", String::class.java, requestId),
+            ).isEqualTo("APPROVAL_PENDING")
+            assertThat(countIntents(requestId)).isEqualTo(1L)
+        }
+
+        @Test
+        fun `work directory discovers emergency approvals without revealing or sending another notice`() {
+            val binding = seedBinding()
+            val requestId = request(binding)
+            mockMvc
+                .perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/support/work-items")
+                        .with(operatorJwt(approverId))
+                        .param("kind", "BREAK_GLASS")
+                        .param("caseId", binding.caseId.toString()),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].requestId").value(requestId.toString()))
+                .andExpect(jsonPath("$.items[0].field").doesNotExist())
+            mockMvc
+                .perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get(
+                            "/api/v1/support/approval-tasks",
+                        ).with(operatorJwt(approverId))
+                        .param("kind", "BREAK_GLASS"),
+                ).andExpect(
+                    status().isOk,
+                ).andExpect(
+                    jsonPath("$.items[0].requestId").value(requestId.toString()),
+                ).andExpect(jsonPath("$.items[0].reviewAction").value("DECIDE"))
+            assertThat(countIntents(requestId)).isEqualTo(1)
+        }
+
         @Test
         fun `break glass requires separated approval one-field reveal and separated post review`() {
             val binding = seedBinding()
@@ -102,6 +166,16 @@ internal class BreakGlassIntegrationTest
                 ).andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.state").value("ACTIVE"))
+            mockMvc
+                .perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get(
+                            "/api/v1/support/approval-tasks/BREAK_GLASS/$requestId/history",
+                        ).with(operatorJwt(approverId)),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].state").value("APPROVED"))
+                .andExpect(jsonPath("$.items[0].actorId").doesNotExist())
+                .andExpect(jsonPath("$.items[0].reasonCode").doesNotExist())
             assertThat(countIntents(requestId)).isEqualTo(2)
 
             mockMvc
@@ -151,6 +225,28 @@ internal class BreakGlassIntegrationTest
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.state").value("REVIEWED"))
 
+            val historyPath = "/api/v1/support/approval-tasks/BREAK_GLASS/$requestId/history"
+            val firstPage =
+                mockMvc
+                    .perform(get(historyPath).with(operatorJwt(reviewerId)).param("limit", "1"))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items[0].state").value("CONFIRMED"))
+                    .andReturn()
+                    .response.contentAsString
+            val historyCursor =
+                JsonMapper
+                    .builder()
+                    .build()
+                    .readTree(firstPage)["nextCursor"]
+                    .asText()
+            mockMvc
+                .perform(get(historyPath).with(operatorJwt(reviewerId)).param("limit", "1").param("cursor", historyCursor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].state").value("APPROVED"))
+                .andExpect(jsonPath("$.nextCursor").doesNotExist())
+            mockMvc
+                .perform(get(historyPath).with(operatorJwt(approverId)).param("cursor", historyCursor))
+                .andExpect(status().isBadRequest)
             worker.dispatchDue()
             assertThat(notificationProvider.calls.get()).isEqualTo(3)
             assertThat(notificationProvider.observedTransaction.get()).isFalse()
@@ -215,6 +311,111 @@ internal class BreakGlassIntegrationTest
                     requestId,
                 ),
             ).isEqualTo(2)
+        }
+
+        @Test
+        fun `workflow separates metadata approval reveal and post review without returning raw values`() {
+            val binding = seedBinding()
+            val requestId = request(binding)
+            val path = "/api/v1/support/break-glass-requests/$requestId/workflow"
+            grant(requesterId, "SUPPORT_PII_REVEAL_APPROVE")
+            mockMvc
+                .perform(get(path).with(operatorJwt(requesterId)))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+                .andExpect(jsonPath("$.request.value").doesNotExist())
+            mockMvc
+                .perform(get(path).with(operatorJwt(approverId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions[0]").value("DECIDE"))
+            mockMvc.perform(get(path).with(operatorJwt(reviewerId))).andExpect(status().isForbidden)
+            mockMvc
+                .perform(
+                    post("/api/v1/support/break-glass-requests/$requestId/approvals")
+                        .with(operatorJwt(approverId))
+                        .header("Idempotency-Key", "workflow-approve")
+                        .json("""{"decision":"APPROVE","expectedVersion":0}"""),
+                ).andExpect(status().isOk)
+            mockMvc
+                .perform(get(path).with(operatorJwt(requesterId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions[0]").value("REVEAL"))
+            mockMvc
+                .perform(
+                    post("/api/v1/support/break-glass-requests/$requestId/reveals")
+                        .with(operatorJwt(requesterId))
+                        .header("Idempotency-Key", "workflow-reveal")
+                        .json("""{"field":"CUSTOMER_PRIMARY_EMAIL"}"""),
+                ).andExpect(status().isOk)
+            mockMvc
+                .perform(get(path).with(operatorJwt(requesterId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.canViewRevealedValue").value(true))
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+                .andExpect(jsonPath("$.value").doesNotExist())
+            grant(approverId, "PRIVACY_BREAK_GLASS_REVIEW")
+            mockMvc
+                .perform(get(path).with(operatorJwt(approverId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+                .andExpect(jsonPath("$.canViewRevealedValue").value(false))
+            jdbcTemplate.update(
+                "UPDATE support_case SET state = 'CLOSED', closed_at = now(), last_changed_at = now() WHERE id = ?",
+                binding.caseId,
+            )
+            mockMvc
+                .perform(get(path).with(operatorJwt(requesterId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.canViewRevealedValue").value(false))
+            mockMvc
+                .perform(get(path).with(operatorJwt(reviewerId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions[0]").value("REVIEW"))
+            mockMvc
+                .perform(
+                    post("/api/v1/support/break-glass-requests/$requestId/reviews")
+                        .with(operatorJwt(reviewerId))
+                        .header("Idempotency-Key", "workflow-review")
+                        .json("""{"decision":"CONFIRMED","expectedVersion":2,"reasonCode":"POLICY_CONFIRMED"}"""),
+                ).andExpect(status().isOk)
+            mockMvc
+                .perform(get(path).with(operatorJwt(reviewerId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+                .andExpect(jsonPath("$.request.state").value("REVIEWED"))
+                .andExpect(jsonPath("$.postReview.decision").value("CONFIRMED"))
+        }
+
+        @Test
+        fun `workflow rejects unrelated revoked requesters and expired reveal capabilities`() {
+            val binding = seedBinding()
+            val requestId = request(binding)
+            val path = "/api/v1/support/break-glass-requests/$requestId/workflow"
+            val unrelated = UUID.randomUUID()
+            grant(unrelated, "SUPPORT_BREAK_GLASS_REQUEST")
+            mockMvc.perform(get(path).with(operatorJwt(unrelated))).andExpect(status().isForbidden)
+            mockMvc
+                .perform(
+                    post("/api/v1/support/break-glass-requests/$requestId/approvals")
+                        .with(operatorJwt(approverId))
+                        .header("Idempotency-Key", "workflow-expiry-approve")
+                        .json("""{"decision":"APPROVE","expectedVersion":0}"""),
+                ).andExpect(status().isOk)
+            jdbcTemplate.update(
+                "UPDATE support_break_glass_request SET requested_at = now() - interval '5 minutes', approved_at = now() - interval '4 minutes', expires_at = now() - interval '2 minutes' WHERE id = ?",
+                requestId,
+            )
+            mockMvc
+                .perform(get(path).with(operatorJwt(requesterId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+                .andExpect(jsonPath("$.canViewRevealedValue").value(false))
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ?",
+                requesterId,
+            )
+            mockMvc.perform(get(path).with(operatorJwt(requesterId))).andExpect(status().isForbidden)
         }
 
         private fun request(binding: Binding): UUID {

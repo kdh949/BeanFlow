@@ -14,7 +14,7 @@ const meta = {
       description: { component: "현재 고객이 저장한 매장을 조회하고 서버 멱등 DELETE로 해제하는 목록입니다." },
       story: { inline: false, height: "720px" },
     },
-    routing: { path: "/app/favorites", initialEntry: "/app/favorites" },
+    routing: { path: "/app/favorites", initialEntry: "/app/favorites", surface: "refresh-customer" },
   },
 } satisfies Meta<typeof FavoriteStoresPage>;
 
@@ -46,6 +46,21 @@ export const Empty: Story = {
   parameters: { msw: { handlers: [http.get("/api/v1/me/favorite-stores", () => HttpResponse.json({ items: [] }))] } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("즐겨찾기한 매장이 없어요")).toBeVisible();
+  },
+};
+
+/** Long names and the pickup date must retain readable space beside the remove action. */
+export const LongStoreDetails: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/me/favorite-stores", () => HttpResponse.json({ items: [
+    { ...customerStore, name: "시청 광장 북쪽 출입구점", customerDisplay: { ...customerDisplay, addressLine: "서울 중구 세종대로 110 북쪽 출입구 옆 1층" } },
+  ] }))] } },
+  play: async ({ canvas }) => {
+    const name = await canvas.findByText("시청 광장 북쪽 출입구점");
+    await expect(name).toBeVisible();
+    await expect(name.getBoundingClientRect().width).toBeGreaterThan(150);
+    const state = canvas.getByText("주문 가능");
+    await expect(Number.parseFloat(getComputedStyle(state).fontSize)).toBeGreaterThanOrEqual(14);
+    await expect(canvas.getByRole("button", { name: "시청 광장 북쪽 출입구점 즐겨찾기 해제" })).toBeVisible();
   },
 };
 

@@ -69,6 +69,17 @@ ALTER TABLE ordering_order ADD CONSTRAINT ck_ordering_order_public_reference
 - 기존 UUID 경로·응답은 호환 전환 동안 유지한다. 새 고객·점주 사람용 API는 `publicReference`만
   노출하고 내부 `orderId`를 응답에 포함하지 않는다. 내부 FK·이벤트·로그는 UUID를 계속 사용한다.
 
+### 공개 주문번호 결제 확인과 재개 (2026-09-11)
+
+`GET /me/orders/{orderReference}/checkout`은 현재 소유 주문·예약 만료·Payment owner 상태를 조회한다.
+`POST /me/orders/{orderReference}/payment-attempts`는 같은 소유권 해석 뒤 기존 일회성 결제 준비 transaction을
+호출한다. 신규 응답에는 내부 orderId가 없다. 기존 UUID checkout 주소는 공개 주문번호 주소로 전환한다.
+
+재개는 새 Payment 생성이 아니다. 기존 Payment와 attempt가 모두 READY이고 예약 시간이 남았을 때만 동일
+providerOrderId/customerKey의 준비 정보를 반환한다. 확인 중·UNKNOWN·RECONCILING·MANUAL_REVIEW·종료 상태는
+재개 정보를 주지 않는다. 클릭 시에도 현재 checkout을 다시 읽는다. 조회와 클릭 사이 경쟁은 기존 Order/Payment
+lock과 결제 확인 멱등성으로 검증한다. 새 조회는 Provider를 호출하지 않는다.
+
 ## Alternatives Considered
 
 ### 1. UUID를 그대로 노출
@@ -146,3 +157,10 @@ ALTER TABLE ordering_order ADD CONSTRAINT ck_ordering_order_public_reference
 - [ADR-098](ADR-098-order-display-snapshots.md)
 - [ADR-003](ADR-003-aggregate-reference-by-id.md)
 - [ADR-030](ADR-030-customer-cancellation-authorization.md)
+
+## Checkout replay clarification (2026-09-12)
+
+공개 payment-attempt POST는 준비 명령 전후에 현재 checkout eligibility를 검사한다.
+Payment/attempt READY와 서버 Clock 기준 유효 예약을 모두 확인한 응답만 결제창에 전달한다.
+그 외 상태는 409이며 고객은 현재 checkout/결제 상태를 조회한다. 브라우저 시계는 재조회 예약의
+힌트일 뿐 서버의 canPay를 무효화하거나 결제창을 독립적으로 허용하는 근거가 아니다.

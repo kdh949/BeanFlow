@@ -146,6 +146,66 @@ internal class DiscoveryStoreCatalogIntegrationTest
         }
 
         @Test
+        fun `customer configurations are complete current same store active sets`() {
+            val menu = insertMenu(storeId, "Latte", 5000, available = true)
+            val shot = insertOption(menu, "Shot", 500, available = true)
+            val basic = UUID.fromString("10000000-0000-4000-8000-000000000001")
+            val withShot = UUID.fromString("10000000-0000-4000-8000-000000000002")
+            jdbcTemplate.update(
+                "INSERT INTO merchant_menu_configuration (id, menu_id, normalized_option_key, available) VALUES (?, ?, '', true), (?, ?, ?, false)",
+                basic,
+                menu,
+                withShot,
+                menu,
+                shot.toString(),
+            )
+            val path = "${menuPath(storeId)}/$menu/configurations"
+            mockMvc
+                .perform(get(path).with(customerJwt()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].configurationId").value(basic.toString()))
+                .andExpect(jsonPath("$.items[0].optionIds.length()").value(0))
+                .andExpect(jsonPath("$.items[1].optionIds[0]").value(shot.toString()))
+                .andExpect(jsonPath("$.items[1].available").value(false))
+            mockMvc
+                .perform(get("${menuPath(otherStoreId)}/$menu/configurations").with(customerJwt()))
+                .andExpect(status().isNotFound)
+            jdbcTemplate.update(
+                "UPDATE merchant_menu_configuration SET lifecycle = 'ARCHIVED', archived_at = ? WHERE id = ?",
+                Timestamp.from(clock.instant()),
+                withShot,
+            )
+            mockMvc
+                .perform(get(path).with(customerJwt()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+            jdbcTemplate.update(
+                "UPDATE merchant_menu SET lifecycle = 'ARCHIVED', available = false, archived_at = ? WHERE id = ?",
+                Timestamp.from(clock.instant()),
+                menu,
+            )
+            mockMvc.perform(get(path).with(customerJwt())).andExpect(status().isNotFound)
+        }
+
+        @Test
+        fun `configuration overflow is explicit failure instead of a truncated selection`() {
+            val menu = insertMenu(storeId, "Latte", 5000, available = true)
+            repeat(501) {
+                jdbcTemplate.update(
+                    "INSERT INTO merchant_menu_configuration (id, menu_id, normalized_option_key, available) VALUES (?, ?, ?, true)",
+                    UUID.randomUUID(),
+                    menu,
+                    UUID.randomUUID().toString(),
+                )
+            }
+            mockMvc
+                .perform(get("${menuPath(storeId)}/$menu/configurations").with(customerJwt()))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+        }
+
+        @Test
         fun `menu response exposes exactly the contract fields`() {
             val menuId = insertMenu(storeId, "Americano", 4_500, available = true, displayCategory = "커피", description = "산뜻한 커피")
             insertOption(menuId, "Extra shot", 500, available = true)

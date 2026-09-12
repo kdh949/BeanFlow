@@ -7,6 +7,10 @@ export type RequestErrorPresentation = {
 };
 
 const knownErrors: Record<string, Omit<RequestErrorPresentation, "reference">> = {
+  COMMAND_IDENTITY_UNAVAILABLE: {
+    title: "요청 식별 정보를 보관하지 못했습니다",
+    description: "브라우저 저장소를 사용할 수 있는지 확인한 뒤 같은 내용으로 다시 시도해 주세요.",
+  },
   INVALID_REQUEST: {
     title: "입력 내용을 확인해 주세요",
     description: "요청 형식이나 입력한 값이 올바르지 않습니다. 내용을 수정한 뒤 다시 시도해 주세요.",
@@ -14,6 +18,30 @@ const knownErrors: Record<string, Omit<RequestErrorPresentation, "reference">> =
   RESOURCE_NOT_FOUND: {
     title: "요청한 대상을 찾을 수 없습니다",
     description: "대상이 존재하는지, 현재 계정으로 접근할 수 있는지 확인해 주세요.",
+  },
+  RESOURCE_STATE_CONFLICT: {
+    title: "현재 상태와 요청이 맞지 않습니다",
+    description: "대상의 현재 상태를 다시 조회하고, 변경할 내용과 적용 조건을 확인해 주세요.",
+  },
+  POINT_ADJUSTMENT_INSUFFICIENT_AVAILABLE: {
+    title: "차감할 수 있는 포인트가 부족합니다",
+    description: "일부만 차감하지 않았습니다. 현재 사용 가능한 포인트와 조정 금액을 다시 확인해 주세요.",
+  },
+  REPROCESSING_PROPOSAL_STALE: {
+    title: "복구 제안 이후 상태가 바뀌었습니다",
+    description: "현재 복구 건을 다시 확인하고 필요한 경우 새 제안을 준비해 주세요.",
+  },
+  REPROCESSING_PROPOSAL_EXPIRED: {
+    title: "복구 제안 기한이 지났습니다",
+    description: "현재 상태를 확인하고 새 제안을 준비해 주세요.",
+  },
+  REPROCESSING_APPROVER_MUST_DIFFER: {
+    title: "다른 담당자의 판정이 필요합니다",
+    description: "제안자는 자신의 복구 제안을 승인하거나 반려할 수 없습니다.",
+  },
+  REPROCESSING_NOT_SAFE: {
+    title: "현재 상태에서 복구할 수 없습니다",
+    description: "복구에 필요한 정보와 현재 처리 상태를 다시 확인해 주세요.",
   },
   REFUND_QUANTITY_UNAVAILABLE: {
     title: "환불 가능 수량이 바뀌었습니다",
@@ -31,9 +59,13 @@ const knownErrors: Record<string, Omit<RequestErrorPresentation, "reference">> =
     title: "결제 정보를 확인할 수 없습니다",
     description: "결제창에서 돌아온 정보가 주문과 일치하지 않습니다. 주문 상태를 확인해 주세요.",
   },
-  POLICY_VERSION_CONFLICT: {
-    title: "정책 버전이 변경되었습니다",
-    description: "다른 운영자가 정책을 먼저 변경했습니다. 현재 값을 다시 조회해 주세요.",
+  ORDER_STATE_CONFLICT: {
+    title: "현재 상태와 요청이 맞지 않습니다",
+    description: "대상의 현재 상태를 다시 조회하고, 변경할 내용과 적용 조건을 확인해 주세요.",
+  },
+  POLICY_DATA_INCOMPLETE: {
+    title: "정책 값을 확인하지 못했습니다",
+    description: "완전한 정책 정보를 다시 조회한 뒤 변경해 주세요.",
   },
   TEMPORARY_PASSWORD_NOT_REPLAYABLE: {
     title: "임시 비밀번호를 다시 표시할 수 없습니다",

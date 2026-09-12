@@ -152,7 +152,7 @@ describe("StoreCatalogPage", () => {
       .mockResolvedValueOnce(response({ ...menuContent, available: true, version: 4 }));
     render(<MemoryRouter><StoreCatalogPage /></MemoryRouter>);
 
-    await userEvent.click(await screen.findByRole("button", { name: /카페 라테/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "카페 라테 편집" }));
     await userEvent.click(await screen.findByRole("checkbox", { name: /고객에게 판매 가능/ }));
     await userEvent.click(screen.getByRole("button", { name: "거래 내용 저장" }));
     expect(await screen.findByText("3번째 저장")).toBeVisible();
@@ -232,7 +232,7 @@ describe("StoreCatalogPage", () => {
     );
     render(<MemoryRouter><StoreCatalogPage /></MemoryRouter>);
 
-    await userEvent.click(await screen.findByRole("button", { name: /카페 라테/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "카페 라테 편집" }));
     const name = await screen.findByLabelText("메뉴 이름");
     await userEvent.clear(name);
     await userEvent.type(name, "새 라테");
@@ -279,7 +279,7 @@ describe("StoreCatalogPage", () => {
     expect(getCalls.filter(([path]) => path === "/stores/{storeId}/menus/{menuId}/trade-content")).toHaveLength(0);
   });
 
-  it("keeps the reloaded policy when an earlier save finishes after a Store round trip", async () => {
+  it("blocks Store changes until a policy save settles, then reads the newly selected Store", async () => {
     const pendingSave = deferred<never>();
     let firstStoreReads = 0;
     vi.mocked(merchantApi.GET).mockImplementation(((path: string, options: {
@@ -307,21 +307,21 @@ describe("StoreCatalogPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "정책 저장" }));
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
     const selector = screen.getByRole("combobox", { name: "매장 선택" });
+    expect(selector).toBeDisabled();
     await userEvent.selectOptions(selector, secondStoreId);
-    expect(await screen.findByText("4번째 저장")).toBeVisible();
-    await userEvent.selectOptions(selector, storeId);
-    expect(await screen.findByText("9번째 저장")).toBeVisible();
-    await userEvent.click(screen.getByRole("checkbox", { name: /매장 픽업/ }));
-
+    expect(selector).toHaveValue(storeId);
+    expect(screen.getByText("2번째 저장")).toBeVisible();
     await act(async () => {
       pendingSave.resolve(response({ ...policy, acceptingOrders: false, version: 3 }));
       await pendingSave.promise;
     });
-    expect(screen.getByText("9번째 저장")).toBeVisible();
-    expect(screen.getByRole("checkbox", { name: /새 주문 접수/ })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /매장 픽업/ })).not.toBeChecked();
+    expect(screen.getByText("3번째 저장")).toBeVisible();
+    expect(selector).toBeEnabled();
+    await userEvent.selectOptions(selector, secondStoreId);
+    expect(await screen.findByText("4번째 저장")).toBeVisible();
+    await userEvent.selectOptions(selector, storeId);
+    expect(await screen.findByText("9번째 저장")).toBeVisible();
     expect(screen.queryByText("주문 정책을 저장했습니다.")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "정책 저장" })).toBeEnabled();
   });
 
   it("ignores a late ordering policy response from the previously selected Store", async () => {

@@ -24,7 +24,44 @@ data class SupportOrderSnapshot(
     val version: Long,
 )
 
+data class SupportOrderDisplay(
+    val orderId: UUID,
+    val publicReference: String,
+    val storeName: String,
+    val state: SupportOrderState,
+)
+
+data class SupportOrderLineOverview(
+    val sequence: Int,
+    val menuName: String,
+    val quantity: Long,
+    val amountKrw: Long,
+)
+
+data class SupportOrderOverviewSnapshot(
+    val orderId: UUID,
+    val publicReference: String,
+    val storeName: String,
+    val state: SupportOrderState,
+    val version: Long,
+    val orderedAt: java.time.Instant,
+    val pickupWindowStart: java.time.Instant,
+    val pickupWindowEnd: java.time.Instant,
+    val subtotalKrw: Long,
+    val couponDiscountKrw: Long,
+    val pointsAppliedKrw: Long,
+    val payableKrw: Long,
+    val currency: String,
+    val lines: List<SupportOrderLineOverview>,
+)
+
 interface OrderingSupportTimelineOperations {
+    fun findOrderOverviews(orderIds: Set<UUID>): List<SupportOrderOverviewSnapshot>
+
+    fun findOrderDisplays(orderIds: Set<UUID>): Map<UUID, SupportOrderDisplay>
+
+    fun findOrderByPublicReference(reference: String): SupportOrderDisplay?
+
     fun findTimelineFacts(query: SupportOwnerTimelineQuery): List<SupportOwnerTimelineFact>
 
     fun findOrderSnapshots(orderIds: Set<UUID>): List<SupportOrderSnapshot>

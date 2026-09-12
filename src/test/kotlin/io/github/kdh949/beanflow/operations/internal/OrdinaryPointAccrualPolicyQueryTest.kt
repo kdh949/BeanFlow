@@ -71,6 +71,7 @@ internal class OrdinaryPointAccrualPolicyQueryTest
             assertThat(global.scopeType).isEqualTo(OrdinaryPointAccrualPolicyScopeType.GLOBAL)
             assertThat(globalHistory.items).hasSize(1)
             assertThat(storeHeads.items.map { it.policyVersionId }).contains(firstHead.policyVersionId, secondHead.policyVersionId)
+            assertThat(storeHeads.items.map { it.scopeName }).containsOnly("Policy test store")
             assertThat(effectiveStore.explicitHead!!.policyVersionId).isEqualTo(firstHead.policyVersionId)
             assertThat(effectiveStore.effectivePolicy.policyVersionId).isEqualTo(firstHead.policyVersionId)
             assertThat(storeHistory.items.map { it.policyVersionId }).containsExactly(firstHead.policyVersionId)
@@ -92,6 +93,24 @@ internal class OrdinaryPointAccrualPolicyQueryTest
                 .isInstanceOfSatisfying(DomainFailure::class.java) {
                     assertThat(it.code).isEqualTo(FailureCode.INVALID_REQUEST)
                 }
+        }
+
+        @Test
+        fun `store list reads current names and fails when a registered profile is missing`() {
+            val storeId = insertStore()
+            writeService.change(inherit(storeId, null, "query-store-label-0001"))
+            jdbcTemplate.update("UPDATE merchant_store_discovery_profile SET name = 'Renamed store' WHERE store_id = ?", storeId)
+            val command = ListStorePointAccrualPolicyHeadsCommand(actorId, "Policy list review", null, null, 20, now)
+            assertThat(
+                query
+                    .storeHeads(command)
+                    .items
+                    .single()
+                    .scopeName,
+            ).isEqualTo("Renamed store")
+            jdbcTemplate.update("DELETE FROM merchant_store_discovery_profile WHERE store_id = ?", storeId)
+            assertFailure(FailureCode.DEPENDENCY_UNAVAILABLE) { query.storeHeads(command) }
+            assertThat(auditCount()).isEqualTo(1)
         }
 
         @Test
@@ -165,6 +184,10 @@ internal class OrdinaryPointAccrualPolicyQueryTest
         private fun insertStore(): UUID =
             UUID.randomUUID().also {
                 jdbcTemplate.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled) VALUES (?, true, true)", it)
+                jdbcTemplate.update(
+                    "INSERT INTO merchant_store_discovery_profile (store_id, name, location, region_code) VALUES (?, 'Policy test store', ST_GeogFromText('SRID=4326;POINT(127 37.5)'), '1168010100')",
+                    it,
+                )
             }
 
         private fun grant(permission: String) {

@@ -25,7 +25,23 @@ import java.util.UUID
 internal class PublicCustomerOrderController(
     private val service: PublicOrderReferenceService,
     private val queries: CustomerOrderQueryService,
+    private val checkout: PublicCheckoutService,
 ) {
+    @GetMapping("/{orderReference}/checkout")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    fun checkout(
+        actor: CustomerActor,
+        @PathVariable orderReference: String,
+    ): PublicCheckoutResponse = checkout.get(actor.actorId, orderReference)
+
+    @PostMapping("/{orderReference}/payment-attempts")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    fun preparePayment(
+        actor: CustomerActor,
+        @PathVariable orderReference: String,
+        @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
+    ): PublicOneTimePaymentAttemptResponse = checkout.prepare(actor.actorId, orderReference, idempotencyKey)
+
     @GetMapping
     @PreAuthorize("hasRole('CUSTOMER')")
     fun list(

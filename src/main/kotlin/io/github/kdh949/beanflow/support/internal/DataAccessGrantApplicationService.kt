@@ -89,6 +89,13 @@ internal data class DataAccessGrantResource(
     val version: Long,
 )
 
+internal enum class DataAccessGrantViewerRole { REQUESTER, APPROVER }
+
+internal data class DataAccessGrantInspectionResource(
+    val grant: DataAccessGrantResource,
+    val viewerRole: DataAccessGrantViewerRole,
+)
+
 internal class RevealedPersonalDataResource(
     val revealAttemptId: UUID,
     val grantId: UUID,
@@ -124,6 +131,11 @@ internal class DataAccessGrantApplicationService(
     private val stores: StoreSupportProfileRevealOperations,
     private val couriers: ExternalCourierSupportProfileRevealOperations,
 ) {
+    fun get(
+        actorId: UUID,
+        grantId: UUID,
+    ): DataAccessGrantInspectionResource = transactions.get(actorId, grantId)
+
     fun request(command: RequestDataAccessGrantCommand): DataAccessGrantResource = transactions.request(command)
 
     fun decide(command: DecideDataAccessGrantCommand): DataAccessGrantResource = transactions.decide(command)
@@ -201,6 +213,51 @@ internal class DataAccessGrantTransactions(
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
 ) {
+    @Transactional
+    fun get(
+        actorId: UUID,
+        grantId: UUID,
+    ): DataAccessGrantInspectionResource =
+        boundary {
+            val canRequest = permissions.hasActive(actorId, OperatorPermission.SUPPORT_PII_REVEAL_REQUEST)
+            val canApprove = permissions.hasActive(actorId, OperatorPermission.SUPPORT_PII_REVEAL_APPROVE)
+            if (!canRequest && !canApprove) throw DomainFailure(FailureCode.ACCESS_DENIED, "DataAccessGrant permission is required")
+            val caseId = grants.findCaseIdById(grantId) ?: notFound()
+            val supportCase = activeCase(caseId)
+            val entity = grants.findLockedById(grantId) ?: notFound()
+            val viewerRole =
+                if (entity.requesterId == actorId) {
+                    if (!canRequest || supportCase.currentAssigneeId != actorId) {
+                        throw DomainFailure(FailureCode.ACCESS_DENIED, "DataAccessGrant requester assignment is required")
+                    }
+                    permissions.requireActive(
+                        actorId,
+                        if (entity.risk ==
+                            DataAccessRisk.BASIC
+                        ) {
+                            OperatorPermission.SUPPORT_PII_REVEAL_BASIC
+                        } else {
+                            OperatorPermission.SUPPORT_PII_REVEAL_SENSITIVE
+                        },
+                    )
+                    DataAccessGrantViewerRole.REQUESTER
+                } else {
+                    if (!canApprove) throw DomainFailure(FailureCode.ACCESS_DENIED, "DataAccessGrant approval permission is required")
+                    DataAccessGrantViewerRole.APPROVER
+                }
+            activeLink(caseId, entity.subjectLinkId)
+            val resource = entity.toResource(fields(entity.id))
+            val effective =
+                if (resource.state == DataAccessGrantState.ACTIVE &&
+                    resource.expiresAt?.let { !clock.instant().isBefore(it) } == true
+                ) {
+                    resource.copy(state = DataAccessGrantState.EXPIRED)
+                } else {
+                    resource
+                }
+            DataAccessGrantInspectionResource(effective, viewerRole)
+        }
+
     @Transactional
     fun request(command: RequestDataAccessGrantCommand): DataAccessGrantResource =
         boundary {

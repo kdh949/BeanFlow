@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.payment.api.ClaimOneTimePaymentConfirmationComm
 import io.github.kdh949.beanflow.payment.api.ExternalPaymentView
 import io.github.kdh949.beanflow.payment.api.OneTimePaymentAmount
 import io.github.kdh949.beanflow.payment.api.OneTimePaymentAttemptView
+import io.github.kdh949.beanflow.payment.api.OneTimePaymentCheckoutView
 import io.github.kdh949.beanflow.payment.api.OneTimePaymentConfirmationClaim
 import io.github.kdh949.beanflow.payment.api.OneTimePaymentConfirmationClaimState
 import io.github.kdh949.beanflow.payment.api.OneTimePaymentOperations
@@ -38,6 +39,24 @@ internal class OneTimePaymentService(
     private val gateway: PaymentGateway,
 ) : OneTimePaymentOperations {
     private val secureRandom = SecureRandom()
+
+    @Transactional(readOnly = true)
+    override fun checkout(
+        actorId: UUID,
+        orderId: UUID,
+        now: java.time.Instant,
+    ): OneTimePaymentCheckoutView? {
+        val payment = payments.findByOrderId(orderId) ?: return null
+        if (payment.customerId != actorId) conflict(FailureCode.ACCESS_DENIED, "Payment belongs to another customer")
+        if (payment.type != PaymentType.EXTERNAL || payment.paymentMethodId != null) {
+            return OneTimePaymentCheckoutView(payment.id, payment.approvalState.name, null)
+        }
+        val attempt = attempts.findById(payment.id).orElse(null) ?: dependency("One-time payment attempt is missing")
+        val ready =
+            payment.approvalState == PaymentApprovalState.READY &&
+                attempt.state == OneTimePaymentAttemptState.READY && now.isBefore(attempt.expiresAt)
+        return OneTimePaymentCheckoutView(payment.id, payment.approvalState.name, if (ready) attempt.toPrepareView(payment) else null)
+    }
 
     @Transactional(propagation = Propagation.MANDATORY)
     override fun existing(command: PrepareOneTimePaymentCommand): OneTimePaymentAttemptView? {

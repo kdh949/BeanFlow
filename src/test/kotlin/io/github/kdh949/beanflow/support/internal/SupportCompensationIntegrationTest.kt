@@ -36,8 +36,10 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -110,6 +112,132 @@ internal class SupportCompensationIntegrationTest
             }
             listOf("SUPPORT_CASE_READ", "SUPPORT_COMPENSATION_APPROVE").forEach { grant(managerId, it) }
             grant(operationsId, "OPERATIONS_SUPPORT_INVESTIGATION")
+        }
+
+        @Test
+        fun `work directory discovers compensation for its separate pending approver without issuing a benefit`() {
+            val created = compensations.create(command(UUID.randomUUID(), 3_001, "directory-compensation"))
+            mockMvc
+                .perform(
+                    get("/api/v1/support/work-items")
+                        .with(jwt().jwt { it.subject(managerId.toString()) })
+                        .param("kind", "COMPENSATION")
+                        .param("caseId", caseId.toString()),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].requestId").value(created.compensationRequestId.toString()))
+                .andExpect(jsonPath("$.items[0].payloadDigest").doesNotExist())
+                .andExpect(jsonPath("$.items[0].verificationSessionId").doesNotExist())
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT terminal_benefit_id FROM support_compensation_request WHERE id = ?",
+                    UUID::class.java,
+                    created.compensationRequestId,
+                ),
+            ).isNull()
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks")
+                        .with(jwt().jwt { it.subject(managerId.toString()) })
+                        .param("kind", "COMPENSATION"),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].requestId").value(created.compensationRequestId.toString()))
+                .andExpect(jsonPath("$.items[0].reviewAction").value("DECIDE"))
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks/COMPENSATION/${created.compensationRequestId}/history")
+                        .with(jwt().jwt { it.subject(managerId.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isEmpty())
+        }
+
+        @Test
+        fun `workflow exposes exact non personal terms to pending separate approver without expanding legacy reads`() {
+            val created = compensations.create(command(UUID.randomUUID(), 3_001, "workflow-medium-create"))
+            val path = "/api/v1/support/compensations/${created.compensationRequestId}"
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isForbidden)
+            mockMvc
+                .perform(get("$path/workflow").with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.terms.responsibility").value("PLATFORM"))
+                .andExpect(jsonPath("$.terms.platformShareBps").value(10000))
+                .andExpect(jsonPath("$.terms.targetVersion").value(orderVersion))
+                .andExpect(jsonPath("$.allowedActions[0]").value("DECIDE_SUPPORT_MANAGER"))
+                .andExpect(jsonPath("$.request.customerId").doesNotExist())
+                .andExpect(jsonPath("$.terms.verificationSessionId").doesNotExist())
+                .andExpect(jsonPath("$.terms.rawPayload").doesNotExist())
+            grant(requesterId, "SUPPORT_COMPENSATION_APPROVE")
+            mockMvc
+                .perform(get("$path/workflow").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+            approveManager(requireNotNull(created.actionRequestId), managerId, "workflow-medium-approve")
+            mockMvc
+                .perform(get("$path/workflow").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions[0]").value("EXECUTE"))
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
+                    "WHERE actor_id = ? AND permission = 'SUPPORT_COMPENSATION_EXECUTE'",
+                requesterId,
+            )
+            mockMvc
+                .perform(get("$path/workflow").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+            assertThat(count("support_compensation_terminal_benefit", "request_id", created.compensationRequestId)).isZero()
+        }
+
+        @Test
+        fun `workflow rejects unrelated reader and removed customer relationship`() {
+            val created = compensations.create(command(UUID.randomUUID(), 100, "workflow-scope-create"))
+            val path = "/api/v1/support/compensations/${created.compensationRequestId}/workflow"
+            grant(replacementId, "SUPPORT_CASE_READ")
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(replacementId.toString()) }))
+                .andExpect(status().isForbidden)
+            jdbcTemplate.update(
+                "UPDATE support_case_subject_link SET unlinked_at = now(), unlinked_by_actor_id = linked_by_actor_id, " +
+                    "unlink_case_version = 1, unlink_reason = 'INCORRECT_LINK' WHERE support_case_id = ? AND subject_type = 'CUSTOMER'",
+                caseId,
+            )
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isForbidden)
+        }
+
+        @Test
+        fun `coupon template catalog is bounded permission checked and cursor ordered`() {
+            val path = "/api/v1/support/compensation-coupon-templates"
+            val firstResult =
+                mockMvc
+                    .perform(get(path).param("limit", "1").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andExpect(jsonPath("$.items[0].minimumEligibleSubtotalKrw").isNumber)
+                    .andReturn()
+            val first = objectMapper.readValue(firstResult.response.contentAsString, SupportCompensationCouponTemplatePage::class.java)
+            assertThat(first.nextCursor).isNotNull()
+            val nextResult =
+                mockMvc
+                    .perform(
+                        get(path)
+                            .param("limit", "1")
+                            .param("cursor", first.nextCursor.toString())
+                            .with(jwt().jwt { it.subject(requesterId.toString()) }),
+                    ).andExpect(status().isOk)
+                    .andReturn()
+            val next = objectMapper.readValue(nextResult.response.contentAsString, SupportCompensationCouponTemplatePage::class.java)
+            assertThat(next.items.single().templateId).isNotEqualTo(first.items.single().templateId)
+            mockMvc
+                .perform(get(path).param("limit", "0").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isBadRequest)
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isForbidden)
         }
 
         @Test
@@ -354,6 +482,29 @@ internal class SupportCompensationIntegrationTest
                     ),
                 )
             assertThat(created.band.name).isEqualTo("HIGH")
+            val operationsActor =
+                jwt()
+                    .jwt { it.subject(operationsId.toString()) }
+                    .authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))
+            mockMvc
+                .perform(get("/api/v1/operations/support-action-requests/${created.actionRequestId}/review").with(operationsActor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.compensation.benefitType").value("COUPON"))
+                .andExpect(jsonPath("$.compensation.terms.responsibility").value("SHARED"))
+                .andExpect(jsonPath("$.compensation.couponTemplate.templateId").value(GOODWILL_COUPON_TEMPLATE_ID.toString()))
+                .andExpect(jsonPath("$.compensation.verificationSessionId").doesNotExist())
+            mockMvc
+                .perform(
+                    get("/api/v1/support/compensations/${created.compensationRequestId}/workflow").with(
+                        jwt().jwt {
+                            it.subject(requesterId.toString())
+                        },
+                    ),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.couponTemplate.templateId").value(GOODWILL_COUPON_TEMPLATE_ID.toString()))
+                .andExpect(jsonPath("$.couponTemplate.amountKrw").value(created.amountKrw))
+                .andExpect(jsonPath("$.couponTemplate.validityDays").value(30))
+                .andExpect(jsonPath("$.couponTemplate.minimumEligibleSubtotalKrw").isNumber)
             approveOperations(created)
 
             val issued = execute(created, "shared-coupon-execute-001")
@@ -558,6 +709,165 @@ internal class SupportCompensationIntegrationTest
                     ).policyVersionId,
             ).isEqualTo(nextPolicyVersionId)
         }
+
+        @Test
+        fun `incident registration replays concurrent requests and preserves terminal identity`() {
+            val occurredAt = Instant.now().minusSeconds(60).toString()
+            val body = incidentPayload(occurredAt)
+            val results =
+                Executors.newFixedThreadPool(2).use { pool ->
+                    pool
+                        .invokeAll(
+                            List(2) {
+                                Callable {
+                                    registerIncident(body, "incident-register-same")
+                                        .andExpect(status().isCreated)
+                                        .andReturn()
+                                        .response.contentAsString
+                                }
+                            },
+                        ).map { it.get() }
+                }
+            assertThat(results[0]).isEqualTo(results[1])
+            val incidentId = UUID.fromString(objectMapper.readTree(results[0])["incidentId"].asText())
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM support_compensation_incident", Long::class.java)).isEqualTo(1)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record WHERE action = 'SUPPORT_COMPENSATION_INCIDENT_REGISTERED'",
+                    Long::class.java,
+                ),
+            ).isEqualTo(1)
+            registerIncident(
+                incidentPayload(Instant.now().minusSeconds(120).toString()),
+                "incident-register-same",
+            ).andExpect(status().isConflict)
+            val created = compensations.create(command(incidentId, 100, "registered-incident-create"))
+            execute(created, "registered-incident-execute")
+            incidentList()
+                .andExpect(
+                    status().isOk,
+                ).andExpect(
+                    jsonPath("$.items[0].incidentId").value(incidentId.toString()),
+                ).andExpect(jsonPath("$.items[0].benefitIssued").value(true))
+            createApi(incidentId, 100, "registered-incident-duplicate").andExpect(status().isConflict)
+        }
+
+        @Test
+        fun `incident directory retains legacy identities and binds cursor to verification and order`() {
+            val legacy = UUID.randomUUID()
+            compensations.create(command(legacy, 100, "incident-legacy-request"))
+            val registered =
+                registerIncident(
+                    incidentPayload(Instant.now().minusSeconds(60).toString()),
+                    "incident-directory-register",
+                ).andExpect(status().isCreated).andReturn().response.contentAsString
+            val first =
+                objectMapper.readTree(
+                    incidentList(limit = 1)
+                        .andExpect(status().isOk)
+                        .andReturn()
+                        .response.contentAsString,
+                )
+            val cursor = first["nextCursor"].asText()
+            val second =
+                objectMapper.readTree(
+                    incidentList(cursor = cursor, limit = 1)
+                        .andExpect(status().isOk)
+                        .andReturn()
+                        .response.contentAsString,
+                )
+            assertThat(
+                listOf(first["items"][0]["incidentId"].asText(), second["items"][0]["incidentId"].asText()),
+            ).containsExactlyInAnyOrder(legacy.toString(), objectMapper.readTree(registered)["incidentId"].asText())
+            incidentList(order = null, cursor = cursor, limit = 1).andExpect(status().isBadRequest)
+            incidentList(
+                incidentId = legacy,
+            ).andExpect(
+                status().isOk,
+            ).andExpect(jsonPath("$.items[0].source").value("EXISTING_COMPENSATION"))
+                .andExpect(jsonPath("$.items[0].occurredAt").isEmpty)
+            incidentList(order = null).andExpect(status().isOk).andExpect(jsonPath("$.items").isEmpty)
+            incidentList(order = UUID.randomUUID()).andExpect(status().isForbidden)
+            jdbcTemplate.update("UPDATE support_verification_session SET state = 'EXPIRED' WHERE id = ?", sessionId)
+            incidentList().andExpect(status().isForbidden)
+        }
+
+        @Test
+        fun `registered incident cannot be reused for a different order binding`() {
+            val response =
+                registerIncident(
+                    incidentPayload(Instant.now().minusSeconds(60).toString(), order = null),
+                    "incident-orderless-register",
+                ).andExpect(status().isCreated).andReturn().response.contentAsString
+            val incidentId = UUID.fromString(objectMapper.readTree(response)["incidentId"].asText())
+            evaluateApi(incidentId, 100).andExpect(status().isForbidden)
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM support_compensation_request", Long::class.java)).isZero()
+        }
+
+        @Test
+        fun `incident registration rejects future facts revoked access and audit failure without partial registration`() {
+            registerIncident(
+                incidentPayload(Instant.now().plusSeconds(3600).toString()),
+                "incident-future-register",
+            ).andExpect(status().isBadRequest)
+            jdbcTemplate.execute(
+                "ALTER TABLE operations_audit_record ADD CONSTRAINT test_incident_audit_failure CHECK (action <> 'SUPPORT_COMPENSATION_INCIDENT_REGISTERED')",
+            )
+            try {
+                registerIncident(
+                    incidentPayload(Instant.now().minusSeconds(60).toString()),
+                    "incident-audit-register",
+                ).andExpect(status().isServiceUnavailable)
+                assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM support_compensation_incident", Long::class.java)).isZero()
+            } finally {
+                jdbcTemplate.execute("ALTER TABLE operations_audit_record DROP CONSTRAINT test_incident_audit_failure")
+            }
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_COMPENSATION_REQUEST'",
+                requesterId,
+            )
+            incidentList().andExpect(status().isForbidden)
+            registerIncident(
+                incidentPayload(Instant.now().minusSeconds(60).toString()),
+                "incident-revoked-register",
+            ).andExpect(status().isForbidden)
+        }
+
+        private fun incidentPayload(
+            occurredAt: String,
+            order: UUID? = orderId,
+        ) = """{"verificationSessionId":"$sessionId","orderId":${order?.let { "\"$it\"" } ?: "null"},"occurredAt":"$occurredAt"}"""
+
+        private fun registerIncident(
+            body: String,
+            key: String,
+        ) = mockMvc.perform(
+            post("/api/v1/support/cases/{caseId}/compensation-incidents", caseId)
+                .with(jwt().jwt { it.subject(requesterId.toString()) })
+                .header("Idempotency-Key", key)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body),
+        )
+
+        private fun incidentList(
+            order: UUID? = orderId,
+            cursor: String? = null,
+            limit: Int = 20,
+            incidentId: UUID? = null,
+        ) = mockMvc.perform(
+            get("/api/v1/support/cases/{caseId}/compensation-incidents", caseId)
+                .with(
+                    jwt().jwt {
+                        it.subject(requesterId.toString())
+                    },
+                ).param("verificationSessionId", sessionId.toString())
+                .param("limit", limit.toString())
+                .also { builder ->
+                    order?.let { builder.param("orderId", it.toString()) }
+                    cursor?.let { builder.param("cursor", it) }
+                    incidentId?.let { builder.param("incidentId", it.toString()) }
+                },
+        )
 
         private fun evaluateApi(
             incidentId: UUID,

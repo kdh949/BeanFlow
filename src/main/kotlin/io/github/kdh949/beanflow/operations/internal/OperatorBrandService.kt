@@ -156,6 +156,16 @@ internal class OperatorBrandService(
     }
 
     @Transactional
+    fun assignment(
+        actorId: UUID,
+        storeId: UUID,
+    ): StoreBrandAssignment {
+        authorization.requireActive(actorId, OperatorPermission.STORE_BRAND_MANAGE)
+        return brandQueries.findAssignment(storeId)
+            ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Store not found", targetReference = storeId.toString())
+    }
+
+    @Transactional
     fun list(
         actorId: UUID,
         cursor: String?,

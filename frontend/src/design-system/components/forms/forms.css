@@ -1,9 +1,10 @@
-.bf-search-field { min-height: var(--control-h-xl); padding: 0 var(--sp-6); display: flex; align-items: center; gap: var(--sp-5); border: var(--bw-hair) solid var(--control-border); border-radius: var(--r-xl); background: var(--control-bg); color: var(--text-muted); transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard); }
+.bf-search-field { min-width: 0; min-height: var(--control-h-xl); padding: 0 var(--sp-4); display: flex; align-items: center; gap: var(--sp-3); border: var(--bw-hair) solid var(--control-border); border-radius: var(--r-xl); background: var(--control-bg); color: var(--text-muted); transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard); }
+.bf-search-field > svg, .bf-search-field > button { flex: none; }
 .bf-search-field:hover { border-color: var(--control-border-hover); }
 .bf-search-field:focus-within { border-color: var(--control-border-focus); box-shadow: var(--control-focus); }
 .bf-search-field:has(input[aria-invalid="true"]) { border-color: var(--control-invalid-border); }
 .bf-search-field:has(input[aria-invalid="true"]):focus-within { box-shadow: var(--ring-danger); }
-.bf-search-field input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--text-strong); }
+.bf-search-field input { min-width: 0; width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--text-strong); }
 .bf-search-field input::placeholder,.bf-field__control::placeholder { color: var(--control-placeholder); }
 .bf-search-field button { min-width: var(--tap-min); min-height: var(--tap-min); display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--text-muted); cursor: pointer; }
 .bf-search-field:has(input:disabled) { border-color: var(--control-disabled-border); background: var(--control-disabled-bg); color: var(--control-disabled-text); }

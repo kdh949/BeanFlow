@@ -500,7 +500,7 @@ internal class MenuCatalogService(
         const val ARCHIVE = "ARCHIVE_MENU_V1"
         const val MAX_PAGE_SIZE = 50
         const val MAX_OPTIONS_PER_MENU = 100
-        const val MAX_CONFIGURATIONS_PER_MENU = 500
+        const val MAX_CONFIGURATIONS_PER_MENU = MAX_MENU_CONFIGURATIONS
         const val MAX_NAME_LENGTH = 200
     }
 }

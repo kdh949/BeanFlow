@@ -352,7 +352,7 @@ internal class PostAcceptanceResolutionCase private constructor(
     val triggerOrderState: String,
     val triggerOrderVersion: Long,
     val requesterActorId: UUID,
-    val executorActorId: UUID,
+    executorActorId: UUID,
     val plan: PostAcceptanceResolutionPlan,
     val createdAt: Instant,
     state: PostAcceptanceResolutionState,
@@ -360,6 +360,8 @@ internal class PostAcceptanceResolutionCase private constructor(
     updatedAt: Instant,
     version: Long,
 ) {
+    var executorActorId: UUID = executorActorId
+        private set
     var state: PostAcceptanceResolutionState = state
         private set
     private val stepsByType = steps.associateBy(PostAcceptanceResolutionStep::type)
@@ -380,6 +382,16 @@ internal class PostAcceptanceResolutionCase private constructor(
     }
 
     fun step(type: PostAcceptanceResolutionStepType): PostAcceptanceResolutionStep = requireNotNull(stepsByType[type])
+
+    fun reassignExecutor(
+        actorId: UUID,
+        now: Instant,
+    ) {
+        check(state == PostAcceptanceResolutionState.PLANNED) { "Only a planned Resolution can be reassigned" }
+        require(actorId != executorActorId) { "Resolution executor is already assigned" }
+        executorActorId = actorId
+        changed(now)
+    }
 
     fun start(now: Instant) {
         check(state == PostAcceptanceResolutionState.PLANNED) { "Only a planned Resolution can start" }

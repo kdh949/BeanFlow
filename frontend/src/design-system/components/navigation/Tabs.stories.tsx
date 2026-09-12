@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, userEvent } from "storybook/test";
+import { expect, fn, userEvent, waitFor } from "storybook/test";
 import { Tab, TabList, TabPanel, Tabs } from "./Tabs";
 
 const meta = { title: "Components/Navigation/Tabs", component: Tabs, tags: ["autodocs"], parameters: { a11y: { test: "error" } }, args: { value: "ACTIVE", onValueChange: fn(), children: null }, render: (args) => { const [value, setValue] = useState(args.value); return <Tabs {...args} value={value} onValueChange={(next) => { args.onValueChange(next); setValue(next); }}><TabList label="주문 상태"><Tab value="ACTIVE">진행 중</Tab><Tab value="PAST">지난 주문</Tab><Tab value="DISABLED" disabled>사용 불가</Tab></TabList><TabPanel value="ACTIVE">진행 중인 주문</TabPanel><TabPanel value="PAST">지난 주문 내역</TabPanel><TabPanel value="DISABLED">표시하지 않음</TabPanel></Tabs>; } } satisfies Meta<typeof Tabs>;
@@ -22,5 +22,25 @@ export const LongKoreanLabels: Story = {
     hours.focus();
     await userEvent.keyboard("{ArrowRight} ");
     await expect(canvas.getByRole("tab", { name: "포인트와 쿠폰" })).toHaveAttribute("aria-selected", "true");
+  },
+};
+
+export const InitialSelectionInOverflow: Story = {
+  render: () => {
+    const [value, setValue] = useState("29");
+    return <Tabs value={value} onValueChange={setValue}><TabList label="여러 운영 업무">{Array.from({ length: 30 }, (_, index) => <Tab key={index} value={String(index)}>운영 업무 {index + 1}</Tab>)}</TabList><TabPanel value={value}>선택한 운영 업무입니다.</TabPanel></Tabs>;
+  },
+  play: async ({ canvas }) => {
+    const list = canvas.getByRole("tablist"), selected = canvas.getByRole("tab", { name: "운영 업무 30" });
+    await expect(list.scrollWidth).toBeGreaterThan(list.clientWidth);
+    await waitFor(() => {
+      const bounds = list.getBoundingClientRect(), tab = selected.getBoundingClientRect();
+      expect(tab.left).toBeGreaterThanOrEqual(bounds.left - 1);
+      expect(tab.right).toBeLessThanOrEqual(bounds.right + 1);
+    });
+    selected.focus(); await userEvent.keyboard("{Home}");
+    const first = canvas.getByRole("tab", { name: "운영 업무 1" });
+    await expect(first).toHaveFocus(); await expect(first).toHaveAttribute("aria-selected", "false");
+    await userEvent.keyboard(" "); await expect(first).toHaveAttribute("aria-selected", "true");
   },
 };

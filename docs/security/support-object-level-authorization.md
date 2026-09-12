@@ -21,6 +21,8 @@ Grant approval requires `SUPPORT_PII_REVEAL_APPROVE` from a different actor. Rev
 assignment/state, active link, exact field scope and `SUPPORT_PII_REVEAL_BASIC` or
 `SUPPORT_PII_REVEAL_SENSITIVE`; owner Contexts independently require subject ID and closed owner field vocabulary.
 
+Grant inspection returns only metadata and the viewer role. The requester must retain current assignment and request/risk-specific reveal permissions; a different viewer needs the existing approval permission. Active Case/link and effective expiry are checked without decrypting or consuming reveal budget.
+
 Break-glass requires `SUPPORT_BREAK_GLASS_REQUEST`, one emergency field and distinct
 `SUPPORT_PII_REVEAL_APPROVE` pre-approval. Only the requester may consume the exact field; post-review requires
 `PRIVACY_BREAK_GLASS_REVIEW` from an actor different from requester and approver. `RESOLVED`/`CLOSED` Case blocks new

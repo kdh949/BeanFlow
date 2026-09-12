@@ -549,6 +549,100 @@ internal class SupportCaseIntegrationTest
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         }
 
+        @Test
+        fun `queue summary is current actor only and excludes resolved and closed cases`() {
+            mockMvc.perform(get("/api/v1/support/case-queue/summary").with(operatorJwt(actorId))).andExpect(status().isForbidden)
+            grant(actorId, "SUPPORT_CASE_WRITE")
+            grant(actorId, "SUPPORT_CASE_READ")
+            for ((index, state) in listOf("OPEN", "IN_PROGRESS", "WAITING", "RESOLVED", "CLOSED").withIndex()) {
+                val id = createCase("summary-case-$index-0001").caseId
+                jdbcTemplate.update(
+                    "UPDATE support_case SET state = ?, priority = 'URGENT', closed_at = CASE WHEN ? = 'CLOSED' THEN opened_at ELSE NULL END WHERE id = ?",
+                    state,
+                    state,
+                    id,
+                )
+            }
+            val other = createCase("summary-other-case-0001").caseId
+            jdbcTemplate.update("UPDATE support_case SET current_assignee_id = ? WHERE id = ?", otherActorId, other)
+            mockMvc
+                .perform(get("/api/v1/support/case-queue/summary").with(operatorJwt(actorId)))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.active").value(3))
+                .andExpect(jsonPath("$.open").value(1))
+                .andExpect(jsonPath("$.inProgress").value(1))
+                .andExpect(jsonPath("$.waiting").value(1))
+                .andExpect(jsonPath("$.urgent").value(3))
+            grant(otherActorId, "SUPPORT_CASE_READ")
+            mockMvc
+                .perform(get("/api/v1/support/case-queue/summary").with(operatorJwt(otherActorId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.active").value(1))
+                .andExpect(jsonPath("$.urgent").value(0))
+            jdbcTemplate.update("DELETE FROM operations_operator_permission_grant WHERE actor_id = ?", actorId)
+            mockMvc.perform(get("/api/v1/support/case-queue/summary").with(operatorJwt(actorId))).andExpect(status().isForbidden)
+        }
+
+        @Test
+        fun `case filters bind category priority and current assignee into the cursor`() {
+            grant(actorId, "SUPPORT_CASE_WRITE")
+            grant(actorId, "SUPPORT_CASE_READ")
+            val ids = (1..4).map { createCase("queue-filter-case-$it").caseId }
+            jdbcTemplate.update("UPDATE support_case SET category = 'COMPENSATION', priority = 'HIGH'")
+            jdbcTemplate.update("UPDATE support_case SET current_assignee_id = ? WHERE id = ?", otherActorId, ids[3])
+            jdbcTemplate.update("UPDATE support_case SET priority = 'LOW' WHERE id = ?", ids[2])
+            val result =
+                mockMvc
+                    .perform(
+                        get(
+                            BASE,
+                        ).with(
+                            operatorJwt(actorId),
+                        ).param("category", "COMPENSATION")
+                            .param("priority", "HIGH")
+                            .param("mine", "true")
+                            .param("limit", "1"),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andReturn()
+            val cursor = json(result.response.contentAsString)["nextCursor"].asText()
+            mockMvc
+                .perform(
+                    get(
+                        BASE,
+                    ).with(
+                        operatorJwt(actorId),
+                    ).param(
+                        "category",
+                        "COMPENSATION",
+                    ).param("priority", "HIGH")
+                        .param("mine", "true")
+                        .param("limit", "1")
+                        .param("cursor", cursor),
+                ).andExpect(
+                    status().isOk,
+                ).andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.nextCursor").doesNotExist())
+            for ((category, priority) in listOf("ORDER_STATUS" to "HIGH", "COMPENSATION" to "LOW")) {
+                mockMvc
+                    .perform(
+                        get(
+                            BASE,
+                        ).with(
+                            operatorJwt(actorId),
+                        ).param("category", category)
+                            .param("priority", priority)
+                            .param("mine", "true")
+                            .param("cursor", cursor),
+                    ).andExpect(status().isBadRequest)
+            }
+            mockMvc
+                .perform(
+                    get(BASE).with(operatorJwt(actorId)).param("mine", "true").param("assigneeId", otherActorId.toString()),
+                ).andExpect(status().isBadRequest)
+        }
+
         private fun createCase(idempotencyKey: String): CreatedCase {
             val result =
                 mockMvc

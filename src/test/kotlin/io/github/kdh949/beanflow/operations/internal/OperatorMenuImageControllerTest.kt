@@ -26,7 +26,9 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.time.Instant
@@ -41,6 +43,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delet
 internal class OperatorMenuImageControllerTest(
     @Autowired private val mockMvc: MockMvc,
     @Autowired private val jdbc: JdbcTemplate,
+    @Autowired private val directory: OperatorMediaMenuDirectory,
 ) {
     @MockitoBean
     private lateinit var storage: StorefrontImageStorageOperations
@@ -111,6 +114,85 @@ internal class OperatorMenuImageControllerTest(
         assertThat(
             jdbc.queryForList("SELECT action FROM operations_audit_record WHERE target_id = ?", String::class.java, menuId),
         ).containsExactly("MENU_IMAGE_DELETED")
+    }
+
+    @Test
+    fun `current menu image validates store relationship and returns its current signed image`() {
+        val storeId = seedStore()
+        val menuId = seedMenu(storeId)
+        val wrongStore = seedStore()
+        grant()
+        val auth = jwt().jwt { it.subject(actorId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))
+
+        fun read(store: UUID) =
+            mockMvc.perform(
+                get("/api/v1/operations/stores/$store/menus/$menuId/image").with(auth).header("X-Access-Reason", "media review"),
+            )
+        read(wrongStore).andExpect(status().isNotFound)
+        read(storeId).andExpect(status().isOk).andExpect(jsonPath("$.image").doesNotExist())
+        stubStorage(menuId)
+        request(storeId, menuId, "media correction").andExpect(status().isOk)
+        read(storeId)
+            .andExpect(status().isOk)
+            .andExpect(header().string("Cache-Control", "no-store"))
+            .andExpect(jsonPath("$.image.url").value(SIGNED_URL))
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM operations_audit_record", Int::class.java)).isEqualTo(1)
+    }
+
+    @Test
+    fun `media menu directory pages by name and identity and binds cursors to actor store and lifecycle`() {
+        val storeId = seedStore()
+        val wrongStore = seedStore()
+        val menuIds = (1..21).map { seedMenu(storeId) }
+        val archived = seedMenu(storeId)
+        jdbc.update("UPDATE merchant_menu SET lifecycle = 'ARCHIVED', archived_at = now() WHERE id = ?", archived)
+        grant()
+        val active = io.github.kdh949.beanflow.merchant.api.MenuCatalogLifecycle.ACTIVE
+        val first = directory.list(actorId, storeId, "media review", active, null)
+        assertThat(first.items).hasSize(20)
+        val second = directory.list(actorId, storeId, "media review", active, first.nextCursor)
+        assertThat(second.items).hasSize(1)
+        assertThat(second.nextCursor).isNull()
+        assertThat((first.items + second.items).map { it.menuId }).containsExactlyInAnyOrderElementsOf(menuIds)
+        val auth = jwt().jwt { it.subject(actorId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))
+        val path = "/api/v1/operations/stores/$storeId/media-menus"
+        mockMvc.perform(get(path).with(auth)).andExpect(status().isBadRequest)
+        mockMvc
+            .perform(get(path).with(auth).header("X-Access-Reason", "media review").param("lifecycle", "ARCHIVED"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items[0].menuId").value(archived.toString()))
+            .andExpect(jsonPath("$.items[0].basePriceKrw").doesNotExist())
+        mockMvc
+            .perform(
+                get(path)
+                    .with(auth)
+                    .header("X-Access-Reason", "media review")
+                    .param("lifecycle", "ARCHIVED")
+                    .param("cursor", first.nextCursor!!),
+            ).andExpect(status().isBadRequest)
+        mockMvc
+            .perform(
+                get("/api/v1/operations/stores/$wrongStore/media-menus")
+                    .with(auth)
+                    .header("X-Access-Reason", "media review")
+                    .param("cursor", first.nextCursor),
+            ).andExpect(status().isBadRequest)
+        val other = UUID.randomUUID()
+        jdbc.update(
+            "INSERT INTO operations_operator_permission_grant " +
+                "(actor_id, permission, state, granted_at, version, audit_source_reference) " +
+                "VALUES (?, 'STORE_MEDIA_MANAGE', 'ACTIVE', now(), 1, 'other-media-actor')",
+            other,
+        )
+        val otherAuth = jwt().jwt { it.subject(other.toString()) }.authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))
+        mockMvc
+            .perform(
+                get(path)
+                    .with(otherAuth)
+                    .header("X-Access-Reason", "media review")
+                    .param("cursor", first.nextCursor),
+            ).andExpect(status().isBadRequest)
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM operations_audit_record", Int::class.java)).isZero()
     }
 
     private fun request(

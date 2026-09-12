@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, waitFor } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { catalogHandlers, customerStore, favoriteHandlers, ids, signedInHandlers, storeIdentityHandlers } from "../../../.storybook/fixtures";
 import { cart } from "../../features/ordering/cart";
@@ -27,9 +27,45 @@ export const Orderable: Story = {
     await expect(await canvas.findByRole("button", { name: "시청점 즐겨찾기 추가" })).toBeVisible();
     await expect(canvas.getByText("장바구니에서 시간을 선택해 주세요.")).toBeVisible();
     await userEvent.click(await canvas.findByRole("button", { name: /오트 라떼/ }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: /6,400.*담기/ })).toBeEnabled());
     await userEvent.click(canvas.getByRole("button", { name: /6,400.*담기/ }));
     await expect(await canvas.findByText("장바구니에 담았어요.")).toBeVisible();
     await expect(await canvas.findByRole("link", { name: /장바구니 1개 보기/ })).toBeVisible();
+  },
+};
+
+export const WeeklyHours: Story = {
+  play: async ({ canvas }) => {
+    const hours = await canvas.findByRole("region", { name: "요일별 운영시간" });
+    await expect(hours).toHaveTextContent("월요일");
+    await expect(hours).toHaveTextContent("08:00–20:00");
+    await expect(hours).toHaveTextContent("토요일09:00–18:00");
+    await expect(hours).toHaveTextContent("일요일휴무");
+  },
+};
+
+/** The customer chooses one registered set, rather than creating an invalid combination. */
+export const RegisteredConfigurations: Story = {
+  parameters: { msw: { handlers: [
+    http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [{ menuId: ids.menu, name: "오트 라떼", basePriceKrw: 6400, available: true, options: [{ optionId: "shot", name: "샷 추가", additionalPriceKrw: 500, available: true }, { optionId: "oat", name: "오트 밀크", additionalPriceKrw: 800, available: true }] }] })),
+    http.get("/api/v1/stores/:storeId/menus/:menuId/configurations", () => HttpResponse.json({ items: [{ configurationId: "with-shot", optionIds: ["shot"], available: true }, { configurationId: "with-oat", optionIds: ["oat"], available: false }] })),
+    ...meta.parameters.msw.handlers,
+  ] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: /오트 라떼/ }));
+    await expect(await canvas.findByRole("radio", { name: /오트 밀크/ })).toBeDisabled();
+    await userEvent.click(canvas.getByRole("radio", { name: /샷 추가/ }));
+    await userEvent.click(canvas.getByRole("button", { name: /6,900.*담기/ }));
+    await expect(cart.read()).toMatchObject({ status: "ready", cart: { lines: [{ optionIds: ["shot"], display: { unitPriceKrw: 6900 } }] } });
+  },
+};
+
+export const ConfigurationUnavailable: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/stores/:storeId/menus/:menuId/configurations", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE", message: "구성을 확인하지 못했습니다." }, { status: 503 })), ...meta.parameters.msw.handlers] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: /오트 라떼/ }));
+    await expect(await canvas.findByRole("alert")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: /담기$/ })).toBeDisabled();
   },
 };
 

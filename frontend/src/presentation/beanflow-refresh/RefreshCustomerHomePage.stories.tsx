@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect } from "storybook/test";
+import { expect, waitFor } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { customerStore, homeHandlers, orderListHandlers, orderSummary, signedInHandlers } from "../../../.storybook/fixtures";
 import { RefreshCustomerHomePage } from "./CustomerDiscoveryPages";
@@ -56,4 +56,36 @@ export const RecommendationFailure: Story = {
 export const LongStoreName: Story = {
   parameters: { msw: { handlers: [http.get("/api/v1/me/store-recommendations", () => HttpResponse.json({ items: [{ store: { ...customerStore, name: "빈플로우 서울시청광장 테이크아웃 전문점", image: { url: "/demo/catalog/store-01.webp" } }, reason: "FAVORITE" }] })), ...homeHandlers] } },
   play: async ({ canvas }) => { await expect(await canvas.findByText("자주 찾는 매장")).toBeVisible(); await expect(canvas.queryByText("최근 주문한 매장")).not.toBeInTheDocument(); },
+};
+
+let activeReady = false;
+export const RefreshOnReturn: Story = {
+  tags: ["!autodocs"],
+  beforeEach: () => { activeReady = false; },
+  parameters: { msw: { handlers: [http.get("/api/v1/me/orders", ({ request }) => new URL(request.url).searchParams.get("status") === "ACTIVE" ? HttpResponse.json({ items: [{ ...orderSummary, status: activeReady ? "READY" : "PAID" }], page: { nextCursor: null } }) : HttpResponse.json({ items: [], page: { nextCursor: null } })), ...homeHandlers] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("link", { name: /A-142.*아이스 아메리카노/ })).toBeVisible();
+    activeReady = true;
+    window.dispatchEvent(new Event("focus"));
+    await expect(await canvas.findByRole("link", { name: /A-142 준비 완료/ })).toBeVisible();
+  },
+};
+
+export const BackgroundRefreshKeepsCards: Story = {
+  tags: ["!autodocs"],
+  play: async ({ canvas, msw }) => {
+    const active = await canvas.findByRole("link", { name: /A-142 준비 완료/ });
+    const recent = await canvas.findByRole("link", { name: "다시 주문" });
+    let reads = 0;
+    let release!: () => void;
+    const wait = new Promise<void>(resolve => { release = resolve; });
+    msw.use(http.get("/api/v1/me/orders", async () => { ++reads; await wait; return HttpResponse.json({ items: [], page: { nextCursor: null } }); }));
+    try {
+      window.dispatchEvent(new Event("focus"));
+      await waitFor(() => expect(reads).toBe(2));
+      await expect(active).toBeInTheDocument();
+      await expect(recent).toBeInTheDocument();
+    } finally { release(); }
+    await expect(await canvas.findByText("진행 중인 주문이 없어요")).toBeVisible();
+  },
 };

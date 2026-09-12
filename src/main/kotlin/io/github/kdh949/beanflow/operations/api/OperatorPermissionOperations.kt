@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.operations.api
 import java.util.UUID
 
 enum class OperatorPermission {
+    CUSTOMER_ACCOUNT_SEARCH,
     EXPIRED_BENEFIT_POLICY_READ,
     EXPIRED_BENEFIT_POLICY_WRITE,
     POINT_ACCOUNT_READ,

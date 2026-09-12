@@ -18,7 +18,7 @@ const account = {
   displayName: "성수점 점주",
   accountState: "ACTIVE",
   lockedUntil: "2026-08-24T09:00:00+09:00",
-  memberships: [{ storeId, role: "OWNER" }],
+  memberships: [{ storeId, role: "OWNER", storeName: "빈플로우 성수점" }],
 };
 
 beforeEach(() => {
@@ -79,6 +79,7 @@ describe("MerchantAccountsPage", () => {
   });
 
   it("creates account and membership atomically and does not persist the one-time password", async () => {
+    vi.spyOn(operationsApi, "GET").mockResolvedValue(response({ items: [{ storeId, name: "빈플로우 성수점", acceptingOrders: true, pickupEnabled: true }] }));
     const post = vi.spyOn(operationsApi, "POST").mockResolvedValue(response({
       merchantAccountId: accountId,
       loginId: "newmerchant",
@@ -92,7 +93,8 @@ describe("MerchantAccountsPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: "새 계정 발급" }));
     await userEvent.type(screen.getByLabelText("새 로그인 ID"), "newmerchant");
     await userEvent.type(screen.getByLabelText("표시 이름"), "신규 점주");
-    await userEvent.type(screen.getByLabelText("첫 매장 ID"), storeId);
+    await userEvent.click(screen.getByRole("button", { name: "매장 찾기" }));
+    await userEvent.click(await screen.findByRole("button", { name: "빈플로우 성수점 선택" }));
     await userEvent.type(screen.getByLabelText("발급 사유"), "신규 가맹 계약 승인");
     await userEvent.click(screen.getByRole("button", { name: "점주 계정 발급" }));
 

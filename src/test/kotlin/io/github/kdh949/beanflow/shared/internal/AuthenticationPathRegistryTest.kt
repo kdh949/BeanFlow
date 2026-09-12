@@ -56,6 +56,9 @@ class AuthenticationPathRegistryTest {
         assertThat(registry.classify(menuPath, "POST")).isEqualTo(AuthenticationChain.MERCHANT)
         assertThat(registry.classify(menuPath, "HEAD")).isEqualTo(AuthenticationChain.CUSTOMER)
         assertThat(registry.classify(menuPath, "DELETE")).isNull()
+        val configurations = "$menuPath/00000000-0000-4000-8000-000000000002/configurations"
+        assertThat(registry.classify(configurations, "GET")).isEqualTo(AuthenticationChain.CUSTOMER)
+        assertThat(registry.classify(configurations, "POST")).isNull()
     }
 
     @Test

@@ -57,6 +57,82 @@ internal class StoreMembershipManagementIntegrationTest(
         )
     }
 
+    @Test fun `membership write alone discovers an exact minimal account and adds its membership`() {
+        val c = command()
+        jdbc.update(
+            "DELETE FROM operations_operator_permission_grant WHERE actor_id = ? AND permission <> 'STORE_MEMBERSHIP_WRITE'",
+            c.operatorId,
+        )
+        val login = jdbc.queryForObject("SELECT login_id FROM identity_merchant_account WHERE id = ?", String::class.java, c.accountId)!!
+        mvc
+            .perform(
+                get("${path(c)}/account-target")
+                    .with(jwt(c.operatorId))
+                    .param("loginId", login)
+                    .header("X-Access-Reason", "STORE_MEMBERSHIP_ASSIGNMENT_REVIEW"),
+            ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.accountId").value(c.accountId.toString()))
+            .andExpect(jsonPath("$.displayName").value("Test merchant actor"))
+            .andExpect(jsonPath("$.loginId").value(login))
+            .andExpect(jsonPath("$.memberships").doesNotExist())
+            .andExpect(jsonPath("$.passwordHash").doesNotExist())
+            .andExpect(jsonPath("$.accountState").doesNotExist())
+            .andExpect(
+                org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                    .header()
+                    .string("Cache-Control", "no-store"),
+            )
+        assertThat(
+            jdbc.queryForObject("SELECT count(*) FROM operations_audit_record WHERE action = 'MERCHANT_ACCOUNT_READ'", Long::class.java),
+        ).isOne()
+        mvc
+            .perform(
+                get("/api/v1/operations/merchant-accounts")
+                    .with(jwt(c.operatorId))
+                    .param("loginId", login)
+                    .header("X-Access-Reason", "STORE_MEMBERSHIP_ASSIGNMENT_REVIEW"),
+            ).andExpect(status().isForbidden)
+        assertThat(service.change(c).accountId).isEqualTo(c.accountId)
+        mvc
+            .perform(
+                get("${path(c)}/account-target")
+                    .with(jwt(c.operatorId))
+                    .param("loginId", login)
+                    .header("X-Access-Reason", "UNRELATED_REASON"),
+            ).andExpect(status().isBadRequest)
+        jdbc.update(
+            "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ?",
+            c.operatorId,
+        )
+        mvc
+            .perform(
+                get("${path(c)}/account-target")
+                    .with(jwt(c.operatorId))
+                    .param("loginId", login)
+                    .header("X-Access-Reason", "STORE_MEMBERSHIP_ASSIGNMENT_REVIEW"),
+            ).andExpect(status().isForbidden)
+    }
+
+    @Test fun `membership target lookup cannot return personal data when audit storage rejects it`() {
+        val c = command()
+        val login = jdbc.queryForObject("SELECT login_id FROM identity_merchant_account WHERE id = ?", String::class.java, c.accountId)!!
+        jdbc.execute(
+            "ALTER TABLE operations_audit_record ADD CONSTRAINT test_membership_target_audit CHECK (action <> 'MERCHANT_ACCOUNT_READ')",
+        )
+        try {
+            mvc
+                .perform(
+                    get("${path(c)}/account-target")
+                        .with(jwt(c.operatorId))
+                        .param("loginId", login)
+                        .header("X-Access-Reason", "STORE_MEMBERSHIP_ASSIGNMENT_REVIEW"),
+                ).andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.accountId").doesNotExist())
+        } finally {
+            jdbc.execute("ALTER TABLE operations_audit_record DROP CONSTRAINT test_membership_target_audit")
+        }
+    }
+
     @Test fun `HTTP creates reads and changes membership without changing credentials`() {
         val c = command()
         val result =
@@ -86,11 +162,17 @@ internal class StoreMembershipManagementIntegrationTest(
                 result,
                 ManagedStoreMembership::class.java,
             )
-        mvc.perform(get(path(c)).with(jwt(c.operatorId))).andExpect(status().isOk).andExpect(jsonPath("$.items.length()").value(1))
+        mvc
+            .perform(get(path(c)).with(jwt(c.operatorId)))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].accountDisplayName").value("Test merchant actor"))
+            .andExpect(jsonPath("$.items[0].accountLoginId").isString)
         mvc
             .perform(get("${path(c)}/${c.accountId}").with(jwt(c.operatorId)))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.membershipId").value(first.membershipId.toString()))
+            .andExpect(jsonPath("$.accountDisplayName").value("Test merchant actor"))
         mvc
             .perform(
                 put("${path(c)}/${c.accountId}")

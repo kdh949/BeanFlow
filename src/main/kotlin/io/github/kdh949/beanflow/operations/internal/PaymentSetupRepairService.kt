@@ -78,6 +78,15 @@ internal class PaymentSetupRepairService(
     private val entityManager: EntityManager,
 ) {
     @Transactional
+    fun get(
+        actorId: UUID,
+        proposalId: UUID,
+    ): RepairProposal {
+        authorization.requireActive(actorId, OperatorPermission.PAYMENT_CANCELLATION_SETUP_REPAIR)
+        return proposals.findById(proposalId).orElseThrow(::notFound).toView()
+    }
+
+    @Transactional
     fun propose(command: ProposePaymentSetupRepairCommand): RepairProposal {
         validate(command.idempotencyKey, command.reason)
         authorization.requireActive(command.actorId, OperatorPermission.PAYMENT_CANCELLATION_SETUP_REPAIR)

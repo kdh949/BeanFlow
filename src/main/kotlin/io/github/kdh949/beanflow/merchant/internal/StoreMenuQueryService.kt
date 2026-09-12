@@ -1,5 +1,6 @@
 package io.github.kdh949.beanflow.merchant.internal
 
+import io.github.kdh949.beanflow.merchant.api.StoreMenuConfigurationView
 import io.github.kdh949.beanflow.merchant.api.StoreMenuOptionView
 import io.github.kdh949.beanflow.merchant.api.StoreMenuQueryOperations
 import io.github.kdh949.beanflow.merchant.api.StoreMenuView
@@ -15,6 +16,22 @@ internal class StoreMenuQueryService(
     private val storeRepository: StoreJpaRepository,
     private val repository: StoreMenuQueryRepository,
 ) : StoreMenuQueryOperations {
+    @Transactional(readOnly = true)
+    override fun listConfigurations(
+        storeId: UUID,
+        menuId: UUID,
+    ): List<StoreMenuConfigurationView> =
+        try {
+            if (!repository.activeMenuExists(storeId, menuId)) {
+                throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Menu was not found")
+            }
+            repository.findConfigurations(menuId).also {
+                requireWithinBound(it.size, MAX_MENU_CONFIGURATIONS, "menu configurations")
+            }
+        } catch (failure: DataAccessException) {
+            unavailable(failure)
+        }
+
     @Transactional(readOnly = true)
     override fun listMenus(storeId: UUID): List<StoreMenuView> {
         val storeExists =

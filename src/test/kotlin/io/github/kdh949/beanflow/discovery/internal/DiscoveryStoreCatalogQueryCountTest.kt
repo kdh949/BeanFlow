@@ -167,6 +167,19 @@ internal class DiscoveryStoreCatalogQueryCountTest : IsolatedPostgresSupport() {
     }
 
     @Test
+    fun `single menu configuration read uses two bounded statements`() {
+        for (storeId in listOf(smallStore, largeStore)) {
+            val menuId = menuRepository.findMenus(storeId).first().menuId
+            val count =
+                countStatements {
+                    assertThat(menuRepository.activeMenuExists(storeId, menuId)).isTrue()
+                    menuRepository.findConfigurations(menuId)
+                }
+            assertThat(count).isEqualTo(2)
+        }
+    }
+
+    @Test
     fun `pickup slot projection uses a single statement regardless of slot count`() {
         val small = countStatements { slotRepository.findOpenSlots(smallStore, now, horizonEnd) }
         val large = countStatements { slotRepository.findOpenSlots(largeStore, now, horizonEnd) }

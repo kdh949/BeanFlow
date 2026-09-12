@@ -29,7 +29,19 @@ interface StoreMenuQueryOperations {
      * list.
      */
     fun listMenus(storeId: UUID): List<StoreMenuView>
+
+    /** Current active configurations of one active, same-store menu; missing menus are 404. */
+    fun listConfigurations(
+        storeId: UUID,
+        menuId: UUID,
+    ): List<StoreMenuConfigurationView>
 }
+
+data class StoreMenuConfigurationView(
+    val configurationId: UUID,
+    val optionIds: List<UUID>,
+    val available: Boolean,
+)
 
 data class StoreMenuView(
     val menuId: UUID,

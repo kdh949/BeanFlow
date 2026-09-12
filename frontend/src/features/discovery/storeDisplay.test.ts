@@ -5,7 +5,7 @@ describe("customer store display copy", () => {
   it("formats pickup timestamps in the contract timezone", () => {
     expect(pickupTimeLabel("2026-08-15T03:20:00Z")).toBe("오후 12:20");
     expect(nextPickupLabel({ startsAt: "2026-08-15T03:20:00Z", endsAt: "2026-08-15T03:30:00Z" }))
-      .toBe("가장 빠른 픽업 오후 12:20");
+      .toBe("가장 빠른 픽업 8월 15일 (토) 오후 12:20");
   });
 
   it("preserves missing schedule and pickup information", () => {

@@ -49,6 +49,7 @@ internal class AuthenticationPathRegistry {
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/disputes/**"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/store-orders/**"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/support-order-change-authorizations/**"),
+            registration(AuthenticationChain.MERCHANT, "/api/v1/stores/{storeId}/support-order-change-requests/**"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/settlement-items/{itemId}/disputes"),
             registration(AuthenticationChain.MERCHANT, "/api/v1/payments/{paymentId}/refunds"),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/auth/customer/**"),
@@ -62,6 +63,7 @@ internal class AuthenticationPathRegistry {
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/search"),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}"),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}/menus", setOf("GET", "HEAD")),
+            registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}/menus/{menuId}/configurations", setOf("GET", "HEAD")),
             registration(AuthenticationChain.CUSTOMER, "/api/v1/stores/{storeId}/pickup-slots"),
         )
 

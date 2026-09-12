@@ -28,6 +28,16 @@ internal class MerchantMenuImageService(
     private val storage: StorefrontImageStorageOperations,
     private val clock: Clock,
 ) {
+    @Transactional
+    fun current(
+        actorId: UUID,
+        storeId: UUID,
+        menuId: UUID,
+    ): StorefrontImageAccess? {
+        transactions.authorize(actorId, storeId)
+        return images.find(storeId, menuId)?.let { storage.access(it.thumbnailKey) }
+    }
+
     fun replace(
         actorId: UUID,
         storeId: UUID,

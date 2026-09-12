@@ -31,8 +31,10 @@ import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
@@ -88,7 +90,7 @@ internal class SupportProfileChangeIntegrationTest
             jdbcTemplate.execute(
                 "TRUNCATE TABLE notification_customer_preference, notification_inbox_item, notification_delivery CASCADE",
             )
-            jdbcTemplate.execute("TRUNCATE TABLE identity_customer_support_profile CASCADE")
+            jdbcTemplate.execute("TRUNCATE TABLE identity_customer_support_profile, delivery_external_courier_support_profile CASCADE")
             jdbcTemplate.execute("TRUNCATE TABLE support_case CASCADE")
             jdbcTemplate.execute("TRUNCATE TABLE operations_audit_record, operations_operator_permission_grant CASCADE")
             audits.reset()
@@ -110,6 +112,197 @@ internal class SupportProfileChangeIntegrationTest
                 "SUPPORT_PROFILE_R3_APPROVE",
             ).forEach { grant(managerId, it) }
             grant(operationsId, "OPERATIONS_SUPPORT_INVESTIGATION")
+        }
+
+        @Test
+        fun `work directory finds profile requests for the approver without including profile values`() {
+            val created = profiles.submit(primaryPhoneCommand("directory-profile"))
+            val body =
+                mockMvc
+                    .perform(
+                        get("/api/v1/support/work-items")
+                            .with(jwt().jwt { it.subject(managerId.toString()) })
+                            .param("kind", "PROFILE_CHANGE")
+                            .param("caseId", caseId.toString()),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items[0].requestId").value(created.profileChangeId.toString()))
+                    .andReturn()
+                    .response.contentAsString
+            assertThat(body).doesNotContain("maskedBefore", "maskedAfter", "payloadDigest", "verificationSessionId")
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks")
+                        .with(jwt().jwt { it.subject(managerId.toString()) })
+                        .param("kind", "PROFILE_CHANGE"),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].requestId").value(created.profileChangeId.toString()))
+                .andExpect(jsonPath("$.items[0].reviewAction").value("DECIDE"))
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks/PROFILE_CHANGE/${created.profileChangeId}/history")
+                        .with(jwt().jwt { it.subject(managerId.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isEmpty())
+        }
+
+        @Test
+        fun `operations only reviewer reads the exact profile review chain without Support case grant`() {
+            val created = profiles.submit(primaryPhoneCommand("operations-review-metadata"))
+            val requestId = requireNotNull(created.actionRequestId)
+            decideManager(requestId, managerId, "operations-review-manager")
+            val actor = jwt().jwt { it.subject(operationsId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))
+            val beforeAudits = jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java)
+            mockMvc.perform(get("/api/v1/support/action-requests/$requestId").with(actor)).andExpect(status().isForbidden)
+            val read =
+                mockMvc
+                    .perform(get("/api/v1/operations/support-action-requests/$requestId/review").with(actor))
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.request.revisionNumber").value(1))
+                    .andExpect(jsonPath("$.profile.purpose").value("CUSTOMER_PRIMARY_PHONE"))
+                    .andExpect(jsonPath("$.profile.subjectId").value(customerId.toString()))
+                    .andExpect(jsonPath("$.request.verificationSessionId").doesNotExist())
+                    .andExpect(jsonPath("$.request.requesterActorId").doesNotExist())
+                    .andExpect(jsonPath("$.profile.maskedBefore").doesNotExist())
+                    .andReturn()
+            assertThat(read.response.contentAsString).doesNotContain("010-1234-5678")
+            mockMvc
+                .perform(
+                    get("/api/v1/operations/investigations")
+                        .param("supportActionRequestId", requestId.toString())
+                        .param("revisionNumber", "1")
+                        .with(actor),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.canDecide").value(true))
+            assertThat(
+                jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java),
+            ).isEqualTo(beforeAudits)
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ?",
+                operationsId,
+            )
+            mockMvc.perform(get("/api/v1/operations/support-action-requests/$requestId/review").with(actor)).andExpect(status().isForbidden)
+        }
+
+        @Test
+        fun `profile context is current minimal and scoped to active assigned subject and purpose`() {
+            val linkId =
+                jdbcTemplate.queryForObject(
+                    "SELECT id FROM support_case_subject_link WHERE support_case_id = ?",
+                    UUID::class.java,
+                    caseId,
+                )!!
+            val path = "/api/v1/support/cases/$caseId/profile-contexts/$linkId"
+            mockMvc
+                .perform(get(path).param("purpose", "CUSTOMER_DISPLAY_NAME").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.currentProfileVersion").value(0))
+                .andExpect(jsonPath("$.requiredVerificationLevel").value("BASIC"))
+                .andExpect(jsonPath("$.displayName").doesNotExist())
+                .andExpect(jsonPath("$.primaryPhone").doesNotExist())
+            mockMvc
+                .perform(get(path).param("purpose", "STORE_PUBLIC_PROFILE").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isForbidden)
+            mockMvc
+                .perform(get(path).param("purpose", "CUSTOMER_DISPLAY_NAME").with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isForbidden)
+            profiles.submit(displayNameCommand("profile-context-update", "김지원"))
+            mockMvc
+                .perform(get(path).param("purpose", "CUSTOMER_DISPLAY_NAME").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.currentProfileVersion").value(1))
+            jdbcTemplate.update(
+                "UPDATE support_case_subject_link SET unlinked_at = now(), unlinked_by_actor_id = linked_by_actor_id, unlink_case_version = 1, unlink_reason = 'INCORRECT_LINK' WHERE id = ?",
+                linkId,
+            )
+            mockMvc
+                .perform(get(path).param("purpose", "CUSTOMER_DISPLAY_NAME").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isForbidden)
+        }
+
+        @Test
+        fun `delivery case scope maps to rider profile context and approval workflow`() {
+            jdbcTemplate.update(
+                """
+                INSERT INTO delivery_external_courier_support_profile (
+                    external_courier_id, provider_code, provider_courier_reference_ciphertext,
+                    provider_courier_reference_key_version, display_name_ciphertext,
+                    display_name_key_version, masked_display_name, relay_email_ciphertext, relay_email_key_version,
+                    relay_email_aad_version, masked_relay_email, created_at, updated_at, version
+                ) VALUES (?, 'TEST_PROVIDER', 'vault:v7:reference', 7, 'vault:v7:name', 7, '배*원',
+                          'vault:v7:email', 7, 1, 'r***@e***.invalid', now(), now(), 0)
+                """.trimIndent(),
+                customerId,
+            )
+            jdbcTemplate.execute("TRUNCATE TABLE support_case CASCADE")
+            seedSupportScope("REGISTERED_PHONE", "DELIVERY")
+            val linkId =
+                jdbcTemplate.queryForObject(
+                    "SELECT id FROM support_case_subject_link WHERE support_case_id = ?",
+                    UUID::class.java,
+                    caseId,
+                )!!
+            mockMvc
+                .perform(
+                    get("/api/v1/support/cases/$caseId/profile-contexts/$linkId")
+                        .param("purpose", "COURIER_PROVIDER_IDENTITY")
+                        .with(jwt().jwt { it.subject(requesterId.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.subjectType").value("RIDER"))
+                .andExpect(jsonPath("$.currentProfileVersion").value(0))
+            val created =
+                profiles.submit(
+                    SubmitSupportProfileChangeCommand(
+                        requesterId,
+                        caseId,
+                        customerId,
+                        0,
+                        sessionId,
+                        "Correct provider reference",
+                        EVIDENCE_DIGEST,
+                        "courier-workflow-request",
+                        SupportProfileChangePayload.CourierProviderIdentity("provider:corrected"),
+                    ),
+                )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/profile-changes/${created.profileChangeId}/workflow")
+                        .with(jwt().jwt { it.subject(managerId.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions[0]").value("DECIDE_SUPPORT_MANAGER"))
+        }
+
+        @Test
+        fun `profile workflow exposes separate approval and current execution without raw payload`() {
+            val created = profiles.submit(primaryPhoneCommand("profile-workflow-request"))
+            val path = "/api/v1/support/profile-changes/${created.profileChangeId}/workflow"
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(managerId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.allowedActions[0]").value("DECIDE_SUPPORT_MANAGER"))
+                .andExpect(jsonPath("$.approval.targetId").value(created.profileChangeId.toString()))
+                .andExpect(jsonPath("$.profileChange.primaryPhone").doesNotExist())
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(replacementId.toString()) }))
+                .andExpect(status().isForbidden)
+            decideManager(requireNotNull(created.actionRequestId), managerId, "profile-workflow-manager")
+            approveOperations(created.actionRequestId)
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions[0]").value("EXECUTE"))
+                .andExpect(jsonPath("$.currentProfileVersion").value(0))
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_PROFILE_R3_REQUEST'",
+                requesterId,
+            )
+            mockMvc
+                .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+            assertThat(currentCustomerVersion()).isZero()
         }
 
         @Test
@@ -633,7 +826,10 @@ internal class SupportProfileChangeIntegrationTest
             )
         }
 
-        private fun seedSupportScope(challengeChannel: String) {
+        private fun seedSupportScope(
+            challengeChannel: String,
+            subjectType: String = "CUSTOMER",
+        ) {
             val now = Instant.now().minusSeconds(30)
             caseId = UUID.randomUUID()
             sessionId = UUID.randomUUID()
@@ -669,10 +865,11 @@ internal class SupportProfileChangeIntegrationTest
                 INSERT INTO support_case_subject_link (
                     id, support_case_id, subject_type, subject_id, relationship,
                     linked_by_actor_id, reason, linked_at
-                ) VALUES (?, ?, 'CUSTOMER', ?, 'REQUESTER', ?, 'PROFILE_SUBJECT', ?)
+                ) VALUES (?, ?, ?, ?, 'REQUESTER', ?, 'PROFILE_SUBJECT', ?)
                 """.trimIndent(),
                 linkId,
                 caseId,
+                subjectType,
                 customerId,
                 requesterId,
                 Timestamp.from(now),
@@ -683,12 +880,13 @@ internal class SupportProfileChangeIntegrationTest
                     id, support_case_id, subject_link_id, subject_type, subject_id, actor_id, purpose,
                     action_scope, requested_level, state, invalid_attempts, started_at, expires_at,
                     verified_at, version
-                ) VALUES (?, ?, ?, 'CUSTOMER', ?, ?, 'CASE_RESOLUTION', 'SUPPORT_ACTION',
+                ) VALUES (?, ?, ?, ?, ?, ?, 'CASE_RESOLUTION', 'SUPPORT_ACTION',
                           'ENHANCED', 'VERIFIED', 0, ?, ?, ?, 1)
                 """.trimIndent(),
                 sessionId,
                 caseId,
                 linkId,
+                subjectType,
                 customerId,
                 requesterId,
                 Timestamp.from(now),

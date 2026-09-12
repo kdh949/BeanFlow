@@ -59,6 +59,8 @@ function routeGet(routes: Record<string, unknown>) {
     "/me/points": ok({ availablePointsKrw: 1500, recoveryPendingKrw: 0, currency: "KRW", expiring: [], expiringHasMore: false }),
     "/me/notification-summary": ok({ hasUnread: false }),
     "/me/favorite-stores": ok({ items: [] }),
+    "/stores/{storeId}/menus": ok(menus),
+    "/stores/{storeId}/menus/{menuId}/configurations": ok({ items: [{ configurationId: "basic", optionIds: [], available: true }, { configurationId: "shot", optionIds: ["option-1"], available: true }] }),
     ...routes,
   };
   return vi.spyOn(customerApi, "GET").mockImplementation(async (path: string) => {
@@ -82,7 +84,7 @@ function renderCart() {
     <MemoryRouter initialEntries={["/app/cart"]}>
       <Routes>
         <Route path="/app/cart" element={<RefreshCartPage />} />
-        <Route path="/app/checkout/:orderId" element={<h1>결제 화면</h1>} />
+        <Route path="/app/orders/:orderReference/checkout" element={<h1>결제 화면</h1>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -182,6 +184,7 @@ describe("store identity comes from the server", () => {
     expect(await screen.findByRole("button", { name: /아메리카노/ })).toBeInTheDocument();
     expect(container.querySelector(".bfr-menu-row__media img")).toHaveAttribute("src", "/demo/catalog/americano.webp");
     await user.click(screen.getByRole("button", { name: /아메리카노/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /담기/ })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: /담기/ }));
 
     expect(cart.read()).toMatchObject({ status: "ready", cart: { storeName: "성수 로스터리" } });
@@ -212,7 +215,7 @@ describe("store identity comes from the server", () => {
     expect(screen.queryByText("예전 이름")).not.toBeInTheDocument();
   });
 
-  it("keeps the saved name and stays orderable when the store read fails", async () => {
+  it("keeps the saved name but blocks ordering until store availability can be verified", async () => {
     cart.add({ storeId: "store-1", storeName: "성수 로스터리" }, line("menu-1"));
     routeGet({
       "/stores/{storeId}": failed(503, "DEPENDENCY_UNAVAILABLE", "매장 정보를 조회하지 못했습니다."),
@@ -223,7 +226,7 @@ describe("store identity comes from the server", () => {
 
     expect(await screen.findByText("성수 로스터리")).toBeInTheDocument();
     expect(screen.getByText("매장 안내를 불러오지 못했어요.")).toBeInTheDocument();
-    expect(await screen.findByRole("radio", { name: /가능/ })).toBeEnabled();
+    expect(await screen.findByRole("radio", { name: /가능/ })).toBeDisabled();
   });
 });
 
@@ -262,7 +265,8 @@ describe("store detail", () => {
     renderStore();
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: /아메리카노/ }));
-    await user.click(screen.getByRole("checkbox", { name: /샷 추가/ }));
+    await user.click(await screen.findByRole("radio", { name: /샷 추가/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /담기/ })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: /담기/ }));
 
     const state = cart.read();

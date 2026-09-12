@@ -41,15 +41,20 @@ export function ConsoleFrame({ kind, access, actorLabel, ownsAnyStore = false, m
     { to: "/ops", label: "운영 홈", icon: BarChart3, end: true },
     { to: "/ops/orders", label: "주문 보상 조회", icon: Search, end: false },
     { to: "/ops/merchant-accounts", label: "점주 계정", icon: UserRound, end: false },
+    { to: "/ops/stores", label: "매장 관리", icon: Store, end: false },
     { to: "/ops/recovery", label: "문제 확인 및 복구", icon: LifeBuoy, end: false },
+    { to: "/ops/support-investigations", label: "상담 요청 검토", icon: Search, end: false },
     { to: "/ops/control", label: "운영 업무", icon: CircleDotDashed, end: false },
     { to: "/ops/policies", label: "정책 관리", icon: Settings2, end: false },
     { to: "/ops/campaigns", label: "쿠폰 캠페인", icon: TicketPercent, end: false },
   ];
   const supportItems = [
     { to: "/support", label: "고객지원", icon: Headset, end: true },
+    { to: "/support/approvals", label: "승인함", icon: ReceiptText, end: false },
+    { to: "/support/cases", label: "상담 목록", icon: ReceiptText, end: false },
+    { to: "/support/inquiries", label: "고객 문의", icon: ReceiptText, end: false },
   ];
-  const unavailablePaths = new Set(["/ops/recovery", "/ops/control"]);
+  const unavailablePaths = new Set<string>();
   const items = kind === "store" ? storeItems : kind === "ops" ? opsItems : supportItems;
 
   async function logOut() {

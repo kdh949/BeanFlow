@@ -32,6 +32,9 @@ repository의 import JSON으로 덮어쓰지 않는다.
 - Web Origins: `<BEANFLOW_PUBLIC_ORIGIN>` (wildcard 금지)
 - access token의 `aud`에 실제 client ID 포함
 - realm role mapper가 최상위 `roles` 배열을 access token에 포함
+- User Property mapper: `username` → `preferred_username`, JSON type `String`, access token 포함.
+  담당자 선택 목록은 서명된 로그인 식별명을 최근 관측한 계정으로 구성한다. 미등록 계정은 mapper 적용 후
+  조직 계정으로 다시 로그인한다. 기존 realm 전체를 재import하거나 사용자 ID를 바꾸지 않는다.
 - 운영자에게 `PLATFORM_OPERATOR` realm role 부여. BeanFlow의 세부 permission grant는 별도다.
 
 `deploy/keycloak/beanflow-realm.json`은 bundled client의 mapper 참고 자료다. 외부 client ID가

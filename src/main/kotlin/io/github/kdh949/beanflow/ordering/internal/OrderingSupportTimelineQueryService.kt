@@ -1,6 +1,9 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.OrderingSupportTimelineOperations
+import io.github.kdh949.beanflow.ordering.api.SupportOrderDisplay
+import io.github.kdh949.beanflow.ordering.api.SupportOrderLineOverview
+import io.github.kdh949.beanflow.ordering.api.SupportOrderOverviewSnapshot
 import io.github.kdh949.beanflow.ordering.api.SupportOrderSnapshot
 import io.github.kdh949.beanflow.ordering.api.SupportOrderState
 import io.github.kdh949.beanflow.shared.api.SUPPORT_TIMELINE_COMPARATOR
@@ -21,6 +24,37 @@ import java.util.UUID
 internal class OrderingSupportTimelineQueryService(
     private val jdbcTemplate: JdbcTemplate,
 ) : OrderingSupportTimelineOperations {
+    override fun findOrderDisplays(orderIds: Set<UUID>): Map<UUID, SupportOrderDisplay> {
+        require(orderIds.size <= 100)
+        if (orderIds.isEmpty()) return emptyMap()
+        val placeholders = orderIds.joinToString(",") { "?" }
+        return jdbcTemplate
+            .query(
+                "SELECT id, public_reference, store_name_snapshot, state FROM ordering_order WHERE id IN ($placeholders)",
+                ::display,
+                *orderIds.toTypedArray(),
+            ).associateBy { it.orderId }
+    }
+
+    override fun findOrderByPublicReference(reference: String): SupportOrderDisplay? =
+        jdbcTemplate
+            .query(
+                "SELECT id, public_reference, store_name_snapshot, state FROM ordering_order WHERE public_reference = ?",
+                ::display,
+                PublicOrderReference.parse(reference).value,
+            ).singleOrNull()
+
+    private fun display(
+        rs: ResultSet,
+        row: Int,
+    ): SupportOrderDisplay =
+        SupportOrderDisplay(
+            rs.getObject("id", UUID::class.java),
+            rs.getString("public_reference"),
+            rs.getString("store_name_snapshot"),
+            SupportOrderState.valueOf(rs.getString("state")),
+        )
+
     override fun findTimelineFacts(query: SupportOwnerTimelineQuery): List<SupportOwnerTimelineFact> =
         findOrders(query.orderIds)
             .flatMap { it.timelineFacts() }
@@ -35,6 +69,69 @@ internal class OrderingSupportTimelineQueryService(
         return findOrders(orderIds).map {
             SupportOrderSnapshot(it.id, it.customerId, it.storeId, SupportOrderState.valueOf(it.state), it.version)
         }
+    }
+
+    override fun findOrderOverviews(orderIds: Set<UUID>): List<SupportOrderOverviewSnapshot> {
+        require(orderIds.isNotEmpty() && orderIds.size <= SupportOwnerTimelineQuery.MAX_ORDER_IDS)
+        val ids = orderIds.sortedBy(UUID::toString)
+        val placeholders = ids.joinToString(",") { "?" }
+        val lines =
+            jdbcTemplate
+                .query(
+                    """
+                    SELECT order_id, line_sequence, menu_name, quantity, gross_krw
+                      FROM ordering_order_line
+                     WHERE order_id IN ($placeholders)
+                     ORDER BY order_id, line_sequence
+                    """.trimIndent(),
+                    { resultSet, _ ->
+                        resultSet.getObject("order_id", UUID::class.java) to
+                            SupportOrderLineOverview(
+                                resultSet.getInt("line_sequence"),
+                                resultSet.getString("menu_name"),
+                                resultSet.getLong("quantity"),
+                                resultSet.getLong("gross_krw"),
+                            )
+                    },
+                    *ids.toTypedArray(),
+                ).groupBy({ it.first }, { it.second })
+        return jdbcTemplate.query(
+            """
+            SELECT id, public_reference, store_name_snapshot, state, version,
+                   created_at, pickup_window_start_snapshot, pickup_window_end_snapshot,
+                   subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw, currency
+              FROM ordering_order
+             WHERE id IN ($placeholders)
+             ORDER BY id
+            """.trimIndent(),
+            { resultSet, _ ->
+                val orderId = resultSet.getObject("id", UUID::class.java)
+                val orderLines = lines[orderId].orEmpty()
+                if (orderLines.isEmpty() || orderLines.any { it.menuName.isBlank() || it.quantity <= 0 || it.amountKrw < 0 }) {
+                    throw io.github.kdh949.beanflow.shared.api.DomainFailure(
+                        io.github.kdh949.beanflow.shared.api.FailureCode.DEPENDENCY_UNAVAILABLE,
+                        "Support order overview projection is invalid",
+                    )
+                }
+                SupportOrderOverviewSnapshot(
+                    orderId = orderId,
+                    publicReference = resultSet.getString("public_reference"),
+                    storeName = resultSet.getString("store_name_snapshot"),
+                    state = SupportOrderState.valueOf(resultSet.getString("state")),
+                    version = resultSet.getLong("version"),
+                    orderedAt = resultSet.getTimestamp("created_at").toInstant(),
+                    pickupWindowStart = resultSet.getTimestamp("pickup_window_start_snapshot").toInstant(),
+                    pickupWindowEnd = resultSet.getTimestamp("pickup_window_end_snapshot").toInstant(),
+                    subtotalKrw = resultSet.getLong("subtotal_krw"),
+                    couponDiscountKrw = resultSet.getLong("coupon_discount_krw"),
+                    pointsAppliedKrw = resultSet.getLong("points_applied_krw"),
+                    payableKrw = resultSet.getLong("payable_krw"),
+                    currency = resultSet.getString("currency"),
+                    lines = orderLines,
+                )
+            },
+            *ids.toTypedArray(),
+        )
     }
 
     private fun findOrders(orderIds: Set<UUID>): List<OrderTimelineRow> {

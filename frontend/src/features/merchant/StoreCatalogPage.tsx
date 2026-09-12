@@ -6,6 +6,7 @@ import { merchantApi, merchantCsrfHeader } from "../../api/merchantClient";
 import { Button, Checkbox, ChipButton, EmptyState, FeedbackState, LoadingState, PageHeading, TextField } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
 import { requestErrorPresentation } from "../../presentation/shared/requestErrorPresentation";
+import { MenuPresentationEditor } from "./MenuPresentationEditor";
 import { StoreSelector } from "./StoreSelector";
 import { useMerchantStores } from "./useMerchantStores";
 
@@ -15,7 +16,7 @@ type MenuCatalogSummary = components["schemas"]["MenuCatalogSummary"];
 type MenuTradeContent = components["schemas"]["MenuTradeContent"];
 type MenuTradeDefinition = components["schemas"]["MenuTradeDefinition"];
 
-export function StoreCatalogPage({ embedded = false }: { embedded?: boolean }) {
+export function StoreCatalogPage({ embedded = false, onBusyChange }: { embedded?: boolean; /** Prevent workspace changes while editing or saving. */ onBusyChange?: (busy: boolean) => void }) {
   const { state: storesState, stores, selected, select, reload } = useMerchantStores("ANY");
   const [policy, setPolicy] = useState<StoreOrderingPolicy | null>(null);
   const [acceptingOrders, setAcceptingOrders] = useState(false);
@@ -27,6 +28,10 @@ export function StoreCatalogPage({ embedded = false }: { embedded?: boolean }) {
   const [saved, setSaved] = useState(false);
   const intent = useRef(new SubmissionIntent());
   const storeId = selected?.storeId ?? null;
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const unchanged = policy ? policy.acceptingOrders === acceptingOrders && policy.pickupEnabled === pickupEnabled : true;
+  const locked = saving || !unchanged || catalogBusy;
+  useEffect(() => { onBusyChange?.(locked); return () => onBusyChange?.(false); }, [locked, onBusyChange]);
   const policyRequest = useRef(0);
   const activeStoreId = useRef(storeId);
   activeStoreId.current = storeId;
@@ -114,15 +119,12 @@ export function StoreCatalogPage({ embedded = false }: { embedded?: boolean }) {
     return <div className="console-page"><ErrorState error={storesState.error} retry={reload} /></div>;
   }
 
-  const unchanged = policy
-    ? policy.acceptingOrders === acceptingOrders && policy.pickupEnabled === pickupEnabled
-    : true;
   const stale = saveError instanceof ApiRequestError && saveError.code === "MERCHANT_CONTENT_STALE";
 
   return (
     <div className="console-page">
-      {embedded ? <div className="catalog-store-selector"><StoreSelector stores={stores} selected={selected} onSelect={select} /></div> : (
-        <PageHeading title="메뉴·가격" action={<StoreSelector stores={stores} selected={selected} onSelect={select} />} />
+      {embedded ? <div className="catalog-store-selector"><StoreSelector stores={stores} selected={selected} onSelect={select} disabled={locked} /></div> : (
+        <PageHeading title="메뉴·가격" action={<StoreSelector stores={stores} selected={selected} onSelect={select} disabled={locked} />} />
       )}
 
       {stores.length === 0 ? (
@@ -136,7 +138,7 @@ export function StoreCatalogPage({ embedded = false }: { embedded?: boolean }) {
         <ErrorState error={loadError} retry={() => void loadPolicy()} />
       ) : policy ? (
         <div className="console-detail-grid">
-          <MenuCatalogWorkspace key={policy.storeId} storeId={policy.storeId} />
+          <MenuCatalogWorkspace key={policy.storeId} storeId={policy.storeId} onBusyChange={setCatalogBusy} />
           <section className="surface-card catalog-policy-panel" aria-labelledby="ordering-policy-title">
             <div className="panel-heading">
               <div>
@@ -161,6 +163,7 @@ export function StoreCatalogPage({ embedded = false }: { embedded?: boolean }) {
             <Button type="button" block loading={saving} disabled={unchanged} onClick={() => void save()}>
               {saving ? "저장 중" : "정책 저장"}
             </Button>
+            {!unchanged ? <Button variant="ghost" disabled={saving} onClick={() => { setAcceptingOrders(policy.acceptingOrders); setPickupEnabled(policy.pickupEnabled); setSaveError(null); }}>정책 편집 취소</Button> : null}
             {saved ? <p className="form-success" role="status">주문 정책을 저장했습니다.</p> : null}
             {stale ? (
               <FeedbackState
@@ -178,7 +181,8 @@ export function StoreCatalogPage({ embedded = false }: { embedded?: boolean }) {
   );
 }
 
-function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
+function MenuCatalogWorkspace({ storeId, onBusyChange }: { storeId: string; onBusyChange: (busy: boolean) => void }) {
+  const [displayTarget, setDisplayTarget] = useState<MenuCatalogSummary | null>(null);
   const [lifecycle, setLifecycle] = useState<MenuCatalogLifecycle>("ACTIVE");
   const [items, setItems] = useState<MenuCatalogSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -192,6 +196,10 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
   const [saveError, setSaveError] = useState<unknown>(null);
   const [saved, setSaved] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<MenuCatalogSummary | null>(null);
+  const [displayBusy, setDisplayBusy] = useState(false);
+  const dirty = editing && !!draft && (!current || JSON.stringify(draft) !== JSON.stringify(toDefinition(current)));
+  const locked = saving || dirty || displayBusy || !!archiveTarget;
+  useEffect(() => { onBusyChange(locked); return () => onBusyChange(false); }, [locked, onBusyChange]);
   const archiveTrigger = useRef<HTMLButtonElement | null>(null);
   const archiveDialog = useRef<HTMLDivElement | null>(null);
   const intent = useRef(new SubmissionIntent());
@@ -236,6 +244,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
     setDraft(null);
     setCurrent(null);
     setEditing(false);
+    setDisplayTarget(null);
     setItems([]);
     setNextCursor(null);
     setLoadingMore(false);
@@ -245,9 +254,11 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
 
   useEffect(() => {
     if (archiveTarget) archiveDialog.current?.querySelector("button")?.focus();
-  }, [archiveTarget]);
+    else if (!locked) { archiveTrigger.current?.focus(); archiveTrigger.current = null; }
+  }, [archiveTarget, locked]);
 
   async function edit(item: MenuCatalogSummary) {
+    setDisplayTarget(null);
     await editById(item.menuId);
   }
 
@@ -276,6 +287,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
   function createDraft() {
     if (saving) return;
     editRequest.current += 1;
+    setDisplayTarget(null);
     setCurrent(null);
     setDraft({
       menuId: crypto.randomUUID(),
@@ -385,12 +397,12 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
           <h2 id="menu-catalog-title">메뉴 거래 내용</h2>
           <p>가격·판매 상태·옵션·판매 구성을 한 번에 저장합니다.</p>
         </div>
-        <Button type="button" variant="secondary" disabled={saving} onClick={createDraft}><Plus aria-hidden="true" /> 새 메뉴</Button>
+        <Button type="button" variant="secondary" disabled={locked} onClick={createDraft}><Plus aria-hidden="true" /> 새 메뉴</Button>
       </div>
 
       <div className="catalog-lifecycle-tabs" role="group" aria-label="메뉴 보관 상태">
         {(["ACTIVE", "ARCHIVED"] as const).map((value) => (
-          <ChipButton disabled={saving} key={value} aria-pressed={lifecycle === value} onClick={() => setLifecycle(value)}>
+          <ChipButton disabled={locked} key={value} aria-pressed={lifecycle === value} onClick={() => setLifecycle(value)}>
             {value === "ACTIVE" ? "판매 카탈로그" : "보관된 메뉴"}
           </ChipButton>
         ))}
@@ -409,7 +421,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
               {item.lifecycle === "ACTIVE" ? (
                 <div className="menu-authoring-summary">
                   <MenuCatalogItemSummary item={item} />
-                  <Button variant="secondary" disabled={saving} onClick={() => void edit(item)} aria-label={`${item.name} 편집`}>편집</Button>
+                  <div className="button-row"><Button variant="secondary" disabled={locked} onClick={() => void edit(item)} aria-label={`${item.name} 편집`}>편집</Button><Button variant="ghost" disabled={locked || editing} aria-label={`${item.name} 표시 정보`} onClick={() => setDisplayTarget(item)}>표시 정보</Button></div>
                 </div>
               ) : (
                 <div className="menu-authoring-summary" aria-label={`${item.name} 보관 요약`}>
@@ -417,7 +429,7 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
                 </div>
               )}
               {item.lifecycle === "ACTIVE" ? (
-                <Button type="button" variant="danger" size="sm" disabled={saving} onClick={() => { editRequest.current += 1; archiveTrigger.current = document.activeElement as HTMLButtonElement; setArchiveTarget(item); }}>
+                <Button type="button" variant="danger" size="sm" disabled={locked} onClick={() => { editRequest.current += 1; archiveTrigger.current = document.activeElement as HTMLButtonElement; setArchiveTarget(item); }}>
                   <Archive aria-hidden="true" /> 보관
                 </Button>
               ) : null}
@@ -433,6 +445,8 @@ function MenuCatalogWorkspace({ storeId }: { storeId: string }) {
           {loadingMore ? "불러오는 중" : "메뉴 더 보기"}
         </Button>
       ) : null}
+
+      {displayTarget ? <><MenuPresentationEditor key={displayTarget.menuId} storeId={storeId} menuId={displayTarget.menuId} name={displayTarget.name} onChanged={() => void loadList()} onBusyChange={setDisplayBusy} /><Button variant="ghost" disabled={displayBusy} onClick={() => setDisplayTarget(null)}>표시 정보 닫기</Button></> : null}
 
       {editing && draft ? (
         <MenuTradeEditor

@@ -18,5 +18,7 @@ type Story = StoryObj<typeof meta>;
 export const Guidance: Story = {
   play: async ({ canvas }) => {
     await expect(canvas.getByText(/카드 번호나 인증 정보는 보내지 마세요/)).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "문의 접수하기" })).toHaveAttribute("href", "/app/support/new");
+    await expect(canvas.getByRole("link", { name: "내 문의와 답변" })).toHaveAttribute("href", "/app/support");
   },
 };

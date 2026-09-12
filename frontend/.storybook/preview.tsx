@@ -1,3 +1,4 @@
+import { sb } from "storybook/test";
 import type { Preview } from "@storybook/react-vite";
 import { useEffect } from "react";
 import { createMemoryRouter, Outlet } from "react-router";
@@ -5,10 +6,13 @@ import { RouterProvider } from "react-router/dom";
 import { mswLoader } from "msw-storybook-addon/csf3";
 import { ConsoleFrame } from "../src/presentation/ConsoleFrame";
 import { ConsoleShell, CustomerShell } from "../src/presentation/AppShells";
+import { authToken } from "../src/auth/session";
 import { merchantSession } from "../src/features/auth/merchant/merchantSession";
 import "../src/design-system/styles.css";
 import "../src/styles.css";
 import { mswHandlers } from "./msw-handlers";
+
+sb.mock(import("../src/payment/toss.ts"), { spy: true });
 
 const storybookA11yTestMode =
   import.meta.env["VITE_STORYBOOK_A11Y_TEST"] === "off" ? "off" : "error";
@@ -40,6 +44,9 @@ const preview: Preview = {
   ],
   loaders: [mswLoader()],
   async beforeEach({ msw }) {
+    // Each story is a fresh browser task; re-entry inside one play keeps its command journal.
+    for (const key of Object.keys(sessionStorage)) if (key.startsWith("beanflow.support-command.v1.")) sessionStorage.removeItem(key);
+    authToken.set(`storybook.${btoa(JSON.stringify({ sub: "storybook-operator", iss: "storybook" }))}.fixture`);
     msw.use(...mswHandlers);
   },
   parameters: {

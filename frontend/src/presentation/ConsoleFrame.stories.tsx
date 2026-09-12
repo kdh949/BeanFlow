@@ -53,15 +53,26 @@ export const LogoutFailure: Story = {
     await expect(canvas.getByRole("button", { name: "로그아웃" })).toBeEnabled();
   },
 };
-export const Operations: Story = { args: { kind: "ops", actorLabel: "operations@example.test", children: <PageHeading title="운영 현황" /> } };
+export const Operations: Story = { args: { kind: "ops", actorLabel: "operations@example.test", children: <PageHeading title="운영 현황" /> }, play: async ({ canvas }) => {
+  const menu = canvas.queryByRole("button", { name: /업무 메뉴/ });
+  if (menu && menu.getClientRects().length > 0) await userEvent.click(menu);
+  await expect(canvas.getByRole("link", { name: "매장 관리" })).toHaveAttribute("href", "/ops/stores");
+  await expect(canvas.getByRole("link", { name: "운영 업무" })).toHaveAttribute("href", "/ops/control");
+} };
 export const Support: Story = { args: { kind: "support", actorLabel: "support@example.test", children: <PageHeading title="고객지원" /> } };
 
-export const PlannedOperations: Story = {
+export const OperationsWorkflows: Story = {
   args: { kind: "ops", children: <PageHeading title="플랫폼 운영" /> },
   play: async ({ canvas }) => {
     const menu = canvas.queryByRole("button", { name: /업무 메뉴/ });
     if (menu && menu.getClientRects().length > 0) await userEvent.click(menu);
-    await expect(canvas.getByRole("link", { name: "문제 확인 및 복구 준비 중" })).toHaveAttribute("aria-disabled", "true");
+    await expect(canvas.getByRole("link", { name: "문제 확인 및 복구" })).toHaveAttribute("href", "/ops/recovery");
     await expect(canvas.getByRole("link", { name: "쿠폰 캠페인" })).toHaveAttribute("href", "/ops/campaigns");
   },
 };
+
+export const SupportCases: Story = { args: { kind: "support", children: <PageHeading title="고객지원" /> }, play: async ({ canvas }) => { const menu = canvas.queryByRole("button", { name: /업무 메뉴/ }); if (menu && menu.getClientRects().length > 0) await userEvent.click(menu); await expect(canvas.getByRole("link", { name: "상담 목록" })).toHaveAttribute("href", "/support/cases"); } };
+
+export const SupportInvestigations: Story = { args: { kind: "ops" }, play: async ({ canvas }) => { await expect(canvas.getByRole("link", { name: "상담 요청 검토" })).toHaveAttribute("href", "/ops/support-investigations"); } };
+
+export const SupportApprovals: Story = { args: { kind: "support", children: <PageHeading title="고객지원" /> }, play: async ({ canvas }) => { const menu = canvas.queryByRole("button", { name: /업무 메뉴/ }); if (menu && menu.getClientRects().length > 0) await userEvent.click(menu); await expect(canvas.getByRole("link", { name: "승인함" })).toHaveAttribute("href", "/support/approvals"); } };

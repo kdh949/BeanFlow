@@ -28,6 +28,24 @@ export const Results: Story = {
   },
 };
 
+/** A populated input must keep its clear action separate from search at narrow widths. */
+export const ClearAndSearch: Story = {
+  tags: ["!autodocs"],
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("시청점")).toBeVisible();
+    const clear = canvas.getByRole("button", { name: "검색어 지우기" });
+    const search = canvas.getByRole("button", { name: /^검색$/ });
+    const clearBox = clear.getBoundingClientRect();
+    const searchBox = search.getBoundingClientRect();
+    await expect(clearBox.right <= searchBox.left || clearBox.bottom <= searchBox.top).toBe(true);
+    await userEvent.click(clear);
+    await expect(canvas.getByRole("searchbox")).toHaveValue("");
+    await userEvent.type(canvas.getByRole("searchbox"), "라떼");
+    await userEvent.click(search);
+    await expect(await canvas.findByDisplayValue("라떼")).toBeVisible();
+  },
+};
+
 export const QueryHelper: Story = {
   parameters: { routing: { path: "/app/stores", initialEntry: "/app/stores", surface: "refresh-customer" } },
   play: async ({ canvas }) => {

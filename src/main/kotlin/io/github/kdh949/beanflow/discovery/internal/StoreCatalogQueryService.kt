@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.discovery.internal
 
 import io.github.kdh949.beanflow.discovery.api.StoreCatalogQueryOperations
+import io.github.kdh949.beanflow.discovery.api.StoreMenuItemConfigurationView
 import io.github.kdh949.beanflow.discovery.api.StoreMenuItemOptionView
 import io.github.kdh949.beanflow.discovery.api.StoreMenuItemView
 import io.github.kdh949.beanflow.discovery.api.StorePickupSlotView
@@ -21,6 +22,7 @@ import java.util.UUID
 
 internal enum class StoreCatalogOperation {
     MENUS,
+    CONFIGURATIONS,
     PICKUP_SLOTS,
 }
 
@@ -45,6 +47,16 @@ internal class StoreCatalogQueryService(
     private val metrics: StoreCatalogMetrics,
     private val imageViews: StorefrontImageViewResolver,
 ) : StoreCatalogQueryOperations {
+    override fun listConfigurations(
+        storeId: UUID,
+        menuId: UUID,
+    ): List<StoreMenuItemConfigurationView> =
+        observed(StoreCatalogOperation.CONFIGURATIONS) {
+            menus.listConfigurations(storeId, menuId).map {
+                StoreMenuItemConfigurationView(it.configurationId, it.optionIds, it.available)
+            }
+        }
+
     override fun listMenus(storeId: UUID): List<StoreMenuItemView> =
         observed(StoreCatalogOperation.MENUS) {
             menus.listMenus(storeId).map { it.toCatalogView(imageViews) }

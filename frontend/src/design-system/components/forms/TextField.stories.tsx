@@ -35,3 +35,8 @@ export const DateTimePicker: Story = {
     await expect(input).toHaveValue("2026-10-01T09:00");
   },
 };
+
+export const TimePicker: Story = {
+  args: { label: "영업 시작", type: "time", value: "08:30", description: "한국 시간 기준입니다." },
+  play: async ({ canvas }) => { await expect(canvas.getByLabelText("영업 시작")).toHaveAttribute("type", "time"); await expect(canvas.getByLabelText("영업 시작")).toHaveValue("08:30"); },
+};

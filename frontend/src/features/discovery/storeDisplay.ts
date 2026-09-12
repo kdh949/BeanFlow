@@ -26,8 +26,16 @@ export function operatingStatusLabel(status: CustomerStoreDisplay["operatingStat
 
 export function nextPickupLabel(window?: NextPickupWindow) {
   return window
-    ? `가장 빠른 픽업 ${pickupTimeLabel(window.startsAt)}`
+    ? `가장 빠른 픽업 ${pickupDateTimeLabel(window.startsAt)}`
     : "예약 가능한 픽업 시간 없음";
+}
+
+/** Reservations span several days; the day must travel with the time. */
+export function pickupDateTimeLabel(value: string) {
+  return new Date(value).toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short",
+    hour: "2-digit", minute: "2-digit",
+  });
 }
 
 export function pickupTimeLabel(value: string) {

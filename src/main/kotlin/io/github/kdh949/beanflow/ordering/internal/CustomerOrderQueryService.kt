@@ -237,6 +237,7 @@ internal class CustomerOrderReadTransaction(
             lines = lines,
             allowedActions = CustomerOrderPresentationPolicy.allowedActions(actionFacts(), now),
             paymentRecovery = paymentRecovery,
+            reservationExpiresAt = reservationExpiresAt,
         )
     }
 

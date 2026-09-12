@@ -236,3 +236,48 @@ registry, non-expiring PointLot 또는 수동 adjustment의 PointRecoveryPending
 - [ADR-064](ADR-064-risk-based-idempotency-model-selection.md)
 - [ADR-065](ADR-065-refund-earned-point-recovery-ledger.md)
 - [ADR-056](ADR-056-ordering-idempotency-retention-worker.md)
+
+### 포인트 비용 주체 선택과 플랫폼 명부 (2026-09-11)
+
+운영 화면은 issuerReference를 직접 입력받지 않고 Merchant의 현재 매장·브랜드 이름으로 선택한다.
+새 STORE/BRAND 선택의 reference는 실제 owner ID의 canonical UUID 문자열이다. STORE 비용을 다른
+매장에 추정 배분하지 않는 BR-20과 과거 Lot/정책 snapshot은 변경하지 않는다. 현재 정책에서 읽은
+기존 reference는 출처와 버전을 표시해 유지할 수 있으며 다른 비용 주체로 추정 변환하지 않는다.
+
+Operations는 플랫폼 비용 주체의 불변 명부를 소유한다. POINT_ACCRUAL_POLICY_WRITE 운영자가 업무상
+이름과 등록 사유를 명시하면 서버가 안정된 `platform:<UUID>` reference를 발급한다. 정규화 이름은
+유일하며 기존 이름을 덮어쓰지 않는다. 등록 자체는 비용 배분·정책 변경·포인트 발급이 아니다.
+actor/key와 이름별 잠금, UNIQUE, 이름·사유 payload hash와 감사 기록을 한 transaction에서 적용한다.
+기존 플랫폼 reference를 이름만으로 이 명부에 소급 연결하거나 새 기본 PLATFORM으로 대체하지 않는다.
+
+후보 조회는 POLICY 목적의 POINT_ACCRUAL_POLICY_WRITE 또는 ADJUSTMENT 목적의 POINT_ADJUSTMENT를
+현재 확인한다. 실제 owner 이름, 등록 플랫폼 명부와 현재 전역 정책의 명시된 PLATFORM source만 제공한다.
+정책 source는 owner 이름을 추정하지 않고 정책 버전 출처로 구분한다. 수동 조정의 200자 reference 제한을
+넘는 과거 정책 source는 조정 후보에서 제외한다. 커서는 actor/purpose/type/query와 정렬 위치에 묶는다.
+페이지 한도는 100이고, 보관된 브랜드는 새 선택 후보에서 제외한다. 별도 브랜드/매장 개인정보나 원장을
+읽지 않는다. 조회 실패를 빈 명부 또는 기본 비용 주체로 바꾸지 않는다.
+
+### 조정 준비와 브라우저 재진입 복구 (2026-09-12)
+
+실제 포인트 반영은 기존 `POST /operations/point-accounts/{accountId}/adjustments`만 수행한다.
+Loyalty의 조정 준비 기록은 실행 전 대상·정규화된 입력·서버 발급 멱등 키를 보관한다.
+`POST /operations/point-adjustment-preparations`는 포인트를 변경하지 않으며,
+`GET /operations/point-adjustment-preparations/current`로 현재 액터의 미확인 기록 하나를 복구한다.
+새 financial Aggregate나 별도 금전 실행 엔진을 도입하지 않는다.
+
+- DB는 액터당 미확인 준비 기록 하나만 허용한다. 현재 기록과 다른 새 조정 키는 거부한다.
+  PREPARED의 동일 키·내용만 실행하며 APPLIED와 최초 결과는 원장·Audit·멱등 원장과 함께 commit한다.
+- 고객의 가린 이름은 Identity 소유 projection으로 읽고, 본문·키·고객 식별자를 브라우저 저장소에 넣지 않는다.
+  복구 조회는 POINT_ACCOUNT_READ와 고객 표시의 CUSTOMER_ACCOUNT_SEARCH를 확인한다.
+  준비는 이 권한들과 POINT_ADJUSTMENT를 요구하고 실제 실행은 기존 POINT_ADJUSTMENT를 다시 확인한다.
+- Account→관련 grant→준비 기록 잠금 순서를 지킨다. 같은 액터의 다른 계정 준비는 grant와 부분 UNIQUE로 직렬화한다.
+  조회에서는 Account를 잠그지 않는다. 저장된 APPLIED 결과의 replay는 새 credit 만료 검증보다 앞선다.
+- `DELETE /operations/point-adjustment-preparations/{preparationId}`는 expectedState를 확인해
+  미실행 준비를 CANCELLED로 닫거나 이미 확인한 APPLIED 결과를 확인 완료한다. 실행과 취소는
+  같은 Account 잠금으로 직렬화하며 취소한 키의 늦은 실행은 거부한다.
+- 통신 결과 불명이어도 복구 기록을 먼저 조회한다. 저장 확인 실패를 빈 결과로 취급하지 않는다.
+  APPLIED 결과를 명시적으로 확인하거나 PREPARED를 취소하기 전에는 새 조정을 시작하지 않는다.
+- 미확인 기록은 결과 확인까지 보존한다. 닫힌 준비 기록은 기존 조정 명령의 90일 보존 정책과
+  정리 작업을 재사용한다. 원문은 로그·Audit에 넣지 않고 조회/준비/닫힘의 비식별 이력을 기록한다.
+
+고객 표시 조회는 Loyalty가 필요한 `PointAdjustmentCustomerLabelQuery` public port를 정의하고 Identity adapter가 자기 테이블의 마스킹 projection을 제공한다. ADR-109의 Identity→Loyalty 방향을 유지하며 Loyalty는 Identity API/Repository에 의존하지 않는다. 새 Context나 cross-Aggregate association을 만들지 않는다.

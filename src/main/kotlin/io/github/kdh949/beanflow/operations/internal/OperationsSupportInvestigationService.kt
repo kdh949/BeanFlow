@@ -52,6 +52,11 @@ internal data class OperationsSupportInvestigationDecisionResource(
     val version: Long,
 )
 
+internal data class OperationsSupportInvestigationWorkflowResource(
+    val investigation: OperationsSupportInvestigationSnapshot,
+    val canDecide: Boolean,
+)
+
 internal sealed interface OperationsSupportInvestigationOutcome {
     data class Succeeded(
         val resource: OperationsSupportInvestigationDecisionResource,
@@ -129,6 +134,22 @@ internal class OperationsSupportInvestigationService(
             ),
         )
         return entity.toSnapshot()
+    }
+
+    @Transactional
+    fun workflow(
+        actorId: UUID,
+        requestId: UUID,
+        revisionNumber: Int,
+        now: Instant,
+    ): OperationsSupportInvestigationWorkflowResource {
+        permissions.requireActive(actorId, OperatorPermission.OPERATIONS_SUPPORT_INVESTIGATION)
+        val entity = investigations.findBySupportActionRequestIdAndRevisionNumber(requestId, revisionNumber) ?: notFound()
+        val separated = actorId != entity.requesterActorId && actorId != entity.executorActorId && actorId != entity.supportApproverActorId
+        return OperationsSupportInvestigationWorkflowResource(
+            entity.toSnapshot(),
+            separated && entity.state == OperationsSupportInvestigationState.OPEN && now.isBefore(entity.expiresAt),
+        )
     }
 
     @Transactional

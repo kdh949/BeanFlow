@@ -183,3 +183,17 @@ customer PII, VAT/세무 값, Provider reference, card/billing key와 내부 UUI
 - [ADR-027 매장 membership 인가](ADR-027-store-membership-authorization.md)
 - [ADR-061 Refund 요청·확정 금액](ADR-061-refund-requested-and-confirmed-amounts.md)
 - [ADR-063 부분 환불 포인트 복원](ADR-063-partial-refund-expired-point-restoration.md)
+
+### 운영 환불 화면 Amendment (2026-09-11)
+
+운영 화면도 동일한 품목 선택과 서버 금액 미리보기를 사용한다.
+`POST /operations/stores/{storeId}/orders/{orderReference}/refund-previews`와
+`POST /operations/stores/{storeId}/orders/{orderReference}/refunds`는 기존 운영 환불처럼
+Operator JWT의 `PLATFORM_OPERATOR` 역할을 요구한다. Merchant Session 또는 Customer JWT로
+대체 인증하지 않는다. 기존 운영 환불에 없는 explicit grant나 금액 정책은 추가하지 않는다.
+
+응답과 선택 계약은 위 public contract를 재사용한다. Store와 공개 주문 번호가 일치해야 하며,
+preview는 조회 transaction에서 계산만 수행한다. 실행은 같은 PartialRefund preparation과
+Provider/result transaction을 사용하고, 잠금 아래 previewVersion을 다시 확인한다.
+감사 actor는 `PLATFORM_OPERATOR`이며 URI를 멱등성 범위에 넣지 않는다. 미확정 결과, 수량 경쟁,
+혜택 배분과 실제 확정 금액의 의미는 점주 계약과 동일하다. 새 스키마나 Provider 키는 없다.

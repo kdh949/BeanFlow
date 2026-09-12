@@ -33,6 +33,9 @@ Keycloak 주소와 Nginx upstream이 남아 정상적으로 기동하거나 로�
   기존 배포 입력에서 Nginx 파일을 생성해 읽기 전용 mount하고 preflight에서 내용 일치를 검증한다.
   별도 이미지 origin은 해당 host가 routing을 소유한다. 구현과 로컬 검증 범위는
   [같은 출처 AIStor 프록시 계획](../exec-plans/completed/same-origin-aistor-proxy.md)에 기록한다.
+- 2026-09-11 담당자 선택 보완: access token에 `preferred_username`을 전달하는 사용자명 mapper를
+  설정한다. BeanFlow는 서명된 최근 로그인 식별명을 표시용으로 관측하며 권한은 영속 grant로 판단한다.
+  claim이 없는 기존 토큰은 이름 미등록으로 표시하고 관리자 API나 임의 이름으로 대체하지 않는다.
 - Doppler는 배포 시 필요한 값을 공급하고 Compose config tree가 요구하는 secret 파일은 저장소
   밖에 0700 directory/0600 file로 준비한다. 비밀값을 출력하지 않고 모든 필수 입력을 확인한 뒤
   기록한다. 기존 DB/HMAC 값의 변경은 자동 credential rotation으로 처리하지 않는다.

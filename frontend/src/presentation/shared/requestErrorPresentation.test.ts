@@ -3,6 +3,13 @@ import { ApiRequestError } from "../../api/client";
 import { requestErrorPresentation } from "./requestErrorPresentation";
 
 describe("requestErrorPresentation", () => {
+  it.each(["RESOURCE_STATE_CONFLICT", "ORDER_STATE_CONFLICT"])("distinguishes %s from a transport failure without exposing server details", (code) => {
+    const result = requestErrorPresentation(new ApiRequestError(409, code, "internal row version", "REQ-CONFLICT"));
+    expect(result.title).toBe("현재 상태와 요청이 맞지 않습니다");
+    expect(result.description).toContain("현재 상태를 다시 조회");
+    expect(result.reference).toBe("REQ-CONFLICT");
+    expect(JSON.stringify(result)).not.toContain("internal row");
+  });
   it("does not expose an arbitrary Error message", () => {
     const result = requestErrorPresentation(new Error("postgres://internal-user:secret@db/private"));
 
