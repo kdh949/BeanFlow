@@ -121,8 +121,8 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - [x] 원격 열린 PR과 미해결 reviewThreads 48건 수집 및 부모/head 고정.
 - [x] 별도 worktree와 Storybook MCP 준비, 컴포넌트 문서 조회.
 - [x] #160–#163 수정·검증·원격 반영 및 리뷰 16건 해결.
-- [ ] #164–#170 수정·검증·원격 반영.
-- [ ] #171–#177 수정·검증·원격 반영.
+- [x] #164–#170 수정·검증·원격 반영.
+- [x] #171–#177 수정·검증·원격 반영.
 - [ ] #178–#184 부모 반영과 전체 검증.
 - [ ] 리뷰 답변·해결 및 남은 미해결 수 확인.
 
@@ -342,3 +342,12 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - 상담 상세의 명령 재진입 복구·표시할 수 없는 대상 제한과 새 연결 주문 요약을 함께 유지했다.
 - Passed: Timeline PostgreSQL 10 + owner query 2 + runtime parity 1 + Modulith 1 = 14개, frontend unit 250개, boundary 10개, copy 11개, typecheck, check:design, Storybook/앱 빌드, Sites 4개, MCP 23개(a11y 포함), Docs smoke 121개, 문서/OpenAPI 검사.
 - Not run: 운영 DB 변경, 배포. 최신 원격 CI는 push 후 확인한다.
+
+### #183 통합 승인함과 전체 화면 회귀 검증 (2026-09-12)
+
+- 다섯 종류의 승인함/결정 이력을 부모의 현재 권한·배정·대상 재검증과 함께 통합했다.
+- Passed: PostgreSQL 주문 14 + 보상 22 + 개인정보 열람 10 + 정정 18 + 긴급 열람 8 + runtime parity 1 + Modulith 1 = 74개. frontend unit 250개, boundary 10개, copy 11개, typecheck, check:design, Storybook/앱 빌드, Sites 4개, Docs smoke 122개, 문서/OpenAPI 검사.
+- 전체 Story 755개가 테스트 runner에서 통과했으나 MCP의 단일 결과 직렬화가 메모리 한도로 종료됐다. 서버를 복구하고 실제 index의 모든 Story ID를 140개 이하 묶음으로 나눠 755/755의 MCP 통과 결과(a11y 포함)를 각각 확인했다. 검사 기준이나 제품 코드는 완화하지 않았다.
+- #177·#179 CI에서 동일한 History Story의 결과 표시/잠금 해제 사이 race를 확인해 #177(8645612)에 활성화 대기를 보완하고 #178–#182로 전파했다. #175·#176 최신 CI는 통과했다.
+- 현재 main은 a6199c6이며 원래 공개된 모든 migration 파일이 원본 스택과 동일하다.
+- Not run: 운영 DB 변경, 배포. 최신 원격 CI 및 #177의 마지막 리뷰 해결은 대기 중이다.
