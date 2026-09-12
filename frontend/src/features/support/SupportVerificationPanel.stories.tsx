@@ -28,8 +28,8 @@ export const ExpiredChallengeAllowsReissue: Story = { play: async ({ canvas, msw
   const edge = Date.now() + 1000;
   const current = { ...session, challenges: [{ challengeId: secondId, sessionId, channel: "REGISTERED_PHONE", state: "ISSUED", requestedAt: session.startedAt, expiresAt: new Date(edge).toISOString() }] };
   msw.use(http.get("/api/v1/support/verification-sessions/:sessionId", () => HttpResponse.json(current)));
-  await userEvent.type(canvas.getByLabelText("기존 본인확인 ID"), sessionId);
-  await userEvent.click(canvas.getByRole("button", { name: "본인확인 현재 상태 조회" }));
+  await userEvent.click(canvas.getByRole("button", { name: "기존 본인확인 요청 찾기" }));
+  await userEvent.click(await canvas.findByRole("button", { name: "이 요청 열기" }));
   await expect(await canvas.findByLabelText("일회성 인증 코드")).toBeVisible();
   MockDate.set(edge);
   await userEvent.click(canvas.getByRole("button", { name: "본인확인 새로고침" }));

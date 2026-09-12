@@ -288,3 +288,10 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - Passed: PostgreSQL 주문/상담 11 + 운영자 목록 6 + runtime parity 1 = 18개, frontend unit 245개, boundary 10개, copy 11개, typecheck, check:design, Storybook/앱 빌드, Sites 4개, 관련 MCP 123개 및 정정 대상 회귀 1개 = 124개(a11y 포함), Docs smoke 113개, 문서/OpenAPI 검사. 표시 metadata가 빠진 기존 테스트 fixture와 실제 HTTP/null 응답 기대값을 보완했다.
 - #170은 terminal CI 후 원본 리뷰를 해결했다(누적 34개). #171 전체 CI에서 유효 나노초 시각이 감사 전화번호 검출에 걸리는 문제를 재현하여 부모 #170에 국소 수정했다. 감사 12 + 준비/조정 8 = 20개 및 문서 검사 통과 후 #171·#172로 전파한다.
 - Not run: 운영 DB 변경, 배포. 최신 원격 CI와 남은 리뷰 해결은 push 후 확인한다.
+
+### #174 긴급 열람 중 업무 탐색 잠금 (2026-09-12)
+
+- 상위 잠금에 busy 외에 원문 표시와 불명 열람을 포함한다. 원문을 지운 후 탐색은 다시 열리며 불명 열람은 현재 화면에서 상태를 확인한다. 개인정보 저장이나 API는 바꾸지 않았다.
+- 기존 인증 만료 회귀 Story도 ID 입력 대신 요청 목록 선택으로 진입하도록 통합했다.
+- Passed: PostgreSQL 주문 요청 12 + 보상 18 + 프로필 18 + 긴급 열람 8 + runtime parity 1 = 57개, frontend unit 245개, boundary 10개, copy 11개, typecheck, check:design, Storybook/앱 빌드, Sites 4개, MCP 149개(a11y 포함), Docs smoke 114개, 문서/OpenAPI 검사.
+- Not run: 운영 DB 변경, 배포. 원격 CI 통과 후 해당 리뷰를 해결한다.
