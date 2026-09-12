@@ -340,3 +340,5 @@ JWT role이나 UI evaluation은 위 grant를 대체하지 않는다. 권한 row�
 `DELETE .../{preparationId}`는 본인의 기록과 POINT_ACCOUNT_READ를 검증하며 기대 상태 PREPARED는 취소, APPLIED는 결과 확인이다. 준비/취소/확인은 각각 POINT_ADJUSTMENT_PREPARED / POINT_ADJUSTMENT_PREPARATION_DISMISSED 감사 기록을 남긴다. 기존 조정 실행의 POINT_ADJUSTMENT 검증과 금융 트랜잭션은 유지한다.
 
 소속 추가 전용 정확 계정 조회 `/operations/stores/{storeId}/memberships/account-target`는 STORE_MEMBERSHIP_WRITE + STORE_MEMBERSHIP_ASSIGNMENT_REVIEW로 accountId/loginId/displayName만 제공한다. MERCHANT_ACCOUNT_READ 감사 action을 purpose/storeId와 함께 기록한다. MERCHANT_CREDENTIAL_MANAGE와 기존 소속 목록 READ는 추가 전용 업무에 요구하지 않는다. 최소 매장 탐색의 MEMBERSHIP_ASSIGNMENT/MERCHANT_ACCOUNT/DISPUTE/REFUND 목적은 ADR-128의 기존 업무 권한만 검증한다.
+
+복구 큐 Case/제안 목록은 PAYMENT_CANCELLATION_SETUP_REPAIR와 고정 업무 목적 PAYMENT_SETUP_RECOVERY_REVIEW 아래, 각 PAYMENT_SETUP_RECOVERY_CASES_READ/PAYMENT_SETUP_REPAIR_PROPOSALS_READ 금융 Audit를 동일 transaction에 저장한다. 필터 상태/결과 건수만 기록하며 감사 실패는 조회 503으로 전파한다.

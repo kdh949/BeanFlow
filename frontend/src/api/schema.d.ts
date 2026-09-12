@@ -1745,7 +1745,7 @@ export interface paths {
         };
         /**
          * 주문별 환불 복구 건 목록
-         * @description PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다.
+         * @description PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다. 고정 목적 PAYMENT_SETUP_RECOVERY_REVIEW와 필터 상태·결과 건수의 금융 감사 기록을 같은 transaction에 저장한다. 감사 실패도 503이다. Case 조회 action은 PAYMENT_SETUP_RECOVERY_CASES_READ, 제안은 PAYMENT_SETUP_REPAIR_PROPOSALS_READ다.
          */
         get: operations["listPaymentSetupRecoveryCases"];
         put?: never;
@@ -1765,7 +1765,7 @@ export interface paths {
         };
         /**
          * 환불 복구 제안 목록
-         * @description PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다.
+         * @description PAYMENT_CANCELLATION_SETUP_REPAIR grant로 현재 목록을 조회한다. 커서는 actor와 필터에 바인딩되며 조회 자체는 복구나 만료 처리를 실행하지 않는다. 상세·판정 시 현재 권한과 승인 경계를 다시 검증한다. 고객·Provider 식별값은 반환하지 않는다. 고정 목적 PAYMENT_SETUP_RECOVERY_REVIEW와 필터 상태·결과 건수의 금융 감사 기록을 같은 transaction에 저장한다. 감사 실패도 503이다. Case 조회 action은 PAYMENT_SETUP_RECOVERY_CASES_READ, 제안은 PAYMENT_SETUP_REPAIR_PROPOSALS_READ다.
          */
         get: operations["listPaymentSetupRepairProposals"];
         put?: never;
@@ -8977,6 +8977,8 @@ export interface components {
             createdAt: components["schemas"]["DateTime"];
         };
         SetupRecoveryCaseItem: {
+            /** @description 현재 Case가 OPEN이고 resolution이 없는 경우만 true이며 명령은 최신 상태를 다시 검증한다. */
+            canPropose: boolean;
             caseId: components["schemas"]["Identifier"];
             /** @enum {string} */
             status: "OPEN" | "RUNNING" | "RESOLVED" | "MANUAL_REVIEW";
@@ -16274,6 +16276,7 @@ export interface operations {
     listPaymentSetupRecoveryCases: {
         parameters: {
             query?: {
+                caseId?: string;
                 status?: "OPEN" | "RUNNING" | "RESOLVED" | "MANUAL_REVIEW";
                 cursor?: string;
                 limit?: number;

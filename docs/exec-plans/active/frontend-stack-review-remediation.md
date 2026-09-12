@@ -268,3 +268,13 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - Passed: PostgreSQL 소속 8 + 최소 매장 권한/커서 19 + runtime parity 1 = 28개. 프론트엔드 단위 245개, typecheck, 디자인 검사, Storybook/앱 빌드, Sites 4개, Docs smoke 111개, 관련 MCP 77개 및 #170 재시도 보완 포함 총 102개(a11y 포함), 문서/OpenAPI 검사.
 - #170 CI의 응답 대기 전 버튼 클릭 race를 2a002f4에서 보완했다. 활성화 이후 클릭하며 원래 payload/key 검증은 유지한다. 새 CI 결과를 확인한 뒤 리뷰를 해결한다.
 - Not run: 운영 DB 변경, 배포. #171 원격 CI와 리뷰 해결은 push 후 확인한다.
+
+#172는 동일 직렬 migration lane에서 V83_2(두 복구 조회 감사 action 등록)만 추가한다. 앞선 V82_1/V83_1과 공개된 V82/V83은 수정하지 않으며 이후 V84–V86을 재번호화하지 않는다.
+
+### #172 복구 대상·감사·확정 오류 (2026-09-12)
+
+- 복구 건/제안 목록은 조회 목적·상태 필터·건수만 같은 트랜잭션의 감사 기록에 남긴다. 감사 저장 실패는 503이며 목록을 반환하지 않는다.
+- 서버 canPropose는 PAYMENT_CANCELLATION_SETUP + OPEN + resolution 미지정에만 true다. 이력을 조회하더라도 선택할 수 없으며 주문에서 연결 진입한 경우에도 현재 건을 조회해 생성 가능 여부를 확인한다.
+- 응답 유실 후 같은 요청에 반환된 ORDER_STATE_CONFLICT/REPROCESSING_NOT_SAFE 및 EXPIRED/STALE 확정 오류는 잠금을 해제하고 최신 상태를 조회한다. 권한 상실로 결과가 불명인 경우에는 기존 요청을 유지한다.
+- Passed: PostgreSQL 복구 19 + runtime parity 1 = 20개, frontend unit 245개, boundary 10개, copy 11개, typecheck, check:design, build-storybook, build, Sites 4개, MCP Story 36개(a11y 포함), Docs smoke 111개, 문서/OpenAPI 검사.
+- Not run: 운영 DB 변경, 배포. 원격 CI와 리뷰 해결은 push 후 확인한다.
