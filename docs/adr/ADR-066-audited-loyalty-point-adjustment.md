@@ -237,6 +237,26 @@ registry, non-expiring PointLot 또는 수동 adjustment의 PointRecoveryPending
 - [ADR-065](ADR-065-refund-earned-point-recovery-ledger.md)
 - [ADR-056](ADR-056-ordering-idempotency-retention-worker.md)
 
+### 포인트 비용 주체 선택과 플랫폼 명부 (2026-09-11)
+
+운영 화면은 issuerReference를 직접 입력받지 않고 Merchant의 현재 매장·브랜드 이름으로 선택한다.
+새 STORE/BRAND 선택의 reference는 실제 owner ID의 canonical UUID 문자열이다. STORE 비용을 다른
+매장에 추정 배분하지 않는 BR-20과 과거 Lot/정책 snapshot은 변경하지 않는다. 현재 정책에서 읽은
+기존 reference는 출처와 버전을 표시해 유지할 수 있으며 다른 비용 주체로 추정 변환하지 않는다.
+
+Operations는 플랫폼 비용 주체의 불변 명부를 소유한다. POINT_ACCRUAL_POLICY_WRITE 운영자가 업무상
+이름과 등록 사유를 명시하면 서버가 안정된 `platform:<UUID>` reference를 발급한다. 정규화 이름은
+유일하며 기존 이름을 덮어쓰지 않는다. 등록 자체는 비용 배분·정책 변경·포인트 발급이 아니다.
+actor/key와 이름별 잠금, UNIQUE, 이름·사유 payload hash와 감사 기록을 한 transaction에서 적용한다.
+기존 플랫폼 reference를 이름만으로 이 명부에 소급 연결하거나 새 기본 PLATFORM으로 대체하지 않는다.
+
+후보 조회는 POLICY 목적의 POINT_ACCRUAL_POLICY_WRITE 또는 ADJUSTMENT 목적의 POINT_ADJUSTMENT를
+현재 확인한다. 실제 owner 이름, 등록 플랫폼 명부와 현재 전역 정책의 명시된 PLATFORM source만 제공한다.
+정책 source는 owner 이름을 추정하지 않고 정책 버전 출처로 구분한다. 수동 조정의 200자 reference 제한을
+넘는 과거 정책 source는 조정 후보에서 제외한다. 커서는 actor/purpose/type/query와 정렬 위치에 묶는다.
+페이지 한도는 100이고, 보관된 브랜드는 새 선택 후보에서 제외한다. 별도 브랜드/매장 개인정보나 원장을
+읽지 않는다. 조회 실패를 빈 명부 또는 기본 비용 주체로 바꾸지 않는다.
+
 ### 조정 준비와 브라우저 재진입 복구 (2026-09-12)
 
 실제 포인트 반영은 기존 `POST /operations/point-accounts/{accountId}/adjustments`만 수행한다.

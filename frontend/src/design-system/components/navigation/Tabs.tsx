@@ -1,4 +1,4 @@
-import { createContext, useContext, useId, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 type TabsContextValue = {
   baseId: string;
@@ -24,8 +24,26 @@ export function Tabs({ value, onValueChange, children, activationMode = "manual"
 
 export type TabListProps = { label: string; children: ReactNode };
 
+/** Keeps the selected tab visible within horizontal overflow without moving focus or activating a panel. */
 export function TabList({ label, children }: TabListProps) {
-  return <div className="bf-tab-list" role="tablist" aria-label={label}>{children}</div>;
+  const { value } = useTabsContext();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const list = ref.current;
+    const selected = list?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+    if (!list || !selected) return;
+    const keepVisible = () => {
+      const bounds = list.getBoundingClientRect(), tab = selected.getBoundingClientRect();
+      if (tab.left < bounds.left) list.scrollLeft += tab.left - bounds.left;
+      else if (tab.right > bounds.right) list.scrollLeft += tab.right - bounds.right;
+    };
+    keepVisible();
+    window.addEventListener("resize", keepVisible);
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(keepVisible);
+    observer?.observe(list); observer?.observe(selected);
+    return () => { window.removeEventListener("resize", keepVisible); observer?.disconnect(); };
+  }, [value]);
+  return <div ref={ref} className="bf-tab-list" role="tablist" aria-label={label}>{children}</div>;
 }
 
 export type TabProps = { value: string; children: ReactNode; disabled?: boolean };

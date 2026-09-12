@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
 import { Button, EmptyState, LoadingState, SelectField } from "../../design-system";
@@ -9,9 +9,10 @@ import { StorePointPolicyWorkspace } from "./StorePointPolicyWorkspace";
 import { StoreTargetPicker, type StoreSelection } from "./StoreTargetPicker";
 
 /** Name selection includes stores without an explicit policy head. */
-export function StorePointPolicyDirectory() {
+export function StorePointPolicyDirectory({ onBusyChange }: { /** Holds the policy workspace while a store change is unresolved. */ onBusyChange?: (busy: boolean) => void }) {
   const [reason, setReason] = useState(""); const [state, setState] = useState<"" | "OVERRIDE" | "INHERIT_GLOBAL">(""); const [store, setStore] = useState<StoreSelection | null>(null); const [selected, setSelected] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
+  useEffect(() => { onBusyChange?.(locked); return () => onBusyChange?.(false); }, [locked, onBusyChange]);
   const [cursors, setCursors] = useState<Array<string | undefined>>([undefined]);
   const [request, setRequest] = useState<{ reason: string; state?: "OVERRIDE" | "INHERIT_GLOBAL"; cursor?: string } | null>(null);
   const list = useResource(useCallback(async () => { if (!request) return null; const result = unwrap(await operationsApi.GET("/operations/policies/ordinary-point-accrual/stores", { params: { header: { "X-Access-Reason": request.reason }, query: { state: request.state, cursor: request.cursor, limit: 20 } } })); if (result.items.some(policy => !policy.scopeName)) throw new Error("현재 매장 이름을 확인할 수 없습니다."); return result; }, [request]));

@@ -239,6 +239,84 @@ internal class SupportTimelineIntegrationTest
             assertAccessDenied { authorization.recheckOrder(actorId, scope) }
         }
 
+        @Test
+        fun `linked overview preserves immutable order amounts and does not infer payment status`() {
+            grant("SUPPORT_ORDER_READ")
+            val response =
+                mockMvc
+                    .perform(
+                        get("/api/v1/support/orders/$orderId/overview").param("caseId", caseId.toString()).with(
+                            jwt().jwt {
+                                it.subject(actorId.toString())
+                            },
+                        ),
+                    ).andExpect(status().isOk)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.orderId").value(orderId.toString()))
+                    .andExpect(jsonPath("$.state").value("PENDING_PAYMENT"))
+                    .andExpect(jsonPath("$.lines.length()").value(1))
+                    .andExpect(jsonPath("$.lines[0].quantity").value(1))
+                    .andExpect(jsonPath("$.customerId").doesNotExist())
+                    .andExpect(jsonPath("$.paymentState").doesNotExist())
+                    .andReturn()
+            val value = json(response.response.contentAsString)
+            val expected =
+                jdbcTemplate.queryForMap(
+                    "SELECT subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw, public_reference, store_name_snapshot FROM ordering_order WHERE id = ?",
+                    orderId,
+                )
+            assertThat(value["subtotalKrw"].asLong()).isEqualTo((expected["subtotal_krw"] as Number).toLong())
+            assertThat(value["couponDiscountKrw"].asLong()).isEqualTo((expected["coupon_discount_krw"] as Number).toLong())
+            assertThat(value["pointsAppliedKrw"].asLong()).isEqualTo((expected["points_applied_krw"] as Number).toLong())
+            assertThat(value["payableKrw"].asLong()).isEqualTo((expected["payable_krw"] as Number).toLong())
+            assertThat(value["publicReference"].asText()).isEqualTo(expected["public_reference"])
+            assertThat(value["storeName"].asText()).isEqualTo(expected["store_name_snapshot"])
+            assertThat(value["lines"][0]["amountKrw"].asLong()).isEqualTo(value["subtotalKrw"].asLong())
+        }
+
+        @Test
+        fun `linked overview requires order grant assignment active case and link`() {
+            fun read(id: UUID = orderId) =
+                mockMvc.perform(
+                    get("/api/v1/support/orders/$id/overview").param("caseId", caseId.toString()).with(
+                        jwt().jwt {
+                            it.subject(actorId.toString())
+                        },
+                    ),
+                )
+            read().andExpect(status().isForbidden)
+            grant("SUPPORT_ORDER_READ")
+            read().andExpect(status().isOk)
+            read(UUID.randomUUID()).andExpect(status().isForbidden)
+            jdbcTemplate.update("UPDATE support_case SET current_assignee_id = ? WHERE id = ?", UUID.randomUUID(), caseId)
+            read().andExpect(status().isForbidden)
+            jdbcTemplate.update("UPDATE support_case SET current_assignee_id = ?, state = 'RESOLVED' WHERE id = ?", actorId, caseId)
+            read().andExpect(status().isForbidden)
+            jdbcTemplate.update("UPDATE support_case SET state = 'IN_PROGRESS' WHERE id = ?", caseId)
+            jdbcTemplate.update("DELETE FROM support_case_subject_link WHERE support_case_id = ?", caseId)
+            read().andExpect(status().isForbidden)
+        }
+
+        @Test
+        fun `missing owner overview fails instead of returning empty order or zero prices`() {
+            grant("SUPPORT_ORDER_READ")
+            val missing = UUID.randomUUID()
+            jdbcTemplate.update(
+                "UPDATE support_case_subject_link SET subject_id = ? WHERE support_case_id = ? AND subject_type = 'ORDER'",
+                missing,
+                caseId,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/orders/$missing/overview").param("caseId", caseId.toString()).with(
+                        jwt().jwt {
+                            it.subject(actorId.toString())
+                        },
+                    ),
+                ).andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+        }
+
         private fun createOrder(): UUID {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)

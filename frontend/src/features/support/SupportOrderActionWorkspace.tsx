@@ -1,3 +1,5 @@
+import { SupportOrderConsentPicker, type OrderConsentSelection } from "./SupportOrderConsentPicker";
+import { SupportWorkPicker } from "./SupportWorkPicker";
 import { supportSubjectLabel, isSupportSubjectSelectable, type SupportSubjectDisplaySource } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -25,18 +27,15 @@ const requestStates: Record<Request["state"], string> = { AWAITING_SUPPORT_MANAG
 const evaluationReasons: Record<string, string> = { POLICY_ALLOWED: "현재 정책에서 요청할 수 있습니다", POLICY_APPROVAL_REQUIRED: "별도 담당자의 승인이 필요합니다", UNSUPPORTED_TARGET_STATE: "현재 주문 상태에서는 처리할 수 없습니다", CASE_NOT_ELIGIBLE: "진행 중인 상담 건이 필요합니다", TARGET_RELATIONSHIP_MISMATCH: "본인확인 대상과 주문의 관계가 일치하지 않습니다", MISSING_PERMISSION: "필요한 업무 권한이 없습니다", VERIFICATION_SCOPE_MISMATCH: "업무 처리 목적의 본인확인이 필요합니다", VERIFICATION_PURPOSE_MISMATCH: "상담 해결 목적의 본인확인이 필요합니다", INSUFFICIENT_VERIFICATION: "추가 본인확인이 필요합니다", STALE_TARGET_VERSION: "주문 정보가 변경되었습니다" };
 
 /** Creates typed order changes and inspects the current server-owned approval workflow. */
-export function SupportOrderActionWorkspace({ supportCase, verification, initialRequestId }: { supportCase?: Case; verification?: Verification | null; initialRequestId?: string }) {
+export function SupportOrderActionWorkspace({ supportCase, verification, initialRequestId, onBusyChange }: { supportCase?: Case; verification?: Verification | null; initialRequestId?: string; onBusyChange?: (busy: boolean) => void }) {
   const [activeCommand, setActiveCommand] = useState(false);
-  const [lookup, setLookup] = useState(initialRequestId ?? "");
   const [requestId, setRequestId] = useState(initialRequestId ?? "");
+  useEffect(() => { onBusyChange?.(activeCommand); return () => onBusyChange?.(false); }, [activeCommand, onBusyChange]);
   return <section className="management-workspace" aria-label="상담 주문 변경">
     <h2>주문 변경 요청</h2>
-    <form className="surface-card management-card operation-form" onSubmit={event => { event.preventDefault(); if (!activeCommand) setRequestId(lookup.trim()); }}>
-      <TextField label="기존 주문 변경 요청 ID" value={lookup} onValueChange={setLookup} disabled={activeCommand} required />
-      <Button type="submit" variant="secondary" disabled={activeCommand}>주문 변경 요청 열기</Button>
-      {requestId ? <Button variant="ghost" disabled={activeCommand} onClick={() => { setRequestId(""); setLookup(""); }}>새 요청 작성</Button> : null}
-    </form>
-    {requestId ? <RequestInspection key={requestId} requestId={requestId} supportCase={supportCase} verification={verification} onBusyChange={setActiveCommand} /> : supportCase ? <CreateOrderRequest onBusyChange={setActiveCommand} supportCase={supportCase} verification={verification} onCreated={id => { setRequestId(id); setLookup(id); }} /> : <EmptyState title="상담 건에서 새 요청을 시작해 주세요" description="기존 요청은 ID로 열어 현재 승인 단계와 실행 담당자를 확인할 수 있습니다." />}
+    <SupportWorkPicker kind="ORDER_ACTION" caseId={supportCase?.caseId} disabled={activeCommand} onSelect={item => setRequestId(item.requestId)} />
+    {requestId && supportCase ? <Button variant="ghost" disabled={activeCommand} onClick={() => setRequestId("")}>새 요청 작성</Button> : null}
+    {requestId ? <RequestInspection key={requestId} requestId={requestId} supportCase={supportCase} verification={verification} onBusyChange={setActiveCommand} /> : supportCase ? <CreateOrderRequest onBusyChange={setActiveCommand} supportCase={supportCase} verification={verification} onCreated={id => { setRequestId(id); }} /> : <EmptyState title="상담 건에서 새 요청을 시작해 주세요" description="기존 요청 찾기에서 현재 승인 단계와 실행 담당자를 확인할 수 있습니다." />}
   </section>;
 }
 
@@ -118,7 +117,7 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
   const command = useSupportCommand(`order-workflow:${requestId}`, read.reload);
   const [message, setMessage] = useState(""); const [execution, setExecution] = useState<components["schemas"]["SupportOrderChangeExecutionResource"] | null>(null);
   const [reasonCode, setReasonCode] = useState<CancellationReason>("CHANGED_MIND"); const [slotId, setSlotId] = useState(""); const [digest, setDigest] = useState("");
-  const [decision, setDecision] = useState<components["schemas"]["SupportApprovalDecision"]>("APPROVE"); const [reason, setReason] = useState(""); const [assignee, setAssignee] = useState<OperatorSelection | null>(null); const [authorizationId, setAuthorizationId] = useState("");
+  const [decision, setDecision] = useState<components["schemas"]["SupportApprovalDecision"]>("APPROVE"); const [reason, setReason] = useState(""); const [assignee, setAssignee] = useState<OperatorSelection | null>(null); const [consent, setConsent] = useState<{ value: OrderConsentSelection; binding: string } | null>(null);
   const [resolutionDraft, setResolutionDraft] = useState<ResolutionDraft>(initialResolutionDraft);
   const [resolutionBusy, setResolutionBusy] = useState(false);
   const [preparingResolution, setPreparingResolution] = useState(false);
@@ -132,6 +131,10 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
   const request = value?.request;
   const direct = request?.action === "ORDER_CANCELLATION" || request?.action === "PICKUP_RESCHEDULE";
   const expired = useExpired(request?.expiresAt);
+  const consentBinding = `${requestId}:${request?.revisionNumber}:${request?.requestVersion}:${request?.targetVersion}`;
+  const selectedConsent = consent?.binding === consentBinding ? consent.value : null;
+  const consentExpired = useExpired(selectedConsent?.expiresAt);
+  const authorizationId = selectedConsent && !consentExpired ? selectedConsent.authorizationId : "";
   useEffect(() => { let live = true; setDigest(""); if (request && direct && (request.action === "ORDER_CANCELLATION" || slotId)) void orderChangeDigest(request.action as OrderChangeAction, request.targetId, reasonCode, slotId).then(result => { if (live) setDigest(result); }); return () => { live = false; }; }, [request?.targetId, request?.action, reasonCode, slotId]);
   useEffect(() => { let live = true; if (request?.action !== "POST_ACCEPTANCE_RESOLUTION") return; setDigest(""); if (validResolutionDraft(resolutionDraft)) void resolutionPlan(resolutionDraft).then(plan => resolutionDigest(request.targetId, plan)).then(result => { if (live) setDigest(result); }).catch(setResolutionError); return () => { live = false; }; }, [request?.action, request?.targetId, resolutionDraft]);
   const allowed = (name: Workflow["allowedActions"][number]) => !!value && !expired && value.allowedActions.includes(name);
@@ -149,7 +152,7 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
     command.submit(JSON.stringify({ operation: "reassign", body }), key => operationsApi.POST("/support/action-requests/{requestId}/reassignments", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => setMessage("상담과 요청의 담당자를 변경했습니다"));
   }
   function execute() {
-    if (!request || !allowed("EXECUTE") || !direct || !matches) return;
+    if (!request || blocked || !allowed("EXECUTE") || !direct || !matches || (value?.order?.state === "ACCEPTED" && !authorizationId)) return;
     const common = { revisionNumber: request.revisionNumber, expectedRequestVersion: request.requestVersion, expectedTargetVersion: request.targetVersion, ...(authorizationId.trim() ? { authorizationId: authorizationId.trim() } : {}) };
     const body = request.action === "ORDER_CANCELLATION" ? { ...common, action: "ORDER_CANCELLATION" as const, reasonCode } : { ...common, action: "PICKUP_RESCHEDULE" as const, newPickupSlotId: slotId };
     command.submit(JSON.stringify({ operation: "execute", body }), async key => { const result = unwrap(await operationsApi.POST("/support/action-requests/{requestId}/executions", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body })); setExecution(result); setMessage(result.outcome === "RESOLUTION_REQUIRED" ? "수락 후 해결 업무로 전환해야 합니다" : "주문 변경을 처리했습니다"); }, () => undefined);
@@ -182,7 +185,7 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
       </> : null}
       {allowed("DECIDE_SUPPORT_MANAGER") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); decide(); }}><SelectField label="승인 결정" value={decision} onValueChange={value => setDecision(value as typeof decision)} disabled={blocked}><option value="APPROVE">승인</option><option value="DENY">반려</option><option value="RETURN_FOR_REVISION">수정 요청</option></SelectField><TextAreaField label="결정 사유" value={reason} onValueChange={setReason} required maxLength={500} disabled={blocked} /><Button type="submit" disabled={blocked || (decision === "APPROVE" && !matches) || !reason.trim()}>승인 결정 기록</Button></form> : null}
       {direct && allowed("EXECUTE") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); execute(); }}>
-        {value.order?.state === "ACCEPTED" ? <TextField label="매장 동의 또는 위임 ID" value={authorizationId} onValueChange={setAuthorizationId} required disabled={blocked} description="매장이 비용 책임을 수락하고 발급한 현재 동의 ID를 입력합니다." /> : null}
+        {value.order?.state === "ACCEPTED" ? <SupportOrderConsentPicker key={consentBinding} requestId={requestId} value={selectedConsent} onValueChange={selected => setConsent(selected ? { value: selected, binding: consentBinding } : null)} disabled={blocked} /> : null}
         <Button type="submit" disabled={blocked || !matches || (value.order?.state === "ACCEPTED" && !authorizationId.trim())}>확인한 주문 변경 실행</Button>
       </form> : null}
       {request.action === "POST_ACCEPTANCE_RESOLUTION" && allowed("EXECUTE") && !value.resolutionId && !createdResolutionId ? <Button disabled={blocked || !matches} onClick={() => void createResolution()}>확인한 해결 실행 계획 등록</Button> : null}

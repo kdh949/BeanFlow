@@ -143,11 +143,15 @@ internal class SupportCaseController(
     @PreAuthorize("isAuthenticated()")
     fun list(
         actor: OperatorActor,
+        @RequestParam(required = false) category: SupportInquiryCategory?,
+        @RequestParam(required = false) priority: SupportCasePriority?,
+        @RequestParam(defaultValue = "false") mine: Boolean,
         @RequestParam(required = false) state: SupportCaseState?,
         @RequestParam(required = false) assigneeId: UUID?,
         @RequestParam(required = false) cursor: String?,
         @RequestParam(required = false) @PositiveOrZero limit: Int?,
-    ): ResponseEntity<SupportCasePageResource> = noStore(HttpStatus.OK, service.list(actor.actorId(), state, assigneeId, cursor, limit))
+    ): ResponseEntity<SupportCasePageResource> =
+        noStore(HttpStatus.OK, service.list(actor.actorId(), state, assigneeId, cursor, limit, category, priority, mine))
 
     @GetMapping("/{caseId}")
     @PreAuthorize("isAuthenticated()")

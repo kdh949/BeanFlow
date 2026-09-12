@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, waitFor } from "storybook/test";
+import { expect, userEvent, waitFor, fn } from "storybook/test";
 import { http, HttpResponse } from "msw";
 import MockDate from "mockdate";
 import type { components } from "../../api/schema";
@@ -46,4 +46,19 @@ export const UnavailableTargetsCannotSelect: Story = {
 export const MissingRevisionTargetDoesNotRetarget: Story = {
   args: { supportCase: { ...supportCase, subjectLinks: [{ ...supportCase.subjectLinks[0]!, display: { state: "REQUIRES_PERMISSION" } }, { ...supportCase.subjectLinks[0]!, linkId: "99020000-0000-4000-8000-000000000003", subjectId: "99020000-0000-4000-8000-000000000003", display: { state: "AVAILABLE", label: "이*현" } }] } },
   play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("button", { name: "정정안 수정" })); await expect(canvas.getByLabelText("정보 정정 대상")).toHaveValue(""); await expect(canvas.getByRole("button", { name: "수정한 정정안 제출" })).toBeDisabled(); },
+};
+
+export const SelectExistingRequest: Story = {
+  args: { initialProfileChangeId: undefined, supportCase: undefined },
+  play: async ({ canvas, msw }) => {
+    const inspected = fn();
+    msw.use(
+      http.get("/api/v1/support/work-items", () => HttpResponse.json({ items: [{ requestId: id, caseId: id, kind: "PROFILE_CHANGE", caseCategory: "ACCOUNT_RECOVERY", caseOpenedAt: "2026-09-10T09:00:00Z", purpose: "CASE_RESOLUTION", state: "PENDING", createdAt: "2026-09-10T09:05:00Z", expiresAt: null }], nextCursor: null })),
+      http.get("/api/v1/support/profile-changes/:id/workflow", async ({ params }) => { expect(params.id).toBe(id); inspected(); return HttpResponse.json(current); }),
+    );
+    await userEvent.click(canvas.getByRole("button", { name: "기존 정보 정정 요청 찾기" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "이 요청 열기" }));
+    await waitFor(() => expect(inspected).toHaveBeenCalled());
+    await expect(canvas.getByRole("button", { name: "기존 정보 정정 요청 찾기" })).toHaveAttribute("aria-expanded", "false");
+  },
 };

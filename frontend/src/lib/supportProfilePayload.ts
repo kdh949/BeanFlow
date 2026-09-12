@@ -1,7 +1,7 @@
 import type { components } from "../api/schema";
 export type ProfilePurpose = components["schemas"]["SupportProfileChangeResource"]["purpose"];
 export type ProfileValues = Record<string, string>;
-type Field = { key: string; label: string; maxLength: number; optional: boolean };
+type Field = { key: string; label: string; maxLength: number; optional: boolean; description?: string };
 type Purpose = { label: string; subject: "CUSTOMER" | "STORE" | "DELIVERY"; risk: "R1" | "R2" | "R3" | "R4"; fields: readonly Field[] };
 export const profilePurposes: Record<ProfilePurpose, Purpose> = {
   CUSTOMER_DISPLAY_NAME: {"label": "고객 표시 이름", "subject": "CUSTOMER", "risk": "R1", "fields": [{"key": "displayName", "label": "고객 표시 이름", "maxLength": 200, "optional": false}]},
@@ -11,12 +11,12 @@ export const profilePurposes: Record<ProfilePurpose, Purpose> = {
   STORE_PUBLIC_PROFILE: {"label": "매장 공개 정보", "subject": "STORE", "risk": "R1", "fields": [{"key": "displayName", "label": "매장 표시 이름", "maxLength": 200, "optional": true}, {"key": "publicPhone", "label": "매장 공개 전화번호", "maxLength": 32, "optional": true}, {"key": "description", "label": "매장 설명", "maxLength": 1000, "optional": true}, {"key": "pickupInstructions", "label": "픽업 안내", "maxLength": 1000, "optional": true}]},
   STORE_OPERATIONS_CONTACT: {"label": "매장 운영 연락처", "subject": "STORE", "risk": "R2", "fields": [{"key": "phone", "label": "매장 운영 전화번호", "maxLength": 32, "optional": true}, {"key": "email", "label": "매장 운영 이메일", "maxLength": 320, "optional": true}]},
   STORE_REPRESENTATIVE: {"label": "매장 대표자", "subject": "STORE", "risk": "R3", "fields": [{"key": "representativeName", "label": "대표자 이름", "maxLength": 200, "optional": false}]},
-  STORE_SETTLEMENT_ACCOUNT: {"label": "매장 정산 계정 참조", "subject": "STORE", "risk": "R3", "fields": [{"key": "accountReference", "label": "정산 계정 참조", "maxLength": 200, "optional": false}]},
+  STORE_SETTLEMENT_ACCOUNT: {"label": "매장 정산 등록 코드", "subject": "STORE", "risk": "R3", "fields": [{"key": "accountReference", "label": "매장 정산 등록 코드", "maxLength": 200, "optional": false, "description": "정산기관에서 등록을 마친 계정의 업무 코드를 확인해 입력합니다. 영문·숫자·콜론(:)·밑줄(_)·하이픈(-) 4~200자입니다. 실제 계좌번호·카드정보·서비스 비밀키는 입력하지 않습니다."}]},
   STORE_ACCESS_REREGISTRATION: {"label": "매장 인증 재등록", "subject": "STORE", "risk": "R4", "fields": []},
   COURIER_DISPLAY_NAME: {"label": "배달원 표시 이름", "subject": "DELIVERY", "risk": "R1", "fields": [{"key": "displayName", "label": "배달원 표시 이름", "maxLength": 200, "optional": false}]},
   COURIER_RELAY_CONTACT: {"label": "배달원 중계 연락처", "subject": "DELIVERY", "risk": "R2", "fields": [{"key": "phone", "label": "배달원 중계 전화번호", "maxLength": 32, "optional": true}, {"key": "email", "label": "배달원 중계 이메일", "maxLength": 320, "optional": true}]},
-  COURIER_PROVIDER_IDENTITY: {"label": "배달 서비스 식별 참조", "subject": "DELIVERY", "risk": "R3", "fields": [{"key": "providerReference", "label": "외부 서비스 식별 참조", "maxLength": 200, "optional": false}]},
-  COURIER_PAYOUT_REFERENCE: {"label": "배달원 정산 참조", "subject": "DELIVERY", "risk": "R3", "fields": [{"key": "payoutReference", "label": "배달원 정산 참조", "maxLength": 200, "optional": false}]},
+  COURIER_PROVIDER_IDENTITY: {"label": "배달업체 배달원 등록 코드", "subject": "DELIVERY", "risk": "R3", "fields": [{"key": "providerReference", "label": "배달업체 배달원 등록 코드", "maxLength": 200, "optional": false, "description": "배달업체가 해당 배달원에게 발급한 등록 코드를 확인해 입력합니다. 영문·숫자·콜론(:)·밑줄(_)·하이픈(-) 4~200자입니다. 실제 계좌번호·카드정보·서비스 비밀키는 입력하지 않습니다."}]},
+  COURIER_PAYOUT_REFERENCE: {"label": "배달원 정산 등록 코드", "subject": "DELIVERY", "risk": "R3", "fields": [{"key": "payoutReference", "label": "배달원 정산 등록 코드", "maxLength": 200, "optional": false, "description": "정산기관에서 등록을 마친 배달원의 정산 코드를 확인해 입력합니다. 영문·숫자·콜론(:)·밑줄(_)·하이픈(-) 4~200자입니다. 실제 계좌번호·카드정보·서비스 비밀키는 입력하지 않습니다."}]},
   COURIER_PROVIDER_REREGISTRATION: {"label": "배달 서비스 인증 재등록", "subject": "DELIVERY", "risk": "R4", "fields": []},
 };
 export function validProfileValues(purpose: ProfilePurpose, values: ProfileValues): boolean {

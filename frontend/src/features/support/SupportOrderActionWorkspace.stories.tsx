@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, waitFor } from "storybook/test";
+import { expect, userEvent, waitFor, fn } from "storybook/test";
 import { http, HttpResponse } from "msw";
 import MockDate from "mockdate";
 import { SupportOrderActionWorkspace } from "./SupportOrderActionWorkspace";
@@ -36,6 +36,38 @@ export const RegisterResolutionPlan: Story = { parameters: { msw: { handlers: [o
   msw.use(http.post("/api/v1/support/orders/:orderId/post-acceptance-resolutions", async ({ request: req }) => { expect(await req.json()).toMatchObject({ requestId, revisionNumber: 1, expectedRequestVersion: 0, expectedOrderVersion: 2, outcome: "PARTIAL_REFUND", responsibility: "PLATFORM", cashRefundKrw: 3000, restorePoints: false, restoreCoupon: false, settlementAdjustmentKrw: null }); return HttpResponse.json({ resolutionId: sessionId }, { status: 201 }); }));
   await userEvent.type(await canvas.findByLabelText("현금 환불 금액"), "3000"); await userEvent.selectOptions(canvas.getByLabelText("비용 책임"), "PLATFORM"); await userEvent.type(canvas.getByLabelText("해결 증빙 참조"), "상담 기록 42"); await waitFor(() => expect(canvas.getByRole("button", { name: "확인한 해결 실행 계획 등록" })).toBeEnabled()); await userEvent.click(canvas.getByRole("button", { name: "확인한 해결 실행 계획 등록" })); await expect(await canvas.findByText("해결 실행 계획을 등록했습니다. 단계별 처리를 시작해 주세요.")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "확인한 주문 변경 실행" })).not.toBeInTheDocument();
 } };
+
+export const SelectExistingRequest: Story = {
+  args: { initialRequestId: undefined, supportCase: undefined },
+  play: async ({ canvas, msw }) => {
+    const inspected = fn();
+    msw.use(
+      http.get("/api/v1/support/work-items", () => HttpResponse.json({ items: [{ requestId: requestId, caseId: caseId, kind: "ORDER_ACTION", caseCategory: "ACCOUNT_RECOVERY", caseOpenedAt: "2026-09-10T09:00:00Z", purpose: "CASE_RESOLUTION", state: "PENDING", createdAt: "2026-09-10T09:05:00Z", expiresAt: null }], nextCursor: null })),
+      http.get("/api/v1/support/action-requests/:requestId/workflow", async ({ params }) => { expect(params.requestId).toBe(requestId); inspected(); return HttpResponse.json(await workflow("READY_FOR_EXECUTION", [])); }),
+    );
+    await userEvent.click(canvas.getByRole("button", { name: "기존 주문 변경 요청 찾기" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "이 요청 열기" }));
+    await waitFor(() => expect(inspected).toHaveBeenCalled());
+    await expect(canvas.getByRole("button", { name: "기존 주문 변경 요청 찾기" })).toHaveAttribute("aria-expanded", "false");
+  },
+};
+
+export const AcceptedOrderSelectsConsent: Story = {
+  play: async ({ canvas, msw }) => {
+    const authorizationId = "71000000-0000-4000-8000-000000000006";
+    msw.use(
+      http.get("/api/v1/support/action-requests/:requestId/workflow", async () => HttpResponse.json({ ...await workflow(), order: { ...order, state: "ACCEPTED" } })),
+      http.get("/api/v1/support/action-requests/:requestId/store-consents", () => HttpResponse.json({ items: [{ authorizationId, authorizationType: "CONFIRMATION", authorizedAt: "2026-09-11T09:00:00Z", expiresAt: session.expiresAt, remainingUses: 1 }], nextCursor: null })),
+      http.post("/api/v1/support/action-requests/:requestId/executions", async ({ request: req }) => { expect(await req.json()).toMatchObject({ authorizationId, revisionNumber: 1, expectedTargetVersion: 2 }); return HttpResponse.error(); }),
+    );
+    await expect(await canvas.findByRole("button", { name: "확인한 주문 변경 실행" })).toBeDisabled();
+    await userEvent.click(await canvas.findByRole("button", { name: "이 동의 선택" }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: "확인한 주문 변경 실행" })).toBeEnabled());
+    await userEvent.click(canvas.getByRole("button", { name: "확인한 주문 변경 실행" }));
+    await canvas.findByRole("button", { name: "같은 요청으로 결과 확인" });
+    await expect(await canvas.findByRole("button", { name: "다른 매장 동의 선택" })).toBeDisabled();
+  },
+};
 
 export const CreatePickupRequest: Story = { args: { initialRequestId: undefined }, play: async ({ canvas, msw }) => {
   msw.use(http.get("/api/v1/support/cases/:caseId/orders/:orderId/pickup-slots", () => HttpResponse.json({ items: [{ pickupSlotId: storeId, startsAt: "2026-09-11T09:20:00Z", endsAt: "2026-09-11T09:30:00Z", remainingCapacity: 2 }] })), http.get("/api/v1/stores/:storeId/pickup-slots", () => { throw new Error("Customer session must not be used"); }));

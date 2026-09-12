@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { authToken } from "../../auth/session";
 import { operationsApi } from "../../api/consoleClient";
 import { SupportWorkspacePage } from "./SupportWorkspacePage";
 
@@ -33,6 +34,7 @@ const supportCase = {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  authToken.set(`test.${btoa(JSON.stringify({ sub: "support-operator" }))}.fixture`);
 });
 
 afterEach(() => {
@@ -92,7 +94,7 @@ describe("SupportWorkspacePage", () => {
     expect(JSON.stringify(searchCall[1])).not.toContain("query");
 
     await userEvent.click(screen.getByRole("button", { name: "새 상담 건에 연결" }));
-    expect(await screen.findByText(`상담 ID ${caseId}`)).toBeVisible();
+    expect(await screen.findByRole("link", { name: "상담 상태·담당자 관리" })).toHaveAttribute("href", `/support/cases/${caseId}`);
     const postCalls = post.mock.calls as unknown as Array<[string, unknown]>;
     expect(postCalls.some(([path]) => path.endsWith("/subject-links"))).toBe(true);
   });

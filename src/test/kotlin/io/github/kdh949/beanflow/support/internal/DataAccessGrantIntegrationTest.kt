@@ -86,6 +86,69 @@ internal class DataAccessGrantIntegrationTest
         }
 
         @Test
+        fun `work directory pages authorized grant metadata without decrypting and binds cursor to actor and case`() {
+            val binding = seedVerifiedBinding(requesterId, "ENHANCED")
+            requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "directory-sensitive", "APPROVAL_PENDING")
+            requestGrant(binding, "CUSTOMER_DISPLAY_NAME", "directory-basic", "ACTIVE")
+            val path = "/api/v1/support/work-items"
+            val first =
+                mockMvc
+                    .perform(
+                        httpGet(path)
+                            .with(operatorJwt(requesterId))
+                            .param("kind", "DATA_ACCESS")
+                            .param("caseId", binding.caseId.toString())
+                            .param("limit", "1"),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andReturn()
+                    .response.contentAsString
+            val cursor =
+                tools.jackson.databind.json.JsonMapper
+                    .builder()
+                    .build()
+                    .readTree(first)
+                    .get("nextCursor")
+                    .asText()
+            mockMvc
+                .perform(
+                    httpGet(path)
+                        .with(operatorJwt(requesterId))
+                        .param("kind", "DATA_ACCESS")
+                        .param("caseId", binding.caseId.toString())
+                        .param("limit", "1")
+                        .param("cursor", cursor),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+            grant(approverId, "SUPPORT_PII_REVEAL_APPROVE")
+            mockMvc
+                .perform(
+                    httpGet(path)
+                        .with(operatorJwt(approverId))
+                        .param("kind", "DATA_ACCESS")
+                        .param("caseId", binding.caseId.toString())
+                        .param("cursor", cursor),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    httpGet(path)
+                        .with(operatorJwt(requesterId))
+                        .param("kind", "DATA_ACCESS")
+                        .param("caseId", UUID.randomUUID().toString())
+                        .param("cursor", cursor),
+                ).andExpect(status().isBadRequest)
+            assertThat(decryptCalls).hasValue(0)
+            jdbcTemplate.update(
+                """
+                UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now()
+                WHERE actor_id = ? AND permission = 'SUPPORT_PII_REVEAL_REQUEST'
+                """.trimIndent(),
+                requesterId,
+            )
+            mockMvc.perform(httpGet(path).with(operatorJwt(requesterId)).param("kind", "DATA_ACCESS")).andExpect(status().isForbidden)
+        }
+
+        @Test
         fun `inspection restricts requester and approver without decrypting or consuming budget`() {
             val binding = seedVerifiedBinding(requesterId, "ENHANCED")
             val grantId = requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "grant-inspect-sensitive", "APPROVAL_PENDING")
@@ -372,6 +435,95 @@ internal class DataAccessGrantIntegrationTest
             assertThat(
                 jdbcTemplate.queryForObject("SELECT state FROM support_data_access_grant WHERE id = ?", String::class.java, grantId),
             ).isEqualTo("REVOKED")
+        }
+
+        @Test
+        fun `approval inbox isolates actors and filters while history shows committed decisions only`() {
+            val binding = seedVerifiedBinding(requesterId, "ENHANCED")
+            val first = requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "inbox-grant-first", "APPROVAL_PENDING")
+            val secondBinding = seedVerifiedBinding(requesterId, "ENHANCED")
+            requestGrant(secondBinding, "CUSTOMER_PRIMARY_EMAIL", "inbox-grant-second", "APPROVAL_PENDING")
+            val path = "/api/v1/support/approval-tasks"
+            mockMvc.perform(httpGet(path).with(operatorJwt(requesterId))).andExpect(status().isForbidden)
+            grant(approverId, "SUPPORT_PII_REVEAL_APPROVE")
+            val page =
+                mockMvc
+                    .perform(httpGet(path).with(operatorJwt(approverId)).param("kind", "DATA_ACCESS").param("limit", "1"))
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andReturn()
+                    .response.contentAsString
+            val cursor =
+                JsonMapper
+                    .builder()
+                    .build()
+                    .readTree(page)["nextCursor"]
+                    .asText()
+            mockMvc
+                .perform(
+                    httpGet(path)
+                        .with(operatorJwt(approverId))
+                        .param("kind", "DATA_ACCESS")
+                        .param("limit", "1")
+                        .param("cursor", cursor),
+                ).andExpect(
+                    status().isOk,
+                ).andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.nextCursor").doesNotExist())
+            mockMvc
+                .perform(
+                    httpGet(path)
+                        .with(operatorJwt(approverId))
+                        .param("kind", "DATA_ACCESS")
+                        .param("view", "VISIBLE")
+                        .param("cursor", cursor),
+                ).andExpect(status().isBadRequest)
+            grant(requesterId, "SUPPORT_PII_REVEAL_APPROVE")
+            mockMvc
+                .perform(
+                    httpGet(path).with(operatorJwt(requesterId)).param("kind", "DATA_ACCESS").param("cursor", cursor),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(httpGet(path).with(operatorJwt(requesterId)).param("kind", "DATA_ACCESS"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isEmpty())
+            mockMvc.perform(httpGet(path).with(operatorJwt(approverId)).param("kind", "COMPENSATION")).andExpect(status().isForbidden)
+            mockMvc
+                .perform(
+                    post(
+                        "/api/v1/support/data-access-grants/$first/approvals",
+                    ).with(
+                        operatorJwt(approverId),
+                    ).header(
+                        "Idempotency-Key",
+                        "inbox-grant-approve",
+                    ).json("""{"decision":"APPROVE","expectedVersion":0,"reasonCode":"CASE_HANDLING"}"""),
+                ).andExpect(status().isOk)
+            val historyPath = "$path/DATA_ACCESS/$first/history"
+            val history =
+                mockMvc
+                    .perform(httpGet(historyPath).with(operatorJwt(approverId)))
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andExpect(jsonPath("$.items[0].state").value("APPROVED"))
+                    .andExpect(jsonPath("$.items[0].actorDisplay.state").value("MISSING_PROFILE"))
+                    .andReturn()
+                    .response.contentAsString
+            assertThat(history).doesNotContain("reasonCode", "actorId", "fields", "verificationSessionId")
+            mockMvc
+                .perform(httpGet(path).with(operatorJwt(approverId)).param("kind", "DATA_ACCESS"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+            mockMvc
+                .perform(httpGet(path).with(operatorJwt(approverId)).param("kind", "DATA_ACCESS").param("view", "VISIBLE"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(2))
+            jdbcTemplate.update("DELETE FROM operations_operator_permission_grant WHERE actor_id = ?", approverId)
+            mockMvc.perform(httpGet(historyPath).with(operatorJwt(approverId))).andExpect(status().isForbidden)
+            assertThat(decryptCalls).hasValue(0)
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM support_reveal_attempt", Long::class.java)).isZero()
         }
 
         private fun requestGrant(

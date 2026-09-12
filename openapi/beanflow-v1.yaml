@@ -4322,6 +4322,40 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /support/work-items:
+    get:
+      tags: [Support]
+      operationId: listSupportWorkItems
+      summary: 기존 상담 업무 요청을 현재 조회 권한으로 탐색
+      description: 업무별 기존 inspection 권한과 상태 갱신을 재사용합니다. 행별 가시성 필터와 마지막 권한 재검사를 거치며, 조회 구간에 보이는 항목이 없어도 nextCursor가 있으면 계속 탐색할 수 있습니다. 원문 열람·승인·실행은 수행하지 않습니다.
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/SupportWorkKind" }
+        - name: caseId
+          in: query
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 2048 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: 권한이 확인된 기존 업무 요청의 표시 정보
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportWorkPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/searches:
     post:
       tags: [Support]
@@ -4358,6 +4392,111 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/SupportSearchRateLimited" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/case-queue/summary:
+    get:
+      tags: [Support]
+      operationId: getSupportCaseQueueSummary
+      summary: 현재 담당자의 진행 중 상담 현황
+      description: SUPPORT_CASE_READ 필요. 현재 actor에게 배정된 OPEN/IN_PROGRESS/WAITING만 집계하며 RESOLVED/CLOSED는 제외한다. urgent는 진행 중 긴급 건수다.
+      responses:
+        "200":
+          description: Current assignment counts
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportCaseQueueSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/orders/{orderId}/overview:
+    get:
+      tags: [Support]
+      operationId: getSupportLinkedOrderOverview
+      summary: 담당 상담에 연결된 주문의 품목과 금액 조회
+      description: SUPPORT_CASE_READ와 SUPPORT_ORDER_READ, 현재 담당자의 활성 Case와 활성 ORDER 링크가 필요하다. 조회 전후 권한/링크를 재확인한다. Ordering의 주문 당시 금액이며 현재 결제·환불 상태를 추정하지 않는다.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - name: caseId
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+      responses:
+        "200":
+          description: Linked order overview
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportOrderOverview" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/approval-tasks:
+    get:
+      tags: [Support]
+      operationId: listSupportApprovalTasks
+      summary: 현재 담당자의 통합 승인함
+      description: 종류별 승인/검토 grant와 기존 workflow 객체 권한을 적용한다. REVIEW는 현재 검토 판정이 있는 요청, VISIBLE은 같은 권한으로 조회 가능한 요청이다. 목록은 승인 성공을 보장하지 않는다. 생성 시각·요청 ID·종류 내림차순, actor/종류/모드에 결합된 15분 cursor. 최대 limit개 후보를 검사하므로 items가 비어도 nextCursor가 존재할 수 있다. 명시적 객체 권한 거절만 필터링하고 의존성 실패는 오류로 반환한다.
+      parameters:
+        - name: kind
+          in: query
+          schema: { $ref: "#/components/schemas/SupportApprovalKind" }
+        - name: view
+          in: query
+          schema: { type: string, enum: [REVIEW, VISIBLE], default: REVIEW }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Authorized approval candidates
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportApprovalPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/DependencyUnavailable" }
+  /support/approval-tasks/{kind}/{requestId}/history:
+    get:
+      tags: [Support]
+      operationId: getSupportApprovalHistory
+      summary: 선택한 승인 요청의 결정 이력
+      description: 종류별 승인 권한과 기존 객체 조회 권한을 전후 재검증한다. 주문 변경은 action request ID, 보상/정보 정정은 해당 요청에 연결된 정확한 action request의 전체 revision 결정만 반환한다. 원문 사유·개인정보 payload는 반환하지 않는다. 결정 시각/이력 ID 내림차순, actor/종류/요청에 결합된 15분 cursor.
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/SupportApprovalKind" }
+        - name: requestId
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Bounded decision history
+          headers:
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportApprovalHistoryPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/cases:
     post:
@@ -4398,9 +4537,19 @@ paths:
       summary: 필터에 고정된 커서로 SupportCase 목록 조회
       description: |
         openedAt 내림차순, 동률 시 Case ID 내림차순으로 정렬됩니다. 서명된 커서는 조회 시점의 state,
-        assigneeId 필터에 고정되며 15분 뒤 만료되고, interactions나 notes는 엔티티 컬렉션으로 함께
+        assigneeId·category·priority 필터에 고정되며 15분 뒤 만료되고, interactions나 notes는 엔티티 컬렉션으로 함께
         로드하지 않습니다. 만료되었거나 필터가 바뀐 커서로 재요청하면 400을 반환합니다.
       parameters:
+        - name: category
+          in: query
+          schema: { $ref: "#/components/schemas/SupportInquiryCategory" }
+        - name: priority
+          in: query
+          schema: { $ref: "#/components/schemas/SupportCasePriority" }
+        - name: mine
+          in: query
+          description: 현재 로그인 담당자만 조회. 다른 assigneeId와 함께 지정하면 400.
+          schema: { type: boolean, default: false }
         - name: state
           in: query
           required: false
@@ -9971,6 +10120,306 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /stores/{storeId}/support-order-change-requests:
+    get:
+      tags:
+      - Support
+      operationId: listStoreSupportOrderChangeRequests
+      summary: 소속 매장의 현재 주문 변경 동의 대상을 공개 주문번호로 탐색
+      parameters:
+      - $ref: '#/components/parameters/StoreId'
+      - &s4paths001
+        name: cursor
+        in: query
+        schema:
+          type: string
+          maxLength: 2048
+      - &s4paths002
+        name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 소속 매장의 현재 주문 변경 동의 대상을 공개 주문번호로 탐색
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreOrderChangeCandidatePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+      security:
+      - merchantSession: []
+  /support/action-requests/{requestId}/store-consents:
+    get:
+      tags:
+      - Support
+      operationId: listSupportOrderConsents
+      summary: 현재 실행 승인안에 유효한 매장 동의와 위임을 조회
+      parameters:
+      - $ref: '#/components/parameters/SupportActionRequestId'
+      - *s4paths001
+      - *s4paths002
+      responses:
+        '200':
+          description: 현재 실행 승인안에 유효한 매장 동의와 위임을 조회
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportOrderConsentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/investigation-queue:
+    get:
+      tags:
+      - Operations
+      operationId: listOperationsSupportInvestigations
+      summary: 현재 승인안의 운영 검토 목록 조회
+      parameters:
+      - name: state
+        in: query
+        schema:
+          $ref: '#/components/schemas/OperationsSupportInvestigationState'
+      - *s4paths001
+      - *s4paths002
+      responses:
+        '200':
+          description: 현재 승인안의 운영 검토 목록 조회
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsInvestigationPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /support/cases/{caseId}/compensation-incidents:
+    get:
+      tags:
+      - Support
+      operationId: listSupportCompensationIncidents
+      summary: 검증된 고객과 주문의 기존 보상 사고 선택
+      parameters:
+      - name: incidentId
+        in: query
+        description: 재검토 링크에서 받은 기존 사고만 확인
+        schema:
+          $ref: "#/components/schemas/Identifier"
+      - $ref: '#/components/parameters/SupportCaseId'
+      - name: verificationSessionId
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/Identifier'
+      - name: orderId
+        in: query
+        schema:
+          $ref: '#/components/schemas/Identifier'
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          maxLength: 2048
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 현재 권한으로 확인한 보상 사고
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCompensationIncidentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    post:
+      tags:
+      - Support
+      operationId: registerSupportCompensationIncident
+      summary: 고객과 주문에 묶인 별개 사고를 멱등 등록
+      parameters:
+      - $ref: '#/components/parameters/SupportCaseId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterSupportCompensationIncidentRequest'
+      responses:
+        '201':
+          description: 현재 권한으로 확인한 보상 사고
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCompensationIncidentResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/point-cost-issuers:
+    get:
+      tags:
+      - Operations
+      operationId: listPointCostIssuers
+      summary: 목적별 현재 권한으로 이름과 실제 출처가 있는 비용 주체 선택
+      parameters:
+      - name: purpose
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - POLICY
+          - ADJUSTMENT
+      - name: type
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - PLATFORM
+          - BRAND
+          - STORE
+      - name: query
+        in: query
+        schema:
+          type: string
+          maxLength: 200
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          maxLength: 2048
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: 명명된 포인트 비용 주체
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PointCostIssuerPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /operations/platform-point-cost-owners:
+    post:
+      tags:
+      - Operations
+      operationId: registerPlatformPointCostOwner
+      summary: 정책 변경 권한으로 플랫폼 비용 주체의 불변 이름과 참조를 등록
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterPlatformPointCostOwnerRequest'
+      responses:
+        '201':
+          description: 명명된 포인트 비용 주체
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PointCostIssuerResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
   /operations/support-action-requests/{requestId}/review:
@@ -18858,6 +19307,7 @@ components:
             linkedAt: "2026-08-15T09:01:00Z"
             caseVersion: 2
       properties:
+        category: { $ref: "#/components/schemas/SupportInquiryCategory" }
         assigneeDisplay: { $ref: '#/components/schemas/OperatorDisplay' }
         customerInquiryId:
           type: string
@@ -18896,6 +19346,7 @@ components:
         version: 3
         openedAt: "2026-08-15T09:00:00Z"
       properties:
+        category: { $ref: "#/components/schemas/SupportInquiryCategory" }
         assigneeDisplay: { $ref: '#/components/schemas/OperatorDisplay' }
         caseId:
           $ref: "#/components/schemas/Identifier"
@@ -18911,6 +19362,84 @@ components:
           minimum: 0
         openedAt:
           $ref: "#/components/schemas/DateTime"
+    SupportOrderOverview:
+      type: object
+      required: [orderId, publicReference, storeName, state, version, orderedAt, pickupWindowStart, pickupWindowEnd, subtotalKrw, couponDiscountKrw, pointsAppliedKrw, payableKrw, currency, lines]
+      properties:
+        orderId: { $ref: "#/components/schemas/Identifier" }
+        publicReference: { type: string }
+        storeName: { type: string }
+        state: { $ref: "#/components/schemas/OrderState" }
+        version: { type: integer, format: int64 }
+        orderedAt: { type: string, format: date-time }
+        pickupWindowStart: { type: string, format: date-time }
+        pickupWindowEnd: { type: string, format: date-time }
+        subtotalKrw: { type: integer, format: int64 }
+        couponDiscountKrw: { type: integer, format: int64 }
+        pointsAppliedKrw: { type: integer, format: int64 }
+        payableKrw: { type: integer, format: int64 }
+        currency: { type: string, enum: [KRW] }
+        lines:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [sequence, menuName, quantity, amountKrw]
+            properties:
+              sequence: { type: integer }
+              menuName: { type: string }
+              quantity: { type: integer, format: int64 }
+              amountKrw: { type: integer, format: int64 }
+    SupportApprovalKind:
+      type: string
+      enum: [DATA_ACCESS, BREAK_GLASS, ORDER_ACTION, COMPENSATION, PROFILE_CHANGE]
+    SupportApprovalItem:
+      type: object
+      required: [kind, requestId, caseId, caseCategory, caseOpenedAt, purpose, state, createdAt, reviewAction]
+      properties:
+        kind: { $ref: "#/components/schemas/SupportApprovalKind" }
+        requestId: { $ref: "#/components/schemas/Identifier" }
+        caseId: { $ref: "#/components/schemas/Identifier" }
+        caseCategory: { $ref: "#/components/schemas/SupportInquiryCategory" }
+        caseOpenedAt: { type: string, format: date-time }
+        purpose: { type: string }
+        state: { type: string }
+        createdAt: { type: string, format: date-time }
+        reviewAction: { type: [string, 'null'], enum: [DECIDE, REVIEW, null] }
+    SupportApprovalPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SupportApprovalItem" } }
+        nextCursor: { type: [string, 'null'] }
+    SupportApprovalDecisionItem:
+      type: object
+      required: [eventId, step, state, occurredAt, revisionNumber, actorDisplay]
+      properties:
+        eventId: { $ref: "#/components/schemas/Identifier" }
+        step: { type: string }
+        state: { type: string }
+        occurredAt: { type: string, format: date-time }
+        revisionNumber: { type: [integer, 'null'] }
+        actorDisplay:
+          anyOf:
+            - $ref: "#/components/schemas/OperatorDisplay"
+            - type: 'null'
+    SupportApprovalHistoryPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SupportApprovalDecisionItem" } }
+        nextCursor: { type: [string, 'null'] }
+    SupportCaseQueueSummary:
+      type: object
+      required: [active, open, inProgress, waiting, urgent]
+      properties:
+        active: { type: integer, format: int64, minimum: 0 }
+        open: { type: integer, format: int64, minimum: 0 }
+        inProgress: { type: integer, format: int64, minimum: 0 }
+        waiting: { type: integer, format: int64, minimum: 0 }
+        urgent: { type: integer, format: int64, minimum: 0 }
     SupportCasePage:
       type: object
       additionalProperties: false
@@ -19035,6 +19564,32 @@ components:
           type: integer
           format: int64
           minimum: 0
+    SupportWorkKind:
+      type: string
+      enum: [VERIFICATION, DATA_ACCESS, ORDER_ACTION, COMPENSATION, PROFILE_CHANGE, BREAK_GLASS]
+    SupportWorkItem:
+      type: object
+      additionalProperties: false
+      required: [requestId, kind, caseId, caseCategory, caseOpenedAt, purpose, state, createdAt]
+      properties:
+        requestId: { $ref: "#/components/schemas/Identifier" }
+        kind: { $ref: "#/components/schemas/SupportWorkKind" }
+        caseId: { $ref: "#/components/schemas/Identifier" }
+        caseCategory: { $ref: "#/components/schemas/SupportInquiryCategory" }
+        caseOpenedAt: { $ref: "#/components/schemas/DateTime" }
+        purpose: { type: string, minLength: 1 }
+        state: { type: string, minLength: 1 }
+        createdAt: { $ref: "#/components/schemas/DateTime" }
+        expiresAt: { type: [string, "null"], format: date-time }
+    SupportWorkPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/SupportWorkItem" }
+        nextCursor: { type: [string, "null"] }
     SupportSubjectDisplay:
       type: object
       additionalProperties: false
@@ -22045,3 +22600,248 @@ components:
         binding:
           $ref: '#/components/schemas/ProfileChangeRevisionBinding'
           description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+    StoreOrderChangeCandidate:
+      type: object
+      required:
+      - requestId
+      - orderReference
+      - action
+      - revisionNumber
+      - createdAt
+      - expiresAt
+      properties:
+        requestId: &s4schemas002
+          $ref: '#/components/schemas/Identifier'
+        orderReference:
+          type: string
+        action:
+          $ref: '#/components/schemas/SupportActionType'
+        revisionNumber:
+          type: integer
+        createdAt: &s4schemas001
+          type: string
+          format: date-time
+        expiresAt: *s4schemas001
+    StoreOrderChangeCandidatePage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreOrderChangeCandidate'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+    SupportOrderConsentCandidate:
+      type: object
+      required:
+      - authorizationId
+      - authorizationType
+      - authorizedAt
+      - expiresAt
+      - remainingUses
+      properties:
+        authorizationId: *s4schemas002
+        authorizationType:
+          $ref: '#/components/schemas/SupportOrderChangeAuthorizationType'
+        authorizedAt: *s4schemas001
+        expiresAt: *s4schemas001
+        remainingUses:
+          type: integer
+          minimum: 1
+    SupportOrderConsentPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportOrderConsentCandidate'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+    SupportInvestigationDisplay:
+      type: object
+      required:
+      - requestId
+      - action
+      - caseCategory
+      - caseOpenedAt
+      - revisionNumber
+      properties:
+        requestId: *s4schemas002
+        action:
+          $ref: '#/components/schemas/SupportActionType'
+        caseCategory:
+          $ref: '#/components/schemas/SupportInquiryCategory'
+        caseOpenedAt: *s4schemas001
+        revisionNumber:
+          type: integer
+    OperationsInvestigationCandidate:
+      type: object
+      required:
+      - investigationId
+      - request
+      - state
+      - openedAt
+      - expiresAt
+      - canDecide
+      properties:
+        investigationId: *s4schemas002
+        request:
+          $ref: '#/components/schemas/SupportInvestigationDisplay'
+        state:
+          $ref: '#/components/schemas/OperationsSupportInvestigationState'
+        openedAt: *s4schemas001
+        expiresAt: *s4schemas001
+        canDecide:
+          type: boolean
+    OperationsInvestigationPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationsInvestigationCandidate'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+    SupportCompensationIncidentResource:
+      type: object
+      required:
+      - incidentId
+      - category
+      - occurredAt
+      - createdAt
+      - source
+      - benefitIssued
+      properties:
+        incidentId:
+          $ref: '#/components/schemas/Identifier'
+        category:
+          $ref: '#/components/schemas/SupportInquiryCategory'
+        occurredAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+          enum:
+          - REGISTERED
+          - EXISTING_COMPENSATION
+        benefitIssued:
+          type: boolean
+    SupportCompensationIncidentPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportCompensationIncidentResource'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+    RegisterSupportCompensationIncidentRequest:
+      type: object
+      required:
+      - verificationSessionId
+      - orderId
+      - occurredAt
+      properties:
+        verificationSessionId:
+          $ref: '#/components/schemas/Identifier'
+        orderId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        occurredAt:
+          type: string
+          format: date-time
+    PointCostIssuerResource:
+      type: object
+      required:
+      - issuerType
+      - issuerReference
+      - displayName
+      - source
+      - sourcePolicyVersion
+      properties:
+        issuerType:
+          type: string
+          enum:
+          - PLATFORM
+          - BRAND
+          - STORE
+        issuerReference:
+          type: string
+          maxLength: 240
+        displayName:
+          type: string
+        source:
+          type: string
+          enum:
+          - STORE_PROFILE
+          - BRAND_PROFILE
+          - REGISTERED_PLATFORM
+          - GLOBAL_POLICY
+        sourcePolicyVersion:
+          type:
+          - integer
+          - 'null'
+          format: int64
+    PointCostIssuerPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      - canRegisterPlatform
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PointCostIssuerResource'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+        canRegisterPlatform:
+          type: boolean
+    RegisterPlatformPointCostOwnerRequest:
+      type: object
+      required:
+      - name
+      - reason
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500

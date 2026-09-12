@@ -115,6 +115,37 @@ internal class SupportProfileChangeIntegrationTest
         }
 
         @Test
+        fun `work directory finds profile requests for the approver without including profile values`() {
+            val created = profiles.submit(primaryPhoneCommand("directory-profile"))
+            val body =
+                mockMvc
+                    .perform(
+                        get("/api/v1/support/work-items")
+                            .with(jwt().jwt { it.subject(managerId.toString()) })
+                            .param("kind", "PROFILE_CHANGE")
+                            .param("caseId", caseId.toString()),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items[0].requestId").value(created.profileChangeId.toString()))
+                    .andReturn()
+                    .response.contentAsString
+            assertThat(body).doesNotContain("maskedBefore", "maskedAfter", "payloadDigest", "verificationSessionId")
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks")
+                        .with(jwt().jwt { it.subject(managerId.toString()) })
+                        .param("kind", "PROFILE_CHANGE"),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items[0].requestId").value(created.profileChangeId.toString()))
+                .andExpect(jsonPath("$.items[0].reviewAction").value("DECIDE"))
+            mockMvc
+                .perform(
+                    get("/api/v1/support/approval-tasks/PROFILE_CHANGE/${created.profileChangeId}/history")
+                        .with(jwt().jwt { it.subject(managerId.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isEmpty())
+        }
+
+        @Test
         fun `operations only reviewer reads the exact profile review chain without Support case grant`() {
             val created = profiles.submit(primaryPhoneCommand("operations-review-metadata"))
             val requestId = requireNotNull(created.actionRequestId)

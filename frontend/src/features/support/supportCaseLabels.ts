@@ -14,6 +14,10 @@ export function supportSubjectLabel(link: SupportSubjectDisplaySource & { subjec
   return `${subjectName} · ${state}`;
 }
 
+export function supportCaseTitle(value: { category?: components["schemas"]["SupportInquiryCategory"] | null }): string {
+  return value.category ? `${caseCategoryLabels[value.category]} 상담` : "상담 상세";
+}
+
 export type SupportSubjectDisplaySource = { display?: { state: string; label?: string | null } };
 /** A command target must have an owner-provided display that the operator can distinguish. */
 export function isSupportSubjectSelectable(link: SupportSubjectDisplaySource | undefined): boolean {

@@ -6,7 +6,7 @@ import { StoreManagementPage } from "./StoreManagementPage";
 const meta = {
   title: "Pages/Store/Business management", component: StoreManagementPage, tags: ["autodocs"],
   args: { catalogContent: <p>현재 메뉴 카탈로그</p> },
-  parameters: { a11y: { test: "error" }, docs: { description: { component: "현재 메뉴 관리, 고객 공개 정보와 실제 픽업 시간 관리의 진입입니다. 거래 내역은 정산 화면으로 연결합니다." }, story: { inline: false, height: "820px" } }, routing: { path: "/store/management", initialEntry: "/store/management" }, msw: { handlers: [http.get("/api/v1/merchant/me/stores", () => HttpResponse.json([{ storeId: ids.store, storeName: "시청점", membershipRole: "STAFF" }])), http.get("/api/v1/stores/:storeId/pickup-slot-management", () => HttpResponse.json({ items: [], nextCursor: null })), ...merchantSignedInHandlers] } },
+  parameters: { a11y: { test: "error" }, docs: { description: { component: "현재 메뉴 관리, 고객 공개 정보와 실제 픽업 시간 관리의 진입입니다. 거래 내역은 정산 화면으로 연결합니다." }, story: { inline: false, height: "820px" } }, routing: { path: "/store/management", initialEntry: "/store/management" }, msw: { handlers: [http.get("/api/v1/merchant/me/stores", () => HttpResponse.json([{ storeId: ids.store, storeName: "시청점", membershipRole: "STAFF" }])), http.get("/api/v1/stores/:storeId/support-order-change-requests", () => HttpResponse.json({ items: [], nextCursor: null })), http.get("/api/v1/stores/:storeId/pickup-slot-management", () => HttpResponse.json({ items: [], nextCursor: null })), ...merchantSignedInHandlers] } },
 } satisfies Meta<typeof StoreManagementPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -14,7 +14,7 @@ export const MenuAndPricing: Story = { play: async ({ canvas }) => { await expec
 export const HoursAndPickup: Story = { args: { initialWorkspace: "hours" }, play: async ({ canvas }) => { await expect(await canvas.findByRole("button", { name: "새 픽업 시간" })).toBeVisible(); } };
 export const KeyboardWorkspaceChange: Story = { play: async ({ canvas }) => { canvas.getByRole("tab", { name: "영업시간과 픽업" }).focus(); await userEvent.keyboard("{Enter}"); await expect(await canvas.findByRole("button", { name: "새 픽업 시간" })).toBeVisible(); } };
 
-export const SupportOrderConsent: Story = { args: { initialWorkspace: "support" }, play: async ({ canvas }) => { await expect(await canvas.findByLabelText("상담 주문 변경 요청 ID")).toBeVisible(); } };
+export const SupportOrderConsent: Story = { args: { initialWorkspace: "support" }, play: async ({ canvas }) => { await expect(await canvas.findByText("현재 조회 구간에 동의할 주문 변경이 없습니다")).toBeVisible(); } };
 export const PickupDraftLocksNavigation: Story = { args: { initialWorkspace: "hours" }, play: async ({ canvas }) => {
   await userEvent.click(await canvas.findByRole("button", { name: "새 픽업 시간" }));
   await userEvent.type(canvas.getByLabelText("정원"), "12");

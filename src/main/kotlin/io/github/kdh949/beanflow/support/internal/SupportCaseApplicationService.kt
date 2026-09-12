@@ -125,6 +125,7 @@ internal data class SupportCaseResource(
     val subjectLinks: List<SupportSubjectLinkResource>,
     val customerInquiryId: UUID? = null,
     val assigneeDisplay: OperatorDisplay? = null,
+    val category: SupportInquiryCategory? = null,
 )
 
 internal data class SupportCaseSummaryResource(
@@ -135,6 +136,7 @@ internal data class SupportCaseSummaryResource(
     val version: Long,
     val openedAt: Instant,
     val assigneeDisplay: OperatorDisplay? = null,
+    val category: SupportInquiryCategory? = null,
 )
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -649,20 +651,32 @@ internal class SupportCaseApplicationService(
         }
 
     @Transactional
+    fun queueSummary(actorId: UUID): SupportCaseQueueSummaryResource =
+        persistenceBoundary {
+            permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
+            queryRepository.summary(actorId)
+        }
+
+    @Transactional
     fun list(
         actorId: UUID,
         state: SupportCaseState?,
         assigneeId: UUID?,
         cursor: String?,
         limit: Int?,
+        category: SupportInquiryCategory? = null,
+        priority: SupportCasePriority? = null,
+        mine: Boolean = false,
     ): SupportCasePageResource =
         persistenceBoundary {
             permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
             val normalizedLimit = limit ?: DEFAULT_LIST_LIMIT
             if (normalizedLimit !in 1..MAX_LIST_LIMIT) invalid("SupportCase limit must be between 1 and 100")
-            val scope = listCursorScope(state, assigneeId)
+            if (mine && assigneeId != null && assigneeId != actorId) invalid("Mine filter conflicts with assignee")
+            val selectedAssignee = if (mine) actorId else assigneeId
+            val scope = listCursorScope(state, selectedAssignee, category, priority)
             val after = cursor?.let { cursors.verify(it, scope).sort }
-            val fetched = queryRepository.findPage(state, assigneeId, after, normalizedLimit + 1)
+            val fetched = queryRepository.findPage(state, selectedAssignee, after, normalizedLimit + 1, category, priority)
             val items = fetched.take(normalizedLimit)
             val nextCursor =
                 if (fetched.size > normalizedLimit) {
@@ -682,6 +696,7 @@ internal class SupportCaseApplicationService(
                         it.version,
                         it.openedAt,
                         displays.getValue(it.assigneeId),
+                        it.category,
                     )
                 },
                 nextCursor,
@@ -704,10 +719,15 @@ internal class SupportCaseApplicationService(
     private fun listCursorScope(
         state: SupportCaseState?,
         assigneeId: UUID?,
+        category: SupportInquiryCategory?,
+        priority: SupportCasePriority?,
     ): SignedCursorScope<SupportCaseSort> =
         SignedCursorScope(
             endpoint = LIST_CURSOR_ENDPOINT,
-            filterHash = hash("$LIST_CURSOR_ENDPOINT|state=${state?.name.orEmpty()}|assigneeId=${assigneeId ?: ""}"),
+            filterHash =
+                hash(
+                    "$LIST_CURSOR_ENDPOINT|state=${state?.name.orEmpty()}|assigneeId=${assigneeId ?: ""}|category=${category?.name.orEmpty()}|priority=${priority?.name.orEmpty()}",
+                ),
             sortAdapter = SUPPORT_CASE_SORT_ADAPTER,
         )
 
@@ -896,7 +916,18 @@ internal class SupportCaseApplicationService(
     }
 
     private fun SupportCaseEntity.toResource(links: List<SupportSubjectLinkResource>): SupportCaseResource =
-        SupportCaseResource(id, state, priority, currentAssigneeId, version, openedAt, closedAt, links, customerInquiries.findIdByCase(id))
+        SupportCaseResource(
+            id,
+            state,
+            priority,
+            currentAssigneeId,
+            version,
+            openedAt,
+            closedAt,
+            links,
+            customerInquiries.findIdByCase(id),
+            category = category,
+        )
 
     private fun SupportCaseSubjectLinkEntity.toResource(): SupportSubjectLinkResource =
         SupportSubjectLinkResource(id, subjectType, subjectId, relationship, linkedAt)

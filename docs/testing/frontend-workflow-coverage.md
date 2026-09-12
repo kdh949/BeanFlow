@@ -3,6 +3,8 @@
 2026-09-11의 실제 Controller/Runtime OpenAPI, 제품 정책, route와 Storybook을 대조한 구현 결과다.
 최초 확인한 화면 결함 F01–F18과 누락 업무 M01–M17을 아래 PR의 수직 슬라이스로 연결했다.
 최종 재대조에서 최근 주문 매장 직접 조회와 이미지 삭제 204 응답 처리도 보완했다.
+이 문서의 수치와 검증 결과는 #169까지의 점검 시점이다. 이후 내부 식별자 직접 입력 28개 항목의
+선택·검색·요청 재개 개선은 [별도 대조표](internal-identifier-workflow-coverage.md)에 기록했다.
 
 ## Findings and implemented workflows
 
@@ -49,7 +51,7 @@ BR-40/기존 API의 정렬·노출·최대 20개 상한을 따른다. 이미지 
 
 ## Runtime API coverage and intentional alternatives
 
-현재 Runtime은 221개 path / 254개 operation이다. 정적 typed call 대조는 235개를 찾았고,
+해당 점검 시점의 Runtime은 221개 path / 254개 operation이다. 정적 typed call 대조는 235개를 찾았고,
 `auth/operationsSession.ts`의 실제 fetch 한 개를 별도로 확인해 직접 호출은 236개다.
 호출 수는 전체 업무 완결성의 대체 지표가 아니므로 위 목록/선택/명령/결과 흐름을 따로 검증했다.
 

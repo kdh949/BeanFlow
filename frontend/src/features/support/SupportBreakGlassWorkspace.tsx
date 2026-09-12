@@ -1,3 +1,4 @@
+import { SupportWorkPicker } from "./SupportWorkPicker";
 import { supportSubjectLabel, isSupportSubjectSelectable, type SupportSubjectDisplaySource } from "./supportCaseLabels";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -17,15 +18,15 @@ type Reason = components["schemas"]["BreakGlassReasonCode"];
 type Reveal = components["schemas"]["BreakGlassRevealResource"];
 const reasons: Record<Reason, { label: string; purpose: "SAFETY_RESPONSE" | "FRAUD_INVESTIGATION" | "PRIVACY_INCIDENT" }> = { IMMEDIATE_SAFETY: { label: "즉각적인 안전 위협", purpose: "SAFETY_RESPONSE" }, ACTIVE_FRAUD: { label: "진행 중인 부정 사용", purpose: "FRAUD_INVESTIGATION" }, PRIVACY_INCIDENT: { label: "개인정보 사고", purpose: "PRIVACY_INCIDENT" } };
 const states: Record<components["schemas"]["BreakGlassState"], string> = { APPROVAL_PENDING: "별도 승인 대기", ACTIVE: "한 번 열람 가능", DENIED: "열람 반려", REVIEW_PENDING: "독립 사후 검토 대기", REVIEWED: "사후 검토 기록 완료", EXPIRED: "열람 기한 만료", REVOKED: "열람 철회" };
-const uuid = (value: string) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value.trim());
 
 /** Composes emergency single-field requests with separated approval, one-time reveal and post-review. */
 export function SupportBreakGlassWorkspace({ supportCase, initialRequestId, onBusyChange }: { supportCase?: Case; initialRequestId?: string; onBusyChange?: (busy: boolean) => void }) {
-  const [id, setId] = useState(initialRequestId ?? ""), [lookup, setLookup] = useState(initialRequestId ?? ""), [active, setActive] = useState(false);
+  const [id, setId] = useState(initialRequestId ?? ""), [active, setActive] = useState(false);
   useEffect(() => { onBusyChange?.(active); return () => onBusyChange?.(false); }, [active, onBusyChange]);
   return <section className="management-workspace" aria-label="긴급 개인정보 열람"><h2>긴급 개인정보 열람</h2><InlineNotice tone="warning" title="긴급한 목적에 필요한 한 필드만 요청합니다" description="기존 본인확인과 구분된 예외 업무입니다. 별도 승인 후 2분 안에 한 번 열람하며, 독립된 사후 검토와 보안 통지 대상입니다." />
-    <form className="surface-card management-card operation-form" onSubmit={event => { event.preventDefault(); if (!active && uuid(lookup)) setId(lookup.trim()); }}><TextField label="기존 긴급 열람 요청 ID" value={lookup} onValueChange={setLookup} required disabled={active} /><Button type="submit" variant="secondary" disabled={active || !uuid(lookup)}>긴급 요청 열기</Button>{supportCase && id ? <Button variant="ghost" disabled={active} onClick={() => { setId(""); setLookup(""); }}>새 긴급 요청</Button> : null}</form>
-    {id ? <Inspection key={id} id={id} caseId={supportCase?.caseId} onBusyChange={setActive} /> : supportCase ? <CreateRequest supportCase={supportCase} onBusyChange={setActive} onCreated={created => { setId(created); setLookup(created); }} /> : <EmptyState title="상담 건에서 긴급 요청을 시작해 주세요" description="기존 요청은 ID로 현재 승인과 사후 검토 상태를 조회합니다." />}
+    <SupportWorkPicker kind="BREAK_GLASS" caseId={supportCase?.caseId} disabled={active} onSelect={item => setId(item.requestId)} />
+    {id && supportCase ? <Button variant="ghost" disabled={active} onClick={() => setId("")}>새 긴급 요청</Button> : null}
+    {id ? <Inspection key={id} id={id} caseId={supportCase?.caseId} onBusyChange={setActive} /> : supportCase ? <CreateRequest supportCase={supportCase} onBusyChange={setActive} onCreated={created => { setId(created); }} /> : <EmptyState title="상담 건에서 긴급 요청을 시작해 주세요" description="기존 요청 찾기에서 현재 승인과 사후 검토 상태를 조회합니다." />}
   </section>;
 }
 function CreateRequest({ supportCase, onCreated, onBusyChange }: { supportCase: Case; onCreated: (id: string) => void; onBusyChange: (busy: boolean) => void }) {
@@ -47,7 +48,7 @@ function Inspection({ id, caseId, onBusyChange }: { id: string; caseId?: string;
   const [raw, setRaw] = useState<Reveal | null>(null), [revealBusy, setRevealBusy] = useState(false), [revealed, setRevealed] = useState(false), [uncertain, setUncertain] = useState(false), [error, setError] = useState<unknown>(null), [checked, setChecked] = useState(false), [message, setMessage] = useState(""), [review, setReview] = useState<"CONFIRMED" | "ESCALATED">("CONFIRMED");
   const inFlight = useRef(false), generation = useRef(0), mounted = useRef(true), clear = useCallback(() => { generation.current++; setRaw(null); }, []);
   const expired = useExpired(request?.expiresAt ?? undefined), command = useSupportCommand(`break-glass:${id}`, () => { clear(); setChecked(false); read.reload(); }), busy = revealBusy || command.busy || command.pending;
-  useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
+  useEffect(() => { onBusyChange(busy || uncertain || Boolean(raw)); return () => onBusyChange(false); }, [busy, uncertain, raw, onBusyChange]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; generation.current++; }; }, []);
   useEffect(() => { if (read.state.status === "failed" || (current && !current.canViewRevealedValue) || expired) clear(); }, [read.state.status, current?.canViewRevealedValue, expired, clear]);
   useEffect(() => { const leave = (event: Event) => { if (event.type === "blur" && event.target instanceof Element) return; if (event.type !== "visibilitychange" || document.hidden) clear(); }; window.addEventListener("blur", leave); document.addEventListener("visibilitychange", leave); return () => { window.removeEventListener("blur", leave); document.removeEventListener("visibilitychange", leave); }; }, [clear]);
