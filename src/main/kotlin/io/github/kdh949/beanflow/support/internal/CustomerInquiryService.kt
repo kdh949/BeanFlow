@@ -260,14 +260,14 @@ internal class CustomerInquiryService(
             val normalized = CustomerInquiryContent.message(content)
             val operation = if (staff) "SUPPORT_INQUIRY_MESSAGE" else "CUSTOMER_INQUIRY_MESSAGE"
             lock(actor, operation, key)
+            val hash = digest(listOf(id.toString(), version.toString(), caseVersion?.toString(), normalized))
+            replay(actor, operation, key, hash)?.let { return@boundary InquiryCommandResult(it.inquiryId, it.messageId) }
             val observed = if (staff) required(id) else owned(actor, id)
             val case = observed.caseId?.let { cases.findLockedById(it) ?: unavailable() }
             if (staff && (case == null || case.currentAssigneeId != actor)) denied()
             val inquiry = required(id, true)
             // A claim completed between the first read and lock. Refresh instead of taking Case after Inquiry.
             if (inquiry.caseId != observed.caseId) conflict()
-            val hash = digest(listOf(id.toString(), version.toString(), caseVersion?.toString(), normalized))
-            replay(actor, operation, key, hash)?.let { return@boundary InquiryCommandResult(it.inquiryId, it.messageId) }
             if (staff && case?.version != caseVersion) conflict()
             val now = clock.instant()
             inquiry.append(version, case?.state, now)
@@ -291,9 +291,10 @@ internal class CustomerInquiryService(
         val scope = scope("support-inquiry-list", "$actor|$customer|$unclaimed")
         val page = inquiries.list(customer, unclaimed, cursor?.let { cursors.verify(it, scope).sort }, PAGE_SIZE + 1)
         val visible = page.take(PAGE_SIZE)
+        val states = inquiries.caseStates(visible.mapNotNull { it.caseId }.toSet())
         return CustomerInquiryPage(
             visible.map {
-                summary(it, currentCase(it))
+                summary(it, it.caseId?.let { caseId -> states[caseId] ?: unavailable() })
             },
             next(page.size, visible.lastOrNull()?.let { InquirySort(it.createdAt, it.id) }, scope),
         )
@@ -309,7 +310,7 @@ internal class CustomerInquiryService(
         val page = inquiries.messages(inquiry.id, cursor?.let { cursors.verify(it, scope).sort }, PAGE_SIZE + 1)
         val visible = page.take(PAGE_SIZE)
         return CustomerInquiryDetail(
-            summary(inquiry, case),
+            summary(inquiry, case?.state),
             visible,
             next(page.size, visible.lastOrNull()?.let { InquirySort(it.createdAt, it.id) }, scope),
             case?.state !in setOf(SupportCaseState.RESOLVED, SupportCaseState.CLOSED),
@@ -318,17 +319,15 @@ internal class CustomerInquiryService(
 
     private fun summary(
         value: CustomerInquiry,
-        case: SupportCaseEntity?,
+        caseState: SupportCaseState?,
     ) = CustomerInquirySummary(
         value.id,
         value.title,
         value.category,
-        if (case ==
-            null
-        ) {
+        if (caseState == null) {
             CustomerInquiryState.RECEIVED
         } else {
-            CustomerInquiryState.valueOf(case.state.name)
+            CustomerInquiryState.valueOf(caseState.name)
         },
         value.orderReference,
         value.version,
