@@ -1,11 +1,11 @@
 # 프론트엔드 업무 스택 리뷰 보완
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `true`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-09-12`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -123,8 +123,8 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - [x] #160–#163 수정·검증·원격 반영 및 리뷰 16건 해결.
 - [x] #164–#170 수정·검증·원격 반영.
 - [x] #171–#177 수정·검증·원격 반영.
-- [ ] #178–#184 부모 반영과 전체 검증.
-- [ ] 리뷰 답변·해결 및 남은 미해결 수 확인.
+- [x] #178–#184 부모 반영과 전체 검증.
+- [x] 리뷰 답변·해결 및 남은 미해결 수 확인.
 
 ### #160 로컬 검증
 
@@ -245,7 +245,7 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 
 ## Outcomes & Retrospective
 
-진행 중. 검증과 원격 반영은 아직 완료되지 않았다.
+원본 리뷰 48건을 수정하고 각 PR에 반영했다. 25개 대상 PR의 검증 기준 head에서 모든 적용 대상 CI가 성공했으며, GraphQL reviewThreads의 미해결 항목은 0건이다. PR의 부모 관계 24개와 main에서 #160까지의 선후 관계를 확인했다. 기능별 보완·부모 merge 이력을 보존하며 PR 병합과 배포는 수행하지 않았다.
 
 ## Revision Notes
 
@@ -351,3 +351,42 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - #177·#179 CI에서 동일한 History Story의 결과 표시/잠금 해제 사이 race를 확인해 #177(8645612)에 활성화 대기를 보완하고 #178–#182로 전파했다. #175·#176 최신 CI는 통과했다.
 - 현재 main은 a6199c6이며 원래 공개된 모든 migration 파일이 원본 스택과 동일하다.
 - Not run: 운영 DB 변경, 배포. 최신 원격 CI 및 #177의 마지막 리뷰 해결은 대기 중이다.
+
+### 최종 검증과 리뷰 해결 (2026-09-12)
+
+- #184까지 원격 반영했으며 기능·API·서버 소스는 전체 회귀 검증본과 동일하다. 아래는 완료 기록을 추가하기 전의 검증 기준 head다.
+- 48개 원본 리뷰에 수정 내용을 답변하고 해결했다. GraphQL reviewThreads에서 대상 전체의 미해결 0개와 페이지 누락 없음을 확인했다.
+- 전체 755개 Story ID의 MCP interaction/a11y, frontend unit 250개, boundary 10개, copy 11개, typecheck, 디자인 검사, Storybook/제품 빌드, Sites 4개, Docs 122개를 통과했다. 최종 승인함 관련 서버·계약·Modulith 74개에 더해 인증·상담·테스트 격리 구조 검사 7개 및 백엔드 build -x test도 통과했다. 각 앞선 슬라이스의 별도 검증은 위 기록을 따른다.
+- 현재 main a6199c6과 원래 공개된 migration 파일을 대조해 변경 없음을 확인했다. 추가 migration은 V82_1/V83_1/V83_2이며 기존 직렬 lane을 유지한다.
+- CI는 변경 범위에 해당하는 모든 필수 job이 성공했다. 문서 전용 등 적용 대상이 아닌 job의 SKIPPED는 실행 성공으로 계산하지 않았다. 최신 문서 정리 커밋의 결과는 #184 Checks에서도 확인한다.
+- Not run: 실서비스 인증/금융 E2E, 운영 DB 변경, PR merge, 배포. 기존 로컬 작업 디렉터리와 진단 파일은 보존했다.
+
+| PR | 검증 기준 head | CI |
+| --- | --- | --- |
+| #160 | `44b8dbf` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34623490394/job/103348789656) |
+| #161 | `e661cd9` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34624589752/job/103358746126) |
+| #162 | `4a9ae73` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34625257039/job/103354537066) |
+| #163 | `f27e918` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34625671768/job/103355678848) |
+| #164 | `3515ee4` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34686466921/job/103536402875) |
+| #165 | `26c7c89` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34686474191/job/103536193155) |
+| #166 | `09de475` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34686521455/job/103536882078) |
+| #167 | `f59b4e5` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34686908537/job/103537888954) |
+| #168 | `8153054` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34687287318/job/103538567568) |
+| #169 | `17a901e` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34687362238/job/103537490300) |
+| #170 | `5dd677e` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34690568190/job/103547236701) |
+| #171 | `94a5dbe` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34690606763/job/103547285865) |
+| #172 | `ade1cb6` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34690607555/job/103547504411) |
+| #173 | `ed4643f` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34690657691/job/103549207208) |
+| #174 | `0fbe77a` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34690950809/job/103549326033) |
+| #175 | `9fee15c` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34692533679/job/103552799460) |
+| #176 | `5ce9204` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34692560930/job/103552879352) |
+| #177 | `8645612` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34693445978/job/103555224899) |
+| #178 | `0397b31` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34693514886/job/103554182617) |
+| #179 | `2601020` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34693516250/job/103554203520) |
+| #180 | `0d7fed2` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34693517460/job/103552996062) |
+| #181 | `7fa5a44` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34693518735/job/103556346745) |
+| #182 | `58457f4` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34693519568/job/103555341167) |
+| #183 | `a03fcfb` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34693636090/job/103557192150) |
+| #184 | `1bb153b` | [Passed](https://github.com/kdh949/BeanFlow/actions/runs/34693665028/job/103553399065) |
+
+- 2026-09-12: 최신 CI·리뷰 해결·스택 선후 관계를 확인하고 이 실행 계획을 완료 처리했다.
