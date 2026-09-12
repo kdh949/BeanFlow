@@ -1,12 +1,11 @@
 import { SupportOrderConsentPicker, type OrderConsentSelection } from "./SupportOrderConsentPicker";
 import { SupportWorkPicker } from "./SupportWorkPicker";
-import { supportSubjectLabel } from "./supportCaseLabels";
+import { supportSubjectLabel, isSupportSubjectSelectable, type SupportSubjectDisplaySource } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import type { components } from "../../api/schema";
 import { operationsApi } from "../../api/consoleClient";
-import { customerApi } from "../../api/customerClient";
 import { ApiRequestError, unwrap } from "../../api/client";
 import { Button, ButtonLink, EmptyState, InlineNotice, LoadingState, PageHeading, SelectField, TextAreaField, TextField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
@@ -19,7 +18,7 @@ import { SupportResolutionWorkspace } from "./SupportResolutionWorkspace";
 import { useExpired } from "./useSupportExpiry";
 import { useSupportCommand } from "./useSupportCommand";
 
-type Case = { caseId: string; state: string; subjectLinks: readonly { subjectType: string; subjectId: string; relationship: string }[] };
+type Case = { caseId: string; state: string; subjectLinks: readonly (SupportSubjectDisplaySource & { subjectType: string; subjectId: string; relationship: string })[] };
 type Verification = { sessionId: string; state: string; actionScope: string; purpose: string; expiresAt: string };
 type Request = components["schemas"]["SupportActionRequestResource"];
 type Workflow = components["schemas"]["SupportOrderWorkflowResource"];
@@ -48,7 +47,7 @@ export function SupportOrderActionPage() {
 
 function CreateOrderRequest({ supportCase, verification, onCreated, revision, onBusyChange }: { onBusyChange?: (value: boolean) => void; supportCase: Case; verification?: Verification | null; onCreated: (id: string) => void; revision?: Request }) {
   const orders = supportCase.subjectLinks.filter(link => link.subjectType === "ORDER" && link.relationship === "RELATED_ORDER");
-  const [orderId, setOrderId] = useState(revision?.targetId ?? orders[0]?.subjectId ?? "");
+  const [orderId, setOrderId] = useState(revision?.targetId ?? orders.find(isSupportSubjectSelectable)?.subjectId ?? "");
   const [action, setAction] = useState<OrderChangeAction | "POST_ACCEPTANCE_RESOLUTION">(revision?.action === "POST_ACCEPTANCE_RESOLUTION" ? "POST_ACCEPTANCE_RESOLUTION" : revision?.action === "PICKUP_RESCHEDULE" ? "PICKUP_RESCHEDULE" : "ORDER_CANCELLATION");
   const [resolutionDraft, setResolutionDraft] = useState<ResolutionDraft>(initialResolutionDraft);
   const [reasonCode, setReasonCode] = useState<CancellationReason>("CHANGED_MIND");
@@ -57,13 +56,14 @@ function CreateOrderRequest({ supportCase, verification, onCreated, revision, on
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [evaluating, setEvaluating] = useState(false); const [preparing, setPreparing] = useState(false); const [error, setError] = useState<unknown>(null);
   const generation = useRef(0);
-  const orderRead = useResource(useCallback(async () => orderId ? unwrap(await operationsApi.GET("/support/cases/{caseId}/orders/{orderId}", { params: { path: { caseId: supportCase.caseId, orderId } } })) : null, [orderId, supportCase.caseId]));
-  const command = useSupportCommand(() => { setEvaluation(null); orderRead.reload(); });
+  const selectedOrder = orders.find(link => link.subjectId === orderId && isSupportSubjectSelectable(link));
+  const orderRead = useResource(useCallback(async () => selectedOrder ? unwrap(await operationsApi.GET("/support/cases/{caseId}/orders/{orderId}", { params: { path: { caseId: supportCase.caseId, orderId } } })) : null, [orderId, selectedOrder, supportCase.caseId]));
+  const command = useSupportCommand(`order-request:${revision?.requestId ?? supportCase.caseId}`, () => { setEvaluation(null); orderRead.reload(); });
   const verificationExpired = useExpired(verification?.expiresAt), evaluationExpired = useExpired(evaluation?.expiresAt);
   const active = !["RESOLVED", "CLOSED"].includes(supportCase.state);
   const verified = verification?.state === "VERIFIED" && verification.actionScope === "SUPPORT_ACTION" && verification.purpose === "CASE_RESOLUTION" && !verificationExpired;
   useEffect(() => { generation.current++; setEvaluation(null); }, [action, orderId, verification?.sessionId, verification?.state]);
-  const current = orderRead.state.status === "ready" ? orderRead.state.value : null;
+  const current = selectedOrder && orderRead.state.status === "ready" ? orderRead.state.value : null;
   const disabled = command.busy || command.pending || preparing || evaluating;
   useEffect(() => { onBusyChange?.(disabled); return () => onBusyChange?.(false); }, [disabled, onBusyChange]);
   async function evaluate() {
@@ -94,11 +94,11 @@ function CreateOrderRequest({ supportCase, verification, onCreated, revision, on
   if (!orders.length) return <EmptyState title="연결된 주문이 없습니다" description="상담 관리에서 관련 주문을 연결한 뒤 요청해 주세요." action={<ButtonLink to={`/support/cases/${supportCase.caseId}`}>상담 대상 연결</ButtonLink>} />;
   return <div className="surface-card management-card management-workspace">
     <h3>{revision ? "새 승인안 작성" : "새 주문 변경 요청"}</h3>
-    <SelectField label="연결된 주문" value={orderId} disabled={!!revision || disabled} onValueChange={setOrderId}>{orders.map(link => <option key={link.subjectId} value={link.subjectId}>{supportSubjectLabel(link)}</option>)}</SelectField>
+    {orders.some(link => !isSupportSubjectSelectable(link)) ? <p>표시 정보 조회 권한과 등록된 대상 프로필을 확인해 주세요.</p> : null}<SelectField label="연결된 주문" value={selectedOrder?.subjectId ?? ""} disabled={!!revision || disabled} onValueChange={setOrderId}><option value="">표시 정보를 확인한 주문 선택</option>{orders.map(link => <option key={link.subjectId} value={link.subjectId} disabled={!isSupportSubjectSelectable(link)}>{supportSubjectLabel(link)}</option>)}</SelectField>
     <SelectField label="주문 변경 업무" value={action} disabled={!!revision || disabled} onValueChange={value => { setAction(value as typeof action); setSlotId(""); }}>{Object.entries({ ...orderActionLabels, POST_ACCEPTANCE_RESOLUTION: " 수락 후 해결" }).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField>
     {orderRead.state.status === "loading" ? <LoadingState label="현재 주문 정보를 읽는 중" /> : orderRead.state.status === "failed" ? <ErrorState error={orderRead.state.error} retry={orderRead.reload} /> : current ? <>
       <p>현재 주문 <StatusText state={current.state} /> · 버전 {current.version}</p>
-      {action === "POST_ACCEPTANCE_RESOLUTION" ? <SupportResolutionPlanFields value={resolutionDraft} onChange={setResolutionDraft} disabled={disabled} /> : <OrderPayloadFields action={action} storeId={current.storeId} reason={reasonCode} slotId={slotId} onReason={setReasonCode} onSlot={setSlotId} disabled={disabled} />}
+      {action === "POST_ACCEPTANCE_RESOLUTION" ? <SupportResolutionPlanFields value={resolutionDraft} onChange={setResolutionDraft} disabled={disabled} /> : <OrderPayloadFields action={action} pickupScope={{ caseId: supportCase.caseId, orderId }} reason={reasonCode} slotId={slotId} onReason={setReasonCode} onSlot={setSlotId} disabled={disabled} />}
       <Button variant="secondary" disabled={disabled} loading={evaluating} onClick={() => void evaluate()}>현재 주문 변경 가능 여부 확인</Button>
     </> : null}
     {evaluation ? <InlineNotice tone={evaluation.decision === "DENIED" ? "warning" : "info"} title={evaluation.decision === "DENIED" ? "현재 요청할 수 없습니다" : evaluation.decision === "APPROVAL_REQUIRED" ? "승인 후 실행할 수 있습니다" : "현재 요청할 수 있습니다"} description={`${evaluation.reasonCodes.map(code => evaluationReasons[code] ?? code).join(" · ")} · 필요한 본인확인 ${evaluation.requiredVerificationLevel === "ENHANCED" ? "강화" : "기본"}`} /> : null}
@@ -114,7 +114,7 @@ function CreateOrderRequest({ supportCase, verification, onCreated, revision, on
 
 function RequestInspection({ requestId, supportCase, verification, onBusyChange }: { onBusyChange: (value: boolean) => void; requestId: string; supportCase?: Case; verification?: Verification | null }) {
   const read = useResource(useCallback(async () => { const result = unwrap(await operationsApi.GET("/support/action-requests/{requestId}/workflow", { params: { path: { requestId } } })); if (supportCase && result.request.caseId !== supportCase.caseId) throw new ApiRequestError(403, "ACCESS_DENIED", "현재 상담에 속한 요청이 아닙니다."); return result; }, [requestId, supportCase?.caseId]));
-  const command = useSupportCommand(read.reload);
+  const command = useSupportCommand(`order-workflow:${requestId}`, read.reload);
   const [message, setMessage] = useState(""); const [execution, setExecution] = useState<components["schemas"]["SupportOrderChangeExecutionResource"] | null>(null);
   const [reasonCode, setReasonCode] = useState<CancellationReason>("CHANGED_MIND"); const [slotId, setSlotId] = useState(""); const [digest, setDigest] = useState("");
   const [decision, setDecision] = useState<components["schemas"]["SupportApprovalDecision"]>("APPROVE"); const [reason, setReason] = useState(""); const [assignee, setAssignee] = useState<OperatorSelection | null>(null); const [consent, setConsent] = useState<{ value: OrderConsentSelection; binding: string } | null>(null);
@@ -143,19 +143,19 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
   function decide() {
     if (!request || !allowed("DECIDE_SUPPORT_MANAGER") || !reason.trim() || (decision === "APPROVE" && !matches)) return;
     const body = { revisionNumber: request.revisionNumber, expectedRequestVersion: request.requestVersion, decision, reason: reason.trim() };
-    command.submit(JSON.stringify(body), key => operationsApi.POST("/support/action-requests/{requestId}/support-manager-decisions", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => { setMessage("승인 결정을 기록했습니다"); setReason(""); });
+    command.submit(JSON.stringify({ operation: "decide", body }), key => operationsApi.POST("/support/action-requests/{requestId}/support-manager-decisions", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => { setMessage("승인 결정을 기록했습니다"); setReason(""); });
   }
   function reassign() {
     if (!assignee) return;
     if (!request || !value || !allowed("REASSIGN")) return;
     const body = { revisionNumber: request.revisionNumber, expectedRequestVersion: request.requestVersion, expectedCaseVersion: value.caseVersion, assigneeId: assignee.operatorId, reason: reason.trim() };
-    command.submit(JSON.stringify(body), key => operationsApi.POST("/support/action-requests/{requestId}/reassignments", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => setMessage("상담과 요청의 담당자를 변경했습니다"));
+    command.submit(JSON.stringify({ operation: "reassign", body }), key => operationsApi.POST("/support/action-requests/{requestId}/reassignments", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body }).then(unwrap), () => setMessage("상담과 요청의 담당자를 변경했습니다"));
   }
   function execute() {
     if (!request || blocked || !allowed("EXECUTE") || !direct || !matches || (value?.order?.state === "ACCEPTED" && !authorizationId)) return;
     const common = { revisionNumber: request.revisionNumber, expectedRequestVersion: request.requestVersion, expectedTargetVersion: request.targetVersion, ...(authorizationId.trim() ? { authorizationId: authorizationId.trim() } : {}) };
     const body = request.action === "ORDER_CANCELLATION" ? { ...common, action: "ORDER_CANCELLATION" as const, reasonCode } : { ...common, action: "PICKUP_RESCHEDULE" as const, newPickupSlotId: slotId };
-    command.submit(JSON.stringify(body), async key => { const result = unwrap(await operationsApi.POST("/support/action-requests/{requestId}/executions", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body })); setExecution(result); setMessage(result.outcome === "RESOLUTION_REQUIRED" ? "수락 후 해결 업무로 전환해야 합니다" : "주문 변경을 처리했습니다"); }, () => undefined);
+    command.submit(JSON.stringify({ operation: "execute", body }), async key => { const result = unwrap(await operationsApi.POST("/support/action-requests/{requestId}/executions", { params: { path: { requestId }, header: { "Idempotency-Key": key } }, body })); setExecution(result); setMessage(result.outcome === "RESOLUTION_REQUIRED" ? "수락 후 해결 업무로 전환해야 합니다" : "주문 변경을 처리했습니다"); }, () => undefined);
   }
   async function createResolution() {
     if (!request || !matches || !allowed("EXECUTE") || blocked || !validResolutionDraft(resolutionDraft)) return;
@@ -180,7 +180,7 @@ function RequestInspection({ requestId, supportCase, verification, onBusyChange 
       <div className="button-row"><Button variant="secondary" onClick={read.reload} disabled={command.busy || resolutionBusy || preparingResolution}>요청 상태 새로고침</Button><ButtonLink variant="secondary" to={`/support/action-requests/${requestId}`}>요청 검토 주소</ButtonLink><ButtonLink variant="secondary" to={`/support/follow-up?caseId=${request.caseId}&requestId=${requestId}`}>상담에서 요청 이어가기</ButtonLink></div>
       {expired && request.state !== "EXECUTED" ? <InlineNotice tone="warning" title="승인안의 유효 시간이 지났습니다" description="현재 상태를 다시 확인하고 필요한 경우 새 요청을 시작해 주세요." /> : null}
       {(direct || request.action === "POST_ACCEPTANCE_RESOLUTION") && !value.resolutionId && !createdResolutionId && (allowed("EXECUTE") || allowed("DECIDE_SUPPORT_MANAGER")) ? <>
-        {request.action === "POST_ACCEPTANCE_RESOLUTION" ? <SupportResolutionPlanFields value={resolutionDraft} onChange={setResolutionDraft} disabled={blocked} /> : <OrderPayloadFields action={request.action as OrderChangeAction} storeId={value.order?.storeId} reason={reasonCode} slotId={slotId} onReason={setReasonCode} onSlot={setSlotId} disabled={blocked} />}
+        {request.action === "POST_ACCEPTANCE_RESOLUTION" ? <SupportResolutionPlanFields value={resolutionDraft} onChange={setResolutionDraft} disabled={blocked} /> : <OrderPayloadFields action={request.action as OrderChangeAction} pickupScope={value.order ? { requestId } : undefined} reason={reasonCode} slotId={slotId} onReason={setReasonCode} onSlot={setSlotId} disabled={blocked} />}
         <InlineNotice tone={matches ? "info" : "warning"} title={matches ? "선택한 내용이 현재 승인안과 일치합니다" : "선택한 내용이 현재 승인안과 다릅니다"} description="승인 요청 때 선택한 변경 내용과 증빙을 확인합니다. 내용이 다르면 새 승인안이 필요합니다." />
       </> : null}
       {allowed("DECIDE_SUPPORT_MANAGER") ? <form className="operation-form" onSubmit={event => { event.preventDefault(); decide(); }}><SelectField label="승인 결정" value={decision} onValueChange={value => setDecision(value as typeof decision)} disabled={blocked}><option value="APPROVE">승인</option><option value="DENY">반려</option><option value="RETURN_FOR_REVISION">수정 요청</option></SelectField><TextAreaField label="결정 사유" value={reason} onValueChange={setReason} required maxLength={500} disabled={blocked} /><Button type="submit" disabled={blocked || (decision === "APPROVE" && !matches) || !reason.trim()}>승인 결정 기록</Button></form> : null}
@@ -201,11 +201,15 @@ function CommandResult({ command }: { command: ReturnType<typeof useSupportComma
   return <>{command.failure ? <ErrorState error={command.failure} /> : null}{command.pending ? <InlineNotice tone="warning" title="요청 결과를 확인하지 못했습니다" description="새 명령을 만들기 전에 같은 요청으로 결과를 확인해 주세요." /> : null}{command.pending ? <Button variant="secondary" loading={command.busy} onClick={() => void command.retry()}>같은 요청으로 결과 확인</Button> : null}</>;
 }
 
-function OrderPayloadFields({ action, storeId, reason, slotId, onReason, onSlot, disabled }: { action: OrderChangeAction; storeId?: string; reason: CancellationReason; slotId: string; onReason: (value: CancellationReason) => void; onSlot: (value: string) => void; disabled: boolean }) {
-  return action === "ORDER_CANCELLATION" ? <SelectField label="취소 사유 확인" value={reason} onValueChange={value => onReason(value as CancellationReason)} disabled={disabled}>{Object.entries(cancellationReasonLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</SelectField> : storeId ? <PickupChoice storeId={storeId} value={slotId} onChange={onSlot} disabled={disabled} /> : <InlineNotice tone="warning" title="매장 정보를 확인할 수 없습니다" description="주문 조회 권한을 확인한 뒤 다시 조회해 주세요." />;
+type PickupScope = { caseId: string; orderId: string; requestId?: never } | { requestId: string; caseId?: never; orderId?: never };
+function OrderPayloadFields({ action, pickupScope, reason, slotId, onReason, onSlot, disabled }: { action: OrderChangeAction; pickupScope?: PickupScope; reason: CancellationReason; slotId: string; onReason: (value: CancellationReason) => void; onSlot: (value: string) => void; disabled: boolean }) {
+  return action === "ORDER_CANCELLATION" ? <SelectField label="취소 사유 확인" value={reason} onValueChange={value => onReason(value as CancellationReason)} disabled={disabled}>{Object.entries(cancellationReasonLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</SelectField> : pickupScope ? <PickupChoice scope={pickupScope} value={slotId} onChange={onSlot} disabled={disabled} /> : <InlineNotice tone="warning" title="매장 정보를 확인할 수 없습니다" description="주문 조회 권한을 확인한 뒤 다시 조회해 주세요." />;
 }
-function PickupChoice({ storeId, value, onChange, disabled }: { storeId: string; value: string; onChange: (value: string) => void; disabled: boolean }) {
-  const read = useResource(useCallback(async () => unwrap(await customerApi.GET("/stores/{storeId}/pickup-slots", { params: { path: { storeId } } })), [storeId]));
+function PickupChoice({ scope, value, onChange, disabled }: { scope: PickupScope; value: string; onChange: (value: string) => void; disabled: boolean }) {
+  const { caseId, orderId, requestId } = scope;
+  const read = useResource(useCallback(async () => requestId
+    ? unwrap(await operationsApi.GET("/support/action-requests/{requestId}/pickup-slots", { params: { path: { requestId } } }))
+    : unwrap(await operationsApi.GET("/support/cases/{caseId}/orders/{orderId}/pickup-slots", { params: { path: { caseId: caseId!, orderId: orderId! } } })), [caseId, orderId, requestId]));
   if (read.state.status === "loading") return <LoadingState label="현재 가능한 픽업 시간을 읽는 중" />;
   if (read.state.status === "failed") return <ErrorState error={read.state.error} retry={read.reload} />;
   return <SelectField label="변경할 픽업 시간" value={value} onValueChange={onChange} disabled={disabled} required description="현재 남은 정원은 실행할 때 다시 검증합니다."><option value="">픽업 시간을 선택해 주세요</option>{read.state.value.items.map(slot => <option key={slot.pickupSlotId} value={slot.pickupSlotId} disabled={slot.remainingCapacity < 1}>{shortDateTime.format(new Date(slot.startsAt))} · 남은 정원 {slot.remainingCapacity}</option>)}</SelectField>;

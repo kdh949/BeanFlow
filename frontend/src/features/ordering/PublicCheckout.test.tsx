@@ -45,3 +45,12 @@ it("keeps the payment control mounted when focus refresh begins during a pointer
   fireEvent.click(button);
   await waitFor(() => expect(requestTossStandardPayment).toHaveBeenCalledOnce());
 });
+
+it("allows fresh server eligibility when the device clock is ahead of both deadlines", async () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2100-01-01T00:00:00Z"));
+  setup();
+  const button = await screen.findByRole("button", { name: /결제하기/ });
+  await waitFor(() => expect(button).toBeEnabled());
+  await userEvent.click(button);
+  await waitFor(() => expect(requestTossStandardPayment).toHaveBeenCalledOnce());
+});

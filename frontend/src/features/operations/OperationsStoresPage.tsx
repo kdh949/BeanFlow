@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { SubmissionIntent, unwrap } from "../../api/client";
 import { operationsApi } from "../../api/consoleClient";
-import { Button, EmptyState, LoadingState, PageHeading, Tab, TabList, TabPanel, Tabs, TextAreaField, TextField } from "../../design-system";
+import { Button, EmptyState, LoadingState, PageHeading, Tab, TabList, TabPanel, Tabs, SelectField, TextAreaField, TextField } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
 import { useResource } from "../shared/useResource";
 import { StoreMediaWorkspace } from "./StoreMediaWorkspace";
@@ -12,10 +12,13 @@ import { StorePointPolicyWorkspace } from "./StorePointPolicyWorkspace";
 
 type StoreIdentity = components["schemas"]["StoreIdentitySnapshot"];
 type Region = components["schemas"]["OperatorStoreRegion"];
+type StorePurpose = "IDENTITY" | "TERMS" | "MEMBERSHIP" | "BRAND" | "POINT_POLICY" | "MEDIA" | "MEMBERSHIP_ASSIGNMENT";
+const purposeWorkspaces = { IDENTITY: "identity", TERMS: "terms", MEMBERSHIP: "memberships", BRAND: "identity", POINT_POLICY: "points", MEDIA: "media", MEMBERSHIP_ASSIGNMENT: "memberships" };
 type Brand = components["schemas"]["Brand"];
 
 /** Store selection is shared by the operator's identity and store-scoped management work. */
 export function OperationsStoresPage() {
+  const [purpose, setPurpose] = useState<StorePurpose>("IDENTITY");
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [cursors, setCursors] = useState<Array<string | undefined>>([undefined]);
@@ -23,34 +26,35 @@ export function OperationsStoresPage() {
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState("");
   const cursor = cursors.at(-1);
-  const stores = useResource(useCallback(async () => unwrap(await operationsApi.GET("/operations/stores", { params: { query: { query: query || undefined, cursor, limit: 20 } } })), [query, cursor]));
+  const stores = useResource(useCallback(async () => unwrap(await operationsApi.GET("/operations/store-targets", { params: { query: { purpose, query: query || undefined, cursor, limit: 20 } } })), [purpose, query, cursor]));
   return <div className="console-page">
     <PageHeading title="매장 관리" action={<Button onClick={() => { setCreating(true); setSelected(null); setNotice(""); }}>새 매장 등록</Button>} />
+    <SelectField label="매장 관리 목적" value={purpose} onValueChange={value => { setPurpose(value as StorePurpose); setSelected(null); setCreating(false); setCursors([undefined]); }}><option value="IDENTITY">식별정보 확인</option><option value="TERMS">정산 계약</option><option value="MEMBERSHIP">점주·직원 소속</option><option value="MEMBERSHIP_ASSIGNMENT">점주·직원 소속 추가</option><option value="BRAND">브랜드 소속</option><option value="POINT_POLICY">포인트 정책</option><option value="MEDIA">매장·메뉴 이미지</option></SelectField>
     <form className="button-row" onSubmit={event => { event.preventDefault(); if (query === search.trim() && !cursor) stores.reload(); else { setQuery(search.trim()); setCursors([undefined]); } }}>
       <TextField label="매장 이름 검색" value={search} onValueChange={setSearch} maxLength={200} />
       <Button type="submit" variant="secondary">매장 검색</Button>
     </form>
     {notice ? <p role="status">{notice}</p> : null}
     {stores.state.status === "loading" ? <LoadingState label="매장 목록을 불러오는 중" /> : stores.state.status === "failed" ? <ErrorState error={stores.state.error} retry={stores.reload} /> : <section className="surface-card management-card">
-      {stores.state.value.items.length ? <ul className="menu-authoring-list">{stores.state.value.items.map(store => <li key={store.storeId}><div><strong>{store.name}</strong><p className="support-case-reference">{store.storeId}</p><p>주문 {store.acceptingOrders ? "접수 중" : "접수 중지"} · 픽업 {store.pickupEnabled ? "사용" : "중지"}</p></div><Button variant="secondary" aria-label={`${store.name} 관리`} onClick={() => { setSelected(store.storeId); setCreating(false); setNotice(""); }}>관리</Button></li>)}</ul> : <EmptyState title="검색 결과가 없습니다." description="매장 이름을 확인하거나 새 매장을 등록해 주세요." />}
+      {stores.state.value.items.length ? <ul className="menu-authoring-list">{stores.state.value.items.map(store => <li key={store.storeId}><div><strong>{store.name}</strong><p className="support-case-reference">{store.storeId}</p></div><Button variant="secondary" aria-label={`${store.name} 관리`} onClick={() => { setSelected(store.storeId); setCreating(false); setNotice(""); }}>관리</Button></li>)}</ul> : <EmptyState title="검색 결과가 없습니다." description="매장 이름을 확인하거나 새 매장을 등록해 주세요." />}
       <div className="button-row"><Button variant="ghost" disabled={cursors.length === 1} onClick={() => setCursors(value => value.slice(0, -1))}>이전 매장 목록</Button><Button variant="secondary" disabled={!stores.state.value.nextCursor} onClick={() => { if (stores.state.status === "ready" && stores.state.value.nextCursor) { const next = stores.state.value.nextCursor; setCursors(value => [...value, next]); } }}>다음 매장 목록</Button></div>
     </section>}
     {creating ? <section className="surface-card management-card"><h2>새 매장</h2><IdentityForm onSaved={store => { setCreating(false); setSelected(store.storeId); setNotice("매장을 등록했습니다. 주문 접수와 픽업은 중지 상태입니다."); stores.reload(); }} /><Button variant="ghost" onClick={() => setCreating(false)}>등록 닫기</Button></section> : null}
-    {selected ? <StoreWorkspace key={selected} storeId={selected} onChanged={stores.reload} /> : null}
+    {selected ? <StoreWorkspace key={selected} storeId={selected} purpose={purpose} onChanged={stores.reload} /> : null}
   </div>;
 }
 
-function StoreWorkspace({ storeId, onChanged }: { storeId: string; onChanged: () => void }) {
-  const [workspace, setWorkspace] = useState("identity");
-  const identity = useResource(useCallback(async () => unwrap(await operationsApi.GET("/operations/stores/{storeId}/identity", { params: { path: { storeId } } })), [storeId]));
+function StoreWorkspace({ storeId, onChanged, purpose }: { storeId: string; onChanged: () => void; purpose: StorePurpose }) {
+  const [workspace, setWorkspace] = useState(purposeWorkspaces[purpose]);
+  const identity = useResource(useCallback(async () => workspace === "identity" && purpose !== "BRAND" ? unwrap(await operationsApi.GET("/operations/stores/{storeId}/identity", { params: { path: { storeId } } })) : null, [storeId, workspace, purpose]));
   const [saved, setSaved] = useState(false);
   return <section className="management-workspace"><h2>선택한 매장</h2><p className="support-case-reference">{storeId}</p>
     <Tabs value={workspace} onValueChange={setWorkspace}><TabList label="선택한 매장 업무"><Tab value="identity">식별정보·브랜드</Tab><Tab value="terms">정산 계약</Tab><Tab value="memberships">점주·직원 소속</Tab><Tab value="points">포인트 정책</Tab><Tab value="media">매장·메뉴 이미지</Tab></TabList>
     <TabPanel value="identity">
     {saved ? <p role="status">식별정보를 저장했습니다.</p> : null}
-    {identity.state.status === "loading" ? <LoadingState label="현재 식별정보를 불러오는 중" /> : identity.state.status === "failed" ? <ErrorState error={identity.state.error} retry={identity.reload} /> : <div className="surface-card management-card"><IdentityForm key={identity.state.value.version} current={identity.state.value} onSaved={() => { setSaved(true); identity.reload(); onChanged(); }} onRefresh={() => { setSaved(false); identity.reload(); }} /></div>}
+    {identity.state.status === "loading" ? <LoadingState label="현재 식별정보를 불러오는 중" /> : identity.state.status === "failed" ? <ErrorState error={identity.state.error} retry={identity.reload} /> : identity.state.value ? <div className="surface-card management-card"><IdentityForm key={identity.state.value.version} current={identity.state.value} onSaved={() => { setSaved(true); identity.reload(); onChanged(); }} onRefresh={() => { setSaved(false); identity.reload(); }} /></div> : null}
     <StoreBrandEditor storeId={storeId} />
-    </TabPanel><TabPanel value="terms"><StoreTermsWorkspace storeId={storeId} /></TabPanel><TabPanel value="memberships"><StoreMembershipsWorkspace storeId={storeId} /></TabPanel><TabPanel value="points"><StorePointPolicyWorkspace storeId={storeId} /></TabPanel><TabPanel value="media"><StoreMediaWorkspace storeId={storeId} /></TabPanel></Tabs>
+    </TabPanel><TabPanel value="terms"><StoreTermsWorkspace storeId={storeId} /></TabPanel><TabPanel value="memberships"><StoreMembershipsWorkspace storeId={storeId} mode={purpose === "MEMBERSHIP_ASSIGNMENT" ? "add" : "manage"} /></TabPanel><TabPanel value="points"><StorePointPolicyWorkspace storeId={storeId} /></TabPanel><TabPanel value="media"><StoreMediaWorkspace storeId={storeId} /></TabPanel></Tabs>
   </section>;
 }
 

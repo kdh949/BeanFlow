@@ -818,6 +818,68 @@ internal class PaymentSetupRepairIntegrationTest
         }
 
         @Test
+        fun `repair directory reads audit purpose and count and fail closed on audit failure`() {
+            val damaged = createMissingRefundCase("directory-audit")
+            propose(damaged.caseId, proposer, "directory-audit-proposal", "Review missing refund")
+            for ((path, action) in listOf(
+                "/api/v1/operations/payment-setup-recovery-cases" to "PAYMENT_SETUP_RECOVERY_CASES_READ",
+                "/api/v1/operations/reprocessing-repair-proposals" to "PAYMENT_SETUP_REPAIR_PROPOSALS_READ",
+            )) {
+                mockMvc.perform(get(path).with(operatorJwt(approver))).andExpect(status().isOk)
+                val audit =
+                    jdbcTemplate.queryForMap(
+                        "SELECT reason, after_summary::text AS payload FROM operations_audit_record WHERE action = ?",
+                        action,
+                    )
+                assertThat(audit["reason"]).isEqualTo("PAYMENT_SETUP_RECOVERY_REVIEW")
+                assertThat(audit["payload"].toString())
+                    .contains("resultCount", "stateFilter")
+                    .doesNotContain(damaged.orderId.toString(), damaged.providerKey, damaged.sourceReference)
+                installAuditFailureTrigger()
+                try {
+                    mockMvc
+                        .perform(get(path).with(operatorJwt(approver)))
+                        .andExpect(status().isServiceUnavailable)
+                        .andExpect(jsonPath("$.items").doesNotExist())
+                } finally {
+                    dropAuditFailureTrigger()
+                }
+                assertThat(
+                    jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record WHERE action = ?", Long::class.java, action),
+                ).isOne()
+            }
+        }
+
+        @Test
+        fun `case filter exposes proposal eligibility from status and resolution`() {
+            val damaged = createMissingRefundCase("directory-eligibility")
+            val path = "/api/v1/operations/payment-setup-recovery-cases"
+            for ((state, resolution, eligible) in listOf(
+                Triple("OPEN", null, true),
+                Triple("OPEN", "REPAIRED", false),
+                Triple("RUNNING", null, false),
+                Triple("RESOLVED", "REPAIRED", false),
+                Triple("MANUAL_REVIEW", null, false),
+            )) {
+                jdbcTemplate.update(
+                    "UPDATE operations_reprocessing_case SET status = ?, resolution = ? WHERE id = ?",
+                    state,
+                    resolution,
+                    damaged.caseId,
+                )
+                mockMvc
+                    .perform(get(path).with(operatorJwt(approver)).param("caseId", damaged.caseId.toString()))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andExpect(jsonPath("$.items[0].canPropose").value(eligible))
+            }
+            mockMvc
+                .perform(get(path).with(operatorJwt(approver)).param("caseId", UUID.randomUUID().toString()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(0))
+        }
+
+        @Test
         fun `malformed recovery ownership fails explicitly instead of returning an empty queue`() {
             val damaged = createMissingRefundCase("directory-invalid-owner")
             jdbcTemplate.update(

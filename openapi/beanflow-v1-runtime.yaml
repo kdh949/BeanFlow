@@ -203,22 +203,22 @@ paths:
         - 404: 대상 자원을 찾을 수 없는 경우
         - 503: 주문 저장소를 사용할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/OrderId
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
       responses:
         '200':
           description: 주문 조회 결과
           content:
             application/json:
               schema:
-                $ref: ./beanflow-v1.yaml#/components/schemas/Order
+                $ref: "./beanflow-v1.yaml#/components/schemas/Order"
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '404':
-          $ref: ./beanflow-v1.yaml#/components/responses/NotFound
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /orders/{orderId}/cancellations:
     post:
       tags:
@@ -237,39 +237,39 @@ paths:
         - 409: 주문이 이미 수락됐거나 취소할 수 없는 상태이거나 `Idempotency-Key`가 충돌한 경우
         - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/OrderId
-        - $ref: ./beanflow-v1.yaml#/components/parameters/IdempotencyKey
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: ./beanflow-v1.yaml#/components/schemas/CancellationRequest
+              $ref: "./beanflow-v1.yaml#/components/schemas/CancellationRequest"
       responses:
         '200':
           description: 주문 취소 결과
           content:
             application/json:
               schema:
-                $ref: ./beanflow-v1.yaml#/components/schemas/Cancellation
+                $ref: "./beanflow-v1.yaml#/components/schemas/Cancellation"
         '202':
           description: 요청은 반영되었고 후속 확인·복구 작업은 계속 진행 중
           content:
             application/json:
               schema:
-                $ref: ./beanflow-v1.yaml#/components/schemas/Cancellation
+                $ref: "./beanflow-v1.yaml#/components/schemas/Cancellation"
         '400':
-          $ref: ./beanflow-v1.yaml#/components/responses/BadRequest
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '404':
-          $ref: ./beanflow-v1.yaml#/components/responses/NotFound
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         '409':
-          $ref: ./beanflow-v1.yaml#/components/responses/Conflict
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /me/orders:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1orders"
   /me/coupons:
@@ -302,40 +302,40 @@ paths:
         - 409: 주문이 이미 수락됐거나 취소할 수 없는 상태이거나 `Idempotency-Key`가 충돌한 경우
         - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/OrderReference
-        - $ref: ./beanflow-v1.yaml#/components/parameters/IdempotencyKey
-        - $ref: ./beanflow-v1.yaml#/components/parameters/CustomerCsrfToken
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderReference"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/CustomerCsrfToken"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: ./beanflow-v1.yaml#/components/schemas/CancellationRequest
+              $ref: "./beanflow-v1.yaml#/components/schemas/CancellationRequest"
       responses:
         '200':
           description: 공개 주문번호 주문 취소 결과
           content:
             application/json:
               schema:
-                $ref: ./beanflow-v1.yaml#/components/schemas/CustomerCancellationResult
+                $ref: "./beanflow-v1.yaml#/components/schemas/CustomerCancellationResult"
         '202':
           description: 요청은 반영되었고 후속 확인·복구 작업은 계속 진행 중
           content:
             application/json:
               schema:
-                $ref: ./beanflow-v1.yaml#/components/schemas/CustomerCancellationResult
+                $ref: "./beanflow-v1.yaml#/components/schemas/CustomerCancellationResult"
         '400':
-          $ref: ./beanflow-v1.yaml#/components/responses/BadRequest
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '404':
-          $ref: ./beanflow-v1.yaml#/components/responses/NotFound
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         '409':
-          $ref: ./beanflow-v1.yaml#/components/responses/Conflict
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /me/orders/{orderReference}/reorders:
     $ref: "./beanflow-v1.yaml#/paths/~1me~1orders~1{orderReference}~1reorders"
   /me/points:
@@ -384,40 +384,40 @@ paths:
         - 409: 이미 환불한 수량을 다시 요청했거나 환불 가능 금액·상태가 충돌한 경우
         - 503: 결제사 또는 필수 저장소를 사용할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/PaymentId
-        - $ref: ./beanflow-v1.yaml#/components/parameters/IdempotencyKey
-        - $ref: ./beanflow-v1.yaml#/components/parameters/MerchantCsrfToken
+        - $ref: "./beanflow-v1.yaml#/components/parameters/PaymentId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/MerchantCsrfToken"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: ./beanflow-v1.yaml#/components/schemas/CreateRefundRequest
+              $ref: "./beanflow-v1.yaml#/components/schemas/CreateRefundRequest"
       responses:
         '201':
           description: 결제 전액·부분 환불 생성 결과
           content:
             application/json:
               schema:
-                $ref: ./beanflow-v1.yaml#/components/schemas/Refund
+                $ref: "./beanflow-v1.yaml#/components/schemas/Refund"
         '202':
           description: 요청은 반영되었고 후속 확인·복구 작업은 계속 진행 중
           content:
             application/json:
               schema:
-                $ref: ./beanflow-v1.yaml#/components/schemas/Refund
+                $ref: "./beanflow-v1.yaml#/components/schemas/Refund"
         '400':
-          $ref: ./beanflow-v1.yaml#/components/responses/BadRequest
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '404':
-          $ref: ./beanflow-v1.yaml#/components/responses/NotFound
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         '409':
-          $ref: ./beanflow-v1.yaml#/components/responses/Conflict
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /operations/payments/{paymentId}/refunds:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1payments~1{paymentId}~1refunds"
   /store-orders/{orderId}:
@@ -436,7 +436,7 @@ paths:
         - 404: 대상 자원을 찾을 수 없는 경우
         - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/OrderId
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
       responses:
         '200':
           description: 주문 조회 결과
@@ -445,13 +445,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/RuntimeStoreOrderResult'
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '404':
-          $ref: ./beanflow-v1.yaml#/components/responses/NotFound
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /store-orders/{orderId}/status:
     patch:
       tags:
@@ -470,8 +470,8 @@ paths:
         - 409: 허용되지 않은 상태 변경이거나 `Idempotency-Key`·현재 주문 상태가 충돌한 경우
         - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/OrderId
-        - $ref: ./beanflow-v1.yaml#/components/parameters/IdempotencyKey
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -492,17 +492,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/RuntimeStoreOrderTransitionResult'
         '400':
-          $ref: ./beanflow-v1.yaml#/components/responses/BadRequest
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '404':
-          $ref: ./beanflow-v1.yaml#/components/responses/NotFound
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         '409':
-          $ref: ./beanflow-v1.yaml#/components/responses/Conflict
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /stores/{storeId}/orders:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1orders"
   /stores/{storeId}/orders/overflow:
@@ -538,8 +538,8 @@ paths:
         - 404: 대상 자원을 찾을 수 없는 경우
         - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/OrderId
-        - $ref: ./beanflow-v1.yaml#/components/parameters/AccessReason
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/AccessReason"
       responses:
         '200':
           description: 주문 취소·거절 후 처리 상태 조회 결과
@@ -548,15 +548,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/RuntimeOperatorCompensationView'
         '400':
-          $ref: ./beanflow-v1.yaml#/components/responses/BadRequest
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '404':
-          $ref: ./beanflow-v1.yaml#/components/responses/NotFound
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /operations/merchant-accounts:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1merchant-accounts"
   /operations/merchant-accounts/{merchantAccountId}/temporary-password-resets:
@@ -580,31 +580,31 @@ paths:
         - 409: 대상 환불이 상태 재확인 대상이 아니거나 `Idempotency-Key`가 충돌한 경우
         - 503: 결제사 조회 작업을 예약할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/OrderId
-        - $ref: ./beanflow-v1.yaml#/components/parameters/IdempotencyKey
+        - $ref: "./beanflow-v1.yaml#/components/parameters/OrderId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: ./beanflow-v1.yaml#/components/schemas/CustomerCancellationRefundReconciliationRequest
+              $ref: "./beanflow-v1.yaml#/components/schemas/CustomerCancellationRefundReconciliationRequest"
       responses:
         '202':
           description: 요청은 반영되었고 후속 확인·복구 작업은 계속 진행 중
           content:
             application/json:
               schema:
-                $ref: ./beanflow-v1.yaml#/components/schemas/CustomerCancellationRefundReconciliation
+                $ref: "./beanflow-v1.yaml#/components/schemas/CustomerCancellationRefundReconciliation"
         '400':
-          $ref: ./beanflow-v1.yaml#/components/responses/BadRequest
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '409':
-          $ref: ./beanflow-v1.yaml#/components/responses/Conflict
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /operations/reprocessing-cases/{caseId}/repair-proposals:
     post:
       tags:
@@ -623,37 +623,37 @@ paths:
         - 409: 이미 복구 제안이 있거나 복구 자료·현재 상태가 충돌한 경우
         - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/IdempotencyKey
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
         - name: caseId
           in: path
           required: true
           schema:
-            $ref: ./beanflow-v1.yaml#/components/schemas/Identifier
+            $ref: "./beanflow-v1.yaml#/components/schemas/Identifier"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: ./beanflow-v1.yaml#/components/schemas/CreateRepairProposalRequest
+              $ref: "./beanflow-v1.yaml#/components/schemas/CreateRepairProposalRequest"
       responses:
         '201':
           description: 누락된 고객 취소 환불 복구 제안 생성 결과
           content:
             application/json:
               schema:
-                $ref: ./beanflow-v1.yaml#/components/schemas/RepairProposal
+                $ref: "./beanflow-v1.yaml#/components/schemas/RepairProposal"
         '400':
-          $ref: ./beanflow-v1.yaml#/components/responses/BadRequest
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '404':
-          $ref: ./beanflow-v1.yaml#/components/responses/NotFound
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         '409':
-          $ref: ./beanflow-v1.yaml#/components/responses/Conflict
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /operations/payment-setup-recovery-cases:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1payment-setup-recovery-cases"
   /operations/reprocessing-repair-proposals:
@@ -678,37 +678,37 @@ paths:
         - 409: 제안이 이미 결정됐거나 주문·결제 상태 또는 버전이 바뀐 경우
         - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/IdempotencyKey
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
         - name: proposalId
           in: path
           required: true
           schema:
-            $ref: ./beanflow-v1.yaml#/components/schemas/Identifier
+            $ref: "./beanflow-v1.yaml#/components/schemas/Identifier"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: ./beanflow-v1.yaml#/components/schemas/RepairProposalDecisionRequest
+              $ref: "./beanflow-v1.yaml#/components/schemas/RepairProposalDecisionRequest"
       responses:
         '200':
           description: 고객 취소 환불 복구 승인·반려 결과
           content:
             application/json:
               schema:
-                $ref: ./beanflow-v1.yaml#/components/schemas/RepairProposal
+                $ref: "./beanflow-v1.yaml#/components/schemas/RepairProposal"
         '400':
-          $ref: ./beanflow-v1.yaml#/components/responses/BadRequest
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '404':
-          $ref: ./beanflow-v1.yaml#/components/responses/NotFound
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         '409':
-          $ref: ./beanflow-v1.yaml#/components/responses/Conflict
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /operations/policies/expired-benefit-restoration:
     get:
       tags:
@@ -725,7 +725,7 @@ paths:
         - 403: 정책 조회 권한이 없는 경우
         - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/AccessReason
+        - $ref: "./beanflow-v1.yaml#/components/parameters/AccessReason"
       responses:
         '200':
           description: 만료 혜택 복원 정책 조회 결과
@@ -736,15 +736,15 @@ paths:
                 minItems: 5
                 maxItems: 5
                 items:
-                  $ref: ./beanflow-v1.yaml#/components/schemas/ExpiredBenefitRestorationPolicy
+                  $ref: "./beanflow-v1.yaml#/components/schemas/ExpiredBenefitRestorationPolicy"
         '400':
-          $ref: ./beanflow-v1.yaml#/components/responses/BadRequest
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /operations/policies/expired-benefit-restoration/{trigger}/{benefitType}:
     patch:
       tags:
@@ -763,7 +763,7 @@ paths:
         - 409: 현재 정책 버전이 바뀌었거나 `Idempotency-Key`가 충돌한 경우
         - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/IdempotencyKey
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
         - name: trigger
           in: path
           required: true
@@ -786,26 +786,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: ./beanflow-v1.yaml#/components/schemas/UpdateExpiredBenefitRestorationPolicyRequest
+              $ref: "./beanflow-v1.yaml#/components/schemas/UpdateExpiredBenefitRestorationPolicyRequest"
       responses:
         '200':
           description: 만료 혜택 복원 정책 변경 결과
           content:
             application/json:
               schema:
-                $ref: ./beanflow-v1.yaml#/components/schemas/ExpiredBenefitRestorationPolicy
+                $ref: "./beanflow-v1.yaml#/components/schemas/ExpiredBenefitRestorationPolicy"
         '400':
-          $ref: ./beanflow-v1.yaml#/components/responses/BadRequest
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '404':
-          $ref: ./beanflow-v1.yaml#/components/responses/NotFound
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         '409':
-          $ref: ./beanflow-v1.yaml#/components/responses/Conflict
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/point-adjustment-preparations:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-adjustment-preparations"
+  /operations/point-adjustment-preparations/current:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-adjustment-preparations~1current"
+  /operations/point-adjustment-preparations/{preparationId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-adjustment-preparations~1{preparationId}"
   /operations/point-accounts/{accountId}/adjustments:
     post:
       tags:
@@ -825,33 +831,33 @@ paths:
         - 409: 잔액이 부족하거나 계정 상태·`Idempotency-Key`가 충돌한 경우
         - 503: 필수 저장소나 외부 시스템을 사용할 수 없는 경우
       parameters:
-        - $ref: ./beanflow-v1.yaml#/components/parameters/PointAccountId
-        - $ref: ./beanflow-v1.yaml#/components/parameters/IdempotencyKey
+        - $ref: "./beanflow-v1.yaml#/components/parameters/PointAccountId"
+        - $ref: "./beanflow-v1.yaml#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: ./beanflow-v1.yaml#/components/schemas/PointAdjustmentRequest
+              $ref: "./beanflow-v1.yaml#/components/schemas/PointAdjustmentRequest"
       responses:
         '201':
           description: 포인트 수동 조정 생성 결과
           content:
             application/json:
               schema:
-                $ref: ./beanflow-v1.yaml#/components/schemas/PointAdjustmentResult
+                $ref: "./beanflow-v1.yaml#/components/schemas/PointAdjustmentResult"
         '400':
-          $ref: ./beanflow-v1.yaml#/components/responses/BadRequest
+          $ref: "./beanflow-v1.yaml#/components/responses/BadRequest"
         '401':
-          $ref: ./beanflow-v1.yaml#/components/responses/Unauthorized
+          $ref: "./beanflow-v1.yaml#/components/responses/Unauthorized"
         '403':
-          $ref: ./beanflow-v1.yaml#/components/responses/Forbidden
+          $ref: "./beanflow-v1.yaml#/components/responses/Forbidden"
         '404':
-          $ref: ./beanflow-v1.yaml#/components/responses/NotFound
+          $ref: "./beanflow-v1.yaml#/components/responses/NotFound"
         '409':
-          $ref: ./beanflow-v1.yaml#/components/responses/Conflict
+          $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         '503':
-          $ref: ./beanflow-v1.yaml#/components/responses/DependencyUnavailable
+          $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
   /point-accounts/{accountId}:
     $ref: "./beanflow-v1.yaml#/paths/~1point-accounts~1{accountId}"
   /point-accounts/{accountId}/transactions:
@@ -1090,6 +1096,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1disputes~1{disputeId}"
   /stores/{storeId}/disputes/{disputeId}/withdrawals:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1disputes~1{disputeId}~1withdrawals"
+  /operations/store-targets:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1store-targets"
   /operations/stores:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores"
   /operations/stores/{storeId}/identity:
@@ -1104,6 +1112,8 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1settlement-terms"
   /operations/stores/{storeId}/settlement-terms/{termsVersionId}:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1settlement-terms~1{termsVersionId}"
+  /operations/stores/{storeId}/memberships/account-target:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1memberships~1account-target"
   /operations/stores/{storeId}/memberships:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1stores~1{storeId}~1memberships"
   /operations/stores/{storeId}/memberships/{accountId}:
@@ -1122,10 +1132,16 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1event-publication-recoveries~1{publicationId}~1retries"
   /support/cases/{caseId}/order-candidates/{orderReference}:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1order-candidates~1{orderReference}"
+  /support/cases/{caseId}/orders/{orderId}/pickup-slots:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1orders~1{orderId}~1pickup-slots"
   /support/cases/{caseId}/orders/{orderId}:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1cases~1{caseId}~1orders~1{orderId}"
+  /support/action-requests/{requestId}/pickup-slots:
+    $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1pickup-slots"
   /support/action-requests/{requestId}/workflow:
     $ref: "./beanflow-v1.yaml#/paths/~1support~1action-requests~1{requestId}~1workflow"
+  /stores/{storeId}/support-order-change-requests/{requestId}/pickup-slots:
+    $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1support-order-change-requests~1{requestId}~1pickup-slots"
   /stores/{storeId}/support-order-change-requests/{requestId}:
     $ref: "./beanflow-v1.yaml#/paths/~1stores~1{storeId}~1support-order-change-requests~1{requestId}"
   /support/compensations/{compensationRequestId}/workflow:
@@ -1171,6 +1187,10 @@ paths:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-cost-issuers"
   /operations/platform-point-cost-owners:
     $ref: "./beanflow-v1.yaml#/paths/~1operations~1platform-point-cost-owners"
+
+  /operations/support-action-requests/{requestId}/review:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1support-action-requests~1{requestId}~1review"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1226,6 +1246,14 @@ components:
       $ref: "./beanflow-v1.yaml#/components/schemas/InquiryCommandResult"
     InquiryClaimResult:
       $ref: "./beanflow-v1.yaml#/components/schemas/InquiryClaimResult"
+    OperationsSupportActionReview:
+      $ref: "./beanflow-v1.yaml#/components/schemas/OperationsSupportActionReview"
+    OperationsSupportProfileReview:
+      $ref: "./beanflow-v1.yaml#/components/schemas/OperationsSupportProfileReview"
+    OperationsSupportCompensationReview:
+      $ref: "./beanflow-v1.yaml#/components/schemas/OperationsSupportCompensationReview"
+    OperationsSupportRequestReviewResource:
+      $ref: "./beanflow-v1.yaml#/components/schemas/OperationsSupportRequestReviewResource"
     BreakGlassWorkflowAction:
       $ref: "./beanflow-v1.yaml#/components/schemas/BreakGlassWorkflowAction"
     BreakGlassWorkflowResource:
@@ -1332,7 +1360,7 @@ components:
           updatedAt: '2026-08-15T09:33:00+09:00'
       properties:
         order:
-          $ref: ./beanflow-v1.yaml#/components/schemas/StoreOrder
+          $ref: "./beanflow-v1.yaml#/components/schemas/StoreOrder"
         compensationRecovery:
           $ref: '#/components/schemas/RuntimeStoreCompensationSummary'
           description: 매장에 허용된 범위로 축약한 환불·혜택 복구 진행 정보입니다.
@@ -1379,7 +1407,7 @@ components:
           updatedAt: '2026-08-15T09:40:00+09:00'
       properties:
         order:
-          $ref: ./beanflow-v1.yaml#/components/schemas/StoreOrder
+          $ref: "./beanflow-v1.yaml#/components/schemas/StoreOrder"
         compensationRecovery:
           $ref: '#/components/schemas/RuntimeStoreCompensationSummary'
           description: 매장에 허용된 범위로 축약한 환불·혜택 복구 진행 정보입니다.
@@ -1452,10 +1480,10 @@ components:
         - compensation
       properties:
         compensation:
-          $ref: ./beanflow-v1.yaml#/components/schemas/CompensationSummary
+          $ref: "./beanflow-v1.yaml#/components/schemas/CompensationSummary"
           description: 운영자 전용 전체 환불·혜택 복구 진행 정보입니다.
         paymentSetupIssue:
-          $ref: ./beanflow-v1.yaml#/components/schemas/PaymentSetupIssue
+          $ref: "./beanflow-v1.yaml#/components/schemas/PaymentSetupIssue"
         setupReprocessingCaseId:
           $ref: ./beanflow-v1.yaml#/components/schemas/Identifier
     StoreOrderChangeCandidate:

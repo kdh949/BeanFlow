@@ -159,3 +159,7 @@ Operator, Order, Payment, Refund와 Provider 식별자는 metric tag로 사용�
 조회한다. 승인자는 제안 ID, 대상 Case, 제안자, 만료와 terminal 상태를 읽은 뒤 기존 결정
 명령을 보낸다. 조회는 제안 만료·복구를 실행하거나 금액·외부 결제 식별값을 공개하지 않는다.
 권한 확인과 제안 읽기는 한 application transaction에서 수행하고 Aggregate 상태는 변경하지 않는다.
+
+화면은 서버가 반환한 proposal state로 판정 입력을 제공한다. 기기 시계가 `expiresAt`을 넘었다는
+이유만으로 현재 PENDING_APPROVAL 제안을 차단하지 않는다. 실제 만료는 기존 결정 transaction이
+서버 Clock으로 검증하며 terminal EXPIRED 응답 뒤에는 새 판정을 허용하지 않는다.

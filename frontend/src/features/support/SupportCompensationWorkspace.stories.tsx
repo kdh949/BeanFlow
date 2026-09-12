@@ -44,3 +44,28 @@ export const SelectExistingRequest: Story = {
     await expect(canvas.getByRole("button", { name: "기존 보상 요청 찾기" })).toHaveAttribute("aria-expanded", "false");
   },
 };
+
+export const UndeterminedCost: Story = { args: { initialCompensationId: undefined }, play: async ({ canvas, msw }) => {
+  msw.use(http.post("/api/v1/support/cases/:caseId/compensation-evaluations", async ({ request: req }) => {
+    expect(await req.json()).toMatchObject({ responsibility: "UNDETERMINED", platformShareBps: 0, storeShareBps: 0 });
+    return HttpResponse.json({ decision: "INVESTIGATION_REQUIRED", band: "EXCEPTIONAL", approvalRoute: "OPERATIONS", executable: false, reasonCodes: ["COST_RESPONSIBILITY_UNDETERMINED"], targetVersion: 4, expiresAt: "2026-09-11T09:06:00Z" });
+  }));
+  await userEvent.click(await canvas.findByRole("button", { name: "이 사고 선택" }));
+  await userEvent.type(canvas.getByLabelText("보상 금액"), "1000");
+  await waitFor(() => expect(canvas.getByRole("button", { name: "현재 보상 가능 여부 평가" })).toBeEnabled());
+  await userEvent.click(canvas.getByRole("button", { name: "현재 보상 가능 여부 평가" }));
+  await expect(await canvas.findByText("비용 책임을 먼저 확정해 주세요")).toBeVisible();
+  await expect(canvas.queryByRole("button", { name: "평가한 보상 요청 등록" })).not.toBeInTheDocument();
+} };
+
+export const UnavailableTargetsCannotSelect: Story = {
+  args: { initialCompensationId: undefined, supportCase: { ...supportCase, subjectLinks: ["REQUIRES_PERMISSION", "MISSING_PROFILE"].map((state, index) => ({ ...supportCase.subjectLinks[0]!, linkId: `99020000-0000-4000-8000-00000000000${index + 1}`, subjectId: `99020000-0000-4000-8000-00000000000${index + 1}`, display: { state } })) } },
+  play: async ({ canvas }) => {
+    const select = await canvas.findByLabelText("보상 관련 주문");
+    const unavailable = [...(select as HTMLSelectElement).options].filter(option => option.value);
+    await expect(unavailable).toHaveLength(2);
+    for (const option of unavailable) await expect(option).toBeDisabled();
+    await expect(select).toHaveValue("");
+
+  },
+};

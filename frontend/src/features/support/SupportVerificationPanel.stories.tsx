@@ -23,3 +23,23 @@ export const WrongCase: Story = { play: async ({ canvas, msw }) => { msw.use(htt
 export const ClosedCase: Story = { args: { disabled: true }, play: async ({ canvas }) => { await expect(canvas.getByText(/종료된 상담 건에서는/)).toBeVisible(); await expect(canvas.queryByRole("button", { name: "본인확인 시작" })).not.toBeInTheDocument(); } };
 
 export const InitialActionScope: Story = { args: { initialActionScope: "SUPPORT_ACTION" }, play: async ({ canvas }) => { await expect(canvas.getByLabelText("인증 사용 업무")).toHaveValue("SUPPORT_ACTION"); await expect(canvas.getByLabelText("본인확인 목적")).toBeDisabled(); } };
+
+export const ExpiredChallengeAllowsReissue: Story = { play: async ({ canvas, msw }) => {
+  const edge = Date.now() + 1000;
+  const current = { ...session, challenges: [{ challengeId: secondId, sessionId, channel: "REGISTERED_PHONE", state: "ISSUED", requestedAt: session.startedAt, expiresAt: new Date(edge).toISOString() }] };
+  msw.use(http.get("/api/v1/support/verification-sessions/:sessionId", () => HttpResponse.json(current)));
+  await userEvent.click(canvas.getByRole("button", { name: "기존 본인확인 요청 찾기" }));
+  await userEvent.click(await canvas.findByRole("button", { name: "이 요청 열기" }));
+  await expect(await canvas.findByLabelText("일회성 인증 코드")).toBeVisible();
+  MockDate.set(edge);
+  await userEvent.click(canvas.getByRole("button", { name: "본인확인 새로고침" }));
+  const channel = await canvas.findByLabelText("인증 수단");
+  await waitFor(() => expect(canvas.queryByLabelText("일회성 인증 코드")).not.toBeInTheDocument(), { timeout: 3000 });
+  await userEvent.selectOptions(channel, "REGISTERED_PHONE");
+  await expect(canvas.getByRole("button", { name: "인증 요청 발급" })).toBeEnabled();
+} };
+
+export const UnavailableTargetsCannotSelect: Story = {
+  args: { links: ["REQUIRES_PERMISSION", "MISSING_PROFILE"].map((state, index) => ({ ...meta.args.links[0]!, linkId: `99020000-0000-4000-8000-00000000000${index + 1}`, subjectId: `99020000-0000-4000-8000-00000000000${index + 1}`, display: { state: state as "REQUIRES_PERMISSION" | "MISSING_PROFILE" } })) },
+  play: async ({ canvas }) => { const select = canvas.getByLabelText("본인확인 대상") as HTMLSelectElement; for (const option of [...select.options].filter(option => option.value)) await expect(option).toBeDisabled(); await expect(select).toHaveValue(""); await expect(canvas.getByRole("button", { name: "본인확인 시작" })).toBeDisabled(); },
+};
