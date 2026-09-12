@@ -105,7 +105,7 @@ internal class PointAdjustmentService(
         }
     }
 
-    private fun normalize(command: ApplyPointAdjustmentCommand): NormalizedPointAdjustmentCommand {
+    internal fun normalize(command: ApplyPointAdjustmentCommand): NormalizedPointAdjustmentCommand {
         val key = command.idempotencyKey.trim()
         val reason = command.reason.trim()
         val evidence = command.evidenceReferences.map(String::trim)
@@ -123,7 +123,7 @@ internal class PointAdjustmentService(
         }
         if (command.amountKrw > 0) {
             if (issuer == null || issuer.issuerReference.length !in 1..200 ||
-                command.expiresAt == null || !command.expiresAt.isAfter(command.now)
+                command.expiresAt == null
             ) {
                 invalid("Credit adjustment requires an issuer and future expiry")
             }
@@ -197,6 +197,7 @@ internal class PointAdjustmentTransaction(
     private val identifierSource: IdentifierSource,
     private val objectMapper: ObjectMapper,
     private val entityManager: EntityManager,
+    private val preparations: PointAdjustmentPreparationRepository,
 ) {
     @Transactional
     fun execute(
@@ -210,6 +211,29 @@ internal class PointAdjustmentTransaction(
         idempotencies
             .findLockedByScope(command.actorId, OPERATION, command.idempotencyKey)
             ?.let { return replay(it, command, payloadHash, objectMapper) }
+
+        val preparation = preparations.findByCommandKey(command.actorId, command.idempotencyKey)
+        if (preparation != null) {
+            if (preparation.accountId != account.id || preparation.payloadHash != payloadHash) {
+                throw DomainFailure(FailureCode.IDEMPOTENCY_KEY_REUSED, "Prepared adjustment payload differs")
+            }
+            if (preparation.state == PointAdjustmentPreparationState.CANCELLED) {
+                throw DomainFailure(FailureCode.RESOURCE_STATE_CONFLICT, "Prepared adjustment was cancelled")
+            }
+            if (preparation.state == PointAdjustmentPreparationState.APPLIED) {
+                return PointAdjustmentExecution(
+                    objectMapper.readValue(checkNotNull(preparation.responseBody), PointAdjustmentResult::class.java),
+                    true,
+                )
+            }
+        }
+        val open = preparations.findOpen(command.actorId, true)
+        if (open != null && open.id.toString() != command.idempotencyKey) {
+            throw DomainFailure(FailureCode.RESOURCE_STATE_CONFLICT, "An unacknowledged point adjustment exists")
+        }
+        if (command.direction == PointAdjustmentDirection.CREDIT && command.expiresAt?.isAfter(command.now) != true) {
+            throw DomainFailure(FailureCode.INVALID_REQUEST, "Credit adjustment requires a future expiry")
+        }
 
         verifyAvailableSummary(account)
         val adjustmentId = identifierSource.next()
@@ -273,6 +297,7 @@ internal class PointAdjustmentTransaction(
                 retentionExpiresAt = command.now.plus(IDEMPOTENCY_RETENTION),
             ),
         )
+        if (preparation != null) preparations.applied(preparation.id, responseBody)
         entityManager.flush()
         return PointAdjustmentExecution(result, replayed = false)
     }

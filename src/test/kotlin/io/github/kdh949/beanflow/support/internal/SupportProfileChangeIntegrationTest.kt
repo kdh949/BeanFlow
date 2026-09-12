@@ -31,6 +31,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -142,6 +143,45 @@ internal class SupportProfileChangeIntegrationTest
                         .with(jwt().jwt { it.subject(managerId.toString()) }),
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.items").isEmpty())
+        }
+
+        @Test
+        fun `operations only reviewer reads the exact profile review chain without Support case grant`() {
+            val created = profiles.submit(primaryPhoneCommand("operations-review-metadata"))
+            val requestId = requireNotNull(created.actionRequestId)
+            decideManager(requestId, managerId, "operations-review-manager")
+            val actor = jwt().jwt { it.subject(operationsId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))
+            val beforeAudits = jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java)
+            mockMvc.perform(get("/api/v1/support/action-requests/$requestId").with(actor)).andExpect(status().isForbidden)
+            val read =
+                mockMvc
+                    .perform(get("/api/v1/operations/support-action-requests/$requestId/review").with(actor))
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.request.revisionNumber").value(1))
+                    .andExpect(jsonPath("$.profile.purpose").value("CUSTOMER_PRIMARY_PHONE"))
+                    .andExpect(jsonPath("$.profile.subjectId").value(customerId.toString()))
+                    .andExpect(jsonPath("$.request.verificationSessionId").doesNotExist())
+                    .andExpect(jsonPath("$.request.requesterActorId").doesNotExist())
+                    .andExpect(jsonPath("$.profile.maskedBefore").doesNotExist())
+                    .andReturn()
+            assertThat(read.response.contentAsString).doesNotContain("010-1234-5678")
+            mockMvc
+                .perform(
+                    get("/api/v1/operations/investigations")
+                        .param("supportActionRequestId", requestId.toString())
+                        .param("revisionNumber", "1")
+                        .with(actor),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.canDecide").value(true))
+            assertThat(
+                jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java),
+            ).isEqualTo(beforeAudits)
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ?",
+                operationsId,
+            )
+            mockMvc.perform(get("/api/v1/operations/support-action-requests/$requestId/review").with(actor)).andExpect(status().isForbidden)
         }
 
         @Test

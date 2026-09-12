@@ -56,7 +56,7 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [caseLoading, setCaseLoading] = useState(false);
   const [caseError, setCaseError] = useState<unknown>(null);
-  const caseCommand = useSupportCommand(() => undefined);
+  const caseCommand = useSupportCommand("support-case-intake", () => undefined);
   const creatingCase = caseCommand.busy;
   const [dataBusy, setDataBusy] = useState(false);
   const [compensationBusy, setCompensationBusy] = useState(false);

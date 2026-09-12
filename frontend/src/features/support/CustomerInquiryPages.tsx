@@ -7,6 +7,7 @@ import { Button, ButtonLink, InlineNotice, LoadingState, PageHeading, SelectFiel
 import { ErrorState } from "../../presentation/shared";
 import { useResource } from "../shared/useResource";
 import { useSupportCommand } from "./useSupportCommand";
+import { customerInquiryActor } from "./customerInquiryActor";
 import { InquiryConversation, InquiryList, InquiryPager, inquiryCategoryLabels, inquiryContentGuidance } from "./InquiryConversation";
 
 /** Authenticated customer's own inquiry directory; independent of operator credentials. */
@@ -29,7 +30,7 @@ function CustomerInquiryForm({ orderReference }: { orderReference?: string }) {
   const [content, setContent] = useState("");
   const [createdId, setCreatedId] = useState<string | null>(null);
   const order = useResource(useCallback(async () => orderReference ? unwrap(await customerApi.GET("/me/orders/{orderReference}", { params: { path: { orderReference } } })) : null, [orderReference]));
-  const command = useSupportCommand(() => {});
+  const command = useSupportCommand(`inquiry-create:${orderReference ?? "general"}`, () => {}, customerInquiryActor);
   const locked = command.busy || command.pending || Boolean(createdId);
   function submit() {
     if (locked || order.state.status !== "ready" || !title.trim() || !content.trim()) return;

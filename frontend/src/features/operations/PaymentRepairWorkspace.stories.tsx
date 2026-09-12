@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent } from "storybook/test";
+import { expect, userEvent, waitFor } from "storybook/test";
 import { http, HttpResponse } from "msw";
 import MockDate from "mockdate";
 import type { components } from "../../api/schema";
@@ -12,16 +12,58 @@ let proposal = original;
 let actor = approver;
 let key: string | null = null;
 const order = { publicReference: "BF-7K9M-2P4R", storeName: "성수점", state: "CANCELLED", createdAt: "2026-09-11T00:00:00Z" };
-const handlers = [http.get("/api/v1/operations/payment-setup-recovery-cases", () => HttpResponse.json({ items: [{ caseId, status: "OPEN", reason: "PAYMENT_SETUP_INCOMPLETE", updatedAt: "2026-09-11T00:00:00Z", order }], nextCursor: null })), http.get("/api/v1/operations/reprocessing-repair-proposals", () => HttpResponse.json({ items: [{ proposal, order }], nextCursor: null })), http.get("/api/v1/operations/me", () => HttpResponse.json({ actorType: "OPERATOR", operatorId: actor, roles: ["PLATFORM_OPERATOR"] })), http.get("/api/v1/operations/reprocessing-repair-proposals/:id", () => HttpResponse.json(proposal)), http.post("/api/v1/operations/reprocessing-cases/:id/repair-proposals", async ({ request }) => { expect(await request.json()).toEqual({ reason: "누락 환불 기록 확인" }); expect(request.headers.get("Idempotency-Key")).toBeTruthy(); return HttpResponse.json(proposal, { status: 201 }); }), http.post("/api/v1/operations/reprocessing-repair-proposals/:id/decisions", async ({ request }) => { const body = await request.json(); expect(body).toEqual({ decision: "APPROVE", reason: "다른 담당자 검증 완료" }); proposal = { ...original, state: "EXECUTED", decidedBy: approver, decidedAt: "2026-09-11T00:01:00Z" }; return HttpResponse.json(proposal); })];
+const handlers = [http.get("/api/v1/operations/payment-setup-recovery-cases", () => HttpResponse.json({ items: [{ caseId, status: "OPEN", canPropose: true, reason: "PAYMENT_SETUP_INCOMPLETE", updatedAt: "2026-09-11T00:00:00Z", order }], nextCursor: null })), http.get("/api/v1/operations/reprocessing-repair-proposals", () => HttpResponse.json({ items: [{ proposal, order }], nextCursor: null })), http.get("/api/v1/operations/me", () => HttpResponse.json({ actorType: "OPERATOR", operatorId: actor, roles: ["PLATFORM_OPERATOR"] })), http.get("/api/v1/operations/reprocessing-repair-proposals/:id", () => HttpResponse.json(proposal)), http.post("/api/v1/operations/reprocessing-cases/:id/repair-proposals", async ({ request }) => { expect(await request.json()).toEqual({ reason: "누락 환불 기록 확인" }); expect(request.headers.get("Idempotency-Key")).toBeTruthy(); return HttpResponse.json(proposal, { status: 201 }); }), http.post("/api/v1/operations/reprocessing-repair-proposals/:id/decisions", async ({ request }) => { const body = await request.json(); expect(body).toEqual({ decision: "APPROVE", reason: "다른 담당자 검증 완료" }); proposal = { ...original, state: "EXECUTED", decidedBy: approver, decidedAt: "2026-09-11T00:01:00Z" }; return HttpResponse.json(proposal); })];
 const meta = { title: "Patterns/Operations/Payment setup repair", component: PaymentRepairWorkspace, tags: ["autodocs"], args: { caseId }, beforeEach: () => { MockDate.set("2026-09-11T00:01:00Z"); proposal = original; actor = approver; key = null; return () => MockDate.reset(); }, parameters: { a11y: { test: "error" }, msw: { handlers }, docs: { description: { component: "복구 제안 생성과 다른 담당자의 현재 제안 조회·승인/반려를 연결합니다. 만료와 자기 판정을 막고 실행은 실제 환불 완료와 구분합니다." }, story: { inline: false, height: "1050px" } } } } satisfies Meta<typeof PaymentRepairWorkspace>;
 export default meta; type Story = StoryObj<typeof meta>;
 async function read(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) { await userEvent.click(await canvas.findByRole("button", { name: /성수점.*제안 검토/ })); }
 export const Propose: Story = { play: async ({ canvas }) => { await userEvent.type(canvas.getByLabelText("복구 제안 사유"), "누락 환불 기록 확인"); await userEvent.click(canvas.getByRole("button", { name: "복구 제안 생성" })); await expect(await canvas.findByText("복구 제안을 만들었습니다. 다른 담당자의 판정이 필요합니다.")).toBeVisible(); await expect(await canvas.findByRole("heading", { name: "현재 복구 제안" })).toBeVisible(); } };
 export const Approve: Story = { play: async ({ canvas }) => { await read(canvas); await userEvent.type(await canvas.findByLabelText("복구 판정 사유"), "다른 담당자 검증 완료"); await userEvent.click(canvas.getByRole("button", { name: "복구 승인" })); await expect(await canvas.findByText("환불 결과 조회를 위한 복구가 실행되었습니다")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument(); } };
 export const SelfDecisionBlocked: Story = { beforeEach: () => { actor = proposer; }, play: async ({ canvas }) => { await read(canvas); await expect(await canvas.findByText("제안자와 다른 담당자가 판정해야 합니다")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument(); } };
-export const Expired: Story = { beforeEach: () => { MockDate.set("2026-09-11T00:30:00Z"); }, play: async ({ canvas }) => { await read(canvas); await expect(await canvas.findByText("복구 제안의 승인 기한이 지났습니다")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument(); } };
+export const Expired: Story = { beforeEach: () => { proposal = { ...original, state: "EXPIRED" }; }, play: async ({ canvas }) => { await read(canvas); await expect(await canvas.findByText("복구 제안의 승인 기한이 지났습니다")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument(); } };
 export const Stale: Story = { parameters: { msw: { handlers: [http.post("/api/v1/operations/reprocessing-repair-proposals/:id/decisions", () => { proposal = { ...proposal, state: "STALE" }; return HttpResponse.json({ code: "REPROCESSING_PROPOSAL_STALE", correlationId: "REPAIR-STALE" }, { status: 409 }); }), ...handlers] } }, play: async ({ canvas }) => { await read(canvas); await userEvent.type(await canvas.findByLabelText("복구 판정 사유"), "다른 담당자 검증 완료"); await userEvent.click(canvas.getByRole("button", { name: "복구 승인" })); await expect(await canvas.findByText("문의 코드 REPAIR-STALE")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument(); } };
 export const LostResponse: Story = { parameters: { msw: { handlers: [http.post("/api/v1/operations/reprocessing-repair-proposals/:id/decisions", ({ request }) => { if (!key) { key = request.headers.get("Idempotency-Key"); return HttpResponse.error(); } expect(request.headers.get("Idempotency-Key")).toBe(key); proposal = { ...proposal, state: "REJECTED" }; return HttpResponse.json(proposal); }), ...handlers] } }, play: async ({ canvas }) => { await read(canvas); await userEvent.type(await canvas.findByLabelText("복구 판정 사유"), "새 제안이 필요함"); await userEvent.click(canvas.getByRole("button", { name: "복구 반려" })); await expect(await canvas.findByRole("alert")).toBeVisible(); await expect(canvas.getByLabelText("복구 판정 사유")).toBeDisabled(); await expect(canvas.getByRole("button", { name: "복구 승인" })).toBeDisabled(); await userEvent.click(await canvas.findByRole("button", { name: "같은 복구 요청 결과 확인" })); await expect((await canvas.findAllByText("반려됨")).length).toBeGreaterThan(0); } };
 export const Forbidden: Story = { parameters: { msw: { handlers: [http.get("/api/v1/operations/reprocessing-repair-proposals/:id", () => HttpResponse.json({ code: "ACCESS_DENIED" }, { status: 403 })), ...handlers] } }, play: async ({ canvas }) => { await read(canvas); await expect(await canvas.findByRole("alert")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument(); } };
 
 export const SelectRecoveryCase: Story = { args: { caseId: undefined }, play: async ({ canvas }) => { await expect(canvas.getByRole("button", { name: "복구 제안 생성" })).toBeDisabled(); await userEvent.click(await canvas.findByRole("button", { name: /성수점.*복구 대상 선택/ })); await userEvent.type(canvas.getByLabelText("복구 제안 사유"), "누락 환불 기록 확인"); await userEvent.click(canvas.getByRole("button", { name: "복구 제안 생성" })); await expect(await canvas.findByText("복구 제안을 만들었습니다. 다른 담당자의 판정이 필요합니다.")).toBeVisible(); await expect(canvas.queryByLabelText("환불 설정 복구 건 ID")).not.toBeInTheDocument(); } };
+
+export const BrowserClockAhead: Story = { ...Approve, beforeEach: () => { MockDate.set("2026-09-12T00:00:00Z"); } };
+export const NewProposalClearsPreviousDecision: Story = { parameters: { msw: { handlers: [
+  http.get("/api/v1/operations/reprocessing-repair-proposals", () => HttpResponse.json({ items: [{ proposal: original, order }, { proposal: { ...original, proposalId: "98000000-0000-4000-8000-000000000005" }, order: { ...order, storeName: "강남점" } }], nextCursor: null })),
+  http.get("/api/v1/operations/reprocessing-repair-proposals/:id", ({ params }) => HttpResponse.json({ ...original, proposalId: params.id })), ...handlers,
+] } }, play: async ({ canvas }) => {
+  await userEvent.type(canvas.getByLabelText("복구 제안 사유"), "누락 환불 기록 확인");
+  await userEvent.click(canvas.getByRole("button", { name: "복구 제안 생성" }));
+  await expect(await canvas.findByText("복구 제안을 만들었습니다. 다른 담당자의 판정이 필요합니다.")).toBeVisible();
+  await userEvent.type(await canvas.findByLabelText("복구 판정 사유"), "이전 제안의 판정 사유");
+  await userEvent.click(await canvas.findByRole("button", { name: /강남점.*제안 검토/ }));
+  await expect(await canvas.findByLabelText("복구 판정 사유")).toHaveValue("");
+  await expect(canvas.queryByText("복구 제안을 만들었습니다. 다른 담당자의 판정이 필요합니다.")).not.toBeInTheDocument();
+  await expect(canvas.getByRole("button", { name: "복구 승인" })).toBeDisabled();
+} };
+
+function terminalRepairReplay(state: "EXPIRED" | "STALE"): Story {
+  return { parameters: { msw: { handlers: [http.post("/api/v1/operations/reprocessing-repair-proposals/:id/decisions", async ({ request }) => {
+    expect(await request.json()).toEqual({ decision: "APPROVE", reason: "다른 담당자 검증 완료" });
+    if (!key) { key = request.headers.get("Idempotency-Key"); proposal = { ...original, state }; return HttpResponse.error(); }
+    expect(request.headers.get("Idempotency-Key")).toBe(key);
+    return HttpResponse.json({ code: `REPROCESSING_PROPOSAL_${state}`, correlationId: `TERMINAL-${state}` }, { status: 409 });
+  }), ...handlers] } }, play: async ({ canvas }) => {
+    await read(canvas); await userEvent.type(await canvas.findByLabelText("복구 판정 사유"), "다른 담당자 검증 완료"); await userEvent.click(canvas.getByRole("button", { name: "복구 승인" }));
+    const retry = await canvas.findByRole("button", { name: "같은 복구 요청 결과 확인" }); await waitFor(() => expect(retry).toBeEnabled()); await userEvent.click(retry);
+    await expect(await canvas.findByText(`문의 코드 TERMINAL-${state}`)).toBeVisible();
+    await waitFor(() => expect(canvas.queryByRole("button", { name: "같은 복구 요청 결과 확인" })).not.toBeInTheDocument());
+    await waitFor(() => expect(canvas.getByLabelText("복구 제안 사유")).toBeEnabled());
+    await expect(canvas.queryByRole("button", { name: "복구 승인" })).not.toBeInTheDocument();
+  } };
+}
+export const ExpiredReplayUnlocks: Story = terminalRepairReplay("EXPIRED");
+export const StaleReplayUnlocks: Story = terminalRepairReplay("STALE");
+export const HistoricalCasesCannotCreate: Story = {
+  args: { caseId: undefined },
+  parameters: { msw: { handlers: [http.get("/api/v1/operations/payment-setup-recovery-cases", () => HttpResponse.json({ items: ["RUNNING", "RESOLVED", "OPEN"].map((status, i) => ({ caseId: `${caseId.slice(0, -1)}${i + 1}`, status, canPropose: false, reason: "PAYMENT_SETUP_INCOMPLETE", updatedAt: original.createdAt, order: { ...order, storeName: `조회 대상 ${i + 1}` } })), nextCursor: null })), ...handlers] } },
+  play: async ({ canvas }) => { await userEvent.selectOptions(canvas.getByLabelText("복구 대상 상태"), ""); const buttons = await canvas.findAllByRole("button", { name: /복구 대상 선택/ }); for (const button of buttons) await expect(button).toBeDisabled(); await userEvent.type(canvas.getByLabelText("복구 제안 사유"), "과거 건 검토"); await expect(canvas.getByRole("button", { name: "복구 제안 생성" })).toBeDisabled(); },
+};
+export const LinkedResolvedCaseCannotCreate: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/operations/payment-setup-recovery-cases", ({ request }) => { expect(new URL(request.url).searchParams.get("caseId")).toBe(caseId); return HttpResponse.json({ items: [{ caseId, status: "RESOLVED", canPropose: false, reason: "PAYMENT_SETUP_INCOMPLETE", updatedAt: original.createdAt, order }], nextCursor: null }); }), ...handlers] } },
+  play: async ({ canvas }) => { await expect(await canvas.findByText("현재 복구 건은 새 제안을 만들 수 없습니다")).toBeVisible(); await userEvent.type(canvas.getByLabelText("복구 제안 사유"), "해결된 건 확인"); await expect(canvas.getByRole("button", { name: "복구 제안 생성" })).toBeDisabled(); },
+};

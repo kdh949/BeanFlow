@@ -60,9 +60,11 @@ internal class SupportSubjectSelectionService(
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
         val masked = permissions.hasActive(actorId, OperatorPermission.SUPPORT_SUBJECT_SEARCH)
         val orderRead = permissions.hasActive(actorId, OperatorPermission.SUPPORT_ORDER_READ)
+
+        fun allowed(type: SupportSubjectType): Boolean = masked && (type != SupportSubjectType.ORDER || orderRead)
         val labels = mutableMapOf<Pair<SupportSubjectType, UUID>, String>()
         for ((type, group) in links.groupBy { it.subjectType }) {
-            if (if (type == SupportSubjectType.ORDER) !orderRead else !masked) continue
+            if (!allowed(type)) continue
             for (ids in group.map { it.subjectId }.distinct().chunked(100)) {
                 val names =
                     when (type) {
@@ -87,25 +89,15 @@ internal class SupportSubjectSelectionService(
                 names.forEach { (id, label) -> labels[type to id] = label }
             }
         }
-        if (links.any {
-                if (it.subjectType ==
-                    SupportSubjectType.ORDER
-                ) {
-                    orderRead
-                } else {
-                    masked
-                }
-            }
-        ) {
+        if (links.any { allowed(it.subjectType) }) {
             audit(actorId, caseId, "LINKED_SUBJECT_DISPLAY")
         }
         return links.map { link ->
-            val allowed = if (link.subjectType == SupportSubjectType.ORDER) orderRead else masked
             val label = labels[link.subjectType to link.subjectId]
             link.copy(
                 display =
                     when {
-                        !allowed -> SupportSubjectDisplay(SupportSubjectDisplayState.REQUIRES_PERMISSION)
+                        !allowed(link.subjectType) -> SupportSubjectDisplay(SupportSubjectDisplayState.REQUIRES_PERMISSION)
                         label == null -> SupportSubjectDisplay(SupportSubjectDisplayState.MISSING_PROFILE)
                         else -> SupportSubjectDisplay(SupportSubjectDisplayState.AVAILABLE, label)
                     },
@@ -118,10 +110,11 @@ internal class SupportSubjectSelectionService(
         actorId: UUID,
         caseId: UUID,
     ) {
-        authorization.authorizeCase(actorId, caseId)
+        permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_READ)
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_WRITE)
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_ORDER_READ)
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_SUBJECT_SEARCH)
+        authorization.authorizeCase(actorId, caseId)
     }
 
     @Transactional
