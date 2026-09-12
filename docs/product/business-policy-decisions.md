@@ -2754,3 +2754,10 @@
   exact approval consumption, old/new notification, OpenAPI와 failure/security test가 완료되기 전에는 허용하지 않는다.
 - Delivery fulfillment/provider automation과 retention automation은 threat model, owner model, OpenAPI와 failure tests가
   확정되기 전 노출하지 않는다.
+
+### BR-56 보완: 미확인 포인트 조정의 서버 복구 (2026-09-12)
+
+화면은 조정 전 서버 준비 기록을 생성한다. 브라우저 재진입 시 현재 액터의 미확인 기록을 먼저
+조회하고 기존 내용·키로만 결과를 확인한다. 조회 실패나 전송 중 새로고침은 새 금전 명령의
+허가가 아니다. 미실행 준비 취소 또는 반영 결과의 명시적 확인 전에는 새 조정을 막는다.
+브라우저의 고객·계정·본문 영구 저장 금지는 유지하며 복구 세부 계약은 ADR-066/127을 따른다.

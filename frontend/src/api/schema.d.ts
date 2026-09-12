@@ -1821,6 +1821,75 @@ export interface paths {
         patch: operations["updateExpiredBenefitRestorationPolicy"];
         trace?: never;
     };
+    "/operations/point-adjustment-preparations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 포인트 조정 준비
+         * @description 현재 운영자 본인의 미확인 조정만 다룹니다. POINT_ACCOUNT_READ가 필요하며 준비와 활성 기록 조회는 CUSTOMER_ACCOUNT_SEARCH도 필요합니다. 준비는 POINT_ADJUSTMENT를 추가로 확인합니다.
+         *     계정과 요청 본문은 서버에 고정하며 preparationId를 기존 조정 API의 Idempotency-Key로 사용합니다. 운영자별 미확인 기록은 하나이며, 다른 조정은 409로 차단합니다.
+         *     PREPARED 취소와 기존 조정 실행은 계정 잠금으로 직렬화합니다. APPLIED는 결과 확인만 가능하고 금전 변경을 취소하지 않습니다. 기대 상태가 달라지면 409입니다.
+         *     응답은 no-store이며 조회와 상태 변경에 감사 기록을 남깁니다. 미확인 기록은 유지하고 확인·취소한 기록은 90일 후 정리합니다.
+         */
+        post: operations["preparePointAdjustment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/point-adjustment-preparations/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 미확인 포인트 조정 복구
+         * @description 현재 운영자 본인의 미확인 조정만 다룹니다. POINT_ACCOUNT_READ가 필요하며 준비와 활성 기록 조회는 CUSTOMER_ACCOUNT_SEARCH도 필요합니다. 준비는 POINT_ADJUSTMENT를 추가로 확인합니다.
+         *     계정과 요청 본문은 서버에 고정하며 preparationId를 기존 조정 API의 Idempotency-Key로 사용합니다. 운영자별 미확인 기록은 하나이며, 다른 조정은 409로 차단합니다.
+         *     PREPARED 취소와 기존 조정 실행은 계정 잠금으로 직렬화합니다. APPLIED는 결과 확인만 가능하고 금전 변경을 취소하지 않습니다. 기대 상태가 달라지면 409입니다.
+         *     응답은 no-store이며 조회와 상태 변경에 감사 기록을 남깁니다. 미확인 기록은 유지하고 확인·취소한 기록은 90일 후 정리합니다.
+         */
+        get: operations["getCurrentPointAdjustmentPreparation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations/point-adjustment-preparations/{preparationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 미적용 조정 취소 또는 적용 결과 확인
+         * @description 현재 운영자 본인의 미확인 조정만 다룹니다. POINT_ACCOUNT_READ가 필요하며 준비와 활성 기록 조회는 CUSTOMER_ACCOUNT_SEARCH도 필요합니다. 준비는 POINT_ADJUSTMENT를 추가로 확인합니다.
+         *     계정과 요청 본문은 서버에 고정하며 preparationId를 기존 조정 API의 Idempotency-Key로 사용합니다. 운영자별 미확인 기록은 하나이며, 다른 조정은 409로 차단합니다.
+         *     PREPARED 취소와 기존 조정 실행은 계정 잠금으로 직렬화합니다. APPLIED는 결과 확인만 가능하고 금전 변경을 취소하지 않습니다. 기대 상태가 달라지면 409입니다.
+         *     응답은 no-store이며 조회와 상태 변경에 감사 기록을 남깁니다. 미확인 기록은 유지하고 확인·취소한 기록은 90일 후 정리합니다.
+         */
+        delete: operations["dismissPointAdjustmentPreparation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/point-accounts/{accountId}/adjustments": {
         parameters: {
             query?: never;
@@ -8925,6 +8994,11 @@ export interface components {
             /** @description 공백이 아닌 조정 근거 참조 목록입니다. 증거 원문 대신 감사 조사에서 근거를 찾을 수 있는 비민감 참조를 제공합니다. */
             evidenceReferences: string[];
         } & unknown;
+        PreparePointAdjustmentRequest: {
+            /** Format: uuid */
+            accountId: string;
+            request: components["schemas"]["PointAdjustmentRequest"];
+        };
         /**
          * @description 고객 포인트 계정의 운영자용 요약입니다. 즉시 사용 가능한 포인트와 아직 복구 중인 포인트를 원화 단위로 구분합니다.
          * @example {
@@ -8971,6 +9045,30 @@ export interface components {
             account: components["schemas"]["PointAccount"];
             /** @description 이번 조정으로 생성되거나 조회된 포인트 거래 내역입니다. */
             transactions: components["schemas"]["PointTransaction"][];
+        };
+        PointAdjustmentPreparationView: {
+            /** Format: uuid */
+            preparationId: string;
+            /** Format: uuid */
+            accountId: string;
+            customer: {
+                /** Format: uuid */
+                customerId: string;
+                maskedLoginId: string;
+                maskedDisplayName: string;
+            };
+            request: components["schemas"]["PointAdjustmentRequest"];
+            /** @enum {string} */
+            state: "PREPARED" | "APPLIED";
+            canExecute: boolean;
+            result: components["schemas"]["PointAdjustmentResult"] | null;
+        };
+        CurrentPointAdjustmentPreparation: {
+            preparation: components["schemas"]["PointAdjustmentPreparationView"] | null;
+        };
+        DismissPointAdjustmentPreparationRequest: {
+            /** @enum {string} */
+            expectedState: "PREPARED" | "APPLIED";
         };
         /**
          * @description 전체 기본 정책 또는 매장별 정책의 한 버전입니다. 매장별 설정을 직접 지정했는지, 전체 기본 정책을 따르는지, 언제부터 적용되는지와 변경 사유를 기록합니다.
@@ -16124,6 +16222,92 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ExpiredBenefitRestorationPolicy"];
                 };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    preparePointAdjustment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreparePointAdjustmentRequest"];
+            };
+        };
+        responses: {
+            /** @description 운영자 본인의 조정 준비 또는 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointAdjustmentPreparationView"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    getCurrentPointAdjustmentPreparation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 운영자 본인의 조정 준비 또는 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentPointAdjustmentPreparation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    dismissPointAdjustmentPreparation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preparationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DismissPointAdjustmentPreparationRequest"];
+            };
+        };
+        responses: {
+            /** @description 취소 또는 결과 확인 완료 (같은 기대 상태의 재호출 포함) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { Button } from "../../design-system";
+import type { components } from "../../api/schema";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor } from "storybook/test";
 import { http, HttpResponse, delay } from "msw";
@@ -6,14 +9,22 @@ import { PointAccountWorkspace } from "./PointAccountWorkspace";
 const accountId = "96000000-0000-4000-8000-000000000001";
 const customerId = "97000000-0000-4000-8000-000000000001";
 const customer = { customerId, maskedLoginId: "m***", maskedDisplayName: "김*수" };
-const initial = { accountId, availablePointsKrw: 12500, recoveryPendingKrw: 1500, currency: "KRW" };
-const transaction = { transactionId: "96000000-0000-4000-8000-000000000002", type: "ADJUSTMENT", amountKrw: -500, occurredAt: "2026-09-11T00:00:00Z", sourceReference: "point-adjustment:review-001" };
+const initial = { accountId, availablePointsKrw: 12500, recoveryPendingKrw: 1500, currency: "KRW" as const };
+const transaction = { transactionId: "96000000-0000-4000-8000-000000000002", type: "ADJUSTMENT" as const, amountKrw: -500, occurredAt: "2026-09-11T00:00:00Z", sourceReference: "point-adjustment:review-001" };
 let account = initial;
 let key: string | null = null;
-const handlers = [http.post("/api/v1/operations/customer-searches", async ({ request }) => { expect(await request.json()).toEqual({ loginId: "minsu01", reasonCode: "POINT_ACCOUNT_INVESTIGATION" }); return HttpResponse.json({ items: [customer] }); }), http.get("/api/v1/operations/customers/:customerId/point-account", ({ params, request }) => { expect(params.customerId).toBe(customerId); expect(request.headers.get("X-Access-Reason")).toBe("POINT_ACCOUNT_INVESTIGATION"); return HttpResponse.json({ customerId, accountId }); }),http.get("/api/v1/operations/point-accounts/:id", ({ request }) => { expect(request.headers.get("X-Access-Reason")).toBe("POINT_ACCOUNT_INVESTIGATION"); return HttpResponse.json(account); }), http.get("/api/v1/operations/point-accounts/:id/transactions", ({ request }) => { expect(request.headers.get("X-Access-Reason")).toBe("POINT_ACCOUNT_INVESTIGATION"); return HttpResponse.json({ items: [transaction], page: {} }); }), http.post("/api/v1/operations/point-accounts/:id/adjustments", async ({ request }) => { const body = await request.json() as { amountKrw: number; issuer?: unknown; expiresAt?: string }; expect(request.headers.get("Idempotency-Key")).toBeTruthy(); if (body.amountKrw > 0) { expect(body.issuer).toEqual({ issuerType: "BRAND", issuerReference: "brand:reviewed-owner" }); expect(body.expiresAt).toBe("2027-09-10T15:00:00.000Z"); } else { expect(body).not.toHaveProperty("issuer"); expect(body).not.toHaveProperty("expiresAt"); } expect(body).toMatchObject({ reason: "확인된 포인트 차이 조정", evidenceReferences: ["support-case://point-review-001"] }); account = { ...initial, availablePointsKrw: initial.availablePointsKrw + body.amountKrw }; return HttpResponse.json({ account, transactions: [{ ...transaction, amountKrw: body.amountKrw }] }, { status: 201 }); })];
-const meta = { title: "Patterns/Operations/Point account", component: PointAccountWorkspace, tags: ["autodocs"], beforeEach: () => { MockDate.set("2026-09-11T00:00:00Z"); account = initial; key = null; return () => MockDate.reset(); }, parameters: { a11y: { test: "error" }, msw: { handlers }, docs: { description: { component: "가입 고객을 검색·선택해 계정 ID 입력 없이 조회하고, 명시적 issuer·만료·증빙을 가진 signed 조정입니다. 조회 오류는 잔액 0으로 대체하지 않습니다." }, story: { inline: false, height: "1150px" } } } } satisfies Meta<typeof PointAccountWorkspace>;
+type Preparation = components["schemas"]["PointAdjustmentPreparationView"];
+const preparationId = "96000000-0000-4000-8000-000000000170";
+let preparation: Preparation | null = null;
+const preparationHandlers = [
+  http.get("/api/v1/operations/point-adjustment-preparations/current", () => HttpResponse.json({ preparation })),
+  http.post("/api/v1/operations/point-adjustment-preparations", async ({ request }) => { const body = await request.json() as { accountId: string; request: Preparation["request"] }; preparation = { preparationId, accountId: body.accountId, customer, request: body.request, state: "PREPARED", canExecute: true, result: null }; return HttpResponse.json(preparation); }),
+  http.delete("/api/v1/operations/point-adjustment-preparations/:id", async ({ params, request }) => { expect(params.id).toBe(preparationId); expect(await request.json()).toMatchObject({ expectedState: expect.stringMatching(/^(PREPARED|APPLIED)$/) }); preparation = null; return new HttpResponse(null, { status: 204 }); }),
+];
+const handlers = [...preparationHandlers, http.post("/api/v1/operations/customer-searches", async ({ request }) => { expect(await request.json()).toEqual({ loginId: "minsu01", reasonCode: "POINT_ACCOUNT_INVESTIGATION" }); return HttpResponse.json({ items: [customer] }); }), http.get("/api/v1/operations/customers/:customerId/point-account", ({ params, request }) => { expect(params.customerId).toBe(customerId); expect(request.headers.get("X-Access-Reason")).toBe("POINT_ACCOUNT_INVESTIGATION"); return HttpResponse.json({ customerId, accountId }); }),http.get("/api/v1/operations/point-accounts/:id", ({ request }) => { expect(request.headers.get("X-Access-Reason")).toBe("POINT_ACCOUNT_INVESTIGATION"); return HttpResponse.json(account); }), http.get("/api/v1/operations/point-accounts/:id/transactions", ({ request }) => { expect(request.headers.get("X-Access-Reason")).toBe("POINT_ACCOUNT_INVESTIGATION"); return HttpResponse.json({ items: [transaction], page: {} }); }), http.post("/api/v1/operations/point-accounts/:id/adjustments", async ({ request }) => { const body = await request.json() as { amountKrw: number; issuer?: unknown; expiresAt?: string }; expect(request.headers.get("Idempotency-Key")).toBeTruthy(); if (body.amountKrw > 0) { expect(body.issuer).toEqual({ issuerType: "BRAND", issuerReference: "brand:reviewed-owner" }); expect(body.expiresAt).toBe("2027-09-10T15:00:00.000Z"); } else { expect(body).not.toHaveProperty("issuer"); expect(body).not.toHaveProperty("expiresAt"); } expect(body).toMatchObject({ reason: "확인된 포인트 차이 조정", evidenceReferences: ["support-case://point-review-001"] }); account = { ...initial, availablePointsKrw: initial.availablePointsKrw + body.amountKrw }; return HttpResponse.json({ account, transactions: [{ ...transaction, amountKrw: body.amountKrw }] }, { status: 201 }); })];
+const meta = { title: "Patterns/Operations/Point account", component: PointAccountWorkspace, tags: ["autodocs"], beforeEach: () => { MockDate.set("2026-09-11T00:00:00Z"); account = initial; key = null; preparation = null; return () => MockDate.reset(); }, parameters: { a11y: { test: "error" }, msw: { handlers }, docs: { description: { component: "가입 고객을 검색·선택해 계정 ID 입력 없이 조회하고, 명시적 issuer·만료·증빙을 가진 signed 조정입니다. 조회 오류는 잔액 0으로 대체하지 않습니다." }, story: { inline: false, height: "1150px" } } } } satisfies Meta<typeof PointAccountWorkspace>;
 export default meta; type Story = StoryObj<typeof meta>;
-async function selectCustomer(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) { await userEvent.type(canvas.getByLabelText("고객 로그인 아이디"), "minsu01"); await userEvent.click(canvas.getByRole("button", { name: "고객 찾기" })); await userEvent.click(await canvas.findByRole("button", { name: "이 고객 선택" })); }
+async function selectCustomer(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) { await userEvent.type(await canvas.findByLabelText("고객 로그인 아이디"), "minsu01"); await userEvent.click(canvas.getByRole("button", { name: "고객 찾기" })); await userEvent.click(await canvas.findByRole("button", { name: "이 고객 선택" })); }
 async function read(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"]) { await selectCustomer(canvas); await canvas.findByLabelText("조정 포인트"); }
 async function fill(canvas: Parameters<NonNullable<Story["play"]>>[0]["canvas"], amount: string) { await read(canvas); await userEvent.type(canvas.getByLabelText("조정 포인트"), amount); if (Number(amount) > 0) { await userEvent.selectOptions(canvas.getByLabelText("추가 포인트 비용 주체"), "BRAND"); await userEvent.type(canvas.getByLabelText("추가 포인트 비용 주체 식별값"), "brand:reviewed-owner"); await userEvent.type(canvas.getByLabelText("추가 포인트 만료 (한국 시간)"), "2027-09-11T00:00"); } await userEvent.type(canvas.getByLabelText("포인트 조정 사유"), "확인된 포인트 차이 조정"); await userEvent.type(canvas.getByLabelText("포인트 조정 증빙 위치"), "support-case://point-review-001"); }
 export const Credit: Story = { play: async ({ canvas }) => { await fill(canvas, "3000"); await userEvent.click(canvas.getByRole("button", { name: "포인트 조정 적용" })); await expect(await canvas.findByText("포인트 조정을 적용했습니다")).toBeVisible(); await expect(await canvas.findByText("15,500P")).toBeVisible(); await expect(canvas.getByText("1,500P")).toBeVisible(); } };
@@ -36,7 +47,7 @@ let releaseResolution: (() => void) | undefined;
 export const LateResolutionIgnored: Story = { beforeEach: () => { releaseResolution = undefined; }, parameters: { msw: { handlers: [http.get("/api/v1/operations/customers/:customerId/point-account", async () => { await new Promise<void>(resolve => { releaseResolution = resolve; }); return HttpResponse.json({ customerId, accountId }); }), ...handlers] } }, play: async ({ canvas }) => { await selectCustomer(canvas); await waitFor(() => expect(typeof releaseResolution).toBe("function")); await userEvent.click(canvas.getByRole("button", { name: "다른 고객 찾기" })); releaseResolution?.(); await expect(canvas.getByLabelText("고객 로그인 아이디")).toBeVisible(); await expect(canvas.queryByText("현재 포인트")).not.toBeInTheDocument(); await expect(canvas.queryByLabelText("조정 포인트")).not.toBeInTheDocument(); } };
 let adjustmentCalls = 0;
 let frozenPayload: unknown;
-export const RetryDenialKeepsOriginalIntent: Story = { beforeEach: () => { adjustmentCalls = 0; frozenPayload = undefined; }, parameters: { msw: { handlers: [http.post("/api/v1/operations/point-accounts/:id/adjustments", async ({ request, params }) => { expect(params.id).toBe(accountId); const body = await request.json(); adjustmentCalls++; if (adjustmentCalls === 1) { key = request.headers.get("Idempotency-Key"); frozenPayload = body; return HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE" }, { status: 503 }); } expect(request.headers.get("Idempotency-Key")).toBe(key); expect(body).toEqual(frozenPayload); if (adjustmentCalls === 2) return HttpResponse.json({ code: "ACCESS_DENIED", correlationId: "RETRY-DENIED" }, { status: 403 }); return HttpResponse.json({ account, transactions: [transaction] }, { status: 201 }); }), ...handlers] } }, play: async ({ canvas }) => { await fill(canvas, "-500"); await userEvent.click(canvas.getByRole("button", { name: "포인트 조정 적용" })); await userEvent.click(await canvas.findByRole("button", { name: "같은 요청으로 결과 확인" })); await expect(await canvas.findByText("문의 코드 RETRY-DENIED")).toBeVisible(); await expect(canvas.getByRole("button", { name: "다른 고객 찾기" })).toBeDisabled(); await expect(canvas.getByLabelText("조정 포인트")).toBeDisabled(); await userEvent.click(canvas.getByRole("button", { name: "같은 요청으로 결과 확인" })); await expect(await canvas.findByText("포인트 조정을 적용했습니다")).toBeVisible(); await expect(canvas.getByRole("button", { name: "다른 고객 찾기" })).toBeEnabled(); } };
+export const RetryDenialKeepsOriginalIntent: Story = { beforeEach: () => { adjustmentCalls = 0; frozenPayload = undefined; }, parameters: { msw: { handlers: [http.post("/api/v1/operations/point-accounts/:id/adjustments", async ({ request, params }) => { expect(params.id).toBe(accountId); const body = await request.json(); adjustmentCalls++; if (adjustmentCalls === 1) { key = request.headers.get("Idempotency-Key"); frozenPayload = body; return HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE" }, { status: 503 }); } expect(request.headers.get("Idempotency-Key")).toBe(key); expect(body).toEqual(frozenPayload); if (adjustmentCalls === 2) return HttpResponse.json({ code: "ACCESS_DENIED", correlationId: "RETRY-DENIED" }, { status: 403 }); return HttpResponse.json({ account, transactions: [transaction] }, { status: 201 }); }), ...handlers] } }, play: async ({ canvas }) => { await fill(canvas, "-500"); await userEvent.click(canvas.getByRole("button", { name: "포인트 조정 적용" })); await userEvent.click(await canvas.findByRole("button", { name: "같은 요청으로 결과 확인" })); await expect(await canvas.findByText("문의 코드 RETRY-DENIED")).toBeVisible(); await expect(canvas.getByRole("button", { name: "다른 고객 찾기" })).toBeDisabled(); await expect(canvas.getByLabelText("조정 포인트")).toBeDisabled(); await userEvent.click(canvas.getByRole("button", { name: "같은 요청으로 결과 확인" })); await expect(await canvas.findByText("포인트 조정을 적용했습니다")).toBeVisible(); await expect(canvas.getByRole("button", { name: "다른 고객 찾기" })).toBeDisabled(); await userEvent.click(canvas.getByRole("button", { name: "확인하고 새 조정" })); await waitFor(() => expect(canvas.getByRole("button", { name: "다른 고객 찾기" })).toBeEnabled()); } };
 let summaryCalls = 0;
 export const RefreshFailureBlocksNewAdjustment: Story = { beforeEach: () => { summaryCalls = 0; }, parameters: { msw: { handlers: [http.get("/api/v1/operations/point-accounts/:id", () => { summaryCalls++; return summaryCalls === 1 ? HttpResponse.json(account) : HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE", correlationId: "REFRESH-FAILED" }, { status: 503 }); }), ...handlers] } }, play: async ({ canvas }) => { await fill(canvas, "-500"); await userEvent.click(canvas.getByRole("button", { name: "포인트 조정 적용" })); await expect(await canvas.findByText("포인트 조정을 적용했습니다")).toBeVisible(); await expect(await canvas.findByText("문의 코드 REFRESH-FAILED")).toBeVisible(); await expect(canvas.queryByLabelText("조정 포인트")).not.toBeInTheDocument(); await expect(canvas.queryByText("12,500P")).not.toBeInTheDocument(); } };
 export const MemoryOnlySelection: Story = { play: async ({ canvas }) => { const localBefore = JSON.stringify(localStorage); const sessionBefore = JSON.stringify(sessionStorage); await read(canvas); await expect(JSON.stringify(localStorage)).toBe(localBefore); await expect(JSON.stringify(sessionStorage)).toBe(sessionBefore); await expect(window.location.href).not.toContain(customerId); await expect(window.location.href).not.toContain(accountId); } };
@@ -62,4 +73,63 @@ export const LateCustomerReadsIgnored: Story = { beforeEach: () => { releaseOldR
   await expect(canvas.queryByText(transaction.sourceReference)).not.toBeInTheDocument(); await expect(canvas.getByRole("button", { name: "다음 포인트 거래" })).toBeDisabled();
 } };
 
-export const UncertainAdjustment: Story = { parameters: { msw: { handlers: [http.post("/api/v1/operations/point-accounts/:id/adjustments", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE", correlationId: "POINT-RESULT-UNKNOWN" }, { status: 503 })), ...handlers] } }, play: async ({ canvas }) => { await fill(canvas, "-500"); await userEvent.click(canvas.getByRole("button", { name: "포인트 조정 적용" })); await expect(await canvas.findByText("포인트 조정 결과를 확인해야 합니다")).toBeVisible(); await expect(canvas.getByRole("button", { name: "다른 고객 찾기" })).toBeDisabled(); await expect(canvas.getByLabelText("조정 포인트")).toBeDisabled(); await expect(canvas.getByRole("button", { name: "같은 요청으로 결과 확인" })).toBeEnabled(); await expect(canvas.queryByText("포인트 조정을 적용했습니다")).not.toBeInTheDocument(); } };
+export const UncertainAdjustment: Story = { parameters: { msw: { handlers: [http.post("/api/v1/operations/point-accounts/:id/adjustments", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE", correlationId: "POINT-RESULT-UNKNOWN" }, { status: 503 })), ...handlers] } }, play: async ({ canvas }) => { await fill(canvas, "-500"); await userEvent.click(canvas.getByRole("button", { name: "포인트 조정 적용" })); await expect(await canvas.findByText("포인트 조정 결과를 확인해야 합니다")).toBeVisible(); await expect(canvas.getByRole("button", { name: "다른 고객 찾기" })).toBeDisabled(); await expect(canvas.getByLabelText("조정 포인트")).toBeDisabled(); await waitFor(() => expect(canvas.getByRole("button", { name: "같은 요청으로 결과 확인" })).toBeEnabled()); await expect(canvas.queryByText("포인트 조정을 적용했습니다")).not.toBeInTheDocument(); } };
+
+function ReentryHarness() {
+  const [visit, setVisit] = useState(0);
+  return <><Button onClick={() => setVisit(value => value + 1)}>화면 재진입</Button><PointAccountWorkspace key={visit} /></>;
+}
+const restoredRequest: Preparation["request"] = { amountKrw: -500, reason: "확인된 포인트 차이 조정", evidenceReferences: ["support-case://point-review-001"] };
+export const PendingSurvivesReentry: Story = {
+  render: () => <ReentryHarness />,
+  beforeEach: () => { adjustmentCalls = 0; },
+  parameters: { msw: { handlers: [http.post("/api/v1/operations/point-accounts/:id/adjustments", async ({ request }) => {
+    expect(request.headers.get("Idempotency-Key")).toBe(preparationId); expect(await request.json()).toEqual(restoredRequest);
+    adjustmentCalls++;
+    if (adjustmentCalls === 1) { await delay("infinite"); return HttpResponse.error(); }
+    preparation = { ...preparation!, state: "APPLIED", canExecute: false, result: { account, transactions: [transaction] } };
+    return HttpResponse.json(preparation.result, { status: 201 });
+  }), ...handlers] } },
+  play: async ({ canvas }) => {
+    const localBefore = JSON.stringify(localStorage); const sessionBefore = JSON.stringify(sessionStorage);
+    await fill(canvas, "-500"); await userEvent.click(canvas.getByRole("button", { name: "포인트 조정 적용" }));
+    await waitFor(() => expect(adjustmentCalls).toBe(1)); await userEvent.click(canvas.getByRole("button", { name: "화면 재진입" }));
+    await expect(await canvas.findByText("포인트 조정 결과를 확인해야 합니다")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "다른 고객 찾기" })).toBeDisabled();
+    await expect(canvas.getByText(restoredRequest.reason)).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "같은 요청으로 결과 확인" }));
+    await expect(await canvas.findByText("포인트 조정을 적용했습니다")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "화면 재진입" }));
+    await expect(await canvas.findByText("포인트 조정을 적용했습니다")).toBeVisible();
+    await expect(adjustmentCalls).toBe(2);
+    await expect(JSON.stringify(localStorage)).toBe(localBefore); await expect(JSON.stringify(sessionStorage)).toBe(sessionBefore);
+    await userEvent.click(canvas.getByRole("button", { name: "확인하고 새 조정" }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: "다른 고객 찾기" })).toBeEnabled());
+  },
+};
+export const UnknownSurvivesReentry: Story = {
+  ...PendingSurvivesReentry,
+  parameters: { msw: { handlers: [http.post("/api/v1/operations/point-accounts/:id/adjustments", async ({ request }) => {
+    expect(request.headers.get("Idempotency-Key")).toBe(preparationId); expect(await request.json()).toEqual(restoredRequest); adjustmentCalls++;
+    if (adjustmentCalls === 1) return HttpResponse.error();
+    preparation = { ...preparation!, state: "APPLIED", canExecute: false, result: { account, transactions: [transaction] } };
+    return HttpResponse.json(preparation.result, { status: 201 });
+  }), ...handlers] } },
+};
+export const PreparationResponseLost: Story = {
+  parameters: { msw: { handlers: [http.post("/api/v1/operations/point-adjustment-preparations", async ({ request }) => {
+    const body = await request.json() as { request: Preparation["request"] };
+    preparation = { preparationId, accountId, customer, request: body.request, state: "PREPARED", canExecute: true, result: null };
+    return HttpResponse.error();
+  }), ...handlers] } },
+  play: async ({ canvas }) => { await fill(canvas, "-500"); await userEvent.click(canvas.getByRole("button", { name: "포인트 조정 적용" })); await expect(await canvas.findByRole("button", { name: "저장된 조정 확인" })).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "저장된 조정 확인" })); await expect(await canvas.findByText("포인트 조정 결과를 확인해야 합니다")).toBeVisible(); await userEvent.click(canvas.getByRole("button", { name: "미적용 조정 취소" })); await waitFor(() => expect(canvas.getByRole("button", { name: "다른 고객 찾기" })).toBeEnabled()); },
+};
+export const RecoveryUnavailableBlocksNewAdjustment: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/operations/point-adjustment-preparations/current", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE", correlationId: "RECOVERY-UNAVAILABLE" }, { status: 503 })), ...handlers] } },
+  play: async ({ canvas }) => { await expect(await canvas.findByText("문의 코드 RECOVERY-UNAVAILABLE")).toBeVisible(); await expect(canvas.queryByLabelText("고객 로그인 아이디")).not.toBeInTheDocument(); await expect(canvas.queryByLabelText("조정 포인트")).not.toBeInTheDocument(); },
+};
+export const CancelRacesWithAppliedResult: Story = {
+  beforeEach: () => { preparation = { preparationId, accountId, customer, request: restoredRequest, state: "PREPARED", canExecute: false, result: null }; },
+  parameters: { msw: { handlers: [http.delete("/api/v1/operations/point-adjustment-preparations/:id", () => { preparation = { ...preparation!, state: "APPLIED", canExecute: false, result: { account, transactions: [transaction] } }; return HttpResponse.json({ code: "RESOURCE_STATE_CONFLICT" }, { status: 409 }); }), ...handlers] } },
+  play: async ({ canvas }) => { await expect(await canvas.findByRole("button", { name: "같은 요청으로 결과 확인" })).toBeDisabled(); await userEvent.click(canvas.getByRole("button", { name: "미적용 조정 취소" })); await expect(await canvas.findByText("포인트 조정을 적용했습니다")).toBeVisible(); await expect(canvas.getByRole("button", { name: "다른 고객 찾기" })).toBeDisabled(); },
+};

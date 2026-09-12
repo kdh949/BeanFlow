@@ -3612,6 +3612,106 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
+  /operations/point-adjustment-preparations:
+    post:
+      tags: [Operations, Loyalty]
+      operationId: preparePointAdjustment
+      summary: 포인트 조정 준비
+      description: |
+        현재 운영자 본인의 미확인 조정만 다룹니다. POINT_ACCOUNT_READ가 필요하며 준비와 활성 기록 조회는 CUSTOMER_ACCOUNT_SEARCH도 필요합니다. 준비는 POINT_ADJUSTMENT를 추가로 확인합니다.
+        계정과 요청 본문은 서버에 고정하며 preparationId를 기존 조정 API의 Idempotency-Key로 사용합니다. 운영자별 미확인 기록은 하나이며, 다른 조정은 409로 차단합니다.
+        PREPARED 취소와 기존 조정 실행은 계정 잠금으로 직렬화합니다. APPLIED는 결과 확인만 가능하고 금전 변경을 취소하지 않습니다. 기대 상태가 달라지면 409입니다.
+        응답은 no-store이며 조회와 상태 변경에 감사 기록을 남깁니다. 미확인 기록은 유지하고 확인·취소한 기록은 90일 후 정리합니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreparePointAdjustmentRequest"
+      responses:
+        '200':
+          description: 운영자 본인의 조정 준비 또는 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PointAdjustmentPreparationView"
+        '400':
+          $ref: "#/components/responses/BadRequest"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '503':
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/point-adjustment-preparations/current:
+    get:
+      tags: [Operations, Loyalty]
+      operationId: getCurrentPointAdjustmentPreparation
+      summary: 미확인 포인트 조정 복구
+      description: |
+        현재 운영자 본인의 미확인 조정만 다룹니다. POINT_ACCOUNT_READ가 필요하며 준비와 활성 기록 조회는 CUSTOMER_ACCOUNT_SEARCH도 필요합니다. 준비는 POINT_ADJUSTMENT를 추가로 확인합니다.
+        계정과 요청 본문은 서버에 고정하며 preparationId를 기존 조정 API의 Idempotency-Key로 사용합니다. 운영자별 미확인 기록은 하나이며, 다른 조정은 409로 차단합니다.
+        PREPARED 취소와 기존 조정 실행은 계정 잠금으로 직렬화합니다. APPLIED는 결과 확인만 가능하고 금전 변경을 취소하지 않습니다. 기대 상태가 달라지면 409입니다.
+        응답은 no-store이며 조회와 상태 변경에 감사 기록을 남깁니다. 미확인 기록은 유지하고 확인·취소한 기록은 90일 후 정리합니다.
+      responses:
+        '200':
+          description: 운영자 본인의 조정 준비 또는 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentPointAdjustmentPreparation"
+        '400':
+          $ref: "#/components/responses/BadRequest"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '503':
+          $ref: "#/components/responses/DependencyUnavailable"
+  /operations/point-adjustment-preparations/{preparationId}:
+    delete:
+      tags: [Operations, Loyalty]
+      operationId: dismissPointAdjustmentPreparation
+      summary: 미적용 조정 취소 또는 적용 결과 확인
+      description: |
+        현재 운영자 본인의 미확인 조정만 다룹니다. POINT_ACCOUNT_READ가 필요하며 준비와 활성 기록 조회는 CUSTOMER_ACCOUNT_SEARCH도 필요합니다. 준비는 POINT_ADJUSTMENT를 추가로 확인합니다.
+        계정과 요청 본문은 서버에 고정하며 preparationId를 기존 조정 API의 Idempotency-Key로 사용합니다. 운영자별 미확인 기록은 하나이며, 다른 조정은 409로 차단합니다.
+        PREPARED 취소와 기존 조정 실행은 계정 잠금으로 직렬화합니다. APPLIED는 결과 확인만 가능하고 금전 변경을 취소하지 않습니다. 기대 상태가 달라지면 409입니다.
+        응답은 no-store이며 조회와 상태 변경에 감사 기록을 남깁니다. 미확인 기록은 유지하고 확인·취소한 기록은 90일 후 정리합니다.
+      parameters:
+        - name: preparationId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DismissPointAdjustmentPreparationRequest"
+      responses:
+        '204':
+          description: 취소 또는 결과 확인 완료 (같은 기대 상태의 재호출 포함)
+        '400':
+          $ref: "#/components/responses/BadRequest"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '503':
+          $ref: "#/components/responses/DependencyUnavailable"
   /operations/point-accounts/{accountId}/adjustments:
     post:
       tags: [Operations, Loyalty]
@@ -17224,6 +17324,47 @@ components:
           maxLength: 200
           pattern: .*\S.*
           description: 포인트 비용을 부담하는 플랫폼, 브랜드 또는 매장을 가리키는 식별값입니다.
+    PreparePointAdjustmentRequest:
+      type: object
+      required: [accountId, request]
+      properties:
+        accountId: {type: string, format: uuid}
+        request:
+          $ref: "#/components/schemas/PointAdjustmentRequest"
+    DismissPointAdjustmentPreparationRequest:
+      type: object
+      required: [expectedState]
+      properties:
+        expectedState: {type: string, enum: [PREPARED, APPLIED]}
+    CurrentPointAdjustmentPreparation:
+      type: object
+      required: [preparation]
+      properties:
+        preparation:
+          oneOf:
+            - $ref: "#/components/schemas/PointAdjustmentPreparationView"
+            - type: 'null'
+    PointAdjustmentPreparationView:
+      type: object
+      required: [preparationId, accountId, customer, request, state, canExecute, result]
+      properties:
+        preparationId: {type: string, format: uuid}
+        accountId: {type: string, format: uuid}
+        customer:
+          type: object
+          required: [customerId, maskedLoginId, maskedDisplayName]
+          properties:
+            customerId: {type: string, format: uuid}
+            maskedLoginId: {type: string}
+            maskedDisplayName: {type: string}
+        request:
+          $ref: "#/components/schemas/PointAdjustmentRequest"
+        state: {type: string, enum: [PREPARED, APPLIED]}
+        canExecute: {type: boolean}
+        result:
+          oneOf:
+            - $ref: "#/components/schemas/PointAdjustmentResult"
+            - type: 'null'
     PointAdjustmentRequest:
       type: object
       additionalProperties: false

@@ -798,6 +798,12 @@ paths:
           $ref: "./beanflow-v1.yaml#/components/responses/Conflict"
         '503':
           $ref: "./beanflow-v1.yaml#/components/responses/DependencyUnavailable"
+  /operations/point-adjustment-preparations:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-adjustment-preparations"
+  /operations/point-adjustment-preparations/current:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-adjustment-preparations~1current"
+  /operations/point-adjustment-preparations/{preparationId}:
+    $ref: "./beanflow-v1.yaml#/paths/~1operations~1point-adjustment-preparations~1{preparationId}"
   /operations/point-accounts/{accountId}/adjustments:
     post:
       tags:

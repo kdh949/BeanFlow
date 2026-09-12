@@ -81,7 +81,8 @@ PR stack의 보완이며 새 독립 migration plan을 시작하지 않는다. 20
 `a6199c6`/V81이고 stack의 마지막 migration은 V86이다. 활성 BeanFlow 작업은 이 보완 작업이며,
 다른 worktree의 V33/V34 변경은 2026-08-08부터 남아 있는 변경으로 보존한다. 이 스택의
 migration writer는 이 작업 하나로 직렬화하며 V82→V82.1 업그레이드와 최종 전체 stack의
-V82→V82.1→V83–V86 순서를 fresh PostgreSQL Flyway에서 검증한다.
+V82→V82.1→V83–V86 순서를 fresh PostgreSQL Flyway에서 검증한다. #170의 서버 조정 준비 기록은
+이 단일 lane을 이어 `V83_1`로 추가하며 기존 V83–V86 번호·checksum을 보존한다.
 
 ## API and Event Contracts
 
@@ -249,3 +250,12 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 ## Revision Notes
 
 - 2026-09-12: 원격 리뷰 기준 실행 범위와 검증 경계를 기록했다.
+
+### #170 포인트 조정 재진입 복구 (2026-09-12)
+
+- 기존 조정 API의 멱등 키로 서버 준비 ID를 사용한다. 준비·현재 복구·취소/결과 확인만 추가하고 실제 포인트 반영은 기존 트랜잭션에서 수행한다. 액터별 미확인 기록 하나, immutable 본문, 계정 잠금, 결과 원자 저장으로 새 키 재실행을 차단한다.
+- 화면은 진입 시 서버 기록을 먼저 확인한다. 대기/응답 유실/권한 철회/취소 경합을 명시적으로 처리하며 브라우저 저장소에 고객·본문·키를 저장하지 않는다. 성공 또는 취소 후 새 입력은 초기화한다.
+- Identity→Loyalty public API 방향을 보존하도록 Loyalty 조회 port를 Identity의 최소 마스킹 projection이 구현한다. 구조 검증에서 발견한 역방향 의존을 제거했다.
+- Passed: PostgreSQL 조정 17 + 준비/재진입/경합/원자 rollback 8 + runtime API parity 1 + Modulith 1 = 27개. 프론트엔드 단위 245개, typecheck, 디자인 검사, Storybook/앱 빌드, Sites 4개, Docs smoke 110개, 관련 MCP Story 30개(a11y 포함), 문서/OpenAPI 검사. 초기 타입·Story fixture/대기·구조 오류를 수정한 뒤 통과했다.
+- Not run: 실제 운영 DB 변경, 배포. #170 원격 CI와 리뷰 해결은 push 후 확인한다.
+- #160–#168의 33개 원본 리뷰는 해당 head의 terminal CI 후 간결한 수정 답변과 함께 해결했다. #169는 CI 완료(변경 없는 backend job은 SKIPPED), 원본 리뷰 없음.
