@@ -1,3 +1,4 @@
+import MockDate from "mockdate";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor } from "storybook/test";
 import { HttpResponse, http, delay } from "msw";
@@ -92,3 +93,36 @@ export const PendingOrderKeepsWorkspace: Story = {
     await expect(canvas.getByRole("button", { name: "기존 본인확인 요청 찾기" })).toBeDisabled();
   },
 };
+
+function lockedBreakGlass(unknown: boolean): Story {
+  const id = "84000000-0000-4000-8000-000000000001";
+  return {
+    beforeEach: () => { MockDate.set("2026-09-11T09:04:00Z"); return () => MockDate.reset(); },
+    parameters: { routing: { path: "/support/follow-up", initialEntry: `/support/follow-up?caseId=${caseId}&breakGlassRequestId=${id}`, surface: "support" } },
+    play: async ({ canvas, msw }) => {
+      let revealed = false, calls = 0;
+      msw.use(http.get("/api/v1/support/break-glass-requests/:id/workflow", () => HttpResponse.json({
+        request: { requestId: id, caseId, subjectId: id, subjectType: "CUSTOMER", requesterId: id, approverId: caseId, field: "CUSTOMER_PRIMARY_EMAIL", purpose: "PRIVACY_INCIDENT", reasonCode: "PRIVACY_INCIDENT", state: revealed ? "REVIEW_PENDING" : "ACTIVE", version: 1, requestedAt: "2026-09-11T09:03:00Z", expiresAt: "2026-09-11T09:06:00Z" },
+        allowedActions: revealed ? [] : ["REVEAL"], canViewRevealedValue: true, postReview: null,
+      })), http.post("/api/v1/support/break-glass-requests/:id/reveals", () => { revealed = true; calls++; return unknown ? HttpResponse.error() : HttpResponse.json({ revealAttemptId: id, requestId: id, caseId, subjectId: id, field: "CUSTOMER_PRIMARY_EMAIL", value: "emergency@example.invalid", revealedAt: "2026-09-11T09:04:00Z" }); }));
+      await userEvent.click(await canvas.findByRole("button", { name: "긴급 정보 한 번 열람" }));
+      await expect(await canvas.findByText(unknown ? "긴급 열람 응답을 확인하지 못했습니다" : "emergency@example.invalid")).toBeVisible();
+      const picker = canvas.getByRole("button", { name: "기존 긴급 열람 요청 찾기" });
+      await waitFor(() => expect(picker).toBeDisabled());
+      for (const tab of canvas.getAllByRole("tab")) await expect(tab).toBeDisabled();
+      if (!unknown) {
+        await userEvent.click(canvas.getByRole("button", { name: "긴급 원문 지금 지우기" }));
+        await waitFor(() => expect(picker).toBeEnabled());
+        await userEvent.click(canvas.getByRole("tab", { name: "상담 이력" }));
+        await expect(canvas.getByText("주문 픽업 완료")).toBeVisible();
+      } else {
+        await userEvent.click(canvas.getByRole("button", { name: "긴급 요청 상태 새로고침" }));
+        await expect(picker).toBeDisabled();
+        await expect(canvas.queryByRole("button", { name: "긴급 정보 한 번 열람" })).not.toBeInTheDocument();
+      }
+      expect(calls).toBe(1);
+    },
+  };
+}
+export const RawRevealLocksNavigation: Story = lockedBreakGlass(false);
+export const UnknownRevealLocksNavigation: Story = lockedBreakGlass(true);

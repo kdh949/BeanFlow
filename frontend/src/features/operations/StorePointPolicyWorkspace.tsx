@@ -53,8 +53,9 @@ function PolicyForm({ storeId, current, onSaved, onRefresh, onLockChange }: { st
       unresolved = false; setPending(null); intent.current.complete(); onSaved();
     } catch (error) {
       setFailure(error);
-      unresolved = unresolved || !(error instanceof ApiRequestError) || error.status >= 500 || error.status === 408 || error.code.startsWith("IDEMPOTENCY_");
-      if (unresolved) setPending(command); else intent.current.complete();
+      const terminal = error instanceof ApiRequestError && (error.code === "IDEMPOTENCY_KEY_REUSED" || error.code === "IDEMPOTENCY_MANUAL_REVIEW_REQUIRED");
+      unresolved = !terminal && (unresolved || !(error instanceof ApiRequestError) || error.status >= 500 || error.status === 408 || error.code === "IDEMPOTENCY_REQUEST_IN_PROGRESS");
+      if (unresolved) setPending(command); else { setPending(null); intent.current.complete(); }
     } finally { submitting.current = false; setBusy(false); onLockChange(unresolved); }
   }
   return <>{pending ? <section className="surface-card management-card"><p role="status">정책 변경 응답을 확인하지 못했습니다. 선택한 매장과 변경 내용을 유지하고 같은 요청의 결과를 확인해 주세요.</p><Button loading={busy} onClick={() => { if (pending) void submit(pending); }}>같은 정책 변경 결과 확인</Button></section> : null}<form className="surface-card management-card" onSubmit={event => { event.preventDefault(); void save(); }}><fieldset className="catalog-fieldset" disabled={busy || pending !== null}><legend>매장 정책 변경</legend>

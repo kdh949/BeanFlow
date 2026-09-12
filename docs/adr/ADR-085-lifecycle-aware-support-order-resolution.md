@@ -36,6 +36,13 @@ Settlement step은 `BLOCKED`로 남는다. Store/Platform cost owner를 자동 �
 검사한다. 요청 권한 `SUPPORT_RESOLUTION_REQUEST`는 실행 권한을 대신하지 않는다.
 화면은 금융 4단계와 고객 알림 상태를 구분한다.
 
+### Planned resolution reassignment amendment (2026-09-12)
+
+S60 실행자 재배정은 연결된 해결 건이 `PLANNED`인 경우 그 실행자도 같은 트랜잭션에서 변경한다.
+잠금 순서는 기존 첫 실행과 동일한 Request → SupportCase → Resolution이며, 원 계획 작성자
+`commandActorId` 및 승인 revision은 보존한다. 실행을 시작한 해결 건은 재배정할 수 없다.
+현재 실행 권한 회수로 `REASSIGNMENT_REQUIRED`가 된 경우에도 동일한 계획으로 복구할 수 있다.
+
 ## Alternatives Considered
 
 - 기존 customer endpoint impersonation: actor/audit/permission 오류로 기각.

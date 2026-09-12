@@ -21,7 +21,9 @@ import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.security.access.prepost.PreAuthorize
@@ -86,6 +88,12 @@ internal data class ManagedStoreMembership(
     val accountLoginId: String? = null,
 )
 
+internal data class MembershipAccountTarget(
+    val accountId: UUID,
+    val loginId: String,
+    val displayName: String,
+)
+
 internal data class ManagedStoreMembershipPage(
     val items: List<ManagedStoreMembership>,
     val nextCursor: String?,
@@ -117,6 +125,48 @@ internal class StoreMembershipManagementService(
     private val jdbc: JdbcTemplate,
     private val clock: Clock,
 ) {
+    fun accountTarget(
+        operatorId: UUID,
+        storeId: UUID,
+        loginId: String,
+        reason: String,
+    ): MembershipAccountTarget {
+        if (reason != "STORE_MEMBERSHIP_ASSIGNMENT_REVIEW" || loginId != loginId.trim() || loginId.length !in 3..64) invalid()
+        grants.requireActive(operatorId, OperatorPermission.STORE_MEMBERSHIP_WRITE)
+        stores.requireExisting(storeId)
+        val result =
+            jdbc
+                .query(
+                    "SELECT id, login_id, display_name FROM identity_merchant_account WHERE login_id = ?",
+                    { row, _ ->
+                        MembershipAccountTarget(
+                            row.getObject("id", UUID::class.java),
+                            row.getString("login_id"),
+                            row.getString("display_name"),
+                        )
+                    },
+                    loginId,
+                ).singleOrNull() ?: throw DomainFailure(FailureCode.MERCHANT_ACCOUNT_NOT_FOUND, "Merchant account was not found")
+        audits.appendAll(
+            listOf(
+                AppendAuditRecordCommand(
+                    actorId = operatorId.toString(),
+                    actorType = AuditActorType.PLATFORM_OPERATOR,
+                    category = AuditCategory.SECURITY_AND_PERMISSION,
+                    action = "MERCHANT_ACCOUNT_READ",
+                    targetType = "MERCHANT_ACCOUNT",
+                    targetId = result.accountId,
+                    occurredAt = clock.instant(),
+                    reason = reason,
+                    afterSummary = mapOf("purpose" to "MEMBERSHIP_ASSIGNMENT", "storeId" to storeId.toString()),
+                    correlationId = correlation.currentOrCreate(),
+                    sourceReference = "membership-account-read:${UUID.randomUUID()}",
+                ),
+            ),
+        )
+        return result
+    }
+
     fun get(
         operatorId: UUID,
         storeId: UUID,
@@ -422,6 +472,18 @@ internal class StoreMembershipManagementController(
     private val service: StoreMembershipManagementService,
     private val clock: Clock,
 ) {
+    @GetMapping("/account-target")
+    fun accountTarget(
+        actor: OperatorActor,
+        @PathVariable storeId: UUID,
+        @RequestParam @Size(min = 3, max = 64) loginId: String,
+        @RequestHeader("X-Access-Reason") reason: String,
+    ): ResponseEntity<MembershipAccountTarget> =
+        ResponseEntity
+            .ok()
+            .cacheControl(CacheControl.noStore())
+            .body(service.accountTarget(actor.actorId, storeId, loginId, reason))
+
     @GetMapping
     fun list(
         actor: OperatorActor,
