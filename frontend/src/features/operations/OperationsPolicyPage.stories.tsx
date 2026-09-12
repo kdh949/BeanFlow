@@ -195,6 +195,7 @@ export const HistoryKeepsPendingPolicy: Story = {
     await expect(canvas.getByLabelText("변경 사유")).toHaveValue("화면 이동에도 동일 변경 유지");
     await userEvent.click(canvas.getByRole("button", { name: "같은 공통 정책 변경 결과 확인" }));
     await expect(await canvas.findByText("버전 13 적용 중")).toBeVisible();
+    await waitFor(() => expect(canvas.getByRole("tab", { name: "포인트 비용 주체" })).toBeEnabled());
     await userEvent.click(canvas.getByRole("button", { name: "다음 방문 화면" }));
     await expect(await canvas.findByLabelText("플랫폼 비용 주체 이름")).toBeVisible();
     await expect(canvas.getByText("현재 업무 주소: ?workspace=cost-owners")).toBeVisible();
