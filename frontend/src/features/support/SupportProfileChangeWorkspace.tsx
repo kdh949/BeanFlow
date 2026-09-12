@@ -1,5 +1,5 @@
 import { SupportWorkPicker } from "./SupportWorkPicker";
-import { supportSubjectLabel } from "./supportCaseLabels";
+import { supportSubjectLabel, isSupportSubjectSelectable, type SupportSubjectDisplaySource } from "./supportCaseLabels";
 import { OperatorTargetPicker, type OperatorSelection } from "../operations/OperatorTargetPicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -15,7 +15,7 @@ import { useExpired } from "./useSupportExpiry";
 import { useSupportCommand } from "./useSupportCommand";
 import { useSensitiveSupportCommand } from "./useSensitiveSupportCommand";
 import { executeProfile, reviseProfile, submitProfile } from "./supportProfileCommands";
-type Case = { caseId: string; state: string; subjectLinks: readonly { linkId: string; subjectId: string; subjectType: string }[] };
+type Case = { caseId: string; state: string; subjectLinks: readonly (SupportSubjectDisplaySource & { linkId: string; subjectId: string; subjectType: string })[] };
 type Verification = { sessionId: string; subjectLinkId: string; state: string; subjectType: string; subjectId: string; purpose: string; actionScope: string; achievedLevel: string; expiresAt: string };
 type Workflow = components["schemas"]["SupportProfileWorkflowResource"];
 const approvalLabels: Record<string, string> = { AWAITING_SUPPORT_MANAGER: "상담 관리자 승인 대기", AWAITING_OPERATIONS: "운영 검토 대기", READY_FOR_EXECUTION: "실행 준비", REASSIGNMENT_REQUIRED: "담당자 재배정 필요", REVISION_REQUIRED: "정정안 수정 필요", DENIED: "반려", EXPIRED: "만료", STALE: "조건 변경", MANUAL_REVIEW: "수동 확인 필요", EXECUTED: "실행 완료" };
@@ -61,8 +61,8 @@ export function SupportProfileChangeWorkspace({ supportCase, verification, initi
 
 function CreateProfileChange({ supportCase, verification, onCreated, onBusyChange, revision }: { supportCase: Case; verification?: Verification | null; onCreated: (id: string) => void; onBusyChange: (busy: boolean) => void; revision?: Workflow }) {
   const targets = supportCase.subjectLinks.filter(link => ["CUSTOMER", "STORE", "DELIVERY"].includes(link.subjectType));
-  const [linkId, setLinkId] = useState(targets.find(link => link.subjectId === revision?.profileChange.subjectId)?.linkId ?? targets[0]?.linkId ?? "");
-  const link = targets.find(item => item.linkId === linkId);
+  const [linkId, setLinkId] = useState((revision ? targets.find(link => link.subjectId === revision.profileChange.subjectId && isSupportSubjectSelectable(link))?.linkId : targets.find(isSupportSubjectSelectable)?.linkId) ?? "");
+  const link = targets.find(item => item.linkId === linkId && isSupportSubjectSelectable(item));
   const purposes = (Object.keys(profilePurposes) as ProfilePurpose[]).filter(purpose => profilePurposes[purpose].subject === link?.subjectType);
   const [selectedPurpose, setPurpose] = useState<ProfilePurpose>(revision?.profileChange.purpose ?? purposes[0] ?? "CUSTOMER_DISPLAY_NAME");
   const purpose = purposes.includes(selectedPurpose) ? selectedPurpose : purposes[0] ?? "CUSTOMER_DISPLAY_NAME";
@@ -70,7 +70,7 @@ function CreateProfileChange({ supportCase, verification, onCreated, onBusyChang
   const raw = useProfileValues(`${linkId}:${purpose}:${verification?.sessionId}`);
   const [reason, setReason] = useState(""), [evidence, setEvidence] = useState(""), [resetAcknowledged, setResetAcknowledged] = useState(false), [preparing, setPreparing] = useState(false), [error, setError] = useState<unknown>(null);
   const preparingRef = useRef(false);
-  const context = useResource(useCallback(async () => linkId ? unwrap(await operationsApi.GET("/support/cases/{caseId}/profile-contexts/{linkId}", { params: { path: { caseId: supportCase.caseId, linkId }, query: { purpose } } })) : null, [supportCase.caseId, linkId, purpose]));
+  const context = useResource(useCallback(async () => link ? unwrap(await operationsApi.GET("/support/cases/{caseId}/profile-contexts/{linkId}", { params: { path: { caseId: supportCase.caseId, linkId }, query: { purpose } } })) : null, [supportCase.caseId, linkId, link, purpose]));
   const command = useSensitiveSupportCommand();
   const expired = useExpired(verification?.expiresAt), busy = preparing || command.busy, frozen = busy || !!command.pending;
   useEffect(() => { onBusyChange(frozen); return () => onBusyChange(false); }, [frozen, onBusyChange]);
@@ -78,7 +78,7 @@ function CreateProfileChange({ supportCase, verification, onCreated, onBusyChang
   const verified = verification?.state === "VERIFIED" && verification.subjectLinkId === linkId && verification.subjectId === link?.subjectId && verification.subjectType === link?.subjectType && verification.purpose === "CASE_RESOLUTION" && verification.actionScope === "SUPPORT_ACTION" && !expired;
   const enough = current?.requiredVerificationLevel === "BASIC" ? ["BASIC", "ENHANCED"].includes(verification?.achievedLevel ?? "") : verification?.achievedLevel === "ENHANCED";
   const valid = validProfileValues(purpose, raw.values) && !!reason.trim() && !!evidence.trim() && (descriptor.risk !== "R4" || resetAcknowledged);
-  const eligible = current && verified && enough && !["RESOLVED", "CLOSED"].includes(supportCase.state);
+  const eligible = link && current && verified && enough && !["RESOLVED", "CLOSED"].includes(supportCase.state);
   async function submit() {
     if (busy || preparingRef.current || !current || !verification || !valid || (!command.pending && !eligible)) return;
     preparingRef.current = true; setPreparing(true); setError(null);
@@ -98,11 +98,11 @@ function CreateProfileChange({ supportCase, verification, onCreated, onBusyChang
     } catch (failure) { setError(failure); } finally { raw.clear(); preparingRef.current = false; setPreparing(false); }
   }
   return <div className="surface-card management-card management-workspace"><h3>{revision ? "정정안 수정" : "새 정보 정정"}</h3>
-    <SelectField label="정보 정정 대상" value={linkId} disabled={frozen || !!revision} onValueChange={setLinkId}>{targets.map(target => <option key={target.linkId} value={target.linkId}>{supportSubjectLabel(target)}</option>)}</SelectField>
+    {targets.some(link => !isSupportSubjectSelectable(link)) ? <p>표시 정보 조회 권한과 등록된 대상 프로필을 확인해 주세요.</p> : null}<SelectField label="정보 정정 대상" value={link?.linkId ?? ""} disabled={frozen || !!revision} onValueChange={setLinkId}><option value="">표시 정보를 확인한 대상 선택</option>{targets.map(target => <option key={target.linkId} value={target.linkId} disabled={!isSupportSubjectSelectable(target)}>{supportSubjectLabel(target)}</option>)}</SelectField>
     <SelectField label="정보 정정 목적" value={purpose} disabled={frozen || !!revision} onValueChange={value => setPurpose(value as ProfilePurpose)}>{purposes.map(item => <option key={item} value={item}>{profilePurposes[item].label}</option>)}</SelectField>
     {!targets.length ? <EmptyState title="정정할 대상이 없습니다" description="상담에 고객·매장·외부 배달원을 연결해 주세요." /> : context.state.status === "loading" ? <LoadingState label="현재 프로필 조건을 읽는 중" /> : context.state.status === "failed" ? <ErrorState error={context.state.error} retry={context.reload} /> : current ? <p>현재 버전 {current.currentProfileVersion} · {current.requiredVerificationLevel === "ENHANCED" ? "강화" : "기본"} 본인확인 필요 · {descriptor.risk === "R3" || descriptor.risk === "R4" ? "상담 관리자와 운영 순차 승인" : "권한 확인 후 직접 정정"}</p> : null}
     {current && !enough && current.requiredVerificationLevel === "ENHANCED" ? <InlineNotice tone="info" title="이 정정에는 강화 본인확인이 필요합니다" description="같은 대상의 상담 해결 목적 본인확인을 완료해 주세요." /> : !verified ? <InlineNotice title="정정 대상의 업무 처리 본인확인이 필요합니다" description="상담 해결 목적·업무 처리 범위의 인증 세션을 선택해 주세요." /> : null}
-    <Button variant="secondary" disabled={frozen || !linkId} onClick={() => { raw.clear(); context.reload(); }}>현재 프로필 조건 다시 확인</Button>
+    <Button variant="secondary" disabled={frozen || !link} onClick={() => { raw.clear(); context.reload(); }}>현재 프로필 조건 다시 확인</Button>
     <ProfileFields purpose={purpose} values={raw.values} onChange={raw.setValues} disabled={busy || (!current && !command.pending)} />
     {descriptor.risk === "R4" ? <Checkbox label="인증정보를 직접 변경하지 않는 재등록 요청임을 확인했습니다" checked={resetAcknowledged} onCheckedChange={setResetAcknowledged} disabled={frozen} /> : null}
     <TextAreaField label="정정 사유" value={reason} onValueChange={setReason} disabled={frozen} maxLength={500} required description="개인정보나 인증 원문을 적지 않습니다." /><TextField label="정정 증빙 참조" value={evidence} onValueChange={setEvidence} disabled={frozen} maxLength={500} required description="확인한 상담 기록의 참조입니다. 해시로 전송합니다." />
@@ -116,7 +116,7 @@ function ProfileInspection({ id, supportCase, verification, onBusyChange }: { id
   const value = read.state.status === "ready" ? read.state.value : null, profile = value?.profileChange, approval = value?.approval;
   const raw = useProfileValues(`${profile?.purpose}:${profile?.version}:${read.state.status}`);
   const [digest, setDigest] = useState(""), [decision, setDecision] = useState<"APPROVE" | "DENY" | "RETURN_FOR_REVISION">("APPROVE"), [reason, setReason] = useState(""), [message, setMessage] = useState(""), [assignee, setAssignee] = useState<OperatorSelection | null>(null), [assignmentReason, setAssignmentReason] = useState(""), [revising, setRevising] = useState(false), [revisionBusy, setRevisionBusy] = useState(false);
-  const sensitive = useSensitiveSupportCommand(), command = useSupportCommand(() => { raw.clear(); read.reload(); });
+  const sensitive = useSensitiveSupportCommand(), command = useSupportCommand(`profile-change:${id}`, () => { raw.clear(); read.reload(); });
   const busy = sensitive.busy || command.busy, frozen = busy || !!sensitive.pending || command.pending || revisionBusy;
   useEffect(() => { onBusyChange(frozen); return () => onBusyChange(false); }, [frozen, onBusyChange]);
   const expired = useExpired(value?.verificationExpiresAt);

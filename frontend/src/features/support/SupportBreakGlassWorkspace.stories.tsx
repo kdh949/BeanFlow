@@ -35,3 +35,27 @@ export const SelectExistingRequest: Story = {
     await expect(canvas.getByRole("button", { name: "기존 긴급 열람 요청 찾기" })).toHaveAttribute("aria-expanded", "false");
   },
 };
+
+export const ChangedFieldNeedsConfirmation: Story = { args: { initialRequestId: undefined, supportCase: { ...supportCase, subjectLinks: [...supportCase.subjectLinks, { linkId: "store-link", subjectType: "STORE", subjectId: "store-subject", display: { state: "AVAILABLE", label: "빈플로우 시청점" } }] } }, play: async ({ canvas }) => {
+  const confirmation = canvas.getByRole("checkbox", { name: "긴급 상황에서 이 필드가 꼭 필요함을 확인했습니다" });
+  await userEvent.click(confirmation);
+  await userEvent.selectOptions(canvas.getByLabelText("긴급 열람 필드"), "CUSTOMER_PRIMARY_EMAIL");
+  await expect(confirmation).not.toBeChecked();
+  await expect(canvas.getByRole("button", { name: "긴급 열람 승인 요청" })).toBeDisabled();
+  await userEvent.click(confirmation);
+  await userEvent.selectOptions(canvas.getByLabelText("긴급 열람 대상"), "store-link");
+  await expect(confirmation).not.toBeChecked();
+  await expect(canvas.getByRole("button", { name: "긴급 열람 승인 요청" })).toBeDisabled();
+} };
+
+export const UnavailableTargetsCannotSelect: Story = {
+  args: { initialRequestId: undefined, supportCase: { ...supportCase, subjectLinks: ["REQUIRES_PERMISSION", "MISSING_PROFILE"].map((state, index) => ({ ...supportCase.subjectLinks[0]!, linkId: `99020000-0000-4000-8000-00000000000${index + 1}`, subjectId: `99020000-0000-4000-8000-00000000000${index + 1}`, display: { state } })) } },
+  play: async ({ canvas }) => {
+    const select = await canvas.findByLabelText("긴급 열람 대상");
+    const unavailable = [...(select as HTMLSelectElement).options].filter(option => option.value);
+    await expect(unavailable).toHaveLength(2);
+    for (const option of unavailable) await expect(option).toBeDisabled();
+    await expect(select).toHaveValue("");
+    await expect(canvas.getByRole("button", { name: "긴급 열람 승인 요청" })).toBeDisabled();
+  },
+};
