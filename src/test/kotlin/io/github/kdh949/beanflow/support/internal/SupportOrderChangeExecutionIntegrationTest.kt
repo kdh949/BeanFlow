@@ -242,6 +242,18 @@ internal class SupportOrderChangeExecutionIntegrationTest
                 .perform(
                     get("/api/v1/stores/${UUID.randomUUID()}/support-order-change-requests/$requestId").with(actor),
                 ).andExpect(status().isForbidden)
+            mockMvc
+                .perform(get("$path/pickup-slots").with(actor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isArray)
+            jdbcTemplate.update("UPDATE support_action_revision SET policy_version = 'retired-policy' WHERE id = ?", revisionId)
+            mockMvc.perform(get(path).with(actor)).andExpect(status().isConflict)
+            mockMvc.perform(get("$path/pickup-slots").with(actor)).andExpect(status().isConflict)
+            jdbcTemplate.update(
+                "UPDATE support_action_revision SET policy_version = ? WHERE id = ?",
+                SupportActionPolicy.POLICY_VERSION,
+                revisionId,
+            )
             jdbcTemplate.update("UPDATE support_action_revision SET expires_at = now() - interval '1 second' WHERE id = ?", revisionId)
             mockMvc.perform(get(path).with(actor)).andExpect(status().isConflict)
         }

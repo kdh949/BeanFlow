@@ -31,6 +31,13 @@
   본문 대신 결과 식별자와 digest만 저장한다. 응답 유실 후 같은 key로 확인하며 새 문의/답변을 추측하지 않는다.
 - 외부 메시지·메일 발송과 새 production dependency는 추가하지 않는다. 고객은 앱 문의함에서 답변을 읽는다.
 
+## Review clarification (2026-09-12)
+
+현재 상담 답변 grant를 확인한 뒤 actor·operation·key의 저장 결과를 먼저 조회한다.
+같은 payload의 이미 커밋된 답변은 이후 재배정·종료가 있어도 기존 messageId로 확인한다.
+새 답변에만 현재 담당자·Case 버전·활성 상태를 검사한다. 목록은 한 페이지의 Case 상태만
+일괄 조회하며, 전체 문의의 `(created_at DESC, id DESC)` 정렬 인덱스를 제공한다.
+
 ## Alternatives Considered
 
 외부 링크는 요구를 충족하지 않는다. 시스템 담당자로 Case를 즉시 생성하면 실제 할당 상태를 왜곡한다.

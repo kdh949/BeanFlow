@@ -62,7 +62,7 @@ function CreateCompensation({ supportCase, verification, initialIncidentId, onCr
   const [evaluation, setEvaluation] = useState<{ result: Evaluation; body: Payload } | null>(null), [preparing, setPreparing] = useState(false), [error, setError] = useState<unknown>(null);
   const sequence = useRef(0);
   const order = useResource(useCallback(async () => orderId ? unwrap(await operationsApi.GET("/support/cases/{caseId}/orders/{orderId}", { params: { path: { caseId: supportCase.caseId, orderId } } })) : null, [supportCase.caseId, orderId]));
-  const command = useSupportCommand(() => { setEvaluation(null); order.reload(); });
+  const command = useSupportCommand(`compensation-create:${supportCase.caseId}`, () => { setEvaluation(null); order.reload(); });
   const busy = preparing || command.busy || command.pending;
   useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
   useEffect(() => { sequence.current++; setEvaluation(null); }, [orderId, incidentId, benefit, amount, responsibility, share, basis, costEvidence, evidence, template, verification?.sessionId, verification?.state]);
@@ -71,14 +71,19 @@ function CreateCompensation({ supportCase, verification, initialIncidentId, onCr
   const active = !["RESOLVED", "CLOSED"].includes(supportCase.state);
   const currentVersion = order.state.status === "ready" ? (orderId ? order.state.value?.version : 0) : undefined;
   const storeCost = responsibility === "STORE" || responsibility === "SHARED";
-  const platformShare = responsibility === "SHARED" ? percentBps(share) : responsibility === "STORE" ? 0 : 10000;
+  const sharedBps = percentBps(share);
+  const shares = responsibility === "UNDETERMINED" ? [0, 0] as const
+    : responsibility === "PLATFORM" ? [10000, 0] as const
+    : responsibility === "STORE" ? [0, 10000] as const
+    : sharedBps === null ? null : [sharedBps, 10000 - sharedBps] as const;
+  const platformShare = shares?.[0] ?? null;
   const amountKrw = benefit === "COUPON" ? template?.amountKrw : /^\d+$/.test(amount) ? Number(amount) : undefined;
   const valid = uuid(incidentId) && currentVersion !== undefined && amountKrw !== undefined && Number.isSafeInteger(amountKrw) && amountKrw > 0 && platformShare !== null && (!storeCost || !!costEvidence.trim()) && (benefit !== "COUPON" || (!!template && !!orderId));
   async function evaluate() {
     if (!verified || !verification || !active || !valid || busy || amountKrw === undefined || currentVersion === undefined || platformShare === null) return;
     const generation = ++sequence.current; setPreparing(true); setError(null); setEvaluation(null);
     try {
-      const body: Payload = { incidentId: incidentId.trim(), orderId: orderId || null, expectedTargetVersion: currentVersion, benefitType: benefit, amountKrw, couponTemplateId: benefit === "COUPON" ? template!.templateId : null, responsibility, evidenceBasis: storeCost ? basis : null, costEvidenceDigest: storeCost ? await supportDigest(costEvidence.trim()) : null, platformShareBps: platformShare, storeShareBps: 10000 - platformShare, verificationSessionId: verification.sessionId };
+      const body: Payload = { incidentId: incidentId.trim(), orderId: orderId || null, expectedTargetVersion: currentVersion, benefitType: benefit, amountKrw, couponTemplateId: benefit === "COUPON" ? template!.templateId : null, responsibility, evidenceBasis: storeCost ? basis : null, costEvidenceDigest: storeCost ? await supportDigest(costEvidence.trim()) : null, platformShareBps: platformShare, storeShareBps: shares![1], verificationSessionId: verification.sessionId };
       const result = unwrap(await operationsApi.POST("/support/cases/{caseId}/compensation-evaluations", { params: { path: { caseId: supportCase.caseId } }, body }));
       if (generation === sequence.current) setEvaluation({ result, body });
     } catch (failure) { if (generation === sequence.current) setError(failure); } finally { setPreparing(false); }
@@ -123,7 +128,7 @@ function CouponPicker({ disabled, selected, onSelect }: { disabled: boolean; sel
 function CompensationInspection({ id, caseId, onBusyChange }: { id: string; caseId?: string; onBusyChange: (busy: boolean) => void }) {
   const read = useResource(useCallback(async () => { const value = unwrap(await operationsApi.GET("/support/compensations/{compensationRequestId}/workflow", { params: { path: { compensationRequestId: id } } })); if (caseId && value.request.supportCaseId !== caseId) throw new ApiRequestError(409, "RESOURCE_STATE_CONFLICT", "현재 상담에 연결된 보상 요청이 아닙니다."); return value; }, [id, caseId]));
   const [reviewed, setReviewed] = useState(false), [reason, setReason] = useState(""), [decision, setDecision] = useState<"APPROVE" | "DENY" | "RETURN_FOR_REVISION">("APPROVE"), [assignee, setAssignee] = useState<OperatorSelection | null>(null), [assignmentReason, setAssignmentReason] = useState(""), [message, setMessage] = useState("");
-  const command = useSupportCommand(() => { setReviewed(false); read.reload(); });
+  const command = useSupportCommand(`compensation:${id}`, () => { setReviewed(false); read.reload(); });
   const busy = command.busy || command.pending;
   useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
   const value: Workflow | null = read.state.status === "ready" ? read.state.value : null;

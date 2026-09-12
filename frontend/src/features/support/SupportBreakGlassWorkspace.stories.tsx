@@ -20,3 +20,15 @@ export const IndependentReview: Story = { beforeEach() { current = { request: { 
 export const Expired: Story = { beforeEach() { active(); current.request.expiresAt = "2026-09-11T09:03:00Z"; current.allowedActions = []; }, play: async ({ canvas }) => { await expect(await canvas.findByText("열람 기한 만료")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "긴급 정보 한 번 열람" })).not.toBeInTheDocument(); } };
 export const PermissionLost: Story = { play: async ({ canvas, msw }) => { await canvas.findByRole("button", { name: "긴급 요청 상태 새로고침" }); msw.use(http.get("/api/v1/support/break-glass-requests/:id/workflow", () => HttpResponse.json({ code: "ACCESS_DENIED", correlationId: "BREAK-GLASS-REVOKED" }, { status: 403 }))); await userEvent.click(canvas.getByRole("button", { name: "긴급 요청 상태 새로고침" })); await expect(await canvas.findByText("문의 코드 BREAK-GLASS-REVOKED")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "긴급 열람 승인" })).not.toBeInTheDocument(); } };
 export const UnknownApproval: Story = { play: async ({ canvas, msw }) => { let key = "", calls = 0; msw.use(http.post("/api/v1/support/break-glass-requests/:id/approvals", async ({ request: httpRequest }) => { expect(await httpRequest.json()).toEqual({ decision: "DENY", expectedVersion: 0 }); calls++; if (calls === 1) { key = httpRequest.headers.get("Idempotency-Key")!; return HttpResponse.error(); } expect(httpRequest.headers.get("Idempotency-Key")).toBe(key); current = { ...current, request: { ...request, state: "DENIED", version: 1 }, allowedActions: [] }; return HttpResponse.json(current.request); })); await userEvent.click(await canvas.findByRole("button", { name: "긴급 열람 반려" })); await userEvent.click(await canvas.findByRole("button", { name: "같은 긴급 결정 확인" })); await expect(await canvas.findByText("열람 반려")).toBeVisible(); expect(calls).toBe(2); } };
+
+export const ChangedFieldNeedsConfirmation: Story = { args: { initialRequestId: undefined, supportCase: { ...supportCase, subjectLinks: [...supportCase.subjectLinks, { linkId: "store-link", subjectType: "STORE", subjectId: "store-subject" }] } }, play: async ({ canvas }) => {
+  const confirmation = canvas.getByRole("checkbox", { name: "긴급 상황에서 이 필드가 꼭 필요함을 확인했습니다" });
+  await userEvent.click(confirmation);
+  await userEvent.selectOptions(canvas.getByLabelText("긴급 열람 필드"), "CUSTOMER_PRIMARY_EMAIL");
+  await expect(confirmation).not.toBeChecked();
+  await expect(canvas.getByRole("button", { name: "긴급 열람 승인 요청" })).toBeDisabled();
+  await userEvent.click(confirmation);
+  await userEvent.selectOptions(canvas.getByLabelText("긴급 열람 대상"), "store-link");
+  await expect(confirmation).not.toBeChecked();
+  await expect(canvas.getByRole("button", { name: "긴급 열람 승인 요청" })).toBeDisabled();
+} };

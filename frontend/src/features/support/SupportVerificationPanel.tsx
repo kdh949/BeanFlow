@@ -37,7 +37,7 @@ export function SupportVerificationPanel({ caseId, links, disabled, onChange, in
   }, [request, disabled, caseId, links]));
   const current = read.state.status === "ready" ? read.state.value : null;
   const expired = current ? Date.now() >= Date.parse(current.expiresAt) : false;
-  const command = useSupportCommand(() => { setProof(""); if (request) read.reload(); });
+  const command = useSupportCommand(`verification:${caseId}`, () => { setProof(""); if (request) read.reload(); });
   const busy = command.busy || proofBusy;
   const blocked = busy || command.pending || disabled;
   useEffect(() => { onChange(current && !expired && !disabled ? current : null); }, [current, expired, disabled, onChange]);
@@ -60,7 +60,7 @@ export function SupportVerificationPanel({ caseId, links, disabled, onChange, in
   }
   const pending = current?.state === "PENDING" && !expired;
   const issued = pending ? current.challenges.find(c => c.state === "ISSUED" && Date.parse(c.expiresAt) > Date.now()) : null;
-  const unavailableChannels = new Set(current?.challenges.filter(c => !["EXPIRED", "INVALID", "REVOKED"].includes(c.state)).map(c => c.channel));
+  const unavailableChannels = new Set(current?.challenges.filter(c => !["EXPIRED", "INVALID", "REVOKED"].includes(c.state) && !(c.state === "ISSUED" && Date.parse(c.expiresAt) <= Date.now())).map(c => c.channel));
   function issue() {
     if (blocked || !current || !pending || unavailableChannels.has(channel)) return;
     const body = { channel }; const sessionId = current.sessionId;
