@@ -226,6 +226,13 @@ Storybook MCP의 변경 story·preview·focused/full tests를 실행한다. 각 
 - 최초 동명 메뉴 Story의 조회 대기를 보완했고, 이전 실패 결과가 남은 MCP 세션을 재시작해 46개 모두 통과를 확인했다.
 - Storybook Docs 108 entries/47 state surfaces도 Passed다. 원격 CI와 리뷰 해결은 대기 중이다.
 
+### #169 부모 반영 검증
+
+- 직접 미해결 리뷰는 없으며 #168까지의 수정 이력을 부모 merge로 반영했다.
+- Passed: frontend unit 245개, boundary 10개, copy 11개, 최근 매장·마이페이지·라우트 Storybook 11개,
+  typecheck, check:design, build-storybook, build, test:sites 4개, verify-docs.
+- Backend 구현 변경은 없고 이 slice의 별도 backend 테스트는 Not run이다. 원격 CI는 대기 중이다.
+
 ## Surprises & Discoveries
 
 이미지 삭제는 후속 #168에서 코드가 보완돼 있으므로 #161 자체의 회귀와 함께 확인한다.
