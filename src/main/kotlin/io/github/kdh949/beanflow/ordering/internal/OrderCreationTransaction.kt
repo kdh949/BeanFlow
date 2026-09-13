@@ -2,6 +2,9 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.CreateOrderCommand
 import io.github.kdh949.beanflow.ordering.api.StoredHttpResponse
+import io.github.kdh949.beanflow.shared.api.PerformanceOperation
+import io.github.kdh949.beanflow.shared.api.PerformancePhaseTelemetry
+import io.github.kdh949.beanflow.shared.api.PerformanceStage
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -12,6 +15,7 @@ internal class OrderCreationTransaction(
     private val quoteCoordinator: OrderQuoteCoordinator,
     private val idempotencyService: OrderIdempotencyService,
     private val responseFactory: OrderCreationResponseFactory,
+    private val phaseTelemetry: PerformancePhaseTelemetry,
 ) {
     @Transactional
     fun create(
@@ -25,11 +29,17 @@ internal class OrderCreationTransaction(
                     io.github.kdh949.beanflow.shared.api.FailureCode.INVALID_REQUEST,
                     "Expected quote fingerprint is required",
                 )
-        val currentQuote = quoteCoordinator.lockForOrderCreation(command)
+        val currentQuote =
+            phaseTelemetry.observe(PerformanceOperation.ORDER_CREATE, PerformanceStage.QUOTE_REVALIDATION) {
+                quoteCoordinator.lockForOrderCreation(command)
+            }
         if (currentQuote.response.quoteFingerprint != expectedFingerprint) {
             throw OrderQuoteStaleFailure(currentQuote.response)
         }
-        val outcome = workflow.create(orderId, command, preparedQuote = currentQuote)
+        val outcome =
+            phaseTelemetry.observe(PerformanceOperation.ORDER_CREATE, PerformanceStage.WORKFLOW) {
+                workflow.create(orderId, command, preparedQuote = currentQuote)
+            }
         val response = responseFactory.create(outcome.order, outcome.benefitOnlyPayment)
         idempotencyService.complete(idempotencyRecordId, outcome.order.id, response)
         return response

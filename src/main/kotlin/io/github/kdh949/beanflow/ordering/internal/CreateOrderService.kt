@@ -7,6 +7,9 @@ import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.github.kdh949.beanflow.shared.api.PerformanceOperation
+import io.github.kdh949.beanflow.shared.api.PerformancePhaseTelemetry
+import io.github.kdh949.beanflow.shared.api.PerformanceStage
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import org.springframework.beans.factory.annotation.Value
@@ -22,6 +25,7 @@ internal class CreateOrderService(
     private val correlationIdSource: CorrelationIdSource,
     private val objectMapper: ObjectMapper,
     private val meterRegistry: MeterRegistry,
+    private val phaseTelemetry: PerformancePhaseTelemetry,
     @Value("\${beanflow.idempotency.retry-after-seconds:2}")
     private val retryAfterSeconds: Long,
 ) : CreateOrderUseCase {
@@ -80,13 +84,15 @@ internal class CreateOrderService(
         val intendedOrderId = identifierSource.next()
         val registration =
             try {
-                idempotencyService.register(
-                    actorId = command.customerId,
-                    operation = OrderCreationOperation.DIRECT,
-                    idempotencyKey = idempotencyKey,
-                    payloadHash = payloadHash,
-                    intendedOrderId = intendedOrderId,
-                )
+                phaseTelemetry.observe(PerformanceOperation.ORDER_CREATE, PerformanceStage.IDEMPOTENCY_REGISTER) {
+                    idempotencyService.register(
+                        actorId = command.customerId,
+                        operation = OrderCreationOperation.DIRECT,
+                        idempotencyKey = idempotencyKey,
+                        payloadHash = payloadHash,
+                        intendedOrderId = intendedOrderId,
+                    )
+                }
             } catch (failure: DomainFailure) {
                 return errorResponse(failure, correlationId)
             } catch (failure: DataAccessException) {
@@ -123,11 +129,13 @@ internal class CreateOrderService(
 
             is IdempotencyRegistration.Acquired -> {
                 try {
-                    return orderCreationTransaction.create(
-                        idempotencyRecordId = registration.recordId,
-                        orderId = registration.intendedOrderId,
-                        command = command,
-                    )
+                    return phaseTelemetry.observe(PerformanceOperation.ORDER_CREATE, PerformanceStage.TRANSACTION_PROXY) {
+                        orderCreationTransaction.create(
+                            idempotencyRecordId = registration.recordId,
+                            orderId = registration.intendedOrderId,
+                            command = command,
+                        )
+                    }
                 } catch (failure: OrderQuoteStaleFailure) {
                     val response = staleResponse(failure, correlationId)
                     return persistFailureOrDependencyError(registration.recordId, response, correlationId)

@@ -6,6 +6,9 @@ import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.github.kdh949.beanflow.shared.api.WorkerOwner
+import io.github.kdh949.beanflow.shared.api.WorkerRun
+import io.github.kdh949.beanflow.shared.api.WorkerTelemetry
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
@@ -244,6 +247,7 @@ internal class AcceptanceTimeoutWorkWorker(
     @Qualifier("applicationTaskExecutor") private val taskExecutor: TaskExecutor,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
+    private val workerTelemetry: WorkerTelemetry,
     @Value("\${beanflow.acceptance-timeout-work.chunk-size:100}")
     private val chunkSize: Int,
 ) {
@@ -268,7 +272,11 @@ internal class AcceptanceTimeoutWorkWorker(
 
     fun wake(workId: UUID) {
         try {
-            taskExecutor.execute { process(workId) }
+            taskExecutor.execute {
+                workerTelemetry.observe(WorkerOwner.ACCEPTANCE_TIMEOUT) { run ->
+                    run.dataRead(if (process(workId, run)) 1 else 0)
+                }
+            }
         } catch (failure: RuntimeException) {
             meterRegistry
                 .counter("beanflow.order.acceptance_timeout.work.count", "state", "pending", "outcome", "wakeup_rejected")
@@ -280,14 +288,21 @@ internal class AcceptanceTimeoutWorkWorker(
         }
     }
 
-    fun runOnce(): Int {
-        val ids = workService.findDueIds(clock.instant(), chunkSize)
-        ids.forEach(::process)
-        return ids.size
-    }
+    fun runOnce(): Int =
+        workerTelemetry.observe(WorkerOwner.ACCEPTANCE_TIMEOUT) { run ->
+            val ids = workService.findDueIds(clock.instant(), chunkSize)
+            val claimed = ids.count { process(it, run) }
+            run.dataRead(claimed)
+            claimed
+        }
 
-    internal fun process(workId: UUID) {
-        val claim = workService.claim(workId, clock.instant()) ?: return
+    internal fun process(
+        workId: UUID,
+        workerRun: WorkerRun? = null,
+    ): Boolean {
+        val claim = workService.claim(workId, clock.instant()) ?: return false
+        val itemStarted = System.nanoTime()
+        workerRun?.claimLag(Duration.between(claim.acceptanceDeadlineAt, clock.instant()))
         count("claimed", "claimed")
         try {
             val outcome = deadlineService.rejectTimedOut(claim.orderId, clock.instant())
@@ -299,11 +314,19 @@ internal class AcceptanceTimeoutWorkWorker(
                 }
             when (sourceOutcome) {
                 AcceptanceTimeoutSourceOutcome.REJECTED -> {
-                    complete(claim, AcceptanceTimeoutCompletionOutcome.REJECTED)
+                    if (complete(claim, AcceptanceTimeoutCompletionOutcome.REJECTED)) {
+                        workerRun?.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                    } else {
+                        workerRun?.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                    }
                 }
 
                 AcceptanceTimeoutSourceOutcome.NOT_APPLICABLE -> {
-                    complete(claim, AcceptanceTimeoutCompletionOutcome.NOT_APPLICABLE)
+                    if (complete(claim, AcceptanceTimeoutCompletionOutcome.NOT_APPLICABLE)) {
+                        workerRun?.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                    } else {
+                        workerRun?.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                    }
                 }
 
                 AcceptanceTimeoutSourceOutcome.RETRY -> {
@@ -317,10 +340,14 @@ internal class AcceptanceTimeoutWorkWorker(
                     if (workService.sourceConflict(claim, clock.instant())) {
                         count("manual_review", "source_conflict")
                         meterRegistry.counter("beanflow.order.acceptance_timeout.work.manual_review.count").increment()
+                        workerRun?.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                    } else {
+                        workerRun?.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
                     }
                 }
             }
         } catch (failure: RuntimeException) {
+            workerRun?.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
             try {
                 workService.recordFailure(claim, failure, clock.instant())?.let { result ->
                     val outcome = if (result.state == AcceptanceTimeoutWorkState.MANUAL_REVIEW) "manual_review" else "retry_scheduled"
@@ -345,19 +372,22 @@ internal class AcceptanceTimeoutWorkWorker(
                 )
             }
         }
+        return true
     }
 
     private fun complete(
         claim: ClaimedAcceptanceTimeoutWork,
         outcome: AcceptanceTimeoutCompletionOutcome,
-    ) {
+    ): Boolean {
         val now = clock.instant()
         if (workService.complete(claim, outcome, now)) {
             count("completed", outcome.name.lowercase())
             meterRegistry
                 .summary("beanflow.order.acceptance_timeout.work.lag", "outcome", outcome.name.lowercase())
                 .record(Duration.between(claim.createdAt, now).toMillis().coerceAtLeast(0) / 1000.0)
+            return true
         }
+        return false
     }
 
     private fun count(

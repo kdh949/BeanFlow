@@ -1,6 +1,8 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.payment.api.PartialRefundPaymentOperations
+import io.github.kdh949.beanflow.shared.api.WorkerOwner
+import io.github.kdh949.beanflow.shared.api.WorkerTelemetry
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -15,6 +17,7 @@ internal class PartialRefundProviderWorker(
     private val execution: PartialRefundProviderExecutionService,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
+    private val workerTelemetry: WorkerTelemetry,
     @Value("\${beanflow.payment.refund.chunk-size:50}")
     private val chunkSize: Int,
 ) {
@@ -28,26 +31,32 @@ internal class PartialRefundProviderWorker(
         runOnce()
     }
 
-    fun runOnce(): Int {
-        val claimedAt = clock.instant()
-        val claims = paymentOperations.claimDueProviders(claimedAt, chunkSize)
-        claims.forEach { claim ->
-            meterRegistry
-                .summary("beanflow.payment.refund.lag")
-                .record(Duration.between(claim.dueAt, claimedAt).toMillis().coerceAtLeast(0) / 1000.0)
-            try {
-                execution.process(claim)
-            } catch (failure: RuntimeException) {
-                logger.error(
-                    "partial_refund refundId={} paymentId={} mode={} outcome=CLAIM_RETAINED attempt={}",
-                    claim.refundId,
-                    claim.paymentId,
-                    claim.mode,
-                    claim.attemptCount,
-                    failure,
-                )
+    fun runOnce(): Int =
+        workerTelemetry.observe(WorkerOwner.PARTIAL_REFUND_PROVIDER) { run ->
+            val claimedAt = clock.instant()
+            val claims = paymentOperations.claimDueProviders(claimedAt, chunkSize)
+            run.dataRead(claims.size)
+            claims.forEach { claim ->
+                val itemStarted = System.nanoTime()
+                run.claimLag(Duration.between(claim.dueAt, claimedAt))
+                meterRegistry
+                    .summary("beanflow.payment.refund.lag")
+                    .record(Duration.between(claim.dueAt, claimedAt).toMillis().coerceAtLeast(0) / 1000.0)
+                try {
+                    execution.process(claim)
+                    run.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                } catch (failure: RuntimeException) {
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                    logger.error(
+                        "partial_refund refundId={} paymentId={} mode={} outcome=CLAIM_RETAINED attempt={}",
+                        claim.refundId,
+                        claim.paymentId,
+                        claim.mode,
+                        claim.attemptCount,
+                        failure,
+                    )
+                }
             }
+            claims.size
         }
-        return claims.size
-    }
 }

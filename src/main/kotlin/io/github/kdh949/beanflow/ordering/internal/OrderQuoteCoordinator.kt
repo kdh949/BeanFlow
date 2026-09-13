@@ -31,6 +31,9 @@ import io.github.kdh949.beanflow.promotion.api.CouponQuoteOperations
 import io.github.kdh949.beanflow.promotion.api.CouponQuoteSnapshot
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.PerformanceOperation
+import io.github.kdh949.beanflow.shared.api.PerformancePhaseTelemetry
+import io.github.kdh949.beanflow.shared.api.PerformanceStage
 import org.springframework.stereotype.Component
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -58,23 +61,29 @@ internal class OrderQuoteCoordinator(
     private val pointQuoteOperations: PointQuoteOperations,
     private val pointAccrualPolicyOperations: OrdinaryPointAccrualPolicyQuoteOperations,
     private val clock: Clock,
+    private val phaseTelemetry: PerformancePhaseTelemetry,
 ) {
     private val pricingCalculator = OrderPricingCalculator()
 
-    fun inspect(command: OrderQuoteCommand): OrderQuoteCalculation = calculate(command, lock = false)
+    fun inspect(command: OrderQuoteCommand): OrderQuoteCalculation =
+        phaseTelemetry.observe(PerformanceOperation.ORDER_QUOTE, PerformanceStage.QUOTE_CALCULATION) {
+            calculate(command, lock = false)
+        }
 
     fun lockForOrderCreation(command: CreateOrderCommand): OrderQuoteCalculation =
-        calculate(
-            OrderQuoteCommand(
-                customerId = command.customerId,
-                storeId = command.storeId,
-                pickupSlotId = command.pickupSlotId,
-                lines = command.lines,
-                couponIssuanceId = command.couponIssuanceId,
-                pointsToUseKrw = command.pointsToUseKrw,
-            ),
-            lock = true,
-        )
+        phaseTelemetry.observe(PerformanceOperation.ORDER_QUOTE, PerformanceStage.QUOTE_CALCULATION) {
+            calculate(
+                OrderQuoteCommand(
+                    customerId = command.customerId,
+                    storeId = command.storeId,
+                    pickupSlotId = command.pickupSlotId,
+                    lines = command.lines,
+                    couponIssuanceId = command.couponIssuanceId,
+                    pointsToUseKrw = command.pointsToUseKrw,
+                ),
+                lock = true,
+            )
+        }
 
     private fun calculate(
         command: OrderQuoteCommand,

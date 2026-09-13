@@ -19,6 +19,9 @@ import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.github.kdh949.beanflow.shared.api.PerformanceOperation
+import io.github.kdh949.beanflow.shared.api.PerformancePhaseTelemetry
+import io.github.kdh949.beanflow.shared.api.PerformanceStage
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -56,6 +59,7 @@ internal class StoreOrderTransitionService(
     private val objectMapper: ObjectMapper,
     private val boardProjector: StoreOrderBoardProjector,
     private val clock: Clock,
+    private val phaseTelemetry: PerformancePhaseTelemetry,
 ) {
     @Transactional(readOnly = true)
     fun get(
@@ -77,8 +81,11 @@ internal class StoreOrderTransitionService(
         idempotencyKey: String,
         request: StoreOrderTransitionRequest,
     ): StoreTransitionHttpResult {
-        validate(request)
-        val payloadHash = CanonicalStoreOrderTransitionPayload.hash(orderId, request.targetState, request.reason)
+        val payloadHash =
+            phaseTelemetry.observe(PerformanceOperation.STORE_TRANSITION, PerformanceStage.TRANSITION_PREPARE) {
+                validate(request)
+                CanonicalStoreOrderTransitionPayload.hash(orderId, request.targetState, request.reason)
+            }
         return transition(
             actor = actor,
             orderId = orderId,
@@ -97,21 +104,39 @@ internal class StoreOrderTransitionService(
         idempotencyKey: String,
         request: StoreOrderActionRequest,
     ): StoreTransitionHttpResult {
-        val targetState = StoreOrderBoardPresentationPolicy.targetState(request.action, request.expectedStatus)
-        val transitionRequest = StoreOrderTransitionRequest(targetState, request.reason)
-        validate(transitionRequest)
+        val (transitionRequest, payloadHash) =
+            phaseTelemetry.observe(PerformanceOperation.STORE_TRANSITION, PerformanceStage.TRANSITION_PREPARE) {
+                val targetState = StoreOrderBoardPresentationPolicy.targetState(request.action, request.expectedStatus)
+                val preparedRequest = StoreOrderTransitionRequest(targetState, request.reason)
+                validate(preparedRequest)
+                preparedRequest to CanonicalStoreOrderTransitionPayload.hashBoardAction(orderId, request)
+            }
         return transition(
             actor = actor,
             orderId = orderId,
             idempotencyKey = idempotencyKey,
             request = transitionRequest,
             operation = BOARD_OPERATION,
-            payloadHash = CanonicalStoreOrderTransitionPayload.hashBoardAction(orderId, request),
+            payloadHash = payloadHash,
             expectedStatus = request.expectedStatus,
         ) { result, now -> objectMapper.writeValueAsString(boardProjector.transitioned(result, now)) }
     }
 
     private fun transition(
+        actor: StoreTransitionActor,
+        orderId: UUID,
+        idempotencyKey: String,
+        request: StoreOrderTransitionRequest,
+        operation: String,
+        payloadHash: String,
+        expectedStatus: StoreOrderExpectedStatus?,
+        responseBody: (StoreOrderResult, Instant) -> String,
+    ): StoreTransitionHttpResult =
+        phaseTelemetry.observe(PerformanceOperation.STORE_TRANSITION, PerformanceStage.TRANSITION_APPLY) {
+            transitionInternal(actor, orderId, idempotencyKey, request, operation, payloadHash, expectedStatus, responseBody)
+        }
+
+    private fun transitionInternal(
         actor: StoreTransitionActor,
         orderId: UUID,
         idempotencyKey: String,

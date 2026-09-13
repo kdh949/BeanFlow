@@ -17,8 +17,10 @@ import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
 import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
+import io.github.kdh949.beanflow.shared.internal.OpenTelemetryWorkerTelemetry
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import io.opentelemetry.api.GlobalOpenTelemetry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
@@ -237,7 +239,20 @@ internal class EventPublicationRecoveryIntegrationTest
             val freshMeters = SimpleMeterRegistry()
             try {
                 clock.advance(Duration.ofMinutes(30))
-                EventPublicationRecoveryWorker(publications, queries, manualReview, scope, clock, freshMeters, 100).runOnce()
+                EventPublicationRecoveryWorker(
+                    publications,
+                    queries,
+                    manualReview,
+                    scope,
+                    clock,
+                    freshMeters,
+                    OpenTelemetryWorkerTelemetry(
+                        freshMeters,
+                        clock,
+                        GlobalOpenTelemetry.getTracer("event-publication-recovery-integration-test"),
+                    ),
+                    100,
+                ).runOnce()
                 assertThat(freshMeters.find("beanflow.event.publication.exhaustion.count").counter()).isNull()
                 assertThat(freshMeters.get("beanflow.event.publication.manual.review.oldest.age.seconds").gauge().value())
                     .isEqualTo(1800.0)

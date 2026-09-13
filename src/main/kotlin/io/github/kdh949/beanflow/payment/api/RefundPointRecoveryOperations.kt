@@ -67,6 +67,7 @@ data class ClaimedRefundPointRecovery(
     val claimToken: UUID,
     val attemptCount: Int,
     val needsEligibility: Boolean,
+    val enqueuedAt: Instant,
 )
 
 data class PreparedRefundPointRecovery(

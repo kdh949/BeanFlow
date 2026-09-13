@@ -400,7 +400,15 @@ internal class RefundPointRecoveryService(
             Timestamp.from(now),
             workId,
         )
-        return ClaimedRefundPointRecovery(work.id, work.refundId, work.orderId, token, nextAttempt, eligibility)
+        return ClaimedRefundPointRecovery(
+            work.id,
+            work.refundId,
+            work.orderId,
+            token,
+            nextAttempt,
+            eligibility,
+            work.refundSucceededAt,
+        )
     }
 
     private fun classify(

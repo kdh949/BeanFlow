@@ -1,6 +1,8 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.shared.internal.OpenTelemetryWorkerTelemetry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import io.opentelemetry.api.GlobalOpenTelemetry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.catchThrowable
 import org.junit.jupiter.api.AfterEach
@@ -25,8 +27,23 @@ internal class EventPublicationRecoveryWorkerTest {
     private val manualReview = mock(EventPublicationManualReviewService::class.java)
     private val scope = AutomaticPublicationRecoveryScope()
     private val meters = SimpleMeterRegistry()
+    private val telemetry =
+        OpenTelemetryWorkerTelemetry(
+            meters,
+            Clock.fixed(now, ZoneOffset.UTC),
+            GlobalOpenTelemetry.getTracer("event-publication-worker-test"),
+        )
     private val worker =
-        EventPublicationRecoveryWorker(publications, queries, manualReview, scope, Clock.fixed(now, ZoneOffset.UTC), meters, 100)
+        EventPublicationRecoveryWorker(
+            publications,
+            queries,
+            manualReview,
+            scope,
+            Clock.fixed(now, ZoneOffset.UTC),
+            meters,
+            telemetry,
+            100,
+        )
 
     @AfterEach
     fun closeMeters() {

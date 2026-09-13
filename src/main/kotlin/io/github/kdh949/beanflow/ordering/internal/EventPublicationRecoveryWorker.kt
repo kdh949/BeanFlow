@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
+import io.github.kdh949.beanflow.shared.api.WorkerOwner
+import io.github.kdh949.beanflow.shared.api.WorkerTelemetry
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -20,6 +22,7 @@ internal class EventPublicationRecoveryWorker(
     private val scope: AutomaticPublicationRecoveryScope,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
+    private val workerTelemetry: WorkerTelemetry,
     @Value("\${beanflow.event-publication.batch-size:100}")
     private val batchSize: Int,
 ) {
@@ -44,33 +47,41 @@ internal class EventPublicationRecoveryWorker(
     }
 
     fun runOnce() {
-        val now = clock.instant()
-        val handoffFailures = mutableListOf<IllegalStateException>()
-        queries.findExhaustedIds(batchSize).forEach { id ->
-            // The service proxy commits the case and compensation step before telemetry is emitted.
-            val transition =
-                try {
-                    manualReview.transition(id, now)
-                } catch (failure: Exception) {
-                    handoffFailures.add(IllegalStateException("Event publication manual-review handoff failed: $id", failure))
-                    return@forEach
+        workerTelemetry.observe(WorkerOwner.EVENT_PUBLICATION) { run ->
+            val now = clock.instant()
+            val handoffFailures = mutableListOf<IllegalStateException>()
+            val exhaustedIds = queries.findExhaustedIds(batchSize)
+            run.dataRead(exhaustedIds.size)
+            exhaustedIds.forEach { id ->
+                // The service proxy commits the case and compensation step before telemetry is emitted.
+                val transition =
+                    try {
+                        manualReview.transition(id, now)
+                    } catch (failure: Exception) {
+                        run.failed()
+                        handoffFailures.add(IllegalStateException("Event publication manual-review handoff failed: $id", failure))
+                        return@forEach
+                    }
+                transition?.let {
+                    recordTransition(it)
+                    run.completed()
                 }
-            transition?.let(::recordTransition)
-        }
-        try {
-            scope.run(now) {
-                publications.resubmitIncompletePublications(
-                    ResubmissionOptions.defaults().withBatchSize(batchSize).withMaxInFlight(batchSize),
-                )
             }
-            updateMetrics(now)
-        } catch (failure: Exception) {
-            handoffFailures.forEach(failure::addSuppressed)
-            throw failure
-        }
-        handoffFailures.firstOrNull()?.let { failure ->
-            handoffFailures.drop(1).forEach(failure::addSuppressed)
-            throw failure
+            try {
+                scope.run(now) {
+                    publications.resubmitIncompletePublications(
+                        ResubmissionOptions.defaults().withBatchSize(batchSize).withMaxInFlight(batchSize),
+                    )
+                }
+                updateMetrics(now)
+            } catch (failure: Exception) {
+                handoffFailures.forEach(failure::addSuppressed)
+                throw failure
+            }
+            handoffFailures.firstOrNull()?.let { failure ->
+                handoffFailures.drop(1).forEach(failure::addSuppressed)
+                throw failure
+            }
         }
     }
 
