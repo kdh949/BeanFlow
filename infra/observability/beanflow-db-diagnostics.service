@@ -1,0 +1,27 @@
+[Unit]
+Description=BeanFlow bounded PostgreSQL diagnostic snapshots
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=orbit-runner
+Group=orbit-runner
+SupplementaryGroups=docker
+EnvironmentFile=/etc/beanflow/db-diagnostics.env
+ExecStart=/usr/bin/python3 /opt/beanflow-observability/db-diagnostics-exporter.py --bind ${BEANFLOW_DIAGNOSTICS_BIND_ADDRESS} --allow ${BEANFLOW_MONITORING_ALLOW_ADDRESS} --project ${BEANFLOW_COMPOSE_PROJECT} --database ${BEANFLOW_DATABASE} --environment ${BEANFLOW_OBSERVABILITY_ENVIRONMENT} --host ${BEANFLOW_OBSERVABILITY_HOST_ID} --otlp-endpoint ${BEANFLOW_ALLOY_LOGS_ENDPOINT}
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -24,12 +24,32 @@ otelcol.processor.batch "beanflow" {
 }
 
 otelcol.exporter.otlphttp "tempo" {
+  sending_queue {
+    enabled    = true
+    queue_size = 2048
+    sizer      = "requests"
+  }
+
+  debug_metrics {
+    disable_high_cardinality_metrics = true
+  }
+
   client {
     endpoint = sys.env("BEANFLOW_TEMPO_OTLP_HTTP_ENDPOINT")
   }
 }
 
 otelcol.exporter.otlphttp "loki" {
+  sending_queue {
+    enabled    = true
+    queue_size = 2048
+    sizer      = "requests"
+  }
+
+  debug_metrics {
+    disable_high_cardinality_metrics = true
+  }
+
   client {
     endpoint = sys.env("BEANFLOW_LOKI_OTLP_HTTP_ENDPOINT")
   }

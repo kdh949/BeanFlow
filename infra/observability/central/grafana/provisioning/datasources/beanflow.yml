@@ -44,6 +44,10 @@ datasources:
         tags:
           - key: service.name
             value: service_name
+          - key: deployment.environment.name
+            value: deployment_environment_name
+          - key: host.name
+            value: host_name
         filterByTraceID: true
         filterBySpanID: false
         customQuery: false
@@ -52,6 +56,10 @@ datasources:
         tags:
           - key: service.name
             value: service_name
+          - key: deployment.environment.name
+            value: deployment_environment_name
+          - key: host.name
+            value: host_name
         profileTypeId: wall:wall:nanoseconds:wall:nanoseconds
       serviceMap:
         datasourceUid: beanflow-prometheus
