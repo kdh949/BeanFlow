@@ -55,7 +55,9 @@ enum class WorkerOwner(
 }
 
 interface WorkerRun {
-    fun dataRead(claimed: Int)
+    fun dataReadSucceeded()
+
+    fun claimed(count: Int = 1)
 
     fun completed(count: Int = 1)
 
@@ -74,9 +76,28 @@ interface WorkerRun {
     fun claimLag(duration: Duration)
 }
 
+enum class WorkerItemOutcome(
+    val tagValue: String,
+) {
+    COMPLETED("completed"),
+    FAILED("failed"),
+}
+
 interface WorkerTelemetry {
     fun <T> observe(
         owner: WorkerOwner,
         block: (WorkerRun) -> T,
     ): T
+
+    fun recordClaimed(
+        owner: WorkerOwner,
+        count: Int = 1,
+    )
+
+    fun recordOutcome(
+        owner: WorkerOwner,
+        outcome: WorkerItemOutcome,
+        duration: Duration,
+        count: Int = 1,
+    )
 }

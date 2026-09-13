@@ -75,7 +75,15 @@ internal class PerformanceTelemetryTest {
         val telemetry = OpenTelemetryWorkerTelemetry(meters, Clock.fixed(now, ZoneOffset.UTC), tracer())
 
         telemetry.observe(WorkerOwner.PAYMENT_RECONCILIATION) { run ->
-            run.dataRead(3)
+            run.dataReadSucceeded()
+            assertThat(
+                meters
+                    .get("beanflow.worker.data.last.success.timestamp.seconds")
+                    .tag("owner", "payment_reconciliation")
+                    .gauge()
+                    .value(),
+            ).isEqualTo(now.epochSecond.toDouble())
+            run.claimed(3)
             run.claimLag(Duration.ofSeconds(4))
             run.completedAfter(Duration.ofMillis(20), 2)
             run.failed()
@@ -112,7 +120,7 @@ internal class PerformanceTelemetryTest {
         ).isEqualTo(1)
         assertThat(
             meters
-                .get("beanflow.worker.claim.to.complete.duration")
+                .get("beanflow.worker.claim.to.outcome.duration")
                 .tag("owner", "payment_reconciliation")
                 .tag("outcome", "completed")
                 .timer()

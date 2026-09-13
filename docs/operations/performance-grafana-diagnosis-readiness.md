@@ -51,9 +51,9 @@ operation/outcome timer와 span, Hikari/JVM/host/container 지표, 일부 업무
 | --- | --- | --- |
 | DB | `beanflow_pg_database_identity_info`, `beanflow_pg_blocked_sessions`, `beanflow_pg_lock_wait_max_seconds` | 선택 DB identity와 현재 blocker 상태 |
 | DB snapshot | `beanflow_db_diagnostics_collection_success`, `beanflow_db_diagnostics_log_export_success`, `beanflow_db_diagnostics_last_success_timestamp_seconds`, `beanflow_db_diagnostics_snapshot_truncated` | DB 읽기와 OTLP 로그 전송을 분리한 collector 상태 |
-| worker backlog | `beanflow_worker_backlog_items`, `beanflow_worker_backlog_oldest_due_age_seconds` | DB 전체의 owner/state별 수와 가장 오래된 due age |
+| worker backlog | `beanflow_worker_backlog_items`, `beanflow_worker_backlog_oldest_due_age_seconds` | DB 전체의 owner/state/claimability별 수와 실제 claim 가능한 가장 오래된 due age |
 | worker runtime | `beanflow_worker_runs_total`, `beanflow_worker_items_total`, `beanflow_worker_data_last_success_timestamp_seconds`, `beanflow_worker_business_last_success_timestamp_seconds` | 실행 결과·처리 결과·데이터/업무 성공 신선도 |
-| worker latency | `beanflow_worker_enqueue_to_claim_duration_seconds`, `beanflow_worker_claim_to_complete_duration_seconds` | 대기와 처리 시간을 분리한 histogram |
+| worker latency | `beanflow_worker_enqueue_to_claim_duration_seconds`, `beanflow_worker_claim_to_outcome_duration_seconds` | 대기와 실제 claim부터 terminal outcome까지를 분리한 histogram |
 | request phase | `beanflow_operation_phase_duration_seconds` | operation/stage/outcome별 bounded 내부 단계 histogram |
 | app host | `beanflow_container_cpu_throttled_periods_total`, `beanflow_container_oom_killed`, `beanflow_container_signal_supported`, `beanflow_host_filesystem_*` | throttling/OOM 지원 여부와 allowlisted filesystem 상태 |
 
@@ -161,7 +161,9 @@ event pending에는 미구현 Analytics target도 들어가므로 총량으로 �
    데이터 조회 성공 시각과 business 처리 성공 시각을 분리한다. 일부 실패한 batch를 전부 성공 처리하지 않는다.
 3. 활성 owner별 due 수·가장 오래된 due age, 미래 scheduled 수, in-progress/unknown/manual-review 수를 표시한다.
    미구현 target은 별도 범주로 보존한다. batch size를 전체 backlog라고 이름 붙이지 않는다.
-4. 완료 처리량과 enqueue→claim 대기, claim→완료 시간을 분리한다.
+4. 완료·실패 처리량과 enqueue→claim 대기, 실제 claim→terminal outcome 시간을 분리한다.
+   batch claim owner는 batch claim 반환 직후의 공통 기준시각을 사용해 뒤 항목의 순차 대기를 포함한다.
+   lease가 없는 owner는 claim latency를 만들지 않고 item outcome만 기록한다.
    owner별 지표는 폐쇄된 owner/state/outcome enum만 label로 사용한다.
 5. 비동기 작업에는 명시적인 작업 span과 안전한 correlation 필드를 기록한다.
    현재 perf HTTP MDC가 영속 이벤트·재시작 후 worker까지 자동 전파된다고 가정하지 않는다.

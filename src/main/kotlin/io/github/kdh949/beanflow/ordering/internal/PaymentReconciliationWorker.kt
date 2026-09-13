@@ -41,18 +41,18 @@ internal class PaymentReconciliationWorker(
         workerTelemetry.observe(WorkerOwner.PAYMENT_RECONCILIATION) { run ->
             val now = clock.instant()
             val claims = reconciliationOperations.claimDue(now, chunkSize)
-            run.dataRead(claims.size)
+            val claimStarted = System.nanoTime()
+            run.dataReadSucceeded()
+            run.claimed(claims.size)
             claims.forEach { work ->
-                val itemStarted = System.nanoTime()
                 run.claimLag(Duration.between(work.dueAt, now))
                 meterRegistry
                     .summary("beanflow.payment.reconciliation.lag")
                     .record(Duration.between(work.dueAt, now).toMillis().coerceAtLeast(0) / 1000.0)
                 try {
                     process(work)
-                    run.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                    run.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 } catch (failure: ProviderTransportFailure) {
-                    run.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
                     logger.warn(
                         "payment_reconciliation paymentId={} kind={} outcome=PROVIDER_UNKNOWN attempt={}",
                         work.paymentId,
@@ -60,8 +60,8 @@ internal class PaymentReconciliationWorker(
                         work.attemptCount + 1,
                     )
                     recordProviderFailure(work)
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 } catch (failure: RuntimeException) {
-                    run.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
                     logger.error(
                         "payment_reconciliation paymentId={} kind={} outcome=CLAIM_RETAINED attempt={}",
                         work.paymentId,
@@ -69,6 +69,7 @@ internal class PaymentReconciliationWorker(
                         work.attemptCount + 1,
                         failure,
                     )
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 }
             }
             claims.size

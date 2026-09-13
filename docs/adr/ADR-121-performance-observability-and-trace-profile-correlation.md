@@ -120,9 +120,14 @@ BeanFlow에는 HTTP Actuator health와 다수의 Micrometer domain metric이 있
 - snapshot log의 허용 필드는 observed time, DB, waiter/blocker PID, state, wait type/event, PostgreSQL query
   ID, transaction age, 확인된 relation과 닫힌 `query_family`뿐이다. raw SQL, literal, customer/order/payment/
   store 식별자는 수집·출력하지 않는다. PID/query ID는 Loki structured metadata로만 보존한다.
-- worker metric의 `owner`, `state`, `outcome`은 코드의 닫힌 사전만 사용한다. 실행 success/partial/failure,
-  duration, last started/success, data-read success, claim/completion throughput을 분리한다. batch size는 backlog로
-  표시하지 않는다. refresh 실패 시 마지막 business 값은 유지할 수 있지만 freshness와 실패 상태를 반드시
+- worker metric의 `owner`, `state`, `claimability`, `outcome`은 코드의 닫힌 사전만 사용한다. 실행
+  success/partial/failure, duration, last started/success, data-read success, claim/outcome throughput을 분리한다.
+  data-read success는 조회가 반환된 즉시 갱신하고 처리 완료 시점으로 미루지 않는다. lease 기반 owner의
+  claim-to-outcome은 batch claim 반환 직후부터 각 terminal 결과까지 재서 순차 처리 대기를 포함한다.
+  lease가 없는 owner는 이 histogram을 발행하지 않는다. event publication은 manual-review handoff가 아니라
+  실제 automatic resubmission repository claim/result를 공통 처리량으로 기록한다. batch size는 backlog로
+  표시하지 않는다. backlog의 business state는 보존하되 claimability는 worker의 backoff·lease 만료 조건으로
+  별도 계산한다. refresh 실패 시 마지막 business 값은 유지할 수 있지만 freshness와 실패 상태를 반드시
   함께 표시하고, `2 * refresh + scrape`를 넘으면 stale이다. owner 사전은 `event_publication`,
   `payment_reconciliation`, `reservation_expiry`, `acceptance_timeout`, `rejection_refund`,
   `partial_refund_provider`, `partial_refund_restoration`, `refund_point_recovery`, `notification`이다.

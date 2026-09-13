@@ -35,18 +35,18 @@ internal class PartialRefundProviderWorker(
         workerTelemetry.observe(WorkerOwner.PARTIAL_REFUND_PROVIDER) { run ->
             val claimedAt = clock.instant()
             val claims = paymentOperations.claimDueProviders(claimedAt, chunkSize)
-            run.dataRead(claims.size)
+            val claimStarted = System.nanoTime()
+            run.dataReadSucceeded()
+            run.claimed(claims.size)
             claims.forEach { claim ->
-                val itemStarted = System.nanoTime()
                 run.claimLag(Duration.between(claim.dueAt, claimedAt))
                 meterRegistry
                     .summary("beanflow.payment.refund.lag")
                     .record(Duration.between(claim.dueAt, claimedAt).toMillis().coerceAtLeast(0) / 1000.0)
                 try {
                     execution.process(claim)
-                    run.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                    run.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 } catch (failure: RuntimeException) {
-                    run.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
                     logger.error(
                         "partial_refund refundId={} paymentId={} mode={} outcome=CLAIM_RETAINED attempt={}",
                         claim.refundId,
@@ -55,6 +55,7 @@ internal class PartialRefundProviderWorker(
                         claim.attemptCount,
                         failure,
                     )
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 }
             }
             claims.size

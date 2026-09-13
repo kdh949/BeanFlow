@@ -2205,12 +2205,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(time() - beanflow_worker_data_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(owner) (beanflow_worker_data_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
+          "expr": "(time() - beanflow_worker_data_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(environment,host,instance,owner) (beanflow_worker_data_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
           "legendFormat": "{{owner}} age"
         },
         {
           "refId": "B",
-          "expr": "(time() - beanflow_worker_business_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(owner) (beanflow_worker_business_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
+          "expr": "(time() - beanflow_worker_business_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(environment,host,instance,owner) (beanflow_worker_business_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
           "legendFormat": "{{owner}} business age"
         },
         {

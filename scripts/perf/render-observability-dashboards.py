@@ -189,12 +189,13 @@ def update_rca():
             row(row_base, 161, "Worker owner · backlog · freshness", 224),
             timeseries(base, 162, "Worker backlog by owner/state", 0, 225, 12, 7, [target(add_scope(
                 'beanflow_worker_backlog_items{job="beanflow-postgres",database="$database"}'),
-                "{{owner}} · {{state}}")], description="전체 DB count이며 worker batch size가 아니다."),
+                "{{owner}} · {{state}} · {{claimability}}")],
+                description="전체 DB count이며 business state와 실제 claim 가능 여부를 함께 보존한다."),
             timeseries(base, 163, "Oldest due work", 12, 225, 12, 7, [target(add_scope(
-                'beanflow_worker_backlog_oldest_due_age_seconds{job="beanflow-postgres",database="$database"} '
-                'and on(owner,state,database) '
-                '(beanflow_worker_backlog_items{job="beanflow-postgres",database="$database",state="due"} > 0)'),
-                "{{owner}}")], unit="s"),
+                'beanflow_worker_backlog_oldest_due_age_seconds{job="beanflow-postgres",database="$database",claimability="due"} '
+                'and on(environment,host,instance,owner,state,claimability,database) '
+                '(beanflow_worker_backlog_items{job="beanflow-postgres",database="$database",claimability="due"} > 0)'),
+                "{{owner}} · {{state}}")], unit="s"),
             timeseries(base, 164, "Worker completed / failed throughput", 0, 232, 12, 7, [target(add_scope(
                 'sum by (owner,outcome) (rate(beanflow_worker_items_total{job="beanflow",outcome=~"completed|failed"}'
                 '[$__rate_interval]))'), "{{owner}} · {{outcome}}"),
@@ -202,13 +203,16 @@ def update_rca():
                                  '[$__rate_interval]))'), "{{owner}} run · {{outcome}}", "B")], unit="ops"),
             timeseries(base, 165, "Worker data freshness / stale threshold", 12, 232, 12, 7, [
                 target(add_scope('(time() - beanflow_worker_data_last_success_timestamp_seconds{job="beanflow"}) '
-                                 'and on(owner) (beanflow_worker_data_last_success_timestamp_seconds{job="beanflow"} > 0)'),
+                                 'and on(environment,host,instance,owner) '
+                                 '(beanflow_worker_data_last_success_timestamp_seconds{job="beanflow"} > 0)'),
                        "{{owner}} data age"),
                 target(add_scope('(time() - beanflow_worker_business_last_success_timestamp_seconds{job="beanflow"}) '
-                                 'and on(owner) (beanflow_worker_business_last_success_timestamp_seconds{job="beanflow"} > 0)'),
+                                 'and on(environment,host,instance,owner) '
+                                 '(beanflow_worker_business_last_success_timestamp_seconds{job="beanflow"} > 0)'),
                        "{{owner}} business age", "B"),
                 target(add_scope('(time() - beanflow_worker_last_started_timestamp_seconds{job="beanflow"}) '
-                                 'and on(owner) (beanflow_worker_last_started_timestamp_seconds{job="beanflow"} > 0)'),
+                                 'and on(environment,host,instance,owner) '
+                                 '(beanflow_worker_last_started_timestamp_seconds{job="beanflow"} > 0)'),
                        "{{owner}} last started age", "C"),
                 target(add_scope('2 * beanflow_worker_refresh_interval_seconds{job="beanflow"} + 10'),
                        "{{owner}} stale threshold", "D"),
@@ -282,7 +286,7 @@ def update_rca():
         timeseries(
             base,
             177,
-            "Worker enqueue→claim / claim→complete p95",
+            "Worker enqueue→claim / claim→outcome p95",
             0,
             274,
             24,
@@ -299,7 +303,7 @@ def update_rca():
                 target(
                     add_scope(
                         'histogram_quantile(0.95, sum by (le,owner,outcome) '
-                        '(rate(beanflow_worker_claim_to_complete_duration_seconds_bucket'
+                        '(rate(beanflow_worker_claim_to_outcome_duration_seconds_bucket'
                         '{job="beanflow"}[$__rate_interval])))',
                     ),
                     "{{owner}} claim→{{outcome}}",
@@ -307,7 +311,7 @@ def update_rca():
                 ),
             ],
             unit="s",
-            description="due/enqueue 대기와 claim 이후 처리 시간을 합치지 않는다.",
+            description="due/enqueue 대기와 실제 claim 이후 terminal outcome까지 시간을 합치지 않는다.",
         ),
     )
     dashboard["panels"] = panels + new_panels
@@ -371,10 +375,12 @@ def update_live():
         ]),
         timeseries(base, 36, "Worker data age / stale threshold", 16, 59, 8, 7, [
             target(add_scope('(time() - beanflow_worker_data_last_success_timestamp_seconds{job="beanflow"}) '
-                             'and on(owner) (beanflow_worker_data_last_success_timestamp_seconds{job="beanflow"} > 0)'),
+                             'and on(environment,host,instance,owner) '
+                             '(beanflow_worker_data_last_success_timestamp_seconds{job="beanflow"} > 0)'),
                    "{{owner}} age"),
             target(add_scope('(time() - beanflow_worker_business_last_success_timestamp_seconds{job="beanflow"}) '
-                             'and on(owner) (beanflow_worker_business_last_success_timestamp_seconds{job="beanflow"} > 0)'),
+                             'and on(environment,host,instance,owner) '
+                             '(beanflow_worker_business_last_success_timestamp_seconds{job="beanflow"} > 0)'),
                    "{{owner}} business age", "B"),
             target(add_scope('2 * beanflow_worker_refresh_interval_seconds{job="beanflow"} + 10'),
                    "{{owner}} threshold", "C"),

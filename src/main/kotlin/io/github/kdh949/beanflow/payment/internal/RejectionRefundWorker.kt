@@ -34,21 +34,21 @@ internal class RejectionRefundWorker(
         workerTelemetry.observe(WorkerOwner.REJECTION_REFUND) { run ->
             val claimedAt = clock.instant()
             val claims = refundService.claimDue(claimedAt, chunkSize)
-            run.dataRead(claims.size)
+            val claimStarted = System.nanoTime()
+            run.dataReadSucceeded()
+            run.claimed(claims.size)
             claims.forEach { claim ->
-                val itemStarted = System.nanoTime()
                 run.claimLag(Duration.between(claim.dueAt, claimedAt))
                 meterRegistry
                     .summary("beanflow.payment.refund.lag")
                     .record(Duration.between(claim.dueAt, claimedAt).toMillis().coerceAtLeast(0) / 1000.0)
                 try {
                     refundService.recordResult(claim, refundService.callProvider(claim), clock.instant())
-                    run.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                    run.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 } catch (failure: ProviderTransportFailure) {
-                    run.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
                     recordProviderFailure(claim)
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 } catch (failure: RuntimeException) {
-                    run.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
                     logger.error(
                         "rejection_refund refundId={} paymentId={} mode={} outcome=CLAIM_RETAINED attempt={}",
                         claim.refundId,
@@ -57,6 +57,7 @@ internal class RejectionRefundWorker(
                         claim.attemptCount,
                         failure,
                     )
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 }
             }
             claims.size

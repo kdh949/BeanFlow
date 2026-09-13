@@ -16,8 +16,13 @@ assert {
     "DB blocked sessions", "DB snapshot collection", "Worker backlog by owner/state",
     "Internal phase p95", "Application task executor (HTTP와 별도)", "Tomcat HTTP threads",
     "Alloy exporter queue usage", "Container CPU throttled periods", "App host filesystem available",
-    "Worker enqueue→claim / claim→complete p95",
+    "Worker enqueue→claim / claim→outcome p95",
 } <= {p["title"] for p in panels}
+backlog = next(p for p in panels if p["title"] == "Worker backlog by owner/state")["targets"][0]
+oldest_due = next(p for p in panels if p["title"] == "Oldest due work")["targets"][0]["expr"]
+assert "claimability" in backlog["legendFormat"]
+assert 'claimability="due"' in oldest_due
+assert "on(environment,host,instance,owner,state,claimability,database)" in oldest_due
 total_time = next(p for p in panels if p["id"] == 130)["targets"][0]["expr"]
 mean_time = next(p for p in panels if p["id"] == 131)["targets"][0]["expr"]
 assert "pg_stat_statements_seconds_total" in total_time and 'datname="$database"' in total_time

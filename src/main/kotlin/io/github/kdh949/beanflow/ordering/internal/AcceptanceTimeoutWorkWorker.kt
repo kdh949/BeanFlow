@@ -274,7 +274,7 @@ internal class AcceptanceTimeoutWorkWorker(
         try {
             taskExecutor.execute {
                 workerTelemetry.observe(WorkerOwner.ACCEPTANCE_TIMEOUT) { run ->
-                    run.dataRead(if (process(workId, run)) 1 else 0)
+                    process(workId, run)
                 }
             }
         } catch (failure: RuntimeException) {
@@ -291,9 +291,8 @@ internal class AcceptanceTimeoutWorkWorker(
     fun runOnce(): Int =
         workerTelemetry.observe(WorkerOwner.ACCEPTANCE_TIMEOUT) { run ->
             val ids = workService.findDueIds(clock.instant(), chunkSize)
-            val claimed = ids.count { process(it, run) }
-            run.dataRead(claimed)
-            claimed
+            run.dataReadSucceeded()
+            ids.count { process(it, run) }
         }
 
     internal fun process(
@@ -301,7 +300,9 @@ internal class AcceptanceTimeoutWorkWorker(
         workerRun: WorkerRun? = null,
     ): Boolean {
         val claim = workService.claim(workId, clock.instant()) ?: return false
-        val itemStarted = System.nanoTime()
+        val claimStarted = System.nanoTime()
+        workerRun?.dataReadSucceeded()
+        workerRun?.claimed()
         workerRun?.claimLag(Duration.between(claim.acceptanceDeadlineAt, clock.instant()))
         count("claimed", "claimed")
         try {
@@ -315,17 +316,17 @@ internal class AcceptanceTimeoutWorkWorker(
             when (sourceOutcome) {
                 AcceptanceTimeoutSourceOutcome.REJECTED -> {
                     if (complete(claim, AcceptanceTimeoutCompletionOutcome.REJECTED)) {
-                        workerRun?.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                        workerRun?.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                     } else {
-                        workerRun?.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                        workerRun?.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                     }
                 }
 
                 AcceptanceTimeoutSourceOutcome.NOT_APPLICABLE -> {
                     if (complete(claim, AcceptanceTimeoutCompletionOutcome.NOT_APPLICABLE)) {
-                        workerRun?.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                        workerRun?.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                     } else {
-                        workerRun?.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                        workerRun?.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                     }
                 }
 
@@ -340,14 +341,13 @@ internal class AcceptanceTimeoutWorkWorker(
                     if (workService.sourceConflict(claim, clock.instant())) {
                         count("manual_review", "source_conflict")
                         meterRegistry.counter("beanflow.order.acceptance_timeout.work.manual_review.count").increment()
-                        workerRun?.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                        workerRun?.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                     } else {
-                        workerRun?.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                        workerRun?.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                     }
                 }
             }
         } catch (failure: RuntimeException) {
-            workerRun?.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
             try {
                 workService.recordFailure(claim, failure, clock.instant())?.let { result ->
                     val outcome = if (result.state == AcceptanceTimeoutWorkState.MANUAL_REVIEW) "manual_review" else "retry_scheduled"
@@ -371,6 +371,7 @@ internal class AcceptanceTimeoutWorkWorker(
                     recordFailure.javaClass.simpleName,
                 )
             }
+            workerRun?.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
         }
         return true
     }

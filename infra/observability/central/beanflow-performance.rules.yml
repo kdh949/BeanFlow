@@ -114,7 +114,7 @@ groups:
       - alert: BeanFlowPerfWorkerTelemetryStale
         expr: |
           (time() - beanflow_worker_data_last_success_timestamp_seconds{job="beanflow",environment="perf"})
-          > on(owner)
+          > on(environment, host, instance, owner)
           (2 * beanflow_worker_refresh_interval_seconds{job="beanflow",environment="perf"} + 10)
         for: 1m
         labels:
@@ -127,7 +127,7 @@ groups:
       - alert: BeanFlowPerfWorkerBusinessStale
         expr: |
           (time() - beanflow_worker_business_last_success_timestamp_seconds{job="beanflow",environment="perf"})
-          > on(owner)
+          > on(environment, host, instance, owner)
           (2 * beanflow_worker_refresh_interval_seconds{job="beanflow",environment="perf"} + 10)
         for: 1m
         labels:

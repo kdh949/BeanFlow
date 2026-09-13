@@ -102,17 +102,18 @@ internal class PartialRefundRestorationWorker(
 
     fun runOnce(): Int =
         workerTelemetry.observe(WorkerOwner.PARTIAL_REFUND_RESTORATION) { run ->
-            val claims = service.claimDue(clock.instant(), chunkSize)
-            run.dataRead(claims.size)
+            val claimedAt = clock.instant()
+            val claims = service.claimDue(claimedAt, chunkSize)
+            val claimStarted = System.nanoTime()
+            run.dataReadSucceeded()
+            run.claimed(claims.size)
             claims.forEach { claim ->
-                val itemStarted = System.nanoTime()
-                run.claimLag(Duration.between(claim.dueAt, clock.instant()))
+                run.claimLag(Duration.between(claim.dueAt, claimedAt))
                 try {
                     val amount = service.callLoyalty(claim)
                     service.recordSuccess(claim, amount, clock.instant())
-                    run.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                    run.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 } catch (failure: RuntimeException) {
-                    run.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
                     try {
                         service.recordFailure(claim, failure, clock.instant())
                     } catch (recordFailure: RuntimeException) {
@@ -124,6 +125,7 @@ internal class PartialRefundRestorationWorker(
                             recordFailure,
                         )
                     }
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 }
             }
             claims.size

@@ -3012,7 +3012,7 @@
         "type": "prometheus",
         "uid": "beanflow-prometheus"
       },
-      "description": "전체 DB count이며 worker batch size가 아니다.",
+      "description": "전체 DB count이며 business state와 실제 claim 가능 여부를 함께 보존한다.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -3025,7 +3025,7 @@
         {
           "refId": "A",
           "expr": "beanflow_worker_backlog_items{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\"}",
-          "legendFormat": "{{owner}} · {{state}}"
+          "legendFormat": "{{owner}} · {{state}} · {{claimability}}"
         }
       ],
       "options": {
@@ -3071,8 +3071,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "beanflow_worker_backlog_oldest_due_age_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\"} and on(owner,state,database) (beanflow_worker_backlog_items{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\",state=\"due\"} > 0)",
-          "legendFormat": "{{owner}}"
+          "expr": "beanflow_worker_backlog_oldest_due_age_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\",claimability=\"due\"} and on(environment,host,instance,owner,state,claimability,database) (beanflow_worker_backlog_items{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\",claimability=\"due\"} > 0)",
+          "legendFormat": "{{owner}} · {{state}}"
         }
       ],
       "options": {
@@ -3170,17 +3170,17 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(time() - beanflow_worker_data_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(owner) (beanflow_worker_data_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
+          "expr": "(time() - beanflow_worker_data_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(environment,host,instance,owner) (beanflow_worker_data_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
           "legendFormat": "{{owner}} data age"
         },
         {
           "refId": "B",
-          "expr": "(time() - beanflow_worker_business_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(owner) (beanflow_worker_business_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
+          "expr": "(time() - beanflow_worker_business_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(environment,host,instance,owner) (beanflow_worker_business_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
           "legendFormat": "{{owner}} business age"
         },
         {
           "refId": "C",
-          "expr": "(time() - beanflow_worker_last_started_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(owner) (beanflow_worker_last_started_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
+          "expr": "(time() - beanflow_worker_last_started_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(environment,host,instance,owner) (beanflow_worker_last_started_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
           "legendFormat": "{{owner}} last started age"
         },
         {
@@ -3683,13 +3683,13 @@
     },
     {
       "id": 177,
-      "title": "Worker enqueue→claim / claim→complete p95",
+      "title": "Worker enqueue→claim / claim→outcome p95",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
         "uid": "beanflow-prometheus"
       },
-      "description": "due/enqueue 대기와 claim 이후 처리 시간을 합치지 않는다.",
+      "description": "due/enqueue 대기와 실제 claim 이후 terminal outcome까지 시간을 합치지 않는다.",
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -3706,7 +3706,7 @@
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le,owner,outcome) (rate(beanflow_worker_claim_to_complete_duration_seconds_bucket{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le,owner,outcome) (rate(beanflow_worker_claim_to_outcome_duration_seconds_bucket{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval])))",
           "legendFormat": "{{owner}} claim→{{outcome}}"
         }
       ],

@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.shared.internal
 import io.github.kdh949.beanflow.shared.api.PerformanceOperation
 import io.github.kdh949.beanflow.shared.api.PerformancePhaseTelemetry
 import io.github.kdh949.beanflow.shared.api.PerformanceStage
+import io.github.kdh949.beanflow.shared.api.WorkerItemOutcome
 import io.github.kdh949.beanflow.shared.api.WorkerOwner
 import io.github.kdh949.beanflow.shared.api.WorkerRun
 import io.github.kdh949.beanflow.shared.api.WorkerTelemetry
@@ -113,13 +114,18 @@ internal class OpenTelemetryWorkerTelemetry(
         lastStarted.getValue(owner).set(startedAt)
         val state =
             MutableWorkerRun(
-                itemDuration = { outcome, duration ->
-                    Timer
-                        .builder("beanflow.worker.claim.to.complete.duration")
-                        .publishPercentileHistogram()
-                        .tags("owner", owner.tagValue, "outcome", outcome)
-                        .register(meterRegistry)
-                        .record(duration)
+                dataReadSuccessRecorder = {
+                    lastDataSuccess.getValue(owner).set(clock.instant().epochSecond)
+                    meterRegistry.counter("beanflow.worker.data.reads", "owner", owner.tagValue, "outcome", "success").increment()
+                },
+                claimedRecorder = { count ->
+                    recordClaimed(owner, count)
+                },
+                itemCountRecorder = { outcome, count ->
+                    recordItems(owner, outcome.tagValue, count)
+                },
+                itemOutcomeRecorder = { outcome, duration, count ->
+                    recordOutcome(owner, outcome, duration, count)
                 },
                 claimLagRecorder = { duration ->
                     Timer
@@ -142,7 +148,7 @@ internal class OpenTelemetryWorkerTelemetry(
         } catch (failure: Throwable) {
             thrown = true
             if (state.failures == 0) {
-                state.failed()
+                state.runFailed()
             }
             span.setStatus(StatusCode.ERROR)
             throw failure
@@ -155,13 +161,7 @@ internal class OpenTelemetryWorkerTelemetry(
                 .tags("owner", owner.tagValue, "outcome", outcome)
                 .register(meterRegistry)
                 .record(elapsed, TimeUnit.NANOSECONDS)
-            recordItems(owner, "claimed", state.claimed)
-            recordItems(owner, "completed", state.completed)
-            recordItems(owner, "failed", state.failures)
-            if (state.readSucceeded) {
-                lastDataSuccess.getValue(owner).set(clock.instant().epochSecond)
-                meterRegistry.counter("beanflow.worker.data.reads", "owner", owner.tagValue, "outcome", "success").increment()
-            } else {
+            if (!state.readSucceeded) {
                 meterRegistry.counter("beanflow.worker.data.reads", "owner", owner.tagValue, "outcome", "failure").increment()
             }
             if (outcome == "success") {
@@ -175,6 +175,31 @@ internal class OpenTelemetryWorkerTelemetry(
             scope.close()
             span.end()
         }
+    }
+
+    override fun recordClaimed(
+        owner: WorkerOwner,
+        count: Int,
+    ) {
+        require(count >= 0) { "Worker claimed count must not be negative" }
+        recordItems(owner, "claimed", count)
+    }
+
+    override fun recordOutcome(
+        owner: WorkerOwner,
+        outcome: WorkerItemOutcome,
+        duration: Duration,
+        count: Int,
+    ) {
+        require(count >= 0) { "Worker outcome count must not be negative" }
+        require(!duration.isNegative) { "Worker claim-to-outcome duration must not be negative" }
+        recordItems(owner, outcome.tagValue, count)
+        Timer
+            .builder("beanflow.worker.claim.to.outcome.duration")
+            .publishPercentileHistogram()
+            .tags("owner", owner.tagValue, "outcome", outcome.tagValue)
+            .register(meterRegistry)
+            .record(duration)
     }
 
     private fun gauges(name: String): Map<WorkerOwner, AtomicLong> =
@@ -203,7 +228,10 @@ internal class OpenTelemetryWorkerTelemetry(
 }
 
 private class MutableWorkerRun(
-    private val itemDuration: (String, Duration) -> Unit,
+    private val dataReadSuccessRecorder: () -> Unit,
+    private val claimedRecorder: (Int) -> Unit,
+    private val itemCountRecorder: (WorkerItemOutcome, Int) -> Unit,
+    private val itemOutcomeRecorder: (WorkerItemOutcome, Duration, Int) -> Unit,
     private val claimLagRecorder: (Duration) -> Unit,
 ) : WorkerRun {
     var readSucceeded = false
@@ -215,40 +243,55 @@ private class MutableWorkerRun(
     var failures = 0
         private set
 
-    override fun dataRead(claimed: Int) {
-        require(claimed >= 0) { "Worker claimed count must not be negative" }
-        readSucceeded = true
-        this.claimed = claimed
+    override fun dataReadSucceeded() {
+        if (!readSucceeded) {
+            readSucceeded = true
+            dataReadSuccessRecorder()
+        }
+    }
+
+    override fun claimed(count: Int) {
+        require(count >= 0) { "Worker claimed count must not be negative" }
+        claimed += count
+        claimedRecorder(count)
     }
 
     override fun completed(count: Int) {
         require(count >= 0) { "Worker completed count must not be negative" }
         completed += count
+        itemCountRecorder(WorkerItemOutcome.COMPLETED, count)
     }
 
     override fun completedAfter(
         duration: Duration,
         count: Int,
     ) {
-        completed(count)
-        itemDuration("completed", duration)
+        require(count >= 0) { "Worker completed count must not be negative" }
+        completed += count
+        itemOutcomeRecorder(WorkerItemOutcome.COMPLETED, duration, count)
     }
 
     override fun failed(count: Int) {
         require(count >= 0) { "Worker failure count must not be negative" }
         failures += count
+        itemCountRecorder(WorkerItemOutcome.FAILED, count)
     }
 
     override fun failedAfter(
         duration: Duration,
         count: Int,
     ) {
-        failed(count)
-        itemDuration("failed", duration)
+        require(count >= 0) { "Worker failure count must not be negative" }
+        failures += count
+        itemOutcomeRecorder(WorkerItemOutcome.FAILED, duration, count)
     }
 
     override fun claimLag(duration: Duration) {
         claimLagRecorder(if (duration.isNegative) Duration.ZERO else duration)
+    }
+
+    fun runFailed() {
+        failures++
     }
 
     fun outcome(thrown: Boolean): String =

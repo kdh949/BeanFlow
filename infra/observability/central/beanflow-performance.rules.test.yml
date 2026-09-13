@@ -1,0 +1,63 @@
+rule_files:
+  - beanflow-performance.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'beanflow_worker_data_last_success_timestamp_seconds{job="beanflow",environment="perf",host="app-a",instance="10.0.0.1:8080",owner="notification"}'
+        values: '1+0x10'
+      - series: 'beanflow_worker_data_last_success_timestamp_seconds{job="beanflow",environment="perf",host="app-b",instance="10.0.0.2:8080",owner="notification"}'
+        values: '1+0x10'
+      - series: 'beanflow_worker_business_last_success_timestamp_seconds{job="beanflow",environment="perf",host="app-a",instance="10.0.0.1:8080",owner="notification"}'
+        values: '1+0x10'
+      - series: 'beanflow_worker_business_last_success_timestamp_seconds{job="beanflow",environment="perf",host="app-b",instance="10.0.0.2:8080",owner="notification"}'
+        values: '1+0x10'
+      - series: 'beanflow_worker_refresh_interval_seconds{job="beanflow",environment="perf",host="app-a",instance="10.0.0.1:8080",owner="notification"}'
+        values: '5+0x10'
+      - series: 'beanflow_worker_refresh_interval_seconds{job="beanflow",environment="perf",host="app-b",instance="10.0.0.2:8080",owner="notification"}'
+        values: '5+0x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: BeanFlowPerfWorkerTelemetryStale
+        exp_alerts:
+          - exp_labels:
+              environment: perf
+              host: app-a
+              instance: 10.0.0.1:8080
+              owner: notification
+              severity: warning
+            exp_annotations:
+              summary: BeanFlow worker telemetry is stale for notification
+              description: The owner has not completed a data read within two refresh intervals plus one scrape allowance.
+          - exp_labels:
+              environment: perf
+              host: app-b
+              instance: 10.0.0.2:8080
+              owner: notification
+              severity: warning
+            exp_annotations:
+              summary: BeanFlow worker telemetry is stale for notification
+              description: The owner has not completed a data read within two refresh intervals plus one scrape allowance.
+      - eval_time: 10m
+        alertname: BeanFlowPerfWorkerBusinessStale
+        exp_alerts:
+          - exp_labels:
+              environment: perf
+              host: app-a
+              instance: 10.0.0.1:8080
+              owner: notification
+              severity: warning
+            exp_annotations:
+              summary: BeanFlow worker business processing is stale for notification
+              description: Data reads may still succeed; inspect partial or failed run and item outcomes before treating the owner as healthy.
+          - exp_labels:
+              environment: perf
+              host: app-b
+              instance: 10.0.0.2:8080
+              owner: notification
+              severity: warning
+            exp_annotations:
+              summary: BeanFlow worker business processing is stale for notification
+              description: Data reads may still succeed; inspect partial or failed run and item outcomes before treating the owner as healthy.

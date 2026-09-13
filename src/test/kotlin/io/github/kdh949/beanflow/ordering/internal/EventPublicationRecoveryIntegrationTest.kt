@@ -166,6 +166,9 @@ internal class EventPublicationRecoveryIntegrationTest
             }
             failingListener.allowSuccess()
             clock.advance(Duration.ofSeconds(12))
+            val claimedBefore = workerItems("claimed")
+            val completedBefore = workerItems("completed")
+            val durationBefore = workerDuration("completed")
 
             recoveryWorker.runOnce()
 
@@ -174,6 +177,9 @@ internal class EventPublicationRecoveryIntegrationTest
             }
             assertThat(notificationCount(event.envelope.eventId)).isEqualTo(1)
             assertThat(inboxCount(event.customerId)).isEqualTo(1)
+            assertThat(workerItems("claimed") - claimedBefore).isEqualTo(1.0)
+            assertThat(workerItems("completed") - completedBefore).isEqualTo(1.0)
+            assertThat(workerDuration("completed") - durationBefore).isEqualTo(1L)
         }
 
         @Test
@@ -484,6 +490,22 @@ internal class EventPublicationRecoveryIntegrationTest
                 .tag("outcome", "manual_review")
                 .counter()
                 ?.count() ?: 0.0
+
+        private fun workerItems(outcome: String): Double =
+            meters
+                .find("beanflow.worker.items")
+                .tag("owner", "event_publication")
+                .tag("outcome", outcome)
+                .counter()
+                ?.count() ?: 0.0
+
+        private fun workerDuration(outcome: String): Long =
+            meters
+                .find("beanflow.worker.claim.to.outcome.duration")
+                .tag("owner", "event_publication")
+                .tag("outcome", outcome)
+                .timer()
+                ?.count() ?: 0L
 
         private fun gauge(name: String): Double = meters.get(name).gauge().value()
 

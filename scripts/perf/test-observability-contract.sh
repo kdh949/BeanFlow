@@ -83,6 +83,10 @@ docker run --rm --entrypoint /bin/promtool \
   -v "$REPOSITORY_ROOT/infra/observability/central/beanflow-performance.rules.yml:/etc/prometheus/beanflow-performance.rules.yml:ro" \
   prom/prometheus:v3.14.0 \
   check rules /etc/prometheus/beanflow-performance.rules.yml
+docker run --rm --entrypoint /bin/promtool \
+  -v "$REPOSITORY_ROOT/infra/observability/central:/etc/prometheus:ro" \
+  prom/prometheus:v3.14.0 \
+  test rules /etc/prometheus/beanflow-performance.rules.test.yml
 
 jq -e '
   .uid == "beanflow-performance-rca" and
@@ -132,6 +136,7 @@ rg -q 'beanflow-db-diagnostics' infra/observability/central/beanflow-performance
 rg -q 'BeanFlowPerfDroppedIterations' infra/observability/central/beanflow-performance.rules.yml
 rg -q 'BeanFlowPerfDatabaseDiagnosticsStale' infra/observability/central/beanflow-performance.rules.yml
 rg -q 'BeanFlowPerfWorkerTelemetryStale' infra/observability/central/beanflow-performance.rules.yml
+[[ "$(rg -c '> on\(environment, host, instance, owner\)' infra/observability/central/beanflow-performance.rules.yml)" -eq 2 ]]
 rg -q 'db-diagnostics-exporter.py.*--otlp-endpoint' infra/observability/beanflow-db-diagnostics.service
 rg -q -- '--filesystem-path /' infra/observability/beanflow-container-stats.service
 rg -q 'releases/download/v2.31.1/opentelemetry-javaagent.jar' Dockerfile

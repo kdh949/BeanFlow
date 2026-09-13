@@ -45,19 +45,18 @@ internal class ReservationExpiryWorker(
             val started = System.nanoTime()
             val now = clock.instant()
             val dueIds = orderRepository.findDueIds(now, PageRequest.of(0, chunkSize))
-            run.dataRead(dueIds.size)
+            run.dataReadSucceeded()
             dueCount.set(dueIds.size)
             var expired = 0
             dueIds.forEach { orderId ->
-                val itemStarted = System.nanoTime()
                 try {
                     val result = expiryUseCase.expireIfDue(orderId, now)
                     if (result.outcome == ReservationExpiryOutcome.EXPIRED) {
                         expired++
                     }
-                    run.completedAfter(java.time.Duration.ofNanos(System.nanoTime() - itemStarted))
+                    run.completed()
                 } catch (failure: RuntimeException) {
-                    run.failedAfter(java.time.Duration.ofNanos(System.nanoTime() - itemStarted))
+                    run.failed()
                     logger.error("reservation_expiry_worker orderId={} outcome=FAILED", orderId, failure)
                 }
             }

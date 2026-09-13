@@ -127,131 +127,210 @@ beanflow_worker_backlog:
         ('partial_refund_restoration'),
         ('refund_point_recovery'),
         ('notification')
-    ), states(state) AS (
-      VALUES ('due'), ('future'), ('in_progress'), ('unknown'), ('manual_review'), ('unimplemented_target')
-    ), facts AS (
+    ), backlog_categories(state, claimability) AS (
+      VALUES
+        ('due', 'due'),
+        ('future', 'future'),
+        ('in_progress', 'in_progress'),
+        ('unknown', 'due'),
+        ('unknown', 'future'),
+        ('unknown', 'not_claimable'),
+        ('manual_review', 'not_claimable'),
+        ('unimplemented_target', 'not_claimable')
+    ), event_rows AS (
+      SELECT
+        publication.*,
+        COALESCE(publication.last_resubmission_date, publication.publication_date) +
+          CASE publication.completion_attempts
+            WHEN 0 THEN interval '10 seconds'
+            WHEN 1 THEN interval '10 seconds'
+            WHEN 2 THEN interval '30 seconds'
+            WHEN 3 THEN interval '2 minutes'
+            WHEN 4 THEN interval '5 minutes'
+            WHEN 5 THEN interval '15 minutes'
+            ELSE interval '0 seconds'
+          END AS eligible_at,
+        EXISTS (
+          SELECT 1 FROM operations_reprocessing_case recovery
+          WHERE recovery.case_type = 'EVENT_PUBLICATION'
+            AND recovery.owner_reference = 'event-publication:' || publication.id::text
+        ) AS has_reprocessing_case
+      FROM event_publication publication
+      WHERE publication.completion_date IS NULL
+    ), raw_facts AS (
       SELECT
         'event_publication'::text AS owner,
         CASE
-          WHEN publication.listener_id LIKE 'beanflow.analytics.%' THEN 'unimplemented_target'
-          WHEN EXISTS (
-            SELECT 1 FROM operations_reprocessing_case recovery
-            WHERE recovery.case_type = 'EVENT_PUBLICATION'
-              AND recovery.owner_reference = 'event-publication:' || publication.id::text
-              AND recovery.status <> 'RESOLVED'
-          ) THEN 'manual_review'
-          WHEN publication.status IN ('PROCESSING', 'RESUBMITTED') THEN 'in_progress'
+          WHEN listener_id LIKE 'beanflow.analytics.%' THEN 'unimplemented_target'
+          WHEN has_reprocessing_case THEN 'manual_review'
+          WHEN status IN ('PROCESSING', 'RESUBMITTED') THEN 'in_progress'
+          WHEN status NOT IN ('FAILED') THEN 'unknown'
+          WHEN completion_attempts <= 5 AND eligible_at > clock_timestamp() THEN 'future'
           ELSE 'due'
         END AS state,
-        count(*)::double precision AS items,
-        min(publication.publication_date) AS oldest_at
-      FROM event_publication publication
-      WHERE publication.completion_date IS NULL
-      GROUP BY 1, 2
+        CASE
+          WHEN listener_id LIKE 'beanflow.analytics.%' OR has_reprocessing_case THEN 'not_claimable'
+          WHEN status IN ('PROCESSING', 'RESUBMITTED') THEN 'in_progress'
+          WHEN status = 'FAILED' OR status IS NULL THEN
+            CASE WHEN completion_attempts <= 5 AND eligible_at > clock_timestamp() THEN 'future' ELSE 'due' END
+          ELSE 'not_claimable'
+        END AS claimability,
+        CASE
+          WHEN completion_attempts <= 5 THEN eligible_at
+          ELSE COALESCE(last_resubmission_date, publication_date)
+        END AS due_at
+      FROM event_rows
       UNION ALL
       SELECT
         'payment_reconciliation',
         CASE
           WHEN status = 'MANUAL_REVIEW' THEN 'manual_review'
+          WHEN status = 'PROCESSING' AND next_attempt_at <= clock_timestamp() AND claim_until <= clock_timestamp() THEN 'due'
           WHEN status = 'PROCESSING' THEN 'in_progress'
           WHEN next_attempt_at > clock_timestamp() THEN 'future'
           ELSE 'due'
         END,
-        count(*)::double precision,
-        min(CASE WHEN next_attempt_at <= clock_timestamp() THEN next_attempt_at END)
+        CASE
+          WHEN status = 'MANUAL_REVIEW' THEN 'not_claimable'
+          WHEN status = 'PROCESSING' AND next_attempt_at <= clock_timestamp() AND claim_until <= clock_timestamp() THEN 'due'
+          WHEN status = 'PROCESSING' THEN 'in_progress'
+          WHEN next_attempt_at > clock_timestamp() THEN 'future'
+          ELSE 'due'
+        END,
+        CASE WHEN status = 'PROCESSING' THEN claim_until ELSE next_attempt_at END
       FROM payment_reconciliation
       WHERE status IN ('SCHEDULED', 'PROCESSING', 'RETRY_SCHEDULED', 'MANUAL_REVIEW')
-      GROUP BY 1, 2
       UNION ALL
       SELECT
         'reservation_expiry',
         CASE WHEN reservation_expires_at > clock_timestamp() THEN 'future' ELSE 'due' END,
-        count(*)::double precision,
-        min(CASE WHEN reservation_expires_at <= clock_timestamp() THEN reservation_expires_at END)
+        CASE WHEN reservation_expires_at > clock_timestamp() THEN 'future' ELSE 'due' END,
+        reservation_expires_at
       FROM ordering_order
       WHERE state = 'PENDING_PAYMENT' AND reservation_expires_at IS NOT NULL
-      GROUP BY 1, 2
       UNION ALL
       SELECT
         'acceptance_timeout',
         CASE
           WHEN state = 'MANUAL_REVIEW' THEN 'manual_review'
+          WHEN state = 'CLAIMED' AND claim_until <= clock_timestamp() THEN 'due'
           WHEN state = 'CLAIMED' THEN 'in_progress'
           WHEN next_attempt_at > clock_timestamp() THEN 'future'
           ELSE 'due'
         END,
-        count(*)::double precision,
-        min(CASE WHEN next_attempt_at <= clock_timestamp() THEN next_attempt_at END)
+        CASE
+          WHEN state = 'MANUAL_REVIEW' THEN 'not_claimable'
+          WHEN state = 'CLAIMED' AND claim_until <= clock_timestamp() THEN 'due'
+          WHEN state = 'CLAIMED' THEN 'in_progress'
+          WHEN next_attempt_at > clock_timestamp() THEN 'future'
+          ELSE 'due'
+        END,
+        CASE WHEN state = 'CLAIMED' THEN claim_until ELSE next_attempt_at END
       FROM ordering_acceptance_timeout_work
       WHERE state <> 'COMPLETED'
-      GROUP BY 1, 2
       UNION ALL
       SELECT
         CASE WHEN reason = 'PARTIAL_REFUND' THEN 'partial_refund_provider' ELSE 'rejection_refund' END,
         CASE
           WHEN state = 'MANUAL_REVIEW' THEN 'manual_review'
           WHEN state = 'UNKNOWN' THEN 'unknown'
+          WHEN state IN ('PROCESSING', 'RECONCILING') AND claim_until <= clock_timestamp() THEN 'due'
           WHEN state IN ('PROCESSING', 'RECONCILING') THEN 'in_progress'
           WHEN next_attempt_at > clock_timestamp() THEN 'future'
           ELSE 'due'
         END,
-        count(*)::double precision,
-        min(CASE WHEN next_attempt_at <= clock_timestamp() THEN next_attempt_at END)
+        CASE
+          WHEN state = 'MANUAL_REVIEW' THEN 'not_claimable'
+          WHEN state IN ('PROCESSING', 'RECONCILING') AND claim_until <= clock_timestamp() THEN 'due'
+          WHEN state IN ('PROCESSING', 'RECONCILING') THEN 'in_progress'
+          WHEN next_attempt_at > clock_timestamp() THEN 'future'
+          ELSE 'due'
+        END,
+        CASE WHEN state IN ('PROCESSING', 'RECONCILING') THEN claim_until ELSE next_attempt_at END
       FROM payment_refund
       WHERE state NOT IN ('SUCCEEDED', 'FAILED')
-      GROUP BY 1, 2
       UNION ALL
       SELECT
         'partial_refund_restoration',
         CASE
           WHEN state = 'MANUAL_REVIEW' THEN 'manual_review'
+          WHEN state = 'PROCESSING' AND claim_until <= clock_timestamp() THEN 'due'
           WHEN state = 'PROCESSING' THEN 'in_progress'
           WHEN next_attempt_at > clock_timestamp() THEN 'future'
           ELSE 'due'
         END,
-        count(*)::double precision,
-        min(CASE WHEN next_attempt_at <= clock_timestamp() THEN next_attempt_at END)
+        CASE
+          WHEN state = 'MANUAL_REVIEW' THEN 'not_claimable'
+          WHEN state = 'PROCESSING' AND claim_until <= clock_timestamp() THEN 'due'
+          WHEN state = 'PROCESSING' THEN 'in_progress'
+          WHEN next_attempt_at > clock_timestamp() THEN 'future'
+          ELSE 'due'
+        END,
+        CASE WHEN state = 'PROCESSING' THEN claim_until ELSE next_attempt_at END
       FROM payment_refund_restoration_work
       WHERE state <> 'SUCCEEDED'
-      GROUP BY 1, 2
       UNION ALL
       SELECT
         'refund_point_recovery',
         CASE
           WHEN state = 'MANUAL_REVIEW' THEN 'manual_review'
+          WHEN state IN ('ELIGIBILITY_PROCESSING', 'PROCESSING') AND claim_until <= clock_timestamp() THEN 'due'
           WHEN state IN ('ELIGIBILITY_PROCESSING', 'PROCESSING') THEN 'in_progress'
           WHEN next_attempt_at > clock_timestamp() THEN 'future'
           ELSE 'due'
         END,
-        count(*)::double precision,
-        min(CASE WHEN next_attempt_at <= clock_timestamp() THEN next_attempt_at END)
+        CASE
+          WHEN state = 'MANUAL_REVIEW' THEN 'not_claimable'
+          WHEN state IN ('ELIGIBILITY_PROCESSING', 'PROCESSING') AND claim_until <= clock_timestamp() THEN 'due'
+          WHEN state IN ('ELIGIBILITY_PROCESSING', 'PROCESSING') THEN 'in_progress'
+          WHEN next_attempt_at > clock_timestamp() THEN 'future'
+          ELSE 'due'
+        END,
+        CASE WHEN state IN ('ELIGIBILITY_PROCESSING', 'PROCESSING') THEN claim_until ELSE next_attempt_at END
       FROM payment_refund_point_recovery_work
       WHERE state NOT IN ('SUCCEEDED', 'EXCLUDED_BEFORE_ACCRUAL', 'NOT_REQUIRED', 'NOT_APPLICABLE')
-      GROUP BY 1, 2
       UNION ALL
       SELECT
         'notification',
         CASE
           WHEN state = 'MANUAL_REVIEW' THEN 'manual_review'
+          WHEN state = 'PROCESSING' AND claim_until <= clock_timestamp() THEN 'due'
           WHEN state = 'PROCESSING' THEN 'in_progress'
           WHEN next_attempt_at > clock_timestamp() THEN 'future'
           ELSE 'due'
         END,
-        count(*)::double precision,
-        min(CASE WHEN next_attempt_at <= clock_timestamp() THEN next_attempt_at END)
+        CASE
+          WHEN state = 'MANUAL_REVIEW' THEN 'not_claimable'
+          WHEN state = 'PROCESSING' AND claim_until <= clock_timestamp() THEN 'due'
+          WHEN state = 'PROCESSING' THEN 'in_progress'
+          WHEN next_attempt_at > clock_timestamp() THEN 'future'
+          ELSE 'due'
+        END,
+        CASE WHEN state = 'PROCESSING' THEN claim_until ELSE next_attempt_at END
       FROM notification_delivery
       WHERE state NOT IN ('SUCCEEDED', 'SKIPPED')
-      GROUP BY 1, 2
+    ), facts AS (
+      SELECT
+        owner,
+        state,
+        claimability,
+        count(*)::double precision AS items,
+        min(due_at) FILTER (WHERE claimability = 'due') AS oldest_due_at
+      FROM raw_facts
+      GROUP BY owner, state, claimability
     )
     SELECT
       current_database() AS database,
       owners.owner,
-      states.state,
+      backlog_categories.state,
+      backlog_categories.claimability,
       COALESCE(facts.items, 0)::double precision AS items,
-      COALESCE(EXTRACT(EPOCH FROM (clock_timestamp() - facts.oldest_at)), 0)::double precision AS oldest_due_age_seconds
+      COALESCE(EXTRACT(EPOCH FROM (clock_timestamp() - facts.oldest_due_at)), 0)::double precision AS oldest_due_age_seconds
     FROM owners
-    CROSS JOIN states
-    LEFT JOIN facts ON facts.owner = owners.owner AND facts.state = states.state
+    CROSS JOIN backlog_categories
+    LEFT JOIN facts ON facts.owner = owners.owner
+      AND facts.state = backlog_categories.state
+      AND facts.claimability = backlog_categories.claimability
   metrics:
     - database:
         usage: LABEL
@@ -262,9 +341,12 @@ beanflow_worker_backlog:
     - state:
         usage: LABEL
         description: Closed backlog state vocabulary
+    - claimability:
+        usage: LABEL
+        description: Closed worker claimability vocabulary derived from repository due and lease rules
     - items:
         usage: GAUGE
         description: Full owner and state backlog count, not a worker batch size
     - oldest_due_age_seconds:
         usage: GAUGE
-        description: Oldest due item age, zero only when that owner and state has no due item
+        description: Oldest claimable due item age, zero only when that owner state and claimability has no due item

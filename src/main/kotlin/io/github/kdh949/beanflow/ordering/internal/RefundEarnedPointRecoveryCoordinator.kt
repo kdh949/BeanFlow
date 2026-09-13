@@ -267,20 +267,20 @@ internal class RefundEarnedPointRecoveryWorker(
         workerTelemetry.observe(WorkerOwner.REFUND_POINT_RECOVERY) { run ->
             val claimedAt = clock.instant()
             val claims = coordinator.claimDue(claimedAt, chunkSize)
-            run.dataRead(claims.size)
+            val claimStarted = System.nanoTime()
+            run.dataReadSucceeded()
+            run.claimed(claims.size)
             claims.forEach { claim ->
-                val itemStarted = System.nanoTime()
                 run.claimLag(Duration.between(claim.enqueuedAt, claimedAt))
                 try {
                     val result = coordinator.recover(claim, clock.instant())
                     if (result == null) {
-                        run.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                        run.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                         return@forEach
                     }
                     coordinator.recordSuccess(claim, result, clock.instant())
-                    run.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                    run.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 } catch (failure: RuntimeException) {
-                    run.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
                     try {
                         coordinator.recordFailure(claim, failure, clock.instant())
                     } catch (recordFailure: RuntimeException) {
@@ -292,6 +292,7 @@ internal class RefundEarnedPointRecoveryWorker(
                             recordFailure,
                         )
                     }
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 }
             }
             claims.size

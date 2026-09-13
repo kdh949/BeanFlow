@@ -33,21 +33,21 @@ internal class NotificationDeliveryWorker(
         workerTelemetry.observe(WorkerOwner.NOTIFICATION) { run ->
             val claimedAt = clock.instant()
             val claims = deliveryService.claimDue(claimedAt, chunkSize)
-            run.dataRead(claims.size)
+            val claimStarted = System.nanoTime()
+            run.dataReadSucceeded()
+            run.claimed(claims.size)
             claims.forEach { claim ->
-                val itemStarted = System.nanoTime()
                 run.claimLag(Duration.between(claim.dueAt, claimedAt))
                 meterRegistry
                     .summary("beanflow.notification.delivery.lag")
                     .record(Duration.between(claim.dueAt, claimedAt).toMillis().coerceAtLeast(0) / 1000.0)
                 try {
                     deliveryService.recordResult(claim, deliveryService.callProvider(claim), clock.instant())
-                    run.completedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
+                    run.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 } catch (failure: NotificationTransportFailure) {
-                    run.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
                     recordProviderFailure(claim)
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 } catch (failure: RuntimeException) {
-                    run.failedAfter(Duration.ofNanos(System.nanoTime() - itemStarted))
                     logger.error(
                         "notification_delivery deliveryId={} template={} outcome=CLAIM_RETAINED attempt={}",
                         claim.deliveryId,
@@ -55,6 +55,7 @@ internal class NotificationDeliveryWorker(
                         claim.attemptCount,
                         failure,
                     )
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 }
             }
             claims.size

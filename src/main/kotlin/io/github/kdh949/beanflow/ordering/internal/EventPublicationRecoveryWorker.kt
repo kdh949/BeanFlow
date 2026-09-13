@@ -51,24 +51,21 @@ internal class EventPublicationRecoveryWorker(
             val now = clock.instant()
             val handoffFailures = mutableListOf<IllegalStateException>()
             val exhaustedIds = queries.findExhaustedIds(batchSize)
-            run.dataRead(exhaustedIds.size)
             exhaustedIds.forEach { id ->
                 // The service proxy commits the case and compensation step before telemetry is emitted.
                 val transition =
                     try {
                         manualReview.transition(id, now)
                     } catch (failure: Exception) {
-                        run.failed()
                         handoffFailures.add(IllegalStateException("Event publication manual-review handoff failed: $id", failure))
                         return@forEach
                     }
                 transition?.let {
                     recordTransition(it)
-                    run.completed()
                 }
             }
             try {
-                scope.run(now) {
+                scope.run(now, run) {
                     publications.resubmitIncompletePublications(
                         ResubmissionOptions.defaults().withBatchSize(batchSize).withMaxInFlight(batchSize),
                     )

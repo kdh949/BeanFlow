@@ -914,6 +914,8 @@ scheduled 업무가 아직 미래라면 "지금 due work 0"만으로 전체 reco
 - [x] 2026-09-13: O1~O6 저장소 구현. DB identity/stat-statements/blocker, bounded snapshot,
   environment/host 범위, worker/phase freshness, Alloy delivery와 앱 host 자원 guardrail 반영.
 - [x] 2026-09-13: application/test compile, collector/dashboard unit·contract와 격리 PostgreSQL runtime 검증.
+- [x] 2026-09-13: O4 리뷰 후 data-read와 claim을 분리하고 claim-to-outcome 기준시각, event publication 실제
+  resubmission 처리량, repository와 동일한 backoff/lease claimability, 다중 host stale rule을 보정.
 - [x] 2026-09-13: 전체 `./gradlew check`의 실행계획 단언 1건 실패를 격리 재실행해 통과 확인하고,
   전체 suite Failed와 격리 Passed를 별도 기록.
 - [ ] 2026-09-13: 새 revision 배포 및 실제 Grafana의 O1~O6 수집·표시, trace-log-profile 연결과 overhead smoke.
@@ -956,11 +958,13 @@ scheduled 업무가 아직 미래라면 "지금 due work 0"만으로 전체 reco
 | 2026-09-13 | 1초/1%/dropped=0 초기 guardrail 유지 | 서비스 SLO 신규 확정 아님; 근거 없이 실패 통과를 위해 완화하지 않음 |
 | 2026-09-13 | 정상 완료/활성 recovery/미구현 downstream을 분리 | 현재 구현 범위와 성능 주장 한계 일치 |
 | 2026-09-13 | O1~O6는 닫힌 label과 bounded collector로 구현하고 live gate를 별도 유지 | cardinality·민감정보·collector 부하를 제한하면서 정적/실환경 증거를 혼동하지 않음 |
+| 2026-09-13 | backlog에 business state와 claimability를 함께 보존 | UNKNOWN 진단 정보를 잃지 않으면서 실제 실행 가능한 due만 분리 |
 
 ## Outcomes & Retrospective
 
 초기 문서 작성 시점의 결과는 구체적인 실행/구현 계획이었다. 2026-09-13에 O1~O6의 저장소 구현과
-격리 검증을 추가했다. 제품 API·retry/deadline·transaction 의미는 변경하지 않았다.
+격리 검증을 추가했다. O4 리뷰 보정은 기존 repository의 backoff·lease 조건을 exporter에 복제해 fixture로
+대조했고, 제품 API·retry/deadline·transaction 의미는 변경하지 않았다.
 실제 서버 revision/DB/자원·중앙 ingest 전체 재확인, 합성 계정 준비, 신규 거래·부하·장애 주입은 **Not run**이다.
 공개 첫 화면을 읽은 결과는 API/DB/계측 준비 완료의 증거가 아니다.
 후속 관측성 감사에서는 Live/Explore와 일부 중앙 metric 존재를 read-only 확인했다.
