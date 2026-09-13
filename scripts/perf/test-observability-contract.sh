@@ -41,6 +41,7 @@ export BEANFLOW_VAULT_BLIND_INDEX_SEARCH_VERSIONS=1
 export BEANFLOW_TEMPO_OTLP_HTTP_ENDPOINT=http://tempo.invalid:4318
 export BEANFLOW_LOKI_OTLP_HTTP_ENDPOINT=http://loki.invalid:3100/otlp
 export BEANFLOW_PYROSCOPE_SERVER_ADDRESS=http://pyroscope.invalid:4040
+export BEANFLOW_OBSERVABILITY_HOST_ID=contract-app-host
 
 cd "$REPOSITORY_ROOT"
 
@@ -54,6 +55,9 @@ assert "/run/beanflow-jvm-tmp:rw,exec,nosuid,nodev,size=128m,uid=10001,gid=10001
 for path in ("/tmp", "/run/beanflow-vault", "/run/beanflow-secrets"):
     assert any(mount.startswith(path + ":") and "noexec" in mount.split(":", 1)[1].split(",") for mount in api["tmpfs"])
 assert api["environment"]["SPRING_PROFILES_ACTIVE"] == "perf"
+resource_attributes = api["environment"]["OTEL_RESOURCE_ATTRIBUTES"]
+assert "deployment.environment.name=perf" in resource_attributes
+assert "host.name=contract-app-host" in resource_attributes
 exporter = config["services"]["postgres-exporter"]
 assert exporter["user"] == "0:0"
 assert exporter["entrypoint"] == ["/bin/sh", "/opt/beanflow/postgres-exporter-entrypoint.sh"]
@@ -112,12 +116,24 @@ rg -q 'peer_attributes: \[beanflow.provider, peer.service, db.name, db.system\]'
   infra/observability/central/tempo-metrics-generator.yml
 rg -q 'profileTypeId: wall:wall:nanoseconds:wall:nanoseconds' \
   infra/observability/central/grafana/provisioning/datasources/beanflow.yml
+[[ "$(rg -c 'key: deployment.environment.name' infra/observability/central/grafana/provisioning/datasources/beanflow.yml)" -eq 2 ]]
+[[ "$(rg -c 'key: host.name' infra/observability/central/grafana/provisioning/datasources/beanflow.yml)" -eq 2 ]]
+[[ "$(rg -c 'value: deployment_environment_name' infra/observability/central/grafana/provisioning/datasources/beanflow.yml)" -eq 2 ]]
+[[ "$(rg -c 'value: host_name' infra/observability/central/grafana/provisioning/datasources/beanflow.yml)" -eq 2 ]]
+[[ "$(rg -c 'sending_queue \{' infra/observability/alloy/config.alloy)" -eq 2 ]]
 rg -q 'DATA_SOURCE_PASS_FILE' compose.perf.yml
+rg -Fq 'host.name=${BEANFLOW_OBSERVABILITY_HOST_ID:?BEANFLOW_OBSERVABILITY_HOST_ID is required}' compose.perf.yml
 rg -q '^  node-exporter:' compose.perf.yml
 rg -q 'job_name: beanflow-node' infra/observability/central/prometheus-scrape.yml
+rg -q 'job_name: beanflow-db-diagnostics' infra/observability/central/prometheus-scrape.yml
 rg -q 'job_name: beanflow-cadvisor' infra/observability/central/prometheus-cadvisor-scrape.yml
 rg -q 'beanflow.*-cadvisor' infra/observability/central/beanflow-performance.rules.yml
+rg -q 'beanflow-db-diagnostics' infra/observability/central/beanflow-performance.rules.yml
 rg -q 'BeanFlowPerfDroppedIterations' infra/observability/central/beanflow-performance.rules.yml
+rg -q 'BeanFlowPerfDatabaseDiagnosticsStale' infra/observability/central/beanflow-performance.rules.yml
+rg -q 'BeanFlowPerfWorkerTelemetryStale' infra/observability/central/beanflow-performance.rules.yml
+rg -q 'db-diagnostics-exporter.py.*--otlp-endpoint' infra/observability/beanflow-db-diagnostics.service
+rg -q -- '--filesystem-path /' infra/observability/beanflow-container-stats.service
 rg -q 'releases/download/v2.31.1/opentelemetry-javaagent.jar' Dockerfile
 rg -q 'releases/download/v2.1.2/pyroscope-otel-javaagent-extension.jar' Dockerfile
 [[ "$(rg -c 'ADD --checksum=sha256:' Dockerfile)" -eq 2 ]]
@@ -144,6 +160,7 @@ ruby -ryaml -e '
 
 node --test scripts/load/load-contract.test.mjs scripts/load/k6-runtime.test.mjs infra/perf/toss-driver.test.mjs
 python3 scripts/perf/test-container-stats-exporter.py
+python3 scripts/perf/test-db-diagnostics-exporter.py
 python3 scripts/perf/test-dashboard-queries.py
 python3 scripts/perf/test-live-dashboard-queries.py
 python3 scripts/load/run-contract.test.py

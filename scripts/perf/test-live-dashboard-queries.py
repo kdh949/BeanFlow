@@ -14,7 +14,7 @@ assert dashboard["uid"] == "beanflow-live-operations"
 assert dashboard["time"] == {"from": "now-15m", "to": "now"}
 assert dashboard["refresh"] == "10s"
 assert len({p["id"] for p in panels}) == len(panels)
-assert {v["name"] for v in dashboard["templating"]["list"]} == {"environment", "host", "route"}
+assert {v["name"] for v in dashboard["templating"]["list"]} == {"environment", "host", "route", "database"}
 assert "k6_" not in DASHBOARD.read_text() and "test_id" not in DASHBOARD.read_text()
 assert "${host:regex}" not in DASHBOARD.read_text()
 assert "${route:regex}" not in DASHBOARD.read_text()
@@ -24,7 +24,7 @@ for p in panels:
     assert p["datasource"] == {"type": "prometheus", "uid": "beanflow-prometheus"}
     for t in p["targets"]:
         assert 'environment="$environment"' in t["expr"]
-        assert 'instance="$host:' in t["expr"]
+        assert 'host="$host"' in t["expr"]
         assert "vector(0)" not in t["expr"] and "last_over_time" not in t["expr"]
         if p["type"] == "stat":
             assert t["instant"] and not t["range"]
@@ -35,7 +35,8 @@ for p in panels:
 
 def render(expr):
     return (expr.replace("$environment", "perf").replace("$host", "host-a")
-            .replace("$route", ".*").replace("$__rate_interval", "1m"))
+            .replace("$route", ".*").replace("$database", "beanflow_perf")
+            .replace("$__rate_interval", "1m"))
 
 
 def query(title, index=0):
@@ -45,7 +46,7 @@ def query(title, index=0):
 def series(metric, value, job="beanflow", host="host-a", environment="perf", extra=""):
     suffix = "," + extra if extra else ""
     port = {"beanflow": 18081, "beanflow-postgres": 19187, "beanflow-containers": 19101}[job]
-    return {"series": f'{metric}{{job="{job}",instance="{host}:{port}",environment="{environment}"{suffix}}}',
+    return {"series": f'{metric}{{job="{job}",instance="{host}:{port}",environment="{environment}",host="{host}"{suffix}}}',
             "values": str(value)}
 
 
@@ -120,7 +121,7 @@ case("wrong host DB waiter cannot leak into selected DB", "PostgreSQL 대기 세
     series("beanflow_pg_wait_sessions", 3, "beanflow-postgres", host="host-b",
            extra='wait_event="transactionid",wait_event_type="Lock"')], samples(0))
 
-container_labels = '{__name__="beanflow_container_running",environment="perf",instance="host-a:19101",job="beanflow-containers",service="api"}'
+container_labels = '{__name__="beanflow_container_running",environment="perf",host="host-a",instance="host-a:19101",job="beanflow-containers",service="api"}'
 for name, up, success, timestamp, running, at, expected in [
     ("running container", 1, 1, 0, 1, "0s", 1),
     ("stopped container stays zero", 1, 1, 0, 0, "0s", 0),
