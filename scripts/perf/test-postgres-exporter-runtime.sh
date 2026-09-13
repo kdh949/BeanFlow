@@ -7,6 +7,17 @@ FIXTURE="beanflow-exporter-smoke-$$"
 EXPORTER_IMAGE=quay.io/prometheuscommunity/postgres-exporter:v0.20.1
 POSTGRES_IMAGE=postgis/postgis:17-3.5
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/beanflow-exporter-smoke.XXXXXX")"
+assert_backlog() {
+  local file="$1" owner="$2" state="$3" claimability="$4" expected="$5"
+  awk -v owner="$owner" -v state="$state" -v claimability="$claimability" -v expected="$expected" '
+    /^beanflow_worker_backlog_items\{/ &&
+      index($0, "owner=\"" owner "\"") &&
+      index($0, "state=\"" state "\"") &&
+      index($0, "claimability=\"" claimability "\"") &&
+      $NF == expected { found = 1 }
+    END { exit !found }
+  ' "$file"
+}
 cleanup() {
   docker rm -fv "$FIXTURE-exporter" "$FIXTURE-postgres" >/dev/null 2>&1 || true
   docker network rm "$FIXTURE-internal" "$FIXTURE-egress" >/dev/null 2>&1 || true
@@ -45,6 +56,7 @@ done
 docker network create --internal "$FIXTURE-internal" >/dev/null
 docker network create "$FIXTURE-egress" >/dev/null
 docker run -d --name "$FIXTURE-postgres" --network "$FIXTURE-internal" --network-alias postgres \
+  --label "com.docker.compose.project=$FIXTURE" --label com.docker.compose.service=postgres \
   -v "$FIXTURE-secrets:/run/secrets:ro" \
   -e POSTGRES_PASSWORD_FILE=/run/secrets/BEANFLOW_POSTGRES_PASSWORD \
   -e POSTGRES_USER=beanflow -e POSTGRES_DB=beanflow_perf \
@@ -54,7 +66,22 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 docker exec "$FIXTURE-postgres" psql -v ON_ERROR_STOP=1 -U beanflow -d beanflow_perf \
-  -c 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;' >/dev/null
+  -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+      CREATE TABLE lock_fixture (id integer PRIMARY KEY, value integer NOT NULL);
+      INSERT INTO lock_fixture VALUES (1, 0);
+      CREATE TABLE operations_reprocessing_case (case_type text, owner_reference text, status text);
+      CREATE TABLE event_publication (id uuid PRIMARY KEY, listener_id text, publication_date timestamptz, completion_date timestamptz, status text, completion_attempts integer, last_resubmission_date timestamptz);
+      CREATE TABLE payment_reconciliation (status text, next_attempt_at timestamptz, claim_until timestamptz);
+      CREATE TABLE ordering_order (state text, reservation_expires_at timestamptz);
+      CREATE TABLE ordering_acceptance_timeout_work (state text, next_attempt_at timestamptz, claim_until timestamptz);
+      CREATE TABLE payment_refund (reason text, state text, next_attempt_at timestamptz, claim_until timestamptz);
+      CREATE TABLE payment_refund_restoration_work (state text, next_attempt_at timestamptz, claim_until timestamptz);
+      CREATE TABLE payment_refund_point_recovery_work (state text, next_attempt_at timestamptz, claim_until timestamptz);
+      CREATE TABLE notification_delivery (state text, next_attempt_at timestamptz, claim_until timestamptz);
+      SELECT count(*) FROM lock_fixture;" >/dev/null
+docker exec "$FIXTURE-postgres" createdb -U beanflow other_database
+docker exec "$FIXTURE-postgres" psql -v ON_ERROR_STOP=1 -U beanflow -d other_database \
+  -c 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements; CREATE TABLE lock_fixture (id integer PRIMARY KEY, value integer NOT NULL); INSERT INTO lock_fixture VALUES (1, 0);' >/dev/null
 
 docker create --name "$FIXTURE-exporter" --user 0:0 --read-only \
   --security-opt no-new-privileges:true --entrypoint /bin/sh \
@@ -78,6 +105,74 @@ done
 grep -qx 'pg_up 1' "$WORK_DIR/metrics"
 grep -qx 'pg_exporter_last_scrape_error 0' "$WORK_DIR/metrics"
 grep -Eq '^beanflow_pg_ungranted_locks(\{| )' "$WORK_DIR/metrics"
+for owner in event_publication payment_reconciliation reservation_expiry acceptance_timeout \
+  rejection_refund partial_refund_provider partial_refund_restoration refund_point_recovery notification; do
+  assert_backlog "$WORK_DIR/metrics" "$owner" due due 0
+done
+if ! grep -Eq '^beanflow_pg_database_identity_info\{[^}]*database="beanflow_perf"[^}]*\} 1$' "$WORK_DIR/metrics"; then
+  grep -E 'beanflow_pg_database|pg_exporter_last_scrape_error' "$WORK_DIR/metrics" >&2 || true
+  exit 1
+fi
+grep -Eq '^pg_stat_statements_calls_total\{[^}]*datname="beanflow_perf"' "$WORK_DIR/metrics"
+grep -Eq '^pg_stat_statements_seconds_total\{[^}]*datname="beanflow_perf"' "$WORK_DIR/metrics"
+
+docker exec "$FIXTURE-postgres" psql -v ON_ERROR_STOP=1 -U beanflow -d beanflow_perf \
+  -c "INSERT INTO event_publication VALUES
+        ('00000000-0000-0000-0000-000000000001', 'beanflow.orders.Listener', clock_timestamp() - interval '5 seconds', NULL, 'FAILED', 0, NULL),
+        ('00000000-0000-0000-0000-000000000002', 'beanflow.orders.Listener', clock_timestamp() - interval '1 minute', NULL, 'FAILED', 1, clock_timestamp() - interval '20 seconds'),
+        ('00000000-0000-0000-0000-000000000003', 'beanflow.orders.Listener', clock_timestamp() - interval '1 hour', NULL, 'FAILED', 6, clock_timestamp() - interval '20 minutes'),
+        ('00000000-0000-0000-0000-000000000004', 'beanflow.orders.Listener', clock_timestamp() - interval '1 hour', NULL, 'PROCESSING', 1, clock_timestamp() - interval '30 minutes');
+      INSERT INTO payment_reconciliation VALUES
+        ('PROCESSING', clock_timestamp() - interval '2 minutes', clock_timestamp() - interval '1 minute'),
+        ('PROCESSING', clock_timestamp() - interval '2 minutes', clock_timestamp() + interval '1 minute');
+      INSERT INTO payment_refund VALUES
+        ('STORE_ORDER_REJECTED', 'UNKNOWN', clock_timestamp() - interval '30 seconds', NULL);" >/dev/null
+curl -fsS --max-time 5 "http://127.0.0.1:$port/metrics" -o "$WORK_DIR/backlog-metrics"
+grep -qx 'pg_exporter_last_scrape_error 0' "$WORK_DIR/backlog-metrics"
+assert_backlog "$WORK_DIR/backlog-metrics" event_publication future future 1
+assert_backlog "$WORK_DIR/backlog-metrics" event_publication due due 2
+assert_backlog "$WORK_DIR/backlog-metrics" event_publication in_progress in_progress 1
+assert_backlog "$WORK_DIR/backlog-metrics" payment_reconciliation due due 1
+assert_backlog "$WORK_DIR/backlog-metrics" payment_reconciliation in_progress in_progress 1
+assert_backlog "$WORK_DIR/backlog-metrics" rejection_refund unknown due 1
+
+docker exec "$FIXTURE-postgres" psql -v ON_ERROR_STOP=1 -U beanflow -d beanflow_perf \
+  -c 'BEGIN; UPDATE lock_fixture SET value = value + 1 WHERE id = 1; SELECT pg_sleep(8); ROLLBACK;' \
+  >"$WORK_DIR/blocker.log" 2>&1 &
+blocker_pid=$!
+sleep 1
+docker exec "$FIXTURE-postgres" psql -v ON_ERROR_STOP=1 -U beanflow -d beanflow_perf \
+  -c 'UPDATE lock_fixture SET value = value + 1 WHERE id = 1;' >"$WORK_DIR/waiter.log" 2>&1 &
+waiter_pid=$!
+docker exec "$FIXTURE-postgres" psql -v ON_ERROR_STOP=1 -U beanflow -d other_database \
+  -c 'BEGIN; UPDATE lock_fixture SET value = value + 1 WHERE id = 1; SELECT pg_sleep(8); ROLLBACK;' \
+  >"$WORK_DIR/other-blocker.log" 2>&1 &
+other_blocker_pid=$!
+sleep 1
+docker exec "$FIXTURE-postgres" psql -v ON_ERROR_STOP=1 -U beanflow -d other_database \
+  -c 'UPDATE lock_fixture SET value = value + 1 WHERE id = 1;' >"$WORK_DIR/other-waiter.log" 2>&1 &
+other_waiter_pid=$!
+sleep 1
+curl -fsS --max-time 5 "http://127.0.0.1:$port/metrics" -o "$WORK_DIR/lock-metrics"
+grep -Eq '^beanflow_pg_ungranted_locks\{[^}]*database="beanflow_perf"[^}]*\} 1$' "$WORK_DIR/lock-metrics"
+grep -Eq '^beanflow_pg_blocked_sessions\{[^}]*database="beanflow_perf"[^}]*\} 1$' "$WORK_DIR/lock-metrics"
+grep -Eq '^beanflow_pg_lock_wait_max_seconds\{[^}]*database="beanflow_perf"[^}]*\} [1-9][0-9]*(\.[0-9]+)?$' "$WORK_DIR/lock-metrics"
+if grep -E '^beanflow_.*other_database' "$WORK_DIR/lock-metrics"; then
+  echo 'Exporter leaked metrics from a different database.' >&2
+  exit 1
+fi
+python3 "$REPOSITORY_ROOT/scripts/perf/db-diagnostics-exporter.py" \
+  --bind 127.0.0.1 --allow 127.0.0.1 --project "$FIXTURE" --database beanflow_perf \
+  --environment perf --host local-smoke --once --output-only >"$WORK_DIR/db-diagnostics.json"
+grep -q 'beanflow_db_diagnostics_blocked_sessions 1' "$WORK_DIR/db-diagnostics.json"
+grep -q '"wait_event": "transactionid"' "$WORK_DIR/db-diagnostics.json"
+grep -q '"database": "beanflow_perf"' "$WORK_DIR/db-diagnostics.json"
+grep -q '"query_family": "unmapped"' "$WORK_DIR/db-diagnostics.json"
+if grep -Eq 'other_database|UPDATE|lock_fixture' "$WORK_DIR/db-diagnostics.json"; then
+  echo 'Bounded DB snapshot leaked another database or SQL text.' >&2
+  exit 1
+fi
+wait "$blocker_pid" "$waiter_pid" "$other_blocker_pid" "$other_waiter_pid"
 docker exec --user 65534:65534 "$FIXTURE-exporter" /bin/sh -ec '
   test ! -r /run/secrets/BEANFLOW_POSTGRES_PASSWORD
   test "$(stat -c %u:%g:%a /run/secrets/BEANFLOW_POSTGRES_PASSWORD)" = 0:0:600
@@ -85,4 +180,4 @@ docker exec --user 65534:65534 "$FIXTURE-exporter" /bin/sh -ec '
   awk "/^Uid:/ { if (\$2 != 65534 || \$3 != 65534 || \$4 != 65534 || \$5 != 65534) exit 1; found=1 } END { if (!found) exit 1 }" /proc/1/status
   test "$(cat /proc/1/comm)" = postgres_export
 '
-echo 'PostgreSQL exporter runtime: PASS (missing/empty fail, root-only source, nobody process, published DB metrics)'
+echo 'PostgreSQL exporter runtime: PASS (stat_statements, database binding, transactionid wait, cross-DB isolation, runtime security)'

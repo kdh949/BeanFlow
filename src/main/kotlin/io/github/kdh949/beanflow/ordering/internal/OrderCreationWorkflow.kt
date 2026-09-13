@@ -27,6 +27,9 @@ import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
+import io.github.kdh949.beanflow.shared.api.PerformanceOperation
+import io.github.kdh949.beanflow.shared.api.PerformancePhaseTelemetry
+import io.github.kdh949.beanflow.shared.api.PerformanceStage
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionReport
 import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
 import org.springframework.stereotype.Service
@@ -62,6 +65,7 @@ internal class OrderCreationWorkflow(
     private val clock: Clock,
     private val snapshotAssembler: OrderSnapshotAssembler,
     private val auditFactory: OrderCreationAuditFactory,
+    private val phaseTelemetry: PerformancePhaseTelemetry,
 ) {
     private val pricingCalculator = OrderPricingCalculator()
     private val pointAccrualCalculator = OrderPointAccrualCalculator()
@@ -84,15 +88,17 @@ internal class OrderCreationWorkflow(
         val quotes = preparedQuote?.menu?.lines ?: prevalidatedQuotes?.also { validatePrevalidatedQuotes(command, it) } ?: quote(command)
 
         val pickupReservation =
-            pickupOperations.reserve(
-                ReservePickupCommand(
-                    orderId = orderId,
-                    storeId = command.storeId,
-                    pickupSlotId = command.pickupSlotId,
-                    expiresAt = requestedExpiresAt,
-                    sourceReference = OrderCreationTransaction.pickupSource(orderId),
-                ),
-            )
+            phaseTelemetry.observe(PerformanceOperation.ORDER_CREATE, PerformanceStage.PICKUP_RESERVATION) {
+                pickupOperations.reserve(
+                    ReservePickupCommand(
+                        orderId = orderId,
+                        storeId = command.storeId,
+                        pickupSlotId = command.pickupSlotId,
+                        expiresAt = requestedExpiresAt,
+                        sourceReference = OrderCreationTransaction.pickupSource(orderId),
+                    ),
+                )
+            }
         val reservationExpiresAt = pickupReservation.expiresAt
 
         val grossLines =
@@ -105,17 +111,19 @@ internal class OrderCreationWorkflow(
             }
         val couponQuote =
             command.couponIssuanceId?.let { couponIssuanceId ->
-                couponOperations.reserve(
-                    ReserveCouponCommand(
-                        orderId = orderId,
-                        customerId = command.customerId,
-                        storeId = command.storeId,
-                        couponIssuanceId = couponIssuanceId,
-                        lines = grossLines,
-                        reservationExpiresAt = reservationExpiresAt,
-                        sourceReference = OrderCreationTransaction.couponSource(orderId),
-                    ),
-                )
+                phaseTelemetry.observe(PerformanceOperation.ORDER_CREATE, PerformanceStage.COUPON_RESERVATION) {
+                    couponOperations.reserve(
+                        ReserveCouponCommand(
+                            orderId = orderId,
+                            customerId = command.customerId,
+                            storeId = command.storeId,
+                            couponIssuanceId = couponIssuanceId,
+                            lines = grossLines,
+                            reservationExpiresAt = reservationExpiresAt,
+                            sourceReference = OrderCreationTransaction.couponSource(orderId),
+                        ),
+                    )
+                }
             }
         val pricing =
             preparedQuote?.pricing ?: pricingCalculator.calculate(
@@ -134,21 +142,26 @@ internal class OrderCreationWorkflow(
             )
         val pointReservation =
             if (command.pointsToUseKrw > 0) {
-                pointOperations.reserve(
-                    ReservePointsCommand(
-                        orderId = orderId,
-                        customerId = command.customerId,
-                        amountKrw = command.pointsToUseKrw,
-                        reservationExpiresAt = reservationExpiresAt,
-                        sourceReference = OrderCreationTransaction.pointsSource(orderId),
-                    ),
-                )
+                phaseTelemetry.observe(PerformanceOperation.ORDER_CREATE, PerformanceStage.POINT_RESERVATION) {
+                    pointOperations.reserve(
+                        ReservePointsCommand(
+                            orderId = orderId,
+                            customerId = command.customerId,
+                            amountKrw = command.pointsToUseKrw,
+                            reservationExpiresAt = reservationExpiresAt,
+                            sourceReference = OrderCreationTransaction.pointsSource(orderId),
+                        ),
+                    )
+                }
             } else {
                 null
             }
 
         val lineIds = quotes.map { identifierSource.next() }
-        val allocatedDisplayIdentity = displayIdentityAllocator.allocate(command.storeId, pickupReservation.startsAt)
+        val allocatedDisplayIdentity =
+            phaseTelemetry.observe(PerformanceOperation.ORDER_CREATE, PerformanceStage.PICKUP_SEQUENCE) {
+                displayIdentityAllocator.allocate(command.storeId, pickupReservation.startsAt)
+            }
         val displayIdentity =
             OrderDisplayIdentitySnapshot(
                 publicReference = allocatedDisplayIdentity.publicReference.value,
@@ -226,16 +239,18 @@ internal class OrderCreationWorkflow(
                     createdAt = createdAt,
                 )
             }
-        orderRepository.save(snapshotAssembler.order(order))
-        orderLineRepository.saveAll(snapshotAssembler.lines(order))
-        orderLineRepository.flush()
-        settlementInputSnapshotService.materialize(
-            order = order,
-            terms = settlementTerms,
-            coupon = couponQuote,
-            points = pointReservation,
-            createdAt = createdAt,
-        )
+        phaseTelemetry.observe(PerformanceOperation.ORDER_CREATE, PerformanceStage.SNAPSHOT_PERSISTENCE) {
+            orderRepository.save(snapshotAssembler.order(order))
+            orderLineRepository.saveAll(snapshotAssembler.lines(order))
+            orderLineRepository.flush()
+            settlementInputSnapshotService.materialize(
+                order = order,
+                terms = settlementTerms,
+                coupon = couponQuote,
+                points = pointReservation,
+                createdAt = createdAt,
+            )
+        }
         val selectedPointAccrualPolicy =
             preparedQuote?.pointAccrualPolicy ?: pointAccrualPolicyOperations.selectForOrder(order.storeId)
         val pointAccrualCalculation =

@@ -10,7 +10,7 @@
   ],
   "timezone": "Asia/Seoul",
   "schemaVersion": 42,
-  "version": 1,
+  "version": 2,
   "editable": false,
   "graphTooltip": 1,
   "time": {
@@ -75,10 +75,10 @@
           "uid": "beanflow-prometheus"
         },
         "query": {
-          "query": "label_values(up{job=\"beanflow\",environment=\"$environment\"}, instance)",
+          "query": "label_values(up{job=\"beanflow\",environment=\"$environment\"}, host)",
           "refId": "host"
         },
-        "regex": "/^([^:]+):[0-9]+$/",
+        "regex": "",
         "refresh": 1,
         "sort": 1,
         "includeAll": false,
@@ -99,7 +99,7 @@
           "uid": "beanflow-prometheus"
         },
         "query": {
-          "query": "label_values(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\"}, uri)",
+          "query": "label_values(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",host=\"$host\",uri!~\"/actuator.*\"}, uri)",
           "refId": "route"
         },
         "regex": "",
@@ -111,6 +111,30 @@
         "current": {
           "text": "All",
           "value": "$__all"
+        },
+        "options": []
+      },
+      {
+        "name": "database",
+        "label": "DB",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "beanflow-prometheus"
+        },
+        "query": {
+          "query": "label_values(beanflow_pg_database_identity_info{job=\"beanflow-postgres\",environment=\"$environment\",host=\"$host\"}, database)",
+          "refId": "database"
+        },
+        "regex": "",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "allValue": null,
+        "current": {
+          "text": "",
+          "value": ""
         },
         "options": []
       }
@@ -188,7 +212,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == bool 1) * on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < bool 30)",
+          "expr": "(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == bool 1) * on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < bool 30)",
           "legendFormat": "API",
           "editorMode": "code",
           "range": false,
@@ -253,7 +277,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum((rate(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "expr": "sum((rate(http_server_requests_seconds_count{host=\"$host\",job=\"beanflow\",environment=\"$environment\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30)))",
           "legendFormat": "HTTP RPS",
           "editorMode": "code",
           "range": false,
@@ -319,7 +343,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum((rate(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\",status=~\"5..\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))) or (0 * sum((rate(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))))) / (sum((rate(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))) > 0)",
+          "expr": "(sum((rate(http_server_requests_seconds_count{host=\"$host\",job=\"beanflow\",environment=\"$environment\",uri!~\"/actuator.*\",uri=~\"$route\",status=~\"5..\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))) or (0 * sum((rate(http_server_requests_seconds_count{host=\"$host\",job=\"beanflow\",environment=\"$environment\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))))) / (sum((rate(http_server_requests_seconds_count{host=\"$host\",job=\"beanflow\",environment=\"$environment\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))) > 0)",
           "legendFormat": "5xx / 전체 요청",
           "editorMode": "code",
           "range": false,
@@ -394,7 +418,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) ((rate(http_server_requests_seconds_bucket{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))))",
+          "expr": "histogram_quantile(0.95, sum by (le) ((rate(http_server_requests_seconds_bucket{host=\"$host\",job=\"beanflow\",environment=\"$environment\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))))",
           "legendFormat": "p95",
           "editorMode": "code",
           "range": false,
@@ -459,7 +483,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum((hikaricp_connections_pending{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "expr": "sum((hikaricp_connections_pending{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30)))",
           "legendFormat": "pending",
           "editorMode": "code",
           "range": false,
@@ -524,7 +548,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum((beanflow_pg_ungranted_locks{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) and on(job,instance) (((up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < 30)) and on(job,instance) (pg_up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 0)))",
+          "expr": "sum((beanflow_pg_ungranted_locks{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"}) and on(job,instance) (((up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"}) < 30)) and on(job,instance) (pg_up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 0)))",
           "legendFormat": "locks",
           "editorMode": "code",
           "range": false,
@@ -599,7 +623,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (status) ((rate(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "expr": "sum by (status) ((rate(http_server_requests_seconds_count{host=\"$host\",job=\"beanflow\",environment=\"$environment\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30)))",
           "legendFormat": "{{status}}",
           "editorMode": "code",
           "range": true,
@@ -657,7 +681,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, uri) ((rate(http_server_requests_seconds_bucket{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))))",
+          "expr": "histogram_quantile(0.95, sum by (le, uri) ((rate(http_server_requests_seconds_bucket{host=\"$host\",job=\"beanflow\",environment=\"$environment\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))))",
           "legendFormat": "p95 {{uri}}",
           "editorMode": "code",
           "range": true,
@@ -667,7 +691,7 @@
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.99, sum by (le, uri) ((rate(http_server_requests_seconds_bucket{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))))",
+          "expr": "histogram_quantile(0.99, sum by (le, uri) ((rate(http_server_requests_seconds_bucket{host=\"$host\",job=\"beanflow\",environment=\"$environment\",uri!~\"/actuator.*\",uri=~\"$route\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))))",
           "legendFormat": "p99 {{uri}}",
           "editorMode": "code",
           "range": true,
@@ -726,7 +750,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (resource) ((rate(beanflow_order_reservation_conflicts_total{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "expr": "sum by (resource) ((rate(beanflow_order_reservation_conflicts_total{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30)))",
           "legendFormat": "{{resource}}",
           "editorMode": "code",
           "range": true,
@@ -798,7 +822,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(hikaricp_connections_active{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "expr": "(hikaricp_connections_active{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))",
           "legendFormat": "active {{pool}}",
           "editorMode": "code",
           "range": true,
@@ -807,7 +831,7 @@
         },
         {
           "refId": "B",
-          "expr": "(hikaricp_connections_max{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "expr": "(hikaricp_connections_max{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))",
           "legendFormat": "max {{pool}}",
           "editorMode": "code",
           "range": true,
@@ -816,7 +840,7 @@
         },
         {
           "refId": "C",
-          "expr": "(hikaricp_connections_pending{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "expr": "(hikaricp_connections_pending{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))",
           "legendFormat": "pending {{pool}}",
           "editorMode": "code",
           "range": true,
@@ -874,7 +898,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum by (wait_event_type,wait_event) ((beanflow_pg_wait_sessions{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) and on(job,instance) (((up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < 30)) and on(job,instance) (pg_up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 0)))) or on() (0 * max((((up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < 30)) and on(job,instance) (pg_up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 0))))",
+          "expr": "(sum by (wait_event_type,wait_event) ((beanflow_pg_wait_sessions{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"}) and on(job,instance) (((up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"}) < 30)) and on(job,instance) (pg_up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 0)))) or on() (0 * max((((up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"}) < 30)) and on(job,instance) (pg_up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 0))))",
           "legendFormat": "{{wait_event_type}} / {{wait_event}}",
           "editorMode": "code",
           "range": true,
@@ -932,7 +956,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(beanflow_pg_ungranted_locks{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) and on(job,instance) (((up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < 30)) and on(job,instance) (pg_up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 0))",
+          "expr": "(beanflow_pg_ungranted_locks{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"}) and on(job,instance) (((up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"}) < 30)) and on(job,instance) (pg_up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 0))",
           "legendFormat": "locks",
           "editorMode": "code",
           "range": true,
@@ -990,7 +1014,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum((jvm_memory_used_bytes{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",area=\"heap\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "expr": "sum((jvm_memory_used_bytes{host=\"$host\",job=\"beanflow\",environment=\"$environment\",area=\"heap\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30)))",
           "legendFormat": "used",
           "editorMode": "code",
           "range": true,
@@ -999,7 +1023,7 @@
         },
         {
           "refId": "B",
-          "expr": "sum((jvm_memory_committed_bytes{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",area=\"heap\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "expr": "sum((jvm_memory_committed_bytes{host=\"$host\",job=\"beanflow\",environment=\"$environment\",area=\"heap\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30)))",
           "legendFormat": "committed",
           "editorMode": "code",
           "range": true,
@@ -1008,7 +1032,7 @@
         },
         {
           "refId": "C",
-          "expr": "sum(((jvm_memory_max_bytes{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\",area=\"heap\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))) > 0)",
+          "expr": "sum(((jvm_memory_max_bytes{host=\"$host\",job=\"beanflow\",environment=\"$environment\",area=\"heap\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))) > 0)",
           "legendFormat": "max",
           "editorMode": "code",
           "range": true,
@@ -1067,7 +1091,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(process_cpu_usage{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "expr": "(process_cpu_usage{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))",
           "legendFormat": "JVM",
           "editorMode": "code",
           "range": true,
@@ -1076,7 +1100,7 @@
         },
         {
           "refId": "B",
-          "expr": "1 - avg((rate(node_cpu_seconds_total{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\",mode=\"idle\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"}) < 30)))",
+          "expr": "1 - avg((rate(node_cpu_seconds_total{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\",mode=\"idle\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\"}) < 30)))",
           "legendFormat": "host",
           "editorMode": "code",
           "range": true,
@@ -1135,7 +1159,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(1 - node_memory_MemAvailable_bytes{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"} / node_memory_MemTotal_bytes{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"}) and on(job,instance) ((up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"}) < 30))",
+          "expr": "(1 - node_memory_MemAvailable_bytes{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\"} / node_memory_MemTotal_bytes{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\"}) < 30))",
           "legendFormat": "memory",
           "editorMode": "code",
           "range": true,
@@ -1144,7 +1168,7 @@
         },
         {
           "refId": "B",
-          "expr": "(rate(node_disk_io_time_seconds_total{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\",device!~\"loop.*|ram.*|sr.*\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"}) < 30))",
+          "expr": "(rate(node_disk_io_time_seconds_total{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\",device!~\"loop.*|ram.*|sr.*\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\"}) < 30))",
           "legendFormat": "disk busy {{device}}",
           "editorMode": "code",
           "range": true,
@@ -1216,7 +1240,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(beanflow_container_cpu_cores{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) and on(job,instance) (((up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} < 45))",
+          "expr": "(beanflow_container_cpu_cores{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"}) and on(job,instance) (((up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} < 45))",
           "legendFormat": "{{service}}",
           "editorMode": "code",
           "range": true,
@@ -1225,7 +1249,7 @@
         },
         {
           "refId": "B",
-          "expr": "((beanflow_container_cpu_limit_cores{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) and on(job,instance) (((up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} < 45))) > 0",
+          "expr": "((beanflow_container_cpu_limit_cores{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"}) and on(job,instance) (((up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} < 45))) > 0",
           "legendFormat": "limit {{service}}",
           "editorMode": "code",
           "range": true,
@@ -1283,7 +1307,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(beanflow_container_memory_working_set_bytes{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) and on(job,instance) (((up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} < 45))",
+          "expr": "(beanflow_container_memory_working_set_bytes{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"}) and on(job,instance) (((up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} < 45))",
           "legendFormat": "{{service}}",
           "editorMode": "code",
           "range": true,
@@ -1292,7 +1316,7 @@
         },
         {
           "refId": "B",
-          "expr": "((beanflow_container_memory_limit_bytes{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) and on(job,instance) (((up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} < 45))) > 0",
+          "expr": "((beanflow_container_memory_limit_bytes{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"}) and on(job,instance) (((up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} < 45))) > 0",
           "legendFormat": "limit {{service}}",
           "editorMode": "code",
           "range": true,
@@ -1367,7 +1391,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(beanflow_container_running{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) and on(job,instance) (((up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} < 45))",
+          "expr": "(beanflow_container_running{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"}) and on(job,instance) (((up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"}) < 45)) and on(job,instance) (beanflow_container_collection_success{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} == 1) and on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} < 45))",
           "legendFormat": "{{service}}",
           "editorMode": "code",
           "range": false,
@@ -1442,7 +1466,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (provider,operation,outcome) ((rate(beanflow_external_calls_total{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30)))",
+          "expr": "sum by (provider,operation,outcome) ((rate(beanflow_external_calls_total{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30)))",
           "legendFormat": "{{provider}} / {{operation}} / {{outcome}}",
           "editorMode": "code",
           "range": true,
@@ -1500,7 +1524,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, provider,operation) ((rate(beanflow_external_duration_seconds_bucket{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}[$__rate_interval])) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))))",
+          "expr": "histogram_quantile(0.95, sum by (le, provider,operation) ((rate(beanflow_external_duration_seconds_bucket{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}[$__rate_interval])) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))))",
           "legendFormat": "{{provider}} / {{operation}}",
           "editorMode": "code",
           "range": true,
@@ -1558,7 +1582,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(beanflow_event_publication_pending_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "expr": "(beanflow_event_publication_pending_count{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))",
           "legendFormat": "미완료 publication",
           "editorMode": "code",
           "range": true,
@@ -1567,7 +1591,7 @@
         },
         {
           "refId": "B",
-          "expr": "(beanflow_order_idempotency_processing_stuck{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "expr": "(beanflow_order_idempotency_processing_stuck{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))",
           "legendFormat": "멱등 처리 장기 대기",
           "editorMode": "code",
           "range": true,
@@ -1576,7 +1600,7 @@
         },
         {
           "refId": "C",
-          "expr": "(beanflow_reservation_due_count{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "expr": "(beanflow_reservation_due_count{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))",
           "legendFormat": "마지막 예약 만료 batch 후보",
           "editorMode": "code",
           "range": true,
@@ -1634,7 +1658,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(beanflow_event_publication_oldest_age_seconds{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "expr": "(beanflow_event_publication_oldest_age_seconds{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))",
           "legendFormat": "가장 오래된 publication",
           "editorMode": "code",
           "range": true,
@@ -1643,7 +1667,7 @@
         },
         {
           "refId": "B",
-          "expr": "(beanflow_payment_unknown_age{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) and on(job,instance) ((up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < 30))",
+          "expr": "(beanflow_payment_unknown_age{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < 30))",
           "legendFormat": "가장 오래된 UNKNOWN payment",
           "editorMode": "code",
           "range": true,
@@ -1732,7 +1756,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"} == bool 1) * on(job,instance) (time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"}) < bool 30)",
+          "expr": "(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"} == bool 1) * on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"}) < bool 30)",
           "legendFormat": "API",
           "editorMode": "code",
           "range": false,
@@ -1741,7 +1765,7 @@
         },
         {
           "refId": "B",
-          "expr": "(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == bool 1) * on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < bool 30)",
+          "expr": "(up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == bool 1) * on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"}) < bool 30)",
           "legendFormat": "PostgreSQL exporter",
           "editorMode": "code",
           "range": false,
@@ -1750,7 +1774,7 @@
         },
         {
           "refId": "C",
-          "expr": "(up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"} == bool 1) * on(job,instance) (time() - timestamp(up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"}) < bool 30)",
+          "expr": "(up{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\"} == bool 1) * on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\"}) < bool 30)",
           "legendFormat": "Host exporter",
           "editorMode": "code",
           "range": false,
@@ -1759,7 +1783,7 @@
         },
         {
           "refId": "D",
-          "expr": "(up{job=\"beanflow-alloy\",environment=\"$environment\",instance=\"$host:12345\"} == bool 1) * on(job,instance) (time() - timestamp(up{job=\"beanflow-alloy\",environment=\"$environment\",instance=\"$host:12345\"}) < bool 45)",
+          "expr": "(up{host=\"$host\",job=\"beanflow-alloy\",environment=\"$environment\"} == bool 1) * on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-alloy\",environment=\"$environment\"}) < bool 45)",
           "legendFormat": "Alloy",
           "editorMode": "code",
           "range": false,
@@ -1768,7 +1792,7 @@
         },
         {
           "refId": "E",
-          "expr": "(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == bool 1) * on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < bool 45)",
+          "expr": "(up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} == bool 1) * on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"}) < bool 45)",
           "legendFormat": "Container exporter (선택)",
           "editorMode": "code",
           "range": false,
@@ -1829,7 +1853,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "time() - timestamp(up{job=\"beanflow\",environment=\"$environment\",instance=\"$host:18081\"})",
+          "expr": "time() - timestamp(up{host=\"$host\",job=\"beanflow\",environment=\"$environment\"})",
           "legendFormat": "API",
           "editorMode": "code",
           "range": true,
@@ -1838,7 +1862,7 @@
         },
         {
           "refId": "B",
-          "expr": "time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"})",
+          "expr": "time() - timestamp(up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"})",
           "legendFormat": "DB",
           "editorMode": "code",
           "range": true,
@@ -1847,7 +1871,7 @@
         },
         {
           "refId": "C",
-          "expr": "time() - timestamp(up{job=\"beanflow-node\",environment=\"$environment\",instance=\"$host:19100\"})",
+          "expr": "time() - timestamp(up{host=\"$host\",job=\"beanflow-node\",environment=\"$environment\"})",
           "legendFormat": "Host",
           "editorMode": "code",
           "range": true,
@@ -1856,7 +1880,7 @@
         },
         {
           "refId": "D",
-          "expr": "time() - timestamp(up{job=\"beanflow-alloy\",environment=\"$environment\",instance=\"$host:12345\"})",
+          "expr": "time() - timestamp(up{host=\"$host\",job=\"beanflow-alloy\",environment=\"$environment\"})",
           "legendFormat": "Alloy",
           "editorMode": "code",
           "range": true,
@@ -1865,7 +1889,7 @@
         },
         {
           "refId": "E",
-          "expr": "time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"})",
+          "expr": "time() - timestamp(up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"})",
           "legendFormat": "Containers",
           "editorMode": "code",
           "range": true,
@@ -1940,7 +1964,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} and on(job,instance) ((up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < 30))",
+          "expr": "pg_up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} and on(job,instance) ((up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"}) < 30))",
           "legendFormat": "DB 연결",
           "editorMode": "code",
           "range": false,
@@ -1949,7 +1973,7 @@
         },
         {
           "refId": "B",
-          "expr": "(1 - pg_exporter_last_scrape_error{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) and on(job,instance) ((up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-postgres\",environment=\"$environment\",instance=\"$host:19187\"}) < 30))",
+          "expr": "(1 - pg_exporter_last_scrape_error{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"}) and on(job,instance) ((up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-postgres\",environment=\"$environment\"}) < 30))",
           "legendFormat": "DB query",
           "editorMode": "code",
           "range": false,
@@ -1958,7 +1982,7 @@
         },
         {
           "refId": "C",
-          "expr": "(beanflow_container_collection_success{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} * on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} < bool 45)) and on(job,instance) ((up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"} == 1) and on(job,instance) (time() - timestamp(up{job=\"beanflow-containers\",environment=\"$environment\",instance=\"$host:19101\"}) < 45))",
+          "expr": "(beanflow_container_collection_success{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} * on(job,instance) (time() - beanflow_container_last_success_timestamp_seconds{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} < bool 45)) and on(job,instance) ((up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"} == 1) and on(job,instance) (time() - timestamp(up{host=\"$host\",job=\"beanflow-containers\",environment=\"$environment\"}) < 45))",
           "legendFormat": "Docker stats",
           "editorMode": "code",
           "range": false,
@@ -1996,6 +2020,435 @@
         "mode": "markdown",
         "content": "**데이터 없음**: 최초 호출 전, 무요청 구간의 지연·오류율, 미설정 exporter, 수집 실패를 먼저 구분하세요. **worker gauge**는 마지막 실행 관측값으로 실패 뒤 오래된 값이 남을 수 있습니다. 위의 수집 상태는 worker 정상 판정이 아닙니다. 이상 구간은 시간축에서 선택한 뒤 상단 **같은 시간의 Performance RCA** 링크에서 trace·log·profile로 확인하세요."
       }
+    },
+    {
+      "id": 33,
+      "title": "Blocker · worker · telemetry freshness",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 58
+      },
+      "description": "",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 34,
+      "title": "DB blocker / lock wait",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 59
+      },
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_pg_blocked_sessions{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\"}",
+          "legendFormat": "blocked"
+        },
+        {
+          "refId": "B",
+          "expr": "beanflow_pg_lock_wait_max_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\"}",
+          "legendFormat": "max wait"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "title": "DB diagnostic snapshot health",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 59
+      },
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_db_diagnostics_collection_success{environment=\"$environment\",host=\"$host\",job=\"beanflow-db-diagnostics\"}",
+          "legendFormat": "DB read"
+        },
+        {
+          "refId": "B",
+          "expr": "time() - beanflow_db_diagnostics_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow-db-diagnostics\"}",
+          "legendFormat": "age"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "title": "Worker data age / stale threshold",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 59
+      },
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(time() - beanflow_worker_data_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(environment,host,instance,owner) (beanflow_worker_data_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
+          "legendFormat": "{{owner}} age"
+        },
+        {
+          "refId": "B",
+          "expr": "(time() - beanflow_worker_business_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(environment,host,instance,owner) (beanflow_worker_business_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
+          "legendFormat": "{{owner}} business age"
+        },
+        {
+          "refId": "C",
+          "expr": "2 * beanflow_worker_refresh_interval_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} + 10",
+          "legendFormat": "{{owner}} threshold"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "title": "App server saturation guardrails",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 66
+      },
+      "description": "",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 38,
+      "title": "Alloy queue / failed delivery",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 67
+      },
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (exporter) (otelcol_exporter_queue_size{environment=\"$environment\",host=\"$host\",job=\"beanflow-alloy\"}) / (sum by (exporter) (otelcol_exporter_queue_capacity{environment=\"$environment\",host=\"$host\",job=\"beanflow-alloy\"}) > 0)",
+          "legendFormat": "{{exporter}} queue"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (exporter) (increase(otelcol_exporter_send_failed_spans_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-alloy\"}[5m]))",
+          "legendFormat": "{{exporter}} span fail"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "title": "Container throttling / OOM",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 67
+      },
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service) (rate(beanflow_container_cpu_throttled_periods_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}[$__rate_interval])) / (sum by (service) (rate(beanflow_container_cpu_periods_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}[$__rate_interval])) > 0)",
+          "legendFormat": "{{service}} throttle"
+        },
+        {
+          "refId": "B",
+          "expr": "beanflow_container_oom_killed{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}",
+          "legendFormat": "{{service}} OOM"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "title": "App host filesystem",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 67
+      },
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "noValue": "데이터 없음",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisBorderShow": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_host_filesystem_available_bytes{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"} / (beanflow_host_filesystem_size_bytes{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"} > 0)",
+          "legendFormat": "available ratio"
+        },
+        {
+          "refId": "B",
+          "expr": "beanflow_host_filesystem_collection_success{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}",
+          "legendFormat": "collection success"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     }
   ]
 }

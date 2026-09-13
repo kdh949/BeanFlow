@@ -7,12 +7,15 @@ import io.github.kdh949.beanflow.loyalty.api.PointIssuerType
 import io.github.kdh949.beanflow.loyalty.api.RestorePartialRefundPointsCommand
 import io.github.kdh949.beanflow.payment.api.ClaimedPartialRefundRestoration
 import io.github.kdh949.beanflow.payment.api.PartialRefundPaymentOperations
+import io.github.kdh949.beanflow.shared.api.WorkerOwner
+import io.github.kdh949.beanflow.shared.api.WorkerTelemetry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 
 @Service
@@ -83,6 +86,7 @@ internal class PartialRefundRestorationService(
 internal class PartialRefundRestorationWorker(
     private val service: PartialRefundRestorationService,
     private val clock: Clock,
+    private val workerTelemetry: WorkerTelemetry,
     @Value("\${beanflow.payment.refund-restoration.chunk-size:50}")
     private val chunkSize: Int,
 ) {
@@ -96,26 +100,34 @@ internal class PartialRefundRestorationWorker(
         runOnce()
     }
 
-    fun runOnce(): Int {
-        val claims = service.claimDue(clock.instant(), chunkSize)
-        claims.forEach { claim ->
-            try {
-                val amount = service.callLoyalty(claim)
-                service.recordSuccess(claim, amount, clock.instant())
-            } catch (failure: RuntimeException) {
+    fun runOnce(): Int =
+        workerTelemetry.observe(WorkerOwner.PARTIAL_REFUND_RESTORATION) { run ->
+            val claimedAt = clock.instant()
+            val claims = service.claimDue(claimedAt, chunkSize)
+            val claimStarted = System.nanoTime()
+            run.dataReadSucceeded()
+            run.claimed(claims.size)
+            claims.forEach { claim ->
+                run.claimLag(Duration.between(claim.dueAt, claimedAt))
                 try {
-                    service.recordFailure(claim, failure, clock.instant())
-                } catch (recordFailure: RuntimeException) {
-                    logger.error(
-                        "partial_refund_restoration refundId={} workId={} outcome=CLAIM_RETAINED attempt={}",
-                        claim.refundId,
-                        claim.workId,
-                        claim.attemptCount,
-                        recordFailure,
-                    )
+                    val amount = service.callLoyalty(claim)
+                    service.recordSuccess(claim, amount, clock.instant())
+                    run.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
+                } catch (failure: RuntimeException) {
+                    try {
+                        service.recordFailure(claim, failure, clock.instant())
+                    } catch (recordFailure: RuntimeException) {
+                        logger.error(
+                            "partial_refund_restoration refundId={} workId={} outcome=CLAIM_RETAINED attempt={}",
+                            claim.refundId,
+                            claim.workId,
+                            claim.attemptCount,
+                            recordFailure,
+                        )
+                    }
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 }
             }
+            claims.size
         }
-        return claims.size
-    }
 }

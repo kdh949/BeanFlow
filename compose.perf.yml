@@ -38,7 +38,7 @@ services:
       OTEL_JAVAAGENT_EXTENSIONS: /opt/beanflow/pyroscope-otel-javaagent-extension.jar
       OTEL_JAVAAGENT_ENABLED: ${BEANFLOW_OTEL_ENABLED:-true}
       OTEL_SERVICE_NAME: beanflow
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=beanflow,deployment.environment.name=perf
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=beanflow,deployment.environment.name=${BEANFLOW_OBSERVABILITY_ENVIRONMENT:-perf},host.name=${BEANFLOW_OBSERVABILITY_HOST_ID:?BEANFLOW_OBSERVABILITY_HOST_ID is required}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_TRACES_EXPORTER: otlp
@@ -120,6 +120,13 @@ services:
       - name: alloy-metrics-from-vpn
         target: 12345
         published: "${BEANFLOW_PERF_ALLOY_PORT:-12345}"
+        host_ip: ${BEANFLOW_MONITORING_BIND_ADDRESS:?BEANFLOW_MONITORING_BIND_ADDRESS is required}
+        protocol: tcp
+        app_protocol: http
+        mode: host
+      - name: alloy-otlp-http-from-host
+        target: 4318
+        published: "${BEANFLOW_PERF_ALLOY_OTLP_HTTP_PORT:-14318}"
         host_ip: ${BEANFLOW_MONITORING_BIND_ADDRESS:?BEANFLOW_MONITORING_BIND_ADDRESS is required}
         protocol: tcp
         app_protocol: http

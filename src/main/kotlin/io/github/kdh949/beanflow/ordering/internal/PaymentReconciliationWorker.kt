@@ -7,6 +7,8 @@ import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.payment.api.ProviderRecoveryOutcome
 import io.github.kdh949.beanflow.payment.api.ProviderRecoveryResult
 import io.github.kdh949.beanflow.payment.api.ProviderTransportFailure
+import io.github.kdh949.beanflow.shared.api.WorkerOwner
+import io.github.kdh949.beanflow.shared.api.WorkerTelemetry
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -21,6 +23,7 @@ internal class PaymentReconciliationWorker(
     private val resultTransaction: PaymentResultTransaction,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
+    private val workerTelemetry: WorkerTelemetry,
     @Value("\${beanflow.payment.reconciliation.chunk-size:50}")
     private val chunkSize: Int,
 ) {
@@ -34,35 +37,43 @@ internal class PaymentReconciliationWorker(
         runOnce()
     }
 
-    fun runOnce(): Int {
-        val now = clock.instant()
-        val claims = reconciliationOperations.claimDue(now, chunkSize)
-        claims.forEach { work ->
-            meterRegistry
-                .summary("beanflow.payment.reconciliation.lag")
-                .record(Duration.between(work.dueAt, now).toMillis().coerceAtLeast(0) / 1000.0)
-            try {
-                process(work)
-            } catch (failure: ProviderTransportFailure) {
-                logger.warn(
-                    "payment_reconciliation paymentId={} kind={} outcome=PROVIDER_UNKNOWN attempt={}",
-                    work.paymentId,
-                    work.kind,
-                    work.attemptCount + 1,
-                )
-                recordProviderFailure(work)
-            } catch (failure: RuntimeException) {
-                logger.error(
-                    "payment_reconciliation paymentId={} kind={} outcome=CLAIM_RETAINED attempt={}",
-                    work.paymentId,
-                    work.kind,
-                    work.attemptCount + 1,
-                    failure,
-                )
+    fun runOnce(): Int =
+        workerTelemetry.observe(WorkerOwner.PAYMENT_RECONCILIATION) { run ->
+            val now = clock.instant()
+            val claims = reconciliationOperations.claimDue(now, chunkSize)
+            val claimStarted = System.nanoTime()
+            run.dataReadSucceeded()
+            run.claimed(claims.size)
+            claims.forEach { work ->
+                run.claimLag(Duration.between(work.dueAt, now))
+                meterRegistry
+                    .summary("beanflow.payment.reconciliation.lag")
+                    .record(Duration.between(work.dueAt, now).toMillis().coerceAtLeast(0) / 1000.0)
+                try {
+                    process(work)
+                    run.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
+                } catch (failure: ProviderTransportFailure) {
+                    logger.warn(
+                        "payment_reconciliation paymentId={} kind={} outcome=PROVIDER_UNKNOWN attempt={}",
+                        work.paymentId,
+                        work.kind,
+                        work.attemptCount + 1,
+                    )
+                    recordProviderFailure(work)
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
+                } catch (failure: RuntimeException) {
+                    logger.error(
+                        "payment_reconciliation paymentId={} kind={} outcome=CLAIM_RETAINED attempt={}",
+                        work.paymentId,
+                        work.kind,
+                        work.attemptCount + 1,
+                        failure,
+                    )
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
+                }
             }
+            claims.size
         }
-        return claims.size
-    }
 
     private fun process(work: ClaimedPaymentReconciliation) {
         val now = clock.instant()

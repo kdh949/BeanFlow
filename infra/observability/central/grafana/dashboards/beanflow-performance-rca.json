@@ -329,7 +329,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "beanflow_media_availability{job=\"beanflow\"}",
+          "expr": "beanflow_media_availability{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
           "legendFormat": "1=available, 0=unavailable",
           "instant": true
         }
@@ -432,7 +432,7 @@
         },
         {
           "refId": "B",
-          "expr": "sum(rate(http_server_requests_seconds_count{job=\"beanflow\",uri!~\"/actuator.*\"}[$__rate_interval]))",
+          "expr": "sum(rate(http_server_requests_seconds_count{environment=\"$environment\",host=\"$host\",job=\"beanflow\",uri!~\"/actuator.*\"}[$__rate_interval]))",
           "legendFormat": "API HTTP RPS (all traffic)"
         }
       ],
@@ -790,12 +790,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{environment=\"$environment\",host=\"$host\",job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])))",
           "legendFormat": "p95 {{uri}}"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.99, sum by (le, uri) (rate(http_server_requests_seconds_bucket{job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (le, uri) (rate(http_server_requests_seconds_bucket{environment=\"$environment\",host=\"$host\",job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])))",
           "legendFormat": "p99 {{uri}}"
         }
       ]
@@ -824,12 +824,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum by (uri) (rate(http_server_requests_seconds_count{job=\"beanflow\",uri=~\"$route\",status=~\"4..\"}[$__rate_interval])) or on(uri) (0*sum by (uri) (rate(http_server_requests_seconds_count{job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])))) / clamp_min(sum by (uri) (rate(http_server_requests_seconds_count{job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])),0.000001)",
+          "expr": "(sum by (uri) (rate(http_server_requests_seconds_count{environment=\"$environment\",host=\"$host\",job=\"beanflow\",uri=~\"$route\",status=~\"4..\"}[$__rate_interval])) or on(uri) (0*sum by (uri) (rate(http_server_requests_seconds_count{environment=\"$environment\",host=\"$host\",job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])))) / clamp_min(sum by (uri) (rate(http_server_requests_seconds_count{environment=\"$environment\",host=\"$host\",job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])),0.000001)",
           "legendFormat": "4xx {{uri}}"
         },
         {
           "refId": "B",
-          "expr": "(sum by (uri) (rate(http_server_requests_seconds_count{job=\"beanflow\",uri=~\"$route\",status=~\"5..\"}[$__rate_interval])) or on(uri) (0*sum by (uri) (rate(http_server_requests_seconds_count{job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])))) / clamp_min(sum by (uri) (rate(http_server_requests_seconds_count{job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])),0.000001)",
+          "expr": "(sum by (uri) (rate(http_server_requests_seconds_count{environment=\"$environment\",host=\"$host\",job=\"beanflow\",uri=~\"$route\",status=~\"5..\"}[$__rate_interval])) or on(uri) (0*sum by (uri) (rate(http_server_requests_seconds_count{environment=\"$environment\",host=\"$host\",job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])))) / clamp_min(sum by (uri) (rate(http_server_requests_seconds_count{environment=\"$environment\",host=\"$host\",job=\"beanflow\",uri=~\"$route\"}[$__rate_interval])),0.000001)",
           "legendFormat": "5xx {{uri}}"
         }
       ],
@@ -859,17 +859,17 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max_over_time(hikaricp_connections_active{job=\"beanflow\"}[$__interval])",
+          "expr": "max_over_time(hikaricp_connections_active{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__interval])",
           "legendFormat": "active"
         },
         {
           "refId": "B",
-          "expr": "max_over_time(hikaricp_connections_max{job=\"beanflow\"}[$__interval])",
+          "expr": "max_over_time(hikaricp_connections_max{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__interval])",
           "legendFormat": "max"
         },
         {
           "refId": "C",
-          "expr": "max_over_time(hikaricp_connections_pending{job=\"beanflow\"}[$__interval])",
+          "expr": "max_over_time(hikaricp_connections_pending{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__interval])",
           "legendFormat": "pending"
         }
       ],
@@ -896,12 +896,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(hikaricp_connections_acquire_seconds_sum{job=\"beanflow\"}[$__rate_interval]) / clamp_min(rate(hikaricp_connections_acquire_seconds_count{job=\"beanflow\"}[$__rate_interval]),0.000001)",
+          "expr": "rate(hikaricp_connections_acquire_seconds_sum{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval]) / clamp_min(rate(hikaricp_connections_acquire_seconds_count{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval]),0.000001)",
           "legendFormat": "mean"
         },
         {
           "refId": "B",
-          "expr": "hikaricp_connections_acquire_seconds_max{job=\"beanflow\"}",
+          "expr": "hikaricp_connections_acquire_seconds_max{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
           "legendFormat": "rolling max"
         }
       ],
@@ -941,7 +941,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(hikaricp_connections_timeout_total{job=\"beanflow\"}[$__rate_interval])",
+          "expr": "rate(hikaricp_connections_timeout_total{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval])",
           "legendFormat": "timeouts/s"
         }
       ],
@@ -981,17 +981,17 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(jvm_memory_used_bytes{job=\"beanflow\",area=\"heap\"})",
+          "expr": "sum(jvm_memory_used_bytes{environment=\"$environment\",host=\"$host\",job=\"beanflow\",area=\"heap\"})",
           "legendFormat": "used"
         },
         {
           "refId": "B",
-          "expr": "sum(jvm_memory_committed_bytes{job=\"beanflow\",area=\"heap\"})",
+          "expr": "sum(jvm_memory_committed_bytes{environment=\"$environment\",host=\"$host\",job=\"beanflow\",area=\"heap\"})",
           "legendFormat": "committed"
         },
         {
           "refId": "C",
-          "expr": "sum(jvm_memory_max_bytes{job=\"beanflow\",area=\"heap\"} > 0)",
+          "expr": "sum(jvm_memory_max_bytes{environment=\"$environment\",host=\"$host\",job=\"beanflow\",area=\"heap\"} > 0)",
           "legendFormat": "max"
         }
       ],
@@ -1031,12 +1031,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(jvm_gc_pause_seconds_sum{job=\"beanflow\"}[$__rate_interval])/clamp_min(rate(jvm_gc_pause_seconds_count{job=\"beanflow\"}[$__rate_interval]),0.000001)",
+          "expr": "rate(jvm_gc_pause_seconds_sum{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval])/clamp_min(rate(jvm_gc_pause_seconds_count{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval]),0.000001)",
           "legendFormat": "mean {{action}}"
         },
         {
           "refId": "B",
-          "expr": "jvm_gc_pause_seconds_max{job=\"beanflow\"}",
+          "expr": "jvm_gc_pause_seconds_max{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
           "legendFormat": "rolling max {{action}}"
         }
       ],
@@ -1076,7 +1076,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "jvm_threads_states_threads{job=\"beanflow\"}",
+          "expr": "jvm_threads_states_threads{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
           "legendFormat": "{{state}}"
         }
       ],
@@ -1116,7 +1116,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "process_cpu_usage{job=\"beanflow\"}",
+          "expr": "process_cpu_usage{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
           "legendFormat": "process CPU"
         }
       ],
@@ -1156,7 +1156,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(jvm_gc_pause_seconds_sum{job=\"beanflow\"}[$__rate_interval]))",
+          "expr": "sum(rate(jvm_gc_pause_seconds_sum{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval]))",
           "legendFormat": "pause seconds / second"
         }
       ],
@@ -1196,7 +1196,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "jvm_memory_usage_after_gc{job=\"beanflow\"}",
+          "expr": "jvm_memory_usage_after_gc{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
           "legendFormat": "{{pool}}"
         }
       ],
@@ -1253,12 +1253,19 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum by (wait_event_type,wait_event) (beanflow_pg_wait_sessions{job=\"beanflow-postgres\"}) and on() ((up{job=\"beanflow-postgres\"} == 1) and on(job,instance) (pg_up{job=\"beanflow-postgres\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{job=\"beanflow-postgres\"} == 0))) or on() (0 * max((up{job=\"beanflow-postgres\"} == 1) and on(job,instance) (pg_up{job=\"beanflow-postgres\"} == 1) and on(job,instance) (pg_exporter_last_scrape_error{job=\"beanflow-postgres\"} == 0)))",
+          "expr": "(sum by (database,wait_event_type,wait_event) (beanflow_pg_wait_sessions{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\"}) and on() max((up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_exporter_last_scrape_error{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 0))) or on() (0 * max((up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_exporter_last_scrape_error{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 0)))",
           "legendFormat": "{{wait_event_type}} / {{wait_event}}"
         }
       ],
       "description": "exporter/DB/scrape가 모두 정상일 때만 빈 대기를 0으로 표시합니다. 수집 중단은 데이터 없음입니다.",
-      "interval": "10s"
+      "interval": "10s",
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Prometheus Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "type": "timeseries",
@@ -1284,11 +1291,18 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "beanflow_pg_ungranted_locks{job=\"beanflow-postgres\"}",
+          "expr": "beanflow_pg_ungranted_locks{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\"} and on() max((up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_exporter_last_scrape_error{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 0))",
           "legendFormat": "ungranted"
         }
       ],
-      "interval": "10s"
+      "interval": "10s",
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Prometheus Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "id": 126,
@@ -1310,7 +1324,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_stat_database_numbackends{job=\"beanflow-postgres\",datname=\"$database\"}",
+          "expr": "pg_stat_database_numbackends{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",datname=\"$database\"}",
           "legendFormat": "connections"
         }
       ],
@@ -1328,7 +1342,14 @@
         "w": 8,
         "x": 16,
         "y": 79
-      }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Prometheus Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "id": 127,
@@ -1350,12 +1371,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_xact_commit{job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])",
+          "expr": "rate(pg_stat_database_xact_commit{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])",
           "legendFormat": "commits/s"
         },
         {
           "refId": "B",
-          "expr": "rate(pg_stat_database_xact_rollback{job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])",
+          "expr": "rate(pg_stat_database_xact_rollback{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])",
           "legendFormat": "rollbacks/s"
         }
       ],
@@ -1373,7 +1394,14 @@
         "w": 8,
         "x": 0,
         "y": 87
-      }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Prometheus Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "id": 128,
@@ -1395,7 +1423,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_blks_hit{job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])/clamp_min(rate(pg_stat_database_blks_hit{job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])+rate(pg_stat_database_blks_read{job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval]),0.000001)",
+          "expr": "rate(pg_stat_database_blks_hit{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])/clamp_min(rate(pg_stat_database_blks_hit{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])+rate(pg_stat_database_blks_read{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval]),0.000001)",
           "legendFormat": "cache hit"
         }
       ],
@@ -1413,7 +1441,14 @@
         "w": 8,
         "x": 8,
         "y": 87
-      }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Prometheus Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "id": 129,
@@ -1435,7 +1470,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_temp_bytes{job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])",
+          "expr": "rate(pg_stat_database_temp_bytes{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])",
           "legendFormat": "temp bytes/s"
         }
       ],
@@ -1453,7 +1488,14 @@
         "w": 8,
         "x": 16,
         "y": 87
-      }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Prometheus Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "id": 130,
@@ -1475,7 +1517,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "topk(10, rate(pg_stat_statements_seconds_total{job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval]))",
+          "expr": "topk(10, rate(pg_stat_statements_seconds_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval]))",
           "legendFormat": "{{queryid}}"
         }
       ],
@@ -1493,7 +1535,14 @@
         "w": 8,
         "x": 0,
         "y": 95
-      }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Prometheus Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "id": 131,
@@ -1515,7 +1564,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "topk(10, rate(pg_stat_statements_seconds_total{job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval]) / clamp_min(rate(pg_stat_statements_calls_total{job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval]),0.000001))",
+          "expr": "topk(10, rate(pg_stat_statements_seconds_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval]) / (rate(pg_stat_statements_calls_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval]) > 0))",
           "legendFormat": "{{queryid}}"
         }
       ],
@@ -1533,7 +1582,14 @@
         "w": 8,
         "x": 8,
         "y": 95
-      }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Prometheus Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "id": 132,
@@ -1555,12 +1611,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_blk_read_time{job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])/1000",
+          "expr": "rate(pg_stat_database_blk_read_time{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])/1000",
           "legendFormat": "read seconds/s"
         },
         {
           "refId": "B",
-          "expr": "rate(pg_stat_database_blk_write_time{job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])/1000",
+          "expr": "rate(pg_stat_database_blk_write_time{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",datname=\"$database\"}[$__rate_interval])/1000",
           "legendFormat": "write seconds/s"
         }
       ],
@@ -1578,7 +1634,14 @@
         "w": 8,
         "x": 16,
         "y": 95
-      }
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Prometheus Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     },
     {
       "id": 133,
@@ -1618,7 +1681,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{job=\"beanflow-node\",mode=\"idle\"}[$__rate_interval]))",
+          "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-node\",mode=\"idle\"}[$__rate_interval]))",
           "legendFormat": "{{instance}}"
         }
       ]
@@ -1648,7 +1711,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "1 - (node_memory_MemAvailable_bytes{job=\"beanflow-node\"} / node_memory_MemTotal_bytes{job=\"beanflow-node\"})",
+          "expr": "1 - (node_memory_MemAvailable_bytes{environment=\"$environment\",host=\"$host\",job=\"beanflow-node\"} / node_memory_MemTotal_bytes{environment=\"$environment\",host=\"$host\",job=\"beanflow-node\"})",
           "legendFormat": "{{instance}}"
         }
       ]
@@ -1673,12 +1736,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(node_disk_read_bytes_total{job=\"beanflow-node\",device!~\"loop.*|ram.*\"}[$__rate_interval])",
+          "expr": "rate(node_disk_read_bytes_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-node\",device!~\"loop.*|ram.*\"}[$__rate_interval])",
           "legendFormat": "read {{device}}"
         },
         {
           "refId": "B",
-          "expr": "rate(node_disk_written_bytes_total{job=\"beanflow-node\",device!~\"loop.*|ram.*\"}[$__rate_interval])",
+          "expr": "rate(node_disk_written_bytes_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-node\",device!~\"loop.*|ram.*\"}[$__rate_interval])",
           "legendFormat": "written {{device}}"
         }
       ],
@@ -1718,7 +1781,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(node_disk_io_time_seconds_total{job=\"beanflow-node\",device!~\"loop.*|ram.*\"}[$__rate_interval])",
+          "expr": "rate(node_disk_io_time_seconds_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-node\",device!~\"loop.*|ram.*\"}[$__rate_interval])",
           "legendFormat": "{{device}}"
         }
       ],
@@ -1758,12 +1821,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(node_network_receive_bytes_total{job=\"beanflow-node\",device!~\"lo|veth.*|br-.*|docker.*\"}[$__rate_interval])",
+          "expr": "rate(node_network_receive_bytes_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-node\",device!~\"lo|veth.*|br-.*|docker.*\"}[$__rate_interval])",
           "legendFormat": "receive {{device}}"
         },
         {
           "refId": "B",
-          "expr": "rate(node_network_transmit_bytes_total{job=\"beanflow-node\",device!~\"lo|veth.*|br-.*|docker.*\"}[$__rate_interval])",
+          "expr": "rate(node_network_transmit_bytes_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-node\",device!~\"lo|veth.*|br-.*|docker.*\"}[$__rate_interval])",
           "legendFormat": "transmit {{device}}"
         }
       ],
@@ -1803,22 +1866,22 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(node_network_receive_drop_total{job=\"beanflow-node\",device!~\"lo|veth.*|br-.*|docker.*\"}[$__rate_interval])",
+          "expr": "rate(node_network_receive_drop_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-node\",device!~\"lo|veth.*|br-.*|docker.*\"}[$__rate_interval])",
           "legendFormat": "receive drop {{device}}"
         },
         {
           "refId": "B",
-          "expr": "rate(node_network_receive_errs_total{job=\"beanflow-node\",device!~\"lo|veth.*|br-.*|docker.*\"}[$__rate_interval])",
+          "expr": "rate(node_network_receive_errs_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-node\",device!~\"lo|veth.*|br-.*|docker.*\"}[$__rate_interval])",
           "legendFormat": "receive errs {{device}}"
         },
         {
           "refId": "C",
-          "expr": "rate(node_network_transmit_drop_total{job=\"beanflow-node\",device!~\"lo|veth.*|br-.*|docker.*\"}[$__rate_interval])",
+          "expr": "rate(node_network_transmit_drop_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-node\",device!~\"lo|veth.*|br-.*|docker.*\"}[$__rate_interval])",
           "legendFormat": "transmit drop {{device}}"
         },
         {
           "refId": "D",
-          "expr": "rate(node_network_transmit_errs_total{job=\"beanflow-node\",device!~\"lo|veth.*|br-.*|docker.*\"}[$__rate_interval])",
+          "expr": "rate(node_network_transmit_errs_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-node\",device!~\"lo|veth.*|br-.*|docker.*\"}[$__rate_interval])",
           "legendFormat": "transmit errs {{device}}"
         }
       ],
@@ -1858,12 +1921,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "beanflow_container_cpu_cores{job=\"beanflow-containers\"}",
+          "expr": "beanflow_container_cpu_cores{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}",
           "legendFormat": "{{service}}"
         },
         {
           "refId": "B",
-          "expr": "beanflow_container_cpu_limit_cores{job=\"beanflow-containers\"} > 0",
+          "expr": "beanflow_container_cpu_limit_cores{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"} > 0",
           "legendFormat": "limit {{service}}"
         }
       ],
@@ -1903,12 +1966,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "beanflow_container_memory_working_set_bytes{job=\"beanflow-containers\"}",
+          "expr": "beanflow_container_memory_working_set_bytes{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}",
           "legendFormat": "{{service}}"
         },
         {
           "refId": "B",
-          "expr": "beanflow_container_memory_limit_bytes{job=\"beanflow-containers\"} > 0",
+          "expr": "beanflow_container_memory_limit_bytes{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"} > 0",
           "legendFormat": "limit {{service}}"
         }
       ],
@@ -1948,7 +2011,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "beanflow_container_restart_count{job=\"beanflow-containers\"}",
+          "expr": "beanflow_container_restart_count{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}",
           "legendFormat": "{{service}}"
         }
       ],
@@ -1988,7 +2051,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "beanflow_container_running{job=\"beanflow-containers\"}",
+          "expr": "beanflow_container_running{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}",
           "legendFormat": "{{service}}"
         }
       ],
@@ -2045,7 +2108,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, provider, operation) (rate(beanflow_external_duration_seconds_bucket{job=\"beanflow\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, provider, operation) (rate(beanflow_external_duration_seconds_bucket{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval])))",
           "legendFormat": "{{provider}} / {{operation}}"
         }
       ]
@@ -2074,7 +2137,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (provider, operation, outcome) (rate(beanflow_external_calls_total{job=\"beanflow\"}[$__rate_interval]))",
+          "expr": "sum by (provider, operation, outcome) (rate(beanflow_external_calls_total{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval]))",
           "legendFormat": "{{provider}} / {{operation}} / {{outcome}}"
         }
       ]
@@ -2099,17 +2162,17 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "beanflow_event_publication_pending_count{job=\"beanflow\"}",
+          "expr": "beanflow_event_publication_pending_count{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
           "legendFormat": "publication pending"
         },
         {
           "refId": "B",
-          "expr": "beanflow_order_idempotency_processing_stuck{job=\"beanflow\"}",
+          "expr": "beanflow_order_idempotency_processing_stuck{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
           "legendFormat": "idempotency stuck"
         },
         {
           "refId": "C",
-          "expr": "beanflow_reservation_due_count{job=\"beanflow\"}",
+          "expr": "beanflow_reservation_due_count{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
           "legendFormat": "reservation due"
         }
       ],
@@ -2149,12 +2212,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "beanflow_event_publication_oldest_age_seconds{job=\"beanflow\"}",
+          "expr": "beanflow_event_publication_oldest_age_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
           "legendFormat": "publication age"
         },
         {
           "refId": "B",
-          "expr": "beanflow_payment_unknown_age{job=\"beanflow\"}",
+          "expr": "beanflow_payment_unknown_age{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
           "legendFormat": "payment unknown age"
         }
       ],
@@ -2194,7 +2257,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "up{job=~\"beanflow(|-alloy|-postgres|-node|-containers)\"}",
+          "expr": "up{environment=\"$environment\",host=\"$host\",job=~\"beanflow(|-alloy|-postgres|-node|-containers)\"}",
           "legendFormat": "{{job}}"
         }
       ],
@@ -2234,17 +2297,17 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_up{job=\"beanflow-postgres\"}",
+          "expr": "pg_up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"}",
           "legendFormat": "PostgreSQL connection"
         },
         {
           "refId": "B",
-          "expr": "1-pg_exporter_last_scrape_error{job=\"beanflow-postgres\"}",
+          "expr": "1-pg_exporter_last_scrape_error{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"}",
           "legendFormat": "PostgreSQL scrape"
         },
         {
           "refId": "C",
-          "expr": "beanflow_container_collection_success{job=\"beanflow-containers\"}",
+          "expr": "beanflow_container_collection_success{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}",
           "legendFormat": "container collection"
         }
       ],
@@ -2284,7 +2347,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "time()-beanflow_container_last_success_timestamp_seconds{job=\"beanflow-containers\"}",
+          "expr": "time()-beanflow_container_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}",
           "legendFormat": "seconds since success"
         }
       ],
@@ -2335,7 +2398,7 @@
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{ resource.service.name = \"beanflow\" && duration > 1s }",
+          "query": "{ resource.service.name = \"beanflow\" && resource.deployment.environment.name = \"$environment\" && resource.host.name = \"$host\" && duration > 1s }",
           "tableType": "traces",
           "limit": 50
         }
@@ -2385,7 +2448,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"beanflow\"}"
+          "expr": "{service_name=\"beanflow\",deployment_environment_name=\"$environment\"} | host_name = \"$host\""
         }
       ],
       "description": "trace ID 없는 scheduled task 실패도 포함합니다. 특정 trace의 Logs 링크로 정확한 요청을 확인합니다."
@@ -2409,7 +2472,7 @@
           "refId": "A",
           "queryType": "profile",
           "profileTypeId": "wall:wall:nanoseconds:wall:nanoseconds",
-          "labelSelector": "{service_name=\"beanflow\"}"
+          "labelSelector": "{service_name=\"beanflow\",deployment_environment_name=\"$environment\",host_name=\"$host\"}"
         }
       ],
       "description": "선택 기간의 모든 JVM 스레드 wall 시간을 합한 개요다. 대기 시간을 포함하므로 누적 시간이 조회 기간보다 길 수 있으며 CPU 사용 시간이나 단일 요청 지연이 아니다. 원인 판단은 선택 trace의 pyroscope.profile.id로 조회한 span profile과 함께 한다."
@@ -2438,7 +2501,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(resource)(rate(beanflow_order_reservation_conflicts_total{job=\"beanflow\"}[$__rate_interval]))",
+          "expr": "sum by(resource)(rate(beanflow_order_reservation_conflicts_total{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval]))",
           "legendFormat": "{{resource}}"
         }
       ],
@@ -2462,7 +2525,7 @@
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{ resource.service.name = \"beanflow\" && span.beanflow.test.id = \"${test_id:raw}\" && duration > 200ms }",
+          "query": "{ resource.service.name = \"beanflow\" && resource.deployment.environment.name = \"$environment\" && resource.host.name = \"$host\" && span.beanflow.test.id = \"${test_id:raw}\" && duration > 200ms }",
           "tableType": "traces",
           "limit": 50
         }
@@ -2516,7 +2579,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (mode, outcome) (rate(beanflow_payment_refund_attempts_total{job=\"beanflow\"}[$__rate_interval]))",
+          "expr": "sum by (mode, outcome) (rate(beanflow_payment_refund_attempts_total{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval]))",
           "legendFormat": "{{mode}} / {{outcome}}"
         }
       ],
@@ -2556,12 +2619,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(beanflow_order_pickup_sequence_allocation_duration_seconds_sum{job=\"beanflow\"}[$__rate_interval]) / (rate(beanflow_order_pickup_sequence_allocation_duration_seconds_count{job=\"beanflow\"}[$__rate_interval]) > 0)",
+          "expr": "rate(beanflow_order_pickup_sequence_allocation_duration_seconds_sum{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval]) / (rate(beanflow_order_pickup_sequence_allocation_duration_seconds_count{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval]) > 0)",
           "legendFormat": "mean"
         },
         {
           "refId": "B",
-          "expr": "beanflow_order_pickup_sequence_allocation_duration_seconds{job=\"beanflow\",quantile=\"0.95\"}",
+          "expr": "beanflow_order_pickup_sequence_allocation_duration_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\",quantile=\"0.95\"}",
           "legendFormat": "p95"
         }
       ],
@@ -2580,6 +2643,1095 @@
         "x": 12,
         "y": 200
       }
+    },
+    {
+      "id": 153,
+      "type": "row",
+      "title": "PostgreSQL blocker · bounded snapshot readiness",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 209
+      }
+    },
+    {
+      "id": 154,
+      "title": "DB blocked sessions",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "pg_blocking_pids()가 확인한 대상 DB의 blocked session 수다.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_pg_blocked_sessions{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\"} and on() max((up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_exporter_last_scrape_error{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 0))",
+          "legendFormat": "blocked"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 0,
+        "y": 210
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 155,
+      "title": "DB max lock wait",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "현재 lock wait의 최대 경과 시간이다.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_pg_lock_wait_max_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\"} and on() max((up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_exporter_last_scrape_error{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 0))",
+          "legendFormat": "lock wait"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 6,
+        "y": 210
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 156,
+      "title": "DB max transaction age",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_pg_transaction_max_age_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\"} and on() max((up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_exporter_last_scrape_error{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 0))",
+          "legendFormat": "transaction age"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 12,
+        "y": 210
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 157,
+      "title": "DB idle in transaction",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_pg_transaction_idle_in_transaction_sessions{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\"} and on() max((up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_up{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 1) and on(job,instance,environment,host) (pg_exporter_last_scrape_error{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\"} == 0))",
+          "legendFormat": "idle in tx"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 18,
+        "y": 210
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 158,
+      "title": "DB snapshot collection",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "조회 실패와 OTLP 전송 실패를 빈 잠금으로 바꾸지 않는다.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_db_diagnostics_collection_success{environment=\"$environment\",host=\"$host\",job=\"beanflow-db-diagnostics\"}",
+          "legendFormat": "DB read"
+        },
+        {
+          "refId": "B",
+          "expr": "beanflow_db_diagnostics_log_export_success{environment=\"$environment\",host=\"$host\",job=\"beanflow-db-diagnostics\"}",
+          "legendFormat": "OTLP log"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 217
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 159,
+      "title": "DB snapshot age",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - beanflow_db_diagnostics_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow-db-diagnostics\"}",
+          "legendFormat": "last success age"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 217
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 160,
+      "title": "DB snapshot truncation",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "1이면 10개 waiter 한도를 넘어 snapshot이 잘렸다.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_db_diagnostics_snapshot_truncated{environment=\"$environment\",host=\"$host\",job=\"beanflow-db-diagnostics\"}",
+          "legendFormat": "truncated"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 217
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 161,
+      "type": "row",
+      "title": "Worker owner · backlog · freshness",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 224
+      }
+    },
+    {
+      "id": 162,
+      "title": "Worker backlog by owner/state",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "전체 DB count이며 business state와 실제 claim 가능 여부를 함께 보존한다.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_worker_backlog_items{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\"}",
+          "legendFormat": "{{owner}} · {{state}} · {{claimability}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 225
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 163,
+      "title": "Oldest due work",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_worker_backlog_oldest_due_age_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\",claimability=\"due\"} and on(environment,host,instance,owner,state,claimability,database) (beanflow_worker_backlog_items{environment=\"$environment\",host=\"$host\",job=\"beanflow-postgres\",database=\"$database\",claimability=\"due\"} > 0)",
+          "legendFormat": "{{owner}} · {{state}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 225
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 164,
+      "title": "Worker completed / failed throughput",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (owner,outcome) (rate(beanflow_worker_items_total{environment=\"$environment\",host=\"$host\",job=\"beanflow\",outcome=~\"completed|failed\"}[$__rate_interval]))",
+          "legendFormat": "{{owner}} · {{outcome}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (owner,outcome) (rate(beanflow_worker_runs_total{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval]))",
+          "legendFormat": "{{owner}} run · {{outcome}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 232
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 165,
+      "title": "Worker data freshness / stale threshold",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "data age가 2×worker refresh + 10초 scrape를 넘으면 stale이다.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(time() - beanflow_worker_data_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(environment,host,instance,owner) (beanflow_worker_data_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
+          "legendFormat": "{{owner}} data age"
+        },
+        {
+          "refId": "B",
+          "expr": "(time() - beanflow_worker_business_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(environment,host,instance,owner) (beanflow_worker_business_last_success_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
+          "legendFormat": "{{owner}} business age"
+        },
+        {
+          "refId": "C",
+          "expr": "(time() - beanflow_worker_last_started_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}) and on(environment,host,instance,owner) (beanflow_worker_last_started_timestamp_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} > 0)",
+          "legendFormat": "{{owner}} last started age"
+        },
+        {
+          "refId": "D",
+          "expr": "2 * beanflow_worker_refresh_interval_seconds{environment=\"$environment\",host=\"$host\",job=\"beanflow\"} + 10",
+          "legendFormat": "{{owner}} stale threshold"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 232
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 166,
+      "type": "row",
+      "title": "Request phases · executors · Alloy delivery",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 239
+      }
+    },
+    {
+      "id": 167,
+      "title": "Internal phase p95",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le,operation,stage) (rate(beanflow_operation_phase_duration_seconds_bucket{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval])))",
+          "legendFormat": "{{operation}} · {{stage}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 240
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 168,
+      "title": "Application task executor (HTTP와 별도)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "executor_active_threads{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
+          "legendFormat": "{{name}} active"
+        },
+        {
+          "refId": "B",
+          "expr": "executor_pool_max_threads{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
+          "legendFormat": "{{name}} max"
+        },
+        {
+          "refId": "C",
+          "expr": "executor_queued_tasks{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
+          "legendFormat": "{{name}} queued"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 240
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 169,
+      "title": "Tomcat HTTP threads",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "Spring Boot WebMVC의 embedded Tomcat thread metric이다. applicationTaskExecutor와 구분한다.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tomcat_threads_busy_threads{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
+          "legendFormat": "{{name}} busy"
+        },
+        {
+          "refId": "B",
+          "expr": "tomcat_threads_config_max_threads{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
+          "legendFormat": "{{name}} max"
+        },
+        {
+          "refId": "C",
+          "expr": "tomcat_threads_current_threads{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}",
+          "legendFormat": "{{name}} current"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 240
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 170,
+      "title": "Alloy exporter queue usage",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (exporter) (otelcol_exporter_queue_size{environment=\"$environment\",host=\"$host\",job=\"beanflow-alloy\"}) / (sum by (exporter) (otelcol_exporter_queue_capacity{environment=\"$environment\",host=\"$host\",job=\"beanflow-alloy\"}) > 0)",
+          "legendFormat": "{{exporter}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 248
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 171,
+      "title": "Alloy failed / refused telemetry",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (exporter) (increase(otelcol_exporter_send_failed_spans_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-alloy\"}[5m]))",
+          "legendFormat": "{{exporter}} failed spans"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (exporter) (increase(otelcol_exporter_send_failed_log_records_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-alloy\"}[5m]))",
+          "legendFormat": "{{exporter}} failed logs"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(increase(otelcol_receiver_refused_spans_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-alloy\"}[5m]))",
+          "legendFormat": "receiver refused spans"
+        },
+        {
+          "refId": "D",
+          "expr": "sum(increase(otelcol_receiver_refused_log_records_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-alloy\"}[5m]))",
+          "legendFormat": "receiver refused logs"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 248
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 172,
+      "type": "row",
+      "title": "App host/container guardrails (load generator · WAF 제외)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 256
+      }
+    },
+    {
+      "id": 173,
+      "title": "Container CPU throttled periods",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service) (rate(beanflow_container_cpu_throttled_periods_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}[$__rate_interval])) / (sum by (service) (rate(beanflow_container_cpu_periods_total{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}[$__rate_interval])) > 0)",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 257
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 174,
+      "title": "Container OOM state / support",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "지원되지 않으면 OOM sample을 만들지 않고 support=0만 표시한다.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_container_oom_killed{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}",
+          "legendFormat": "{{service}} OOM"
+        },
+        {
+          "refId": "B",
+          "expr": "beanflow_container_signal_supported{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\",signal=\"oom_state\"}",
+          "legendFormat": "{{service}} supported"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 257
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "id": 175,
+      "title": "App host filesystem available",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "beanflow_host_filesystem_available_bytes{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"} / (beanflow_host_filesystem_size_bytes{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"} > 0)",
+          "legendFormat": "available ratio"
+        },
+        {
+          "refId": "B",
+          "expr": "beanflow_host_filesystem_collection_success{environment=\"$environment\",host=\"$host\",job=\"beanflow-containers\"}",
+          "legendFormat": "collection success"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 257
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Bounded DB blocking snapshots",
+      "id": 176,
+      "datasource": {
+        "type": "loki",
+        "uid": "beanflow-loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 265
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"beanflow-db-diagnostics\",deployment_environment_name=\"$environment\"} | host_name = \"$host\""
+        }
+      ],
+      "description": "PID/query ID는 structured metadata이며 index label이 아니다. raw SQL, literal, 고객·주문 식별자는 수집하지 않는다."
+    },
+    {
+      "id": 177,
+      "title": "Worker enqueue→claim / claim→outcome p95",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beanflow-prometheus"
+      },
+      "description": "due/enqueue 대기와 실제 claim 이후 terminal outcome까지 시간을 합치지 않는다.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le,owner) (rate(beanflow_worker_enqueue_to_claim_duration_seconds_bucket{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval])))",
+          "legendFormat": "{{owner}} enqueue→claim"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le,owner,outcome) (rate(beanflow_worker_claim_to_outcome_duration_seconds_bucket{environment=\"$environment\",host=\"$host\",job=\"beanflow\"}[$__rate_interval])))",
+          "legendFormat": "{{owner}} claim→{{outcome}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 274
+      },
+      "links": [
+        {
+          "title": "같은 절대 시간 범위로 Explore",
+          "url": "/explore?schemaVersion=1&panes=%7B%22beanflow%22:%7B%22datasource%22:%22beanflow-prometheus%22,%22queries%22:%5B%5D,%22range%22:%7B%22from%22:%22${__from}%22,%22to%22:%22${__to}%22%7D%7D%7D",
+          "targetBlank": true
+        }
+      ]
     }
   ],
   "refresh": "10s",
@@ -2592,6 +3744,54 @@
   "templating": {
     "list": [
       {
+        "name": "environment",
+        "label": "환경",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "beanflow-prometheus"
+        },
+        "query": {
+          "query": "label_values(up{job=\"beanflow\"}, environment)",
+          "refId": "environment"
+        },
+        "regex": "",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "allValue": null,
+        "current": {
+          "text": "perf",
+          "value": "perf"
+        },
+        "options": []
+      },
+      {
+        "name": "host",
+        "label": "호스트",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "beanflow-prometheus"
+        },
+        "query": {
+          "query": "label_values(up{job=\"beanflow\",environment=\"$environment\"}, host)",
+          "refId": "host"
+        },
+        "regex": "",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "allValue": null,
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": []
+      },
+      {
         "name": "route",
         "label": "Route",
         "type": "query",
@@ -2600,7 +3800,7 @@
           "uid": "beanflow-prometheus"
         },
         "query": {
-          "query": "label_values(http_server_requests_seconds_count{job=\"beanflow\"}, uri)",
+          "query": "label_values(http_server_requests_seconds_count{job=\"beanflow\",environment=\"$environment\",host=\"$host\"}, uri)",
           "refId": "Prometheus-route-Variable-Query"
         },
         "includeAll": true,
@@ -2651,13 +3851,13 @@
           "uid": "beanflow-prometheus"
         },
         "query": {
-          "query": "label_values(pg_stat_database_numbackends{job=\"beanflow-postgres\",datname!~\"template.*|postgres\"}, datname)",
+          "query": "label_values(beanflow_pg_database_identity_info{job=\"beanflow-postgres\",environment=\"$environment\",host=\"$host\"}, database)",
           "refId": "database"
         },
         "refresh": 1,
         "current": {
-          "text": "beanflow",
-          "value": "beanflow"
+          "text": "",
+          "value": ""
         }
       }
     ]
@@ -2670,5 +3870,5 @@
   "timezone": "browser",
   "title": "BeanFlow / Performance RCA",
   "uid": "beanflow-performance-rca",
-  "version": 2
+  "version": 3
 }

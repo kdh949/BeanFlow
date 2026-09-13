@@ -106,6 +106,40 @@ BeanFlow에는 HTTP Actuator health와 다수의 Micrometer domain metric이 있
   이는 TLS 실패에 대한 자동 downgrade가 아니다. 사설 host 통신에 한정하며 public presigned endpoint는
   별도로 HTTPS를 유지한다. 서버를 분리하거나 신뢰 경계가 바뀌면 내부 TLS를 재검토한다.
 
+### 7. 진단 readiness 계약 (2026-09-13)
+
+- 모든 앱·JVM·Hikari·PostgreSQL·Alloy·container 패널은 닫힌 `environment`, `host`와 실제
+  `database` 선택을 공유한다. trace/log/profile에는 같은 resource attribute를 넣되 PID, query ID와
+  trace ID는 metric 또는 Loki index label로 승격하지 않는다.
+- PostgreSQL lock 집계는 `pg_locks.database`가 아니라 waiter의 `pg_stat_activity.datname`으로 대상 DB를
+  제한한다. 따라서 `database IS NULL`인 transaction ID lock도 포함한다. `pg_blocking_pids()`로 blocked
+  session 수를 확인하고, max lock wait, max transaction age와 idle-in-transaction 수를 별도 신호로 둔다.
+- 진단 snapshot은 업무 트랜잭션 밖의 read-only 조회로 10초마다 실행한다. statement timeout은 1초,
+  waiter는 최대 10개다. 실패 시 이전 snapshot을 빈 잠금이나 0으로 재사용하지 않고 collection success,
+  last success와 truncation을 별도 metric으로 남긴다.
+- snapshot log의 허용 필드는 observed time, DB, waiter/blocker PID, state, wait type/event, PostgreSQL query
+  ID, transaction age, 확인된 relation과 닫힌 `query_family`뿐이다. raw SQL, literal, customer/order/payment/
+  store 식별자는 수집·출력하지 않는다. PID/query ID는 Loki structured metadata로만 보존한다.
+- worker metric의 `owner`, `state`, `claimability`, `outcome`은 코드의 닫힌 사전만 사용한다. 실행
+  success/partial/failure, duration, last started/success, data-read success, claim/outcome throughput을 분리한다.
+  data-read success는 조회가 반환된 즉시 갱신하고 처리 완료 시점으로 미루지 않는다. lease 기반 owner의
+  claim-to-outcome은 batch claim 반환 직후부터 각 terminal 결과까지 재서 순차 처리 대기를 포함한다.
+  lease가 없는 owner는 이 histogram을 발행하지 않는다. event publication은 manual-review handoff가 아니라
+  실제 automatic resubmission repository claim/result를 공통 처리량으로 기록한다. batch size는 backlog로
+  표시하지 않는다. backlog의 business state는 보존하되 claimability는 worker의 backoff·lease 만료 조건으로
+  별도 계산한다. refresh 실패 시 마지막 business 값은 유지할 수 있지만 freshness와 실패 상태를 반드시
+  함께 표시하고, `2 * refresh + scrape`를 넘으면 stale이다. owner 사전은 `event_publication`,
+  `payment_reconciliation`, `reservation_expiry`, `acceptance_timeout`, `rejection_refund`,
+  `partial_refund_provider`, `partial_refund_restoration`, `refund_point_recovery`, `notification`이다.
+- 주문 생성·결제·매장 전이의 내부 span과 stage timer는 기존 transaction과 retry 의미를 바꾸지 않는다.
+  transaction proxy 전체 시간만 commit 포함으로 부르고, 내부 method 시간은 flush/commit으로 표현하지 않는다.
+- 공유 host의 Docker API exporter는 allowlist service의 CPU/memory/restart에 더해 CPU throttling과 OOM 상태,
+  사전에 승인된 앱 host filesystem의 available/size만 노출한다. signal이 지원되지 않거나 수집에 실패하면
+  sample을 생략하고 availability/collection 상태를 표시하며 0으로 대체하지 않는다. cAdvisor와 host root
+  mount를 새로 활성화하지 않는다.
+- load generator와 WAF/proxy는 이 readiness 구현 범위 밖이다. 그 신호가 없으면 원인을 미확정으로 남기며
+  애플리케이션 서버 문제로 단정하지 않는다.
+
 ## Alternatives Considered
 
 ### Spring tracing starter와 별도 Pyroscope agent

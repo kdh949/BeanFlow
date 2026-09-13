@@ -17,8 +17,10 @@ import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepState
 import io.github.kdh949.beanflow.operations.api.OrderCompensationStepType
 import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
+import io.github.kdh949.beanflow.shared.internal.OpenTelemetryWorkerTelemetry
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import io.opentelemetry.api.GlobalOpenTelemetry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
@@ -164,6 +166,9 @@ internal class EventPublicationRecoveryIntegrationTest
             }
             failingListener.allowSuccess()
             clock.advance(Duration.ofSeconds(12))
+            val claimedBefore = workerItems("claimed")
+            val completedBefore = workerItems("completed")
+            val durationBefore = workerDuration("completed")
 
             recoveryWorker.runOnce()
 
@@ -172,6 +177,9 @@ internal class EventPublicationRecoveryIntegrationTest
             }
             assertThat(notificationCount(event.envelope.eventId)).isEqualTo(1)
             assertThat(inboxCount(event.customerId)).isEqualTo(1)
+            assertThat(workerItems("claimed") - claimedBefore).isEqualTo(1.0)
+            assertThat(workerItems("completed") - completedBefore).isEqualTo(1.0)
+            assertThat(workerDuration("completed") - durationBefore).isEqualTo(1L)
         }
 
         @Test
@@ -237,7 +245,20 @@ internal class EventPublicationRecoveryIntegrationTest
             val freshMeters = SimpleMeterRegistry()
             try {
                 clock.advance(Duration.ofMinutes(30))
-                EventPublicationRecoveryWorker(publications, queries, manualReview, scope, clock, freshMeters, 100).runOnce()
+                EventPublicationRecoveryWorker(
+                    publications,
+                    queries,
+                    manualReview,
+                    scope,
+                    clock,
+                    freshMeters,
+                    OpenTelemetryWorkerTelemetry(
+                        freshMeters,
+                        clock,
+                        GlobalOpenTelemetry.getTracer("event-publication-recovery-integration-test"),
+                    ),
+                    100,
+                ).runOnce()
                 assertThat(freshMeters.find("beanflow.event.publication.exhaustion.count").counter()).isNull()
                 assertThat(freshMeters.get("beanflow.event.publication.manual.review.oldest.age.seconds").gauge().value())
                     .isEqualTo(1800.0)
@@ -469,6 +490,22 @@ internal class EventPublicationRecoveryIntegrationTest
                 .tag("outcome", "manual_review")
                 .counter()
                 ?.count() ?: 0.0
+
+        private fun workerItems(outcome: String): Double =
+            meters
+                .find("beanflow.worker.items")
+                .tag("owner", "event_publication")
+                .tag("outcome", outcome)
+                .counter()
+                ?.count() ?: 0.0
+
+        private fun workerDuration(outcome: String): Long =
+            meters
+                .find("beanflow.worker.claim.to.outcome.duration")
+                .tag("owner", "event_publication")
+                .tag("outcome", outcome)
+                .timer()
+                ?.count() ?: 0L
 
         private fun gauge(name: String): Double = meters.get(name).gauge().value()
 

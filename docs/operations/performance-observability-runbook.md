@@ -27,8 +27,9 @@ VPN load generator --HTTPS/WAF--> BeanFlow frontend/API
                                     |-- OTel trace + log --> local Alloy --> central Tempo/Loki
                                     |-- span profile ---------------------> central Pyroscope
                                     |-- PostgreSQL <-- postgres_exporter <-- central Prometheus
+                                    |               `-- bounded DB snapshot --> local Alloy --> central Loki
                                     |-- host CPU/memory/I/O <-- node_exporter <-- central Prometheus
-                                    `-- container CPU/memory <-- cAdvisor (opt-in) <-- central Prometheus
+                                    `-- container CPU/memory/throttle/OOM + host fs <-- bounded exporter <-- central Prometheus
 
 central Grafana --> Prometheus + Tempo + Loki + Pyroscope
 ```
@@ -41,8 +42,9 @@ metrics-generator만 Prometheus remote-write receiver를 사용한다.
 모든 ingest와 scrape 주소는 VPN 또는 동등한 사설망에서만 연다. 아래 파일은 기존 설정을 대체하는
 완전한 설정이 아니라 병합용 조각이다.
 
-1. [prometheus-scrape.yml](../../infra/observability/central/prometheus-scrape.yml)의 네 target에서
-   `BEANFLOW_PERF_VPN_HOST`를 실제 perf 서버 VPN 주소로 바꿔 `scrape_configs`에 병합한다.
+1. [prometheus-scrape.yml](../../infra/observability/central/prometheus-scrape.yml)의 target에서
+   `BEANFLOW_PERF_VPN_HOST`와 `BEANFLOW_PERF_HOST_ID`를 실제 perf 서버 VPN 주소와 안정적인 host ID로 바꿔
+   `scrape_configs`에 병합한다.
    cAdvisor를 활성화하는 실행에서만
    [prometheus-cadvisor-scrape.yml](../../infra/observability/central/prometheus-cadvisor-scrape.yml)의 다섯 번째
    target도 병합한다. cAdvisor를 끈 상태에서 이 job만 남겨 두면 target-down 경보가 발생한다.
@@ -100,6 +102,7 @@ Vault AppRole policy가 perf mount/key만 허용하고 AIStor credential이 perf
 ```bash
 export COMPOSE_PROJECT_NAME=beanflow-perf
 export BEANFLOW_MONITORING_BIND_ADDRESS=10.0.0.21
+export BEANFLOW_OBSERVABILITY_HOST_ID=beanflow-perf-app-01
 export BEANFLOW_PERF_AISTOR_BUCKET=beanflow-perf
 export BEANFLOW_AISTOR_BUCKET="$BEANFLOW_PERF_AISTOR_BUCKET"
 export BEANFLOW_TEMPO_OTLP_HTTP_ENDPOINT=http://10.0.0.10:4318
@@ -182,6 +185,8 @@ curl --fail http://10.0.0.21:18081/actuator/prometheus
 curl --fail http://10.0.0.21:12345/-/ready
 curl --fail http://10.0.0.21:19187/metrics
 curl --fail http://10.0.0.21:19100/metrics
+curl --fail http://10.0.0.21:19101/metrics
+curl --fail http://10.0.0.21:19102/metrics
 ```
 
 ### Exporter 권한과 port publish 검증
@@ -198,8 +203,10 @@ bash scripts/perf/test-postgres-exporter-runtime.sh
 ```
 
 위 격리 검증은 secret 누락·빈 값 실패, 원본 `0600` 유지, 실제 exporter PID의 UID/GID 65534,
-호스트에 publish된 endpoint의 `pg_up 1`, `pg_exporter_last_scrape_error 0`과 DB lock metric을 확인한다.
-실제 서버에서도 같은 값을 확인하고 중앙 Prometheus의 네 개 기본 target이 모두 `UP`인지 확인한다.
+호스트에 publish된 endpoint의 `pg_up 1`, `pg_exporter_last_scrape_error 0`, 실제
+`pg_stat_statements_*` 호출/시간 증가, DB identity, transactionid wait와 다른 DB 제외를 확인한다.
+실제 서버에서도 같은 값을 확인하고 중앙 Prometheus의 앱, Alloy, PostgreSQL, node, DB diagnostics
+기본 target이 모두 `UP`인지 확인한다.
 
 ### 기존 중앙 stack에 적용할 때
 
@@ -422,7 +429,27 @@ sudo systemctl enable --now beanflow-container-stats.service
 
 수집 실패 시 `beanflow_container_collection_success=0`과 마지막 성공 시각만 남기고 이전 container
 수치를 재사용하지 않는다. `restart_count`는 재생성 시 초기화되는 gauge이고 CPU/memory limit 0은
-무제한을 뜻한다. 실제 기동 상태와 메모리 제한 2 GiB 같은 배포 자원도 snapshot과 함께 확인한다.
+무제한을 뜻한다. Docker API가 throttling 또는 OOM 상태를 제공하지 않으면 해당 sample은 만들지 않고
+`beanflow_container_signal_supported=0`으로 표시한다. filesystem은 unit에 allowlist된 앱 host 경로만 읽는다.
+실제 기동 상태와 메모리 제한 2 GiB 같은 배포 자원도 snapshot과 함께 확인한다.
+
+### bounded DB 진단 수집기 설치
+
+DB 진단 수집기는 10초마다 최대 10개 waiter만 1초 read-only timeout으로 조회한다. raw SQL, literal,
+고객·주문 식별자는 전송하지 않는다. `/etc/beanflow/db-diagnostics.env`에는 실제 Compose project/service,
+DB, environment/host, local Alloy OTLP HTTP endpoint와 monitoring allowlist를 둔다. secret은 필요하지 않으며
+Docker 권한이 있는 기존 배포 계정으로 실행한다.
+
+```bash
+sudo install -m 0644 scripts/perf/db-diagnostics-exporter.py /opt/beanflow-observability/
+sudo install -m 0644 infra/observability/beanflow-db-diagnostics.service /etc/systemd/system/
+sudo systemd-analyze verify /etc/systemd/system/beanflow-db-diagnostics.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now beanflow-db-diagnostics.service
+```
+
+`collection_success`와 `log_export_success`가 모두 1이고 last-success age가 30초 이내인지 확인한다.
+조회나 전송 실패를 blocker 0으로 해석하지 않는다.
 
 ### 2026-09-07 반영 상태와 복구
 

@@ -7,3 +7,4 @@ scrape_configs:
       - targets: ["BEANFLOW_PERF_VPN_HOST:19101"]
         labels:
           environment: perf
+          host: BEANFLOW_PERF_HOST_ID

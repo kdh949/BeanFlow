@@ -4,14 +4,23 @@ groups:
     rules:
       - record: beanflow:http_server_error_ratio:rate5m
         expr: |
-          sum(rate(http_server_requests_seconds_count{job="beanflow",status=~"5.."}[5m]))
+          sum by (environment, host) (
+            rate(http_server_requests_seconds_count{job="beanflow",environment="perf",status=~"5.."}[5m])
+          )
           /
-          clamp_min(sum(rate(http_server_requests_seconds_count{job="beanflow"}[5m])), 0.000001)
+          clamp_min(
+            sum by (environment, host) (
+              rate(http_server_requests_seconds_count{job="beanflow",environment="perf"}[5m])
+            ),
+            0.000001
+          )
       - record: beanflow:http_server_duration_seconds:p95_5m
         expr: |
           histogram_quantile(
             0.95,
-            sum by (le) (rate(http_server_requests_seconds_bucket{job="beanflow"}[5m]))
+            sum by (environment, host, le) (
+              rate(http_server_requests_seconds_bucket{job="beanflow",environment="perf"}[5m])
+            )
           )
 
   - name: beanflow-performance-alerts
@@ -39,7 +48,7 @@ groups:
           description: Use an exemplar to inspect the slow trace before changing capacity or timeout settings.
 
       - alert: BeanFlowPerfHikariPending
-        expr: max(hikaricp_connections_pending{job="beanflow"}) > 0
+        expr: max by (environment, host) (hikaricp_connections_pending{job="beanflow",environment="perf"}) > 0
         for: 2m
         labels:
           severity: warning
@@ -49,7 +58,7 @@ groups:
           description: Compare Hikari pending with PostgreSQL waits and ungranted locks in the same time range.
 
       - alert: BeanFlowPerfTelemetryTargetDown
-        expr: up{job=~"beanflow(|-alloy|-postgres|-node|-cadvisor|-containers)"} == 0
+        expr: up{job=~"beanflow(|-alloy|-postgres|-node|-cadvisor|-containers|-db-diagnostics)",environment="perf"} == 0
         for: 2m
         labels:
           severity: warning
@@ -68,7 +77,7 @@ groups:
           description: The requested arrival rate was not delivered, so this run does not pass the capacity gate.
 
       - alert: BeanFlowPerfMediaUnavailable
-        expr: beanflow_media_availability{job="beanflow"} == 0
+        expr: beanflow_media_availability{job="beanflow",environment="perf"} == 0
         for: 2m
         labels:
           severity: warning
@@ -79,8 +88,8 @@ groups:
 
       - alert: BeanFlowPerfContainerCollectionFailed
         expr: |
-          beanflow_container_collection_success{job="beanflow-containers"} == 0
-          or time() - beanflow_container_last_success_timestamp_seconds{job="beanflow-containers"} > 45
+          beanflow_container_collection_success{job="beanflow-containers",environment="perf"} == 0
+          or time() - beanflow_container_last_success_timestamp_seconds{job="beanflow-containers",environment="perf"} > 45
         for: 1m
         labels:
           severity: warning
@@ -88,3 +97,64 @@ groups:
         annotations:
           summary: BeanFlow container stats collection is unavailable or stale
           description: Check the host service. Old container samples must not be treated as current values.
+
+      - alert: BeanFlowPerfDatabaseDiagnosticsStale
+        expr: |
+          beanflow_db_diagnostics_collection_success{job="beanflow-db-diagnostics",environment="perf"} == 0
+          or beanflow_db_diagnostics_log_export_success{job="beanflow-db-diagnostics",environment="perf"} == 0
+          or time() - beanflow_db_diagnostics_last_success_timestamp_seconds{job="beanflow-db-diagnostics",environment="perf"} > 30
+        for: 1m
+        labels:
+          severity: warning
+          environment: perf
+        annotations:
+          summary: BeanFlow bounded database diagnostics are unavailable or stale
+          description: Do not interpret an absent blocking snapshot as zero blockers until DB read and OTLP log export recover.
+
+      - alert: BeanFlowPerfWorkerTelemetryStale
+        expr: |
+          (time() - beanflow_worker_data_last_success_timestamp_seconds{job="beanflow",environment="perf"})
+          > on(environment, host, instance, owner)
+          (2 * beanflow_worker_refresh_interval_seconds{job="beanflow",environment="perf"} + 10)
+        for: 1m
+        labels:
+          severity: warning
+          environment: perf
+        annotations:
+          summary: BeanFlow worker telemetry is stale for {{ $labels.owner }}
+          description: The owner has not completed a data read within two refresh intervals plus one scrape allowance.
+
+      - alert: BeanFlowPerfWorkerBusinessStale
+        expr: |
+          (time() - beanflow_worker_business_last_success_timestamp_seconds{job="beanflow",environment="perf"})
+          > on(environment, host, instance, owner)
+          (2 * beanflow_worker_refresh_interval_seconds{job="beanflow",environment="perf"} + 10)
+        for: 1m
+        labels:
+          severity: warning
+          environment: perf
+        annotations:
+          summary: BeanFlow worker business processing is stale for {{ $labels.owner }}
+          description: Data reads may still succeed; inspect partial or failed run and item outcomes before treating the owner as healthy.
+
+      - alert: BeanFlowPerfHostFilesystemCollectionFailed
+        expr: beanflow_host_filesystem_collection_success{job="beanflow-containers",environment="perf"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          environment: perf
+        annotations:
+          summary: BeanFlow app-host filesystem collection failed
+          description: Filesystem capacity panels are invalid until the allowlisted app-host path is readable again.
+
+      - alert: BeanFlowPerfHostFilesystemLow
+        expr: |
+          beanflow_host_filesystem_available_bytes{job="beanflow-containers",environment="perf"}
+          / beanflow_host_filesystem_size_bytes{job="beanflow-containers",environment="perf"} < 0.10
+        for: 5m
+        labels:
+          severity: warning
+          environment: perf
+        annotations:
+          summary: BeanFlow app-host filesystem has less than 10 percent available
+          description: This is an initial performance-test guardrail, not a production SLO.

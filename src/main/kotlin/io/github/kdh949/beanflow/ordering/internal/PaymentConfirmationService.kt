@@ -10,6 +10,9 @@ import io.github.kdh949.beanflow.payment.api.ProviderTransportFailure
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.PerformanceOperation
+import io.github.kdh949.beanflow.shared.api.PerformancePhaseTelemetry
+import io.github.kdh949.beanflow.shared.api.PerformanceStage
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import org.slf4j.LoggerFactory
@@ -28,6 +31,7 @@ internal class PaymentConfirmationService(
     private val correlationIdSource: CorrelationIdSource,
     private val meterRegistry: MeterRegistry,
     private val clock: Clock,
+    private val phaseTelemetry: PerformancePhaseTelemetry,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -49,7 +53,11 @@ internal class PaymentConfirmationService(
                 correlationId = correlationIdSource.currentOrCreate(),
                 now = now,
             )
-        return when (val preparation = preparationTransaction.prepare(command)) {
+        val preparation =
+            phaseTelemetry.observe(PerformanceOperation.PAYMENT_CONFIRM, PerformanceStage.PAYMENT_PREPARE) {
+                preparationTransaction.prepare(command)
+            }
+        return when (preparation) {
             is OrderPaymentPreparation.Expired -> {
                 throw DomainFailure(FailureCode.RESERVATION_EXPIRED, "Order reservation lease has expired")
             }
@@ -86,7 +94,9 @@ internal class PaymentConfirmationService(
                 val sample = Timer.start(meterRegistry)
                 val result =
                     try {
-                        paymentOperations.requestProviderApproval(preparation.paymentId)
+                        phaseTelemetry.observe(PerformanceOperation.PAYMENT_CONFIRM, PerformanceStage.PROVIDER_CALL) {
+                            paymentOperations.requestProviderApproval(preparation.paymentId)
+                        }
                     } catch (failure: ProviderTransportFailure) {
                         logger.warn(
                             "payment_approval paymentId={} outcome=UNKNOWN reason=PROVIDER_CALL_FAILED",
@@ -109,7 +119,9 @@ internal class PaymentConfirmationService(
                     }
                 meterRegistry.counter("beanflow.payment.approval.attempts", "outcome", outcome).increment()
                 try {
-                    resultTransaction.apply(customerId, orderId, preparation.paymentId, result, clock.instant())
+                    phaseTelemetry.observe(PerformanceOperation.PAYMENT_CONFIRM, PerformanceStage.RESULT_APPLY) {
+                        resultTransaction.apply(customerId, orderId, preparation.paymentId, result, clock.instant())
+                    }
                 } catch (failure: DataAccessException) {
                     throw DomainFailure(
                         FailureCode.DEPENDENCY_UNAVAILABLE,

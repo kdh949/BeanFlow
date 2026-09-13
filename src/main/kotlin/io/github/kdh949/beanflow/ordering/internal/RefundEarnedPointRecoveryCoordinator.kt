@@ -23,6 +23,8 @@ import io.github.kdh949.beanflow.payment.api.RefundPointRecoveryOperations
 import io.github.kdh949.beanflow.payment.api.RefundPointRecoveryResult
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.WorkerOwner
+import io.github.kdh949.beanflow.shared.api.WorkerTelemetry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.modulith.events.ApplicationModuleListener
@@ -31,6 +33,7 @@ import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -246,6 +249,7 @@ internal class OrderCompletedPointAccrualListener(
 internal class RefundEarnedPointRecoveryWorker(
     private val coordinator: RefundEarnedPointRecoveryCoordinator,
     private val clock: Clock,
+    private val workerTelemetry: WorkerTelemetry,
     @Value("\${beanflow.payment.point-recovery.chunk-size:50}")
     private val chunkSize: Int,
 ) {
@@ -259,26 +263,38 @@ internal class RefundEarnedPointRecoveryWorker(
         runOnce()
     }
 
-    fun runOnce(): Int {
-        val claims = coordinator.claimDue(clock.instant(), chunkSize)
-        claims.forEach { claim ->
-            try {
-                val result = coordinator.recover(claim, clock.instant()) ?: return@forEach
-                coordinator.recordSuccess(claim, result, clock.instant())
-            } catch (failure: RuntimeException) {
+    fun runOnce(): Int =
+        workerTelemetry.observe(WorkerOwner.REFUND_POINT_RECOVERY) { run ->
+            val claimedAt = clock.instant()
+            val claims = coordinator.claimDue(claimedAt, chunkSize)
+            val claimStarted = System.nanoTime()
+            run.dataReadSucceeded()
+            run.claimed(claims.size)
+            claims.forEach { claim ->
+                run.claimLag(Duration.between(claim.enqueuedAt, claimedAt))
                 try {
-                    coordinator.recordFailure(claim, failure, clock.instant())
-                } catch (recordFailure: RuntimeException) {
-                    logger.error(
-                        "refund_earned_point_recovery refundId={} workId={} outcome=CLAIM_RETAINED attempt={}",
-                        claim.refundId,
-                        claim.workId,
-                        claim.attemptCount,
-                        recordFailure,
-                    )
+                    val result = coordinator.recover(claim, clock.instant())
+                    if (result == null) {
+                        run.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
+                        return@forEach
+                    }
+                    coordinator.recordSuccess(claim, result, clock.instant())
+                    run.completedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
+                } catch (failure: RuntimeException) {
+                    try {
+                        coordinator.recordFailure(claim, failure, clock.instant())
+                    } catch (recordFailure: RuntimeException) {
+                        logger.error(
+                            "refund_earned_point_recovery refundId={} workId={} outcome=CLAIM_RETAINED attempt={}",
+                            claim.refundId,
+                            claim.workId,
+                            claim.attemptCount,
+                            recordFailure,
+                        )
+                    }
+                    run.failedAfter(Duration.ofNanos(System.nanoTime() - claimStarted))
                 }
             }
+            claims.size
         }
-        return claims.size
-    }
 }
