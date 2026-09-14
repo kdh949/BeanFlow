@@ -496,6 +496,14 @@ internal class StoreOrderLifecycleIntegrationTest
                 .andExpect(jsonPath("$.compensationRecovery.steps").doesNotExist())
                 .andExpect(jsonPath("$.compensationRecovery.caseId").doesNotExist())
 
+            assertThat(value<String>("SELECT rejection_cause FROM ordering_order WHERE id = ?", orderId))
+                .isEqualTo("STORE_REJECTION")
+            assertThat(value<String>("SELECT rejection_actor_type FROM ordering_order WHERE id = ?", orderId))
+                .isEqualTo("STORE_STAFF")
+            assertThat(value<UUID>("SELECT rejection_event_id FROM ordering_order WHERE id = ?", orderId)).isNotNull()
+            assertThat(value<Long>("SELECT rejection_terminal_version FROM ordering_order WHERE id = ?", orderId))
+                .isEqualTo(value<Long>("SELECT version FROM ordering_order WHERE id = ?", orderId))
+
             await("rejection listeners to create durable external work") {
                 count("SELECT count(*) FROM payment_refund WHERE order_id = ?", orderId) == 1L &&
                     count(
