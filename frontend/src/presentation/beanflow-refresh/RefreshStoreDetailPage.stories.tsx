@@ -21,10 +21,30 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** Store context stays available without pushing the menu below the first screen. */
+export const OrderFirst: Story = {
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("heading", { name: "시청점" })).toBeVisible();
+    const storeActions = canvas.getByRole("group", { name: "매장 작업" });
+    const favoriteAction = await canvas.findByRole("button", { name: "시청점 즐겨찾기 추가" });
+    await expect(storeActions).toContainElement(canvas.getByRole("button", { name: "매장 정보" }));
+    await expect(storeActions).toContainElement(favoriteAction);
+    await expect(canvas.getByRole("button", { name: "매장 정보" })).toHaveAttribute("aria-expanded", "false");
+    await expect(canvas.getByText("장바구니에서 시간을 선택해 주세요.")).not.toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "라떼" })).toBeVisible();
+  },
+};
+
 export const Orderable: Story = {
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("heading", { name: "시청점" })).toBeVisible();
     await expect(await canvas.findByRole("button", { name: "시청점 즐겨찾기 추가" })).toBeVisible();
+    const storeInformation = await canvas.findByRole("button", { name: "매장 정보" });
+    await expect(storeInformation).toHaveAttribute("aria-expanded", "false");
+    await expect(canvas.getByText("장바구니에서 시간을 선택해 주세요.")).not.toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "라떼" })).toBeVisible();
+    await userEvent.click(storeInformation);
+    await expect(storeInformation).toHaveAttribute("aria-expanded", "true");
     await expect(canvas.getByText("장바구니에서 시간을 선택해 주세요.")).toBeVisible();
     await userEvent.click(await canvas.findByRole("button", { name: /오트 라떼/ }));
     await waitFor(() => expect(canvas.getByRole("button", { name: /6,400.*담기/ })).toBeEnabled());
@@ -36,6 +56,9 @@ export const Orderable: Story = {
 
 export const WeeklyHours: Story = {
   play: async ({ canvas }) => {
+    const storeInformation = await canvas.findByRole("button", { name: "매장 정보" });
+    await expect(canvas.queryByRole("region", { name: "요일별 운영시간" })).not.toBeInTheDocument();
+    await userEvent.click(storeInformation);
     const hours = await canvas.findByRole("region", { name: "요일별 운영시간" });
     await expect(hours).toHaveTextContent("월요일");
     await expect(hours).toHaveTextContent("08:00–20:00");

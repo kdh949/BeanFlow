@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { customerApi } from "../../api/customerClient";
 import { couponSelection } from "./couponSelection";
 import { CouponWalletPage } from "./CouponWalletPage";
+import { couponReturnTarget } from "./couponNavigation";
 import { FavoriteStoreButton, FavoriteStoresPage } from "./FavoriteStoresPage";
 import { RefreshCartPage } from "../../presentation/beanflow-refresh";
 import { cart } from "../ordering/cart";
@@ -50,6 +51,12 @@ afterEach(() => {
 });
 
 describe("customer coupon selection", () => {
+  it("restores only an internal customer return path", () => {
+    expect(couponReturnTarget("/app/cart", "store-1", "시청점")).toEqual({ to: "/app/cart", label: "장바구니" });
+    expect(couponReturnTarget("https://example.com/orders", "store-1", "시청점")).toEqual({ to: "/app/stores/store-1", label: "시청점" });
+    expect(couponReturnTarget("http://[", "store-1", "시청점")).toEqual({ to: "/app/stores/store-1", label: "시청점" });
+  });
+
   it("keeps one store-scoped coupon in memory and clears it explicitly", () => {
     couponSelection.select({ storeId: "store-1", couponIssuanceId: "coupon-1", label: "1,000원 할인" });
 
@@ -73,10 +80,11 @@ describe("customer coupon selection", () => {
       throw new Error(`unexpected GET ${path}`);
     });
 
-    renderRoute("/app/coupons?storeId=store-1", <CouponWalletPage />);
+    renderRoute("/app/coupons?storeId=store-1&returnTo=%2Fapp%2Fcart", <CouponWalletPage />);
     const user = userEvent.setup();
 
     expect(await screen.findByRole("heading", { name: "시청점 쿠폰" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "장바구니" })).toHaveAttribute("href", "/app/cart");
     expect(screen.getByRole("button", { name: /이 매장에서는 사용할 수 없음/ })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /₩1,000 할인 쿠폰 선택/ }));
 
