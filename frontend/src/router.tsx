@@ -1,3 +1,5 @@
+import { DemoRoot } from "./features/demo/DemoProvider";
+import { DemoEntryPage } from "./features/demo/DemoEntryPage";
 import { createBrowserRouter, redirect } from "react-router";
 import { ConsoleShell, CustomerShell, RootRedirect } from "./presentation/AppShells";
 import {
@@ -29,7 +31,8 @@ export function NotFoundPage() {
   return <main className="not-found"><strong>404</strong><h1>화면을 찾을 수 없습니다</h1><ButtonLink to="/">처음으로</ButtonLink></main>;
 }
 
-export const router = createBrowserRouter([
+export const router = createBrowserRouter([{ element: <DemoRoot />, children: [
+  { path: "/demo", element: <DemoEntryPage /> },
   { path: "/", element: <RootRedirect /> },
   {
     path: "/app", children: [
@@ -132,4 +135,4 @@ export const router = createBrowserRouter([
     ],
   },
   { path: "*", element: <NotFoundPage /> },
-]);
+] }]);

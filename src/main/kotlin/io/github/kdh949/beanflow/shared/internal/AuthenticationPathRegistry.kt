@@ -21,6 +21,7 @@ internal class AuthenticationPathRegistry {
         listOf(
             registration(AuthenticationChain.PUBLIC, "/actuator/health"),
             registration(AuthenticationChain.PUBLIC, "/api/v1/payment-config"),
+            registration(AuthenticationChain.PUBLIC, "/api/v1/demo/**"),
             registration(AuthenticationChain.PUBLIC, "/api/v1/auth/operations/config"),
             // Scalar API 문서 페이지와 그 문서가 fetch하는 OpenAPI 스펙. 로그인 없이 열람 가능해야
             // 외부 파트너(POS 연동사 등)가 별도 인증 없이 연동 문서를 먼저 확인할 수 있다.
@@ -77,7 +78,10 @@ internal class AuthenticationPathRegistry {
     }
 
     fun requestMatcher(chain: AuthenticationChain): RequestMatcher =
-        RequestMatcher { request -> classify(request.applicationPath(), request.method) == chain }
+        RequestMatcher { request ->
+            classify(request.applicationPath(), request.method) ==
+                chain
+        }
 
     fun overlappingPatterns(): List<Pair<String, String>> =
         registrations.indices.flatMap { leftIndex ->

@@ -42,6 +42,10 @@ internal class CustomerAccountEntity(
     val createdAt: Instant,
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant,
+    @Column(name = "demo_store_id")
+    val demoStoreId: UUID? = null,
+    @Column(name = "demo_expires_at")
+    var demoExpiresAt: Instant? = null,
     @Version
     var version: Long = 0,
 ) {
@@ -82,6 +86,8 @@ internal interface CustomerAccountJpaRepository : JpaRepository<CustomerAccountE
     fun findByLoginId(loginId: String): CustomerAccountEntity?
 
     fun existsByLoginId(loginId: String): Boolean
+
+    fun findByDemoStoreId(storeId: UUID): CustomerAccountEntity?
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select account from CustomerAccountEntity account where account.id = :id")

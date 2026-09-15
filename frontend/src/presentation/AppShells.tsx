@@ -1,3 +1,5 @@
+import { useDemo } from "../features/demo/DemoProvider";
+import { DemoJourneyFrame } from "../features/demo/DemoJourneyFrame";
 import {
   Bell, Headset, Home, ReceiptText, Search, ShieldCheck, ShoppingBag, Store, UserRound,
 } from "lucide-react";
@@ -56,7 +58,7 @@ export function CustomerShell() {
             <NotificationAction />
           </div>
         </header>
-        <main className="bfr-customer-content"><Outlet /></main>
+        <main className="bfr-customer-content"><DemoJourneyFrame surface="customer"><Outlet /></DemoJourneyFrame></main>
         <nav className="bfr-customer-tabs" aria-label="고객 메뉴">
           <NavLink to="/app" end><Home size={20} /><span>홈</span></NavLink>
           <NavLink to="/app/stores"><Search size={20} /><span>매장</span></NavLink>
@@ -71,6 +73,7 @@ export function CustomerShell() {
 /** Shared session adapter for all console routes. */
 export function ConsoleShell({ kind }: { kind: ConsoleKind }) {
   const merchant = useMerchantSession();
+  const demo = useDemo();
   const operations = useOperationsAuth();
   const membership = useOwnerMembership(kind === "store" && merchant.status === "authenticated", merchant.status === "authenticated" ? merchant.actor.merchantId : null);
   const access: ConsoleAccess = kind === "store"
@@ -80,7 +83,7 @@ export function ConsoleShell({ kind }: { kind: ConsoleKind }) {
     ? merchant.actor.displayName
     : kind !== "store" && operations.status === "authenticated" ? operations.displayName ?? "조직 계정 로그인됨"
     : access === "checking" ? "로그인 확인 중" : access === "unavailable" ? "로그인 확인 필요" : "로그인 필요";
-  return <ConsoleFrame kind={kind} access={access} actorLabel={actorLabel} ownsAnyStore={membership.ownsAnyStore} membershipState={kind === "store" ? membership.status : undefined} onRetryMembership={membership.retry} onLogOut={() => kind === "store" ? merchantSession.logOut() : operationsAuth.logOut()}><Outlet /></ConsoleFrame>;
+  return <ConsoleFrame kind={kind} access={access} actorLabel={actorLabel} ownsAnyStore={membership.ownsAnyStore} membershipState={kind === "store" ? membership.status : undefined} onRetryMembership={membership.retry} onLogOut={() => kind === "store" ? demo?.session ? demo.act("exit") : merchantSession.logOut() : operationsAuth.logOut()}><DemoJourneyFrame surface={kind === "store" ? "store" : "none"}><Outlet /></DemoJourneyFrame></ConsoleFrame>;
 }
 
 function useOwnerMembership(enabled: boolean, accountId: string | null) {
@@ -104,6 +107,7 @@ export function RootRedirect() {
       <BrandLockup />
       <h1>어떤 화면을 열까요?</h1>
       <div>
+        <ButtonLink to="/demo">BeanFlow 체험</ButtonLink>
         <ButtonLink to="/app">고객 앱</ButtonLink>
         <ButtonLink variant="secondary" to="/store"><Store size={18} /> 매장 콘솔</ButtonLink>
         <ButtonLink variant="secondary" to="/ops"><ShieldCheck size={18} /> 운영 콘솔</ButtonLink>

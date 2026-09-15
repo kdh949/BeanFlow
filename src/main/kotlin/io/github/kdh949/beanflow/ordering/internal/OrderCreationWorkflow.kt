@@ -46,6 +46,7 @@ internal data class OrderCreationOutcome(
 
 @Service
 internal class OrderCreationWorkflow(
+    private val customerOrderingAccess: io.github.kdh949.beanflow.identity.api.CustomerOrderingAccess,
     private val menuQuoteUseCase: MenuQuoteUseCase,
     private val storeSettlementTermsOperations: StoreSettlementTermsOperations,
     private val storeDisplaySnapshotOperations: StoreDisplaySnapshotOperations,
@@ -77,6 +78,7 @@ internal class OrderCreationWorkflow(
         prevalidatedQuotes: List<MenuLineQuote>? = null,
         preparedQuote: OrderQuoteCalculation? = null,
     ): OrderCreationOutcome {
+        customerOrderingAccess.requireStore(command.customerId, command.storeId)
         validate(command)
         if (prevalidatedQuotes != null && preparedQuote != null) {
             throw DomainFailure(FailureCode.INVALID_REQUEST, "Only one prevalidated order quote may be supplied")

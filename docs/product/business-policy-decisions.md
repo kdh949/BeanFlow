@@ -2633,6 +2633,19 @@
 
 ---
 
+## BR-58 방문자별 주문 체험
+
+- **Status:** Accepted for MVP (2026-09-15)
+- **Decision:** 명시적으로 활성화한 테스트 결제 환경에서 방문자별 고객·점주·매장을 발급한다. 일반 로그인 Session을 덮어쓰지 않는다. 체험 계정은 자기 매장에만 주문을 생성하며 발급 후 30분이 지나거나 종료하면 서버가 접근을 거부한다. 한 브라우저당 활성 공간 하나, 기본 상한은 동시 20개/하루 200개/브라우저당 하루 5개다. 만료·종료한 공간은 재사용하지 않는다.
+- **Sample order:** 전용 포인트 4,500원을 사용한 BENEFIT_ONLY 주문을 기존 주문 생성 경계로 확정한다. 재시작은 새 주문이며 기존 상태를 되돌리지 않는다. 직접 주문은 기존 메뉴·장바구니·Toss 테스트 결제를 따른다. 접수 제한은 BR-06을 유지한다.
+- **Failure:** 발급은 원자적이며 동일 cookie/요청 키를 재시도해도 중복 생성하지 않는다. 상한 초과는 429, 의존성 실패는 명시적 오류다. 주문 종료를 환불 완료로 간주하지 않는다.
+- **Affected Contexts / Aggregates:** Demo Workspace, Identity Account/Session, Merchant Store/Menu, Fulfillment PickupSlot, Loyalty PointAccount/Lot, Ordering Order.
+- **Required Tests:** 방문자 격리, 만료 경계, 종료, 일반 Session 보존, 동일 key 및 동시 발급, 전체 rollback, 타 매장 주문 거부, 테스트 profile guard.
+- **ADR Required:** [ADR-132](../adr/ADR-132-visitor-demo-workspace.md)
+- **Revisit Conditions:** 운영 상한, 체험 기한 또는 계정 전환 요구 변경.
+
+---
+
 # 정책 간 의존성과 우선 적용 순서
 
 1. `BR-01`, `BR-02`를 모든 시간·금액 Value Object의 기준으로 사용한다.
