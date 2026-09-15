@@ -22,6 +22,10 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 모든 영업시간, 픽업 슬롯, 캠페인 기간, 포인트 만료, 정산 기준일과 배치 스케줄은 `Asia/Seoul`을 기준으로 계산한다. API와 DB의 시각 값은 timezone을 포함한 `Instant` 또는 offset이 명시된 형식으로 저장·전달하고, 사용자 표시 시 `Asia/Seoul`로 변환한다.
+- **Immediate Checkout Business Date Amendment (2026-09-16):** `IMMEDIATE` 주문에는 픽업 슬롯이 없으므로
+  `pickupBusinessDate`를 초안 생성 시각의 `Asia/Seoul` 날짜로 고정한다. 이 값은 공개 픽업번호 allocator의
+  partition key일 뿐 준비 예상시각이나 실제 완료일이 아니다. 기존 `LEGACY_RESERVED` 주문은 슬롯 시작 시각
+  snapshot에서 계산한 날짜를 그대로 보존하며 다시 계산하지 않는다.
 - **Pickup Business Date Amendment (2026-08-12):** 매장 일일 픽업 순번의
   `pickupBusinessDate`는 주문의 픽업 슬롯 `startsAt` Instant를 `Asia/Seoul` 날짜로 변환한 값이다.
   주문 생성 시 이 날짜를 snapshot하고 이후 슬롯·영업시간 변경으로 다시 계산하지 않는다. 매장별
@@ -68,6 +72,11 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 주문 생성 후 픽업 슬롯, 쿠폰, 포인트 예약은 5분간 유지한다. 5분 안에 결제가 승인되지 않으면 Payment가 `UNKNOWN`이더라도 주문을 `EXPIRED`로 전환하고 모든 예약 자원을 해제한다. 이후 reconciliation에서 Provider 승인이 확인돼도 만료 주문을 `PAID`로 되살리거나 예약을 다시 확정하지 않는다. Payment가 자동 void 또는 전액 환불을 시작하고, 외부 결과가 확정될 때까지 `RECONCILING` 또는 `MANUAL_REVIEW`와 운영 case를 남긴다.
+- **Immediate Checkout Amendment (2026-09-16):** 위 5분 lease는 기존 `LEGACY_RESERVED` 주문의 읽기·복구에만
+  유지한다. 신규 `IMMEDIATE` 주문은 초안·Toss 인증 대기 중 픽업 슬롯, 쿠폰, 포인트를 예약하지 않고
+  `reservationExpiresAt`도 저장하지 않는다. 5분 경과만으로 `EXPIRED`로 전이하지 않으며, 해당 시도가 시작된
+  같은 날 영업 구간의 `orderingWindowClosesAt`을 넘기면 신규 승인과 주문 확정을 차단한다. 결과가 불명확한
+  Payment는 시간 경과를 확정 실패로 바꾸지 않고 기존 조회·reconciliation으로 수렴한다.
 - **Expiration:** 예약 만료 시각은 주문 생성 트랜잭션에서 고정하며, 연장 API는 MVP에서 제공하지 않는다.
 - **Amendment (2026-07-28):** 결제 결과 불명 상태에서 자원이 무기한 점유되는 것을 막고 뒤늦은 승인 주문이 이미 해제된 자원을 다시 확정하지 않도록 만료 우선과 명시적 환불 복구를 확정했다.
 - **Point Reservation Amendment (2026-07-28):** 주문 생성 시점에 유효한 PointLot에서 예약한 allocation은 주문 lease가 끝날 때까지 확정 가능성을 보장한다. lease 도중 원 PointLot 만료 시각이 지나도 예약분은 결제 승인에 사용할 수 있다. 예약을 해제할 때 이미 만료된 allocation은 가용 포인트로 복원하지 않고 만료 원장으로 처리한다.
@@ -157,6 +166,10 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 주문 생성 시 슬롯을 임시 예약하고, 결제 승인 성공 시 확정한다. 결제 실패·예약 만료·결제 전 취소 시 해제한다. 결제 승인 후 매장이 주문을 거절하면 슬롯을 해제한다.
+- **Immediate Checkout Amendment (2026-09-16):** 위 슬롯 계약은 `LEGACY_RESERVED` 주문에만 적용한다.
+  신규 `IMMEDIATE` quote·생성·재주문·결제·수락에는 `pickupSlotId`와 픽업 시간창 입력이 없고 슬롯 정원
+  예약·확정·해제를 호출하지 않는다. 종료 보상에서 PICKUP은 실제 예약이 없는 경우 `NOT_REQUIRED`이며,
+  과거 주문과 publication replay는 기존 슬롯 snapshot과 복구 계약을 유지한다.
 - **Payment Decline Clarification (2026-07-29):** 명시 거절은 슬롯 예약을
   `RELEASED`로 전환한다. `UNKNOWN`은 거절로 간주하지 않으며 정확한 lease
   deadline에서 기존 만료 정책을 적용한다.
@@ -201,6 +214,13 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 결제 승인 후 매장은 3분 안에 주문을 수락하거나 거절해야 한다. 2분이 지나면 매장 운영 알림을 생성하고, 3분이 지나도 응답이 없으면 주문을 자동 거절한다. 자동 거절 시 결제 전액 취소, 슬롯 복원, 쿠폰·포인트 복원, 고객 알림을 수행한다.
+- **Immediate Checkout and Preparation Amendment (2026-09-16):** 신규 `IMMEDIATE` 주문의 수락 기한은
+  `min(paidAt + 3분, orderingWindowClosesAt)`이다. 두 경계가 같으면 `STORE_CLOSED`를 적용한다. 2분 경고
+  시각이 effective deadline 미만일 때만 경고를 저장·발행한다. 미수락 `PAID`만 마감 자동거절 대상이며,
+  이미 `ACCEPTED`, `PREPARING`, `READY`인 주문은 영업 종료만으로 취소하지 않는다. `ACCEPT`는 양의 정수
+  `preparationMinutes` 1~120을 최초 요청에 필수로 받고 `estimatedReadyAt = acceptedAt + preparationMinutes`를
+  같은 transaction에 한 번 저장한다. 같은 멱등 요청은 최초 값을 재생하고 ETA 도달로 READY 또는 COMPLETED를
+  자동 전이하지 않는다. UI quick choice는 5·10·15·20·30분이다.
 - **Store Board Visibility Amendment (2026-08-12):** 수락 제한시간은 픽업 영업일과 무관하므로 점주
   실행 주문보드는 오늘 주문만으로 제한하지 않는다. 해당 매장의 모든 `PAID`, `ACCEPTED`,
   `PREPARING`, `READY`는 보드 또는 오래된 작업 큐에서 접근 가능해야 한다. `PENDING_PAYMENT`와 종료 상태는
@@ -265,6 +285,11 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 고객은 주문이 `PENDING_PAYMENT` 또는 `PAID`이고 매장이 아직 `ACCEPTED`하지 않은 경우에만 직접 취소할 수 있다. `ACCEPTED` 이후 취소는 고객 직접 API로 허용하지 않고 운영자 또는 매장 취소·환불 절차로 처리한다.
+- **Immediate Checkout Amendment (2026-09-16):** `IMMEDIATE PENDING_PAYMENT` 취소에는 슬롯·쿠폰·포인트
+  예약이 없으므로 실제 생성되지 않은 자원 해제를 성공으로 기록하지 않는다. 승인 사실이 확인되지 않은 초안은
+  외부 환불 없이 종료하고, 승인 결과가 `UNKNOWN` 또는 진행 중이면 새 결제로 대체하지 않고 기존 거래를
+  조회·복구한다. `IMMEDIATE PAID` 취소는 실제 commit된 USED 혜택만 기존 보상 정책으로 복원하고 PICKUP
+  step은 `NOT_REQUIRED`다. 기존 `LEGACY_RESERVED` 취소와 publication은 종전 계약을 유지한다.
 - **Scope Confirmation Amendment (2026-07-31):** 고객 취소 구현 범위를 위 두 상태로
   확정한다. `PENDING_PAYMENT` 취소는 슬롯·쿠폰·포인트 예약 해제만으로 완결하고
   외부 환불을 만들지 않는다. `PAID` 취소는 매장 거절과 동일한 owner 보상 대상
@@ -816,6 +841,10 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 포인트는 쿠폰 적용 후 남은 결제 예정액 전부까지 사용할 수 있다. 포인트로 전액 결제되어 최종 결제액이 0원이면 외부 PG를 호출하지 않고 `BENEFIT_ONLY` 결제 기록을 생성하여 주문을 결제 완료로 처리한다.
+- **Immediate Checkout Amendment (2026-09-16):** `IMMEDIATE` 0원 주문은 외부 PG 없이 동일한 영업시간
+  gate와 혜택 direct-use 검증을 거쳐, Coupon/Point 실제 사용·정산 입력 snapshot·`BENEFIT_ONLY APPROVED`·
+  Order `PAID`를 한 로컬 transaction으로 commit한다. 초안 또는 중간 RESERVED 상태를 먼저 commit하지 않으며
+  어느 경제적 write라도 실패하면 전부 rollback한다.
 - **Amendment (2026-07-28):** 0원 주문은 주문 생성 Feature에 포함한다. 주문 생성 로컬 트랜잭션 안에서 임시 예약을 획득한 뒤 `BENEFIT_ONLY Payment(APPROVED)`를 생성하고 슬롯·쿠폰·포인트 예약을 확정하며 Order를 `PAID`로 커밋한다. 이 주문에는 active 결제 전 lease가 남지 않고 외부 PG 호출도 발생하지 않는다.
 - **Customer Cancellation Amendment (2026-07-31):** 매장 수락 전 고객 취소는
   Refund 없이 PAYMENT 보상 step을 `NOT_REQUIRED`로 확정한다. Provider를 호출하지
@@ -968,6 +997,10 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 플랫폼 수수료는 쿠폰과 포인트를 반영한 최종 실결제액을 기준으로 계산한다. 수수료율은 매장 계약 스냅샷을 주문 또는 SettlementItem에 저장하며, 정산 시 현재 계약 값을 다시 조회하지 않는다.
+- **Immediate Checkout Materialization Amendment (2026-09-16):** `IMMEDIATE` 주문의 금액·항목·수수료 계약
+  입력은 Tx A에서 고정하고 재시도 때 최신 정책으로 교체하지 않는다. 실제 coupon leg와 PointLot issuer
+  allocation을 요구하는 최종 `OrderSettlementInputSnapshot`은 승인 후 혜택 사용과 같은 Tx C에서 저장한다.
+  최종 snapshot 없이 `PAID`를 commit하지 않으며, 기존 주문의 snapshot은 재계산하지 않는다.
 - **Order Snapshot Amendment (2026-08-02):** canonical 저장 위치는 Order당 정확히 하나인
   immutable `OrderSettlementInputSnapshot`이다. `feeBaseKrw=Order.payableKrw`이고 Payment
   승인 금액도 이 값과 같아야 한다. Merchant의 applicable `StoreSettlementTerms` version ID,
@@ -988,6 +1021,10 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 쿠폰 비용 부담 주체는 캠페인 생성 시 `PLATFORM`, `STORE`, `SHARED` 중 하나로 명시한다. `SHARED`인 경우 플랫폼과 매장의 부담 비율 합계는 100%여야 하며 주문 확정 시 부담액을 스냅샷으로 저장한다.
+- **Immediate Checkout Amendment (2026-09-16):** Tx A의 쿠폰 선택은 사용 예약이나 최종 비용 부담 원장이
+  아니다. Tx C에서 해당 issuance를 실제 USED로 전이한 결과와 Tx A에 고정한 Campaign terms source가
+  일치할 때만 최종 비용 부담 snapshot을 저장한다. 경합·만료·source 불일치는 부분 snapshot이나 0원 부담으로
+  대체하지 않고 주문 성립을 중단해 승인 복구로 보낸다.
 - **Compensation Coupon Amendment (2026-07-31):** 만료된 원 쿠폰을 대체하는 보상
   CouponIssuance는 원 issuance의 Campaign 비용 부담 주체와 platform/store basis
   point 비율을 immutable snapshot으로 그대로 승계한다. 원 Campaign 종료·변경이나
@@ -1016,6 +1053,10 @@
 
 - **Status:** Accepted for MVP
 - **Decision:** 포인트 비용은 포인트 프로그램의 발급 주체가 부담한다. 발급 주체는 `PLATFORM`, `BRAND`, `STORE` 중 하나이며, 사용 시 PointLot별 발급 주체를 기준으로 비용을 배분한다.
+- **Immediate Checkout Amendment (2026-09-16):** `IMMEDIATE` 주문은 Tx A에서 PointLot을 예약하거나
+  allocation을 확정하지 않는다. Tx C에서 실제로 사용할 수 있는 Lot을 기존 선소멸 순서로 잠그고 배분하며,
+  그 실제 issuer allocation만 최종 정산 입력 원천으로 저장한다. Tx A 뒤 다른 Lot으로 충당할 수 있으면 실제
+  allocation을 사용하고, 총 사용 가능 금액이 부족하면 부분 사용 없이 rollback 후 승인 복구로 보낸다.
 - **Manual Adjustment Issuer Amendment (2026-08-01):** 양수 수동
   `ADJUSTMENT`는 호출자가 issuer type과 immutable reference를 반드시 입력해 새
   PointLot에 snapshot으로 저장한다. actor, customer 또는 기존 Lot에서 issuer를
@@ -1585,6 +1626,11 @@
   호출하지 않는다. 기존 PaymentMethod는 등록·조회·폐기 lifecycle만 유지하며 checkout
   인증 소스, 기본 선택 또는 fallback이 아니다. billing, Payment Widget, BrandPay,
   가상계좌와 지급대행은 MVP 결제 범위가 아니다.
+- **Immediate Checkout Amendment (2026-09-16):** 신규 주문은 장바구니에서 초안과 one-time Payment
+  attempt를 연속 준비해 기존 Toss 창으로 바로 진입한다. 초안 생성 `201`이나 success callback 도착은 주문
+  제출 성공이 아니다. 서버가 승인 결과 exact match, 영업시간, 실제 혜택 사용, 정산 입력과 Order `PAID`를
+  commit한 응답 또는 같은 거래 조회로 확인한 뒤에만 성공을 표시한다. 결제 시작 시 cart revision과 성공 확인
+  시 현재 revision이 같을 때만 장바구니와 coupon selection을 비운다.
 - **Failure Policy:** Provider confirm을 시작한 뒤 timeout·응답 유실·5xx·파싱 실패 또는
   로컬 결과 commit 실패가 발생하면 성공/거절로 추정하거나 새 key로 승인하지 않는다.
   같은 Payment의 stable key와 paymentKey/providerOrderId 조회로 수렴하고 유한 예산 뒤에도
@@ -2321,6 +2367,11 @@
   현재 owner state의 server 계산을 확인한다. quote는 `subtotalKrw`, `couponDiscountKrw`,
   `pointsAppliedKrw`, `payableKrw`, `currency`와 line·pickup snapshot,
   `guarantee=NONE`, opaque `quoteFingerprint`를 반환한다.
+- **Immediate Checkout Amendment (2026-09-16):** 신규 quote 입력과 fingerprint에서 픽업 슬롯 ID,
+  시간창, 정원·예약 사용량을 제거한다. `order-quote-fingerprint/v7`은 메뉴·옵션·가격·판매 상태,
+  Store 주문 정책, 선택한 쿠폰 조건과 포인트 사용 요청, 수수료·적립 정책 등 Tx A가 고정할 거래조건을
+  비교한다. quote는 계속 무부수효과이며, 최종 주문 transaction은 Store commerce shared lock 아래 현재
+  영업 구간과 주문받기 상태를 다시 검증한다. `LEGACY_RESERVED` fingerprint replay는 기존 결과만 보존한다.
 - **No-hold Boundary:** quote는 Order, 픽업·쿠폰·포인트 reservation, Payment, 주문 생성
   idempotency record, Audit 또는 event를 만들지 않는다. 가격·slot을 보장하지 않고 Provider를
   호출하지 않으며 `Idempotency-Key`를 받지 않는다.
@@ -2380,6 +2431,12 @@
 - **Decision:** Merchant는 고객 공개용 Store address/directions/weekly hours와 Menu display
   category/description을 소유한다. 기존 Support-purpose profile을 customer display source나
   fallback으로 사용하지 않는다.
+- **Immediate Checkout Availability Amendment (2026-09-16):** 고객 표시 schedule은 신규 `IMMEDIATE`
+  결제의 authoritative 영업시간 원본이기도 하다. complete seven-day schedule이 없거나 해당 요일이 휴무,
+  `now < opensAt`, `now >= closesAt`이면 신규 초안/승인 확정을 차단한다. 원본 read 실패를 CLOSED나 OPEN으로
+  대체하지 않는다. 고객 탐색의 주문 가능성은 현재 영업 중이며 `acceptingOrders && pickupEnabled`인지를 함께
+  표현하되 승인 직전에 owner state를 재확인한다. 수동 주문받기 OFF는 기존 PAID를 일괄 취소하지 않는다.
+  마감 단축은 기존 시도의 cutoff만 줄일 수 있고 시간 연장·재개점·다음 날은 지난 거래를 되살리지 않는다.
 - **Profile Ownership:** `merchant_store_customer_display_profile`과 complete optional seven-day
   schedule은 ACTIVE same-store `OWNER`가 full replacement한다. profile version 하나가 text와 hours
   전체의 optimistic concurrency boundary이며 profile·hours·Audit는 한 transaction으로 commit 또는
@@ -2480,6 +2537,12 @@
   관리한다. Menu와 Option은 생성·전체 교체·보관할 수 있지만 public hard delete와 archived item 복원은
   제공하지 않는다. 실행 시 membership과 Store 소유권을 다시 검증하고 다른 Store 자원의 존재를 노출하지
   않는다.
+- **Immediate Checkout Lock Amendment (2026-09-16):** 영업시간 full replacement도 membership shared
+  lock을 먼저 보유한 뒤 Store commerce root exclusive lock을 획득한다. `IMMEDIATE` quote는 read-only,
+  Tx A·Tx C·수락은 필요한 경우 Store commerce shared lock으로 영업시간과 거래 owner state를 다시 검증한다.
+  외부 PG 호출 중에는 Store·Order·Payment·benefit DB lock과 connection을 보유하지 않는다. 현재 영업 마감
+  단축은 schedule 저장과 같은 transaction에서 아직 성립 전 또는 미수락 PAID의 cutoff/deadline을 단조 감소시키며,
+  실패하면 schedule만 commit하지 않는다.
 - **Authorization Serialization:** authoring transaction은 대상 Store membership row를 shared lock으로
   먼저 읽고 transaction 종료까지 유지한 뒤 같은 Store commerce root를 exclusive lock한다. membership이
   없으면 대상 Store 존재 여부와 무관하게 404, inactive·revoked membership 또는 허용되지 않은 역할은

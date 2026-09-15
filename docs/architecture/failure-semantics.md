@@ -86,6 +86,26 @@ Behavior:
   Plan 15는 이 검증까지만 제공하며 outbox 저장·V1→V2 activation과 Settlement consumer 실패
   처리는 Plan 20의 별도 transaction 경계다.
 
+#### Immediate checkout approval and order commitment
+
+- 신규 `IMMEDIATE` checkout의 초안 생성과 Toss 인증 대기는 Pickup, Coupon 또는 Point를 예약하지 않는다.
+  초안 `201`, success callback과 Provider approval만으로 고객 성공을 반환하거나 장바구니를 비우지 않는다.
+- Provider confirm은 DB transaction과 row lock 밖에서 실행한다. 승인 후 local Tx C는 원래 영업 cutoff,
+  Payment/Order replay, Coupon direct use, PointLot allocation, immutable settlement input과 Order `PAID`를
+  한 번에 commit한다. 이 중 하나라도 실패하면 부분 경제 write나 PAID를 남기지 않는다.
+- 영업 종료, coupon 경합/만료와 point 부족처럼 검증된 업무 실패는 Tx C rollback 뒤 별도 Tx D에서
+  Order/Payment를 다시 잠근다. 이미 같은 거래가 PAID인 승자를 재확인한 뒤에만 승인 void/refund work를
+  저장한다. final settlement input이 없는 미성립 승인도 실제 Provider approval fact로 복구한다.
+- DB 연결·lock timeout·deadlock·serialization failure, malformed/missing immutable snapshot과 Provider
+  결과불명은 혜택 부족이나 STORE_CLOSED로 바꾸지 않는다. 동일 Payment lookup/reconciliation으로 수렴하고
+  자동 예산 뒤에도 확정할 수 없으면 `MANUAL_REVIEW`다.
+- 현재 영업시간이 닫혔다는 사실은 새 confirm/commit을 차단하지만 이미 발생한 Payment의 조회,
+  reconciliation, void/refund를 차단하지 않는다. 다음 날 재개점이나 영업시간 연장은 저장된 cutoff를 늘리지
+  않는다.
+- `IMMEDIATE` 종료에는 실제 Pickup reservation이 없으므로 compensation PICKUP step은 처음부터
+  `NOT_REQUIRED`다. 없는 예약 해제를 APPLIED/success로 기록하지 않으며 legacy publication은 기존 source와
+  trigger로 계속 처리한다.
+
 #### Immutable Refund and Loyalty publication
 
 - Refund `SUCCEEDED` result는 immutable request/success allocation, Plan 15 settlement snapshot,

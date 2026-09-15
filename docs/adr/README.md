@@ -126,3 +126,12 @@
 | [ADR-122](ADR-122-external-keycloak-deployment.md) | Accepted | 외부 Keycloak을 사용하는 배포 모드 |
 | [ADR-123](ADR-123-order-quote-trade-terms-and-shared-availability.md) | Accepted | 주문 견적의 거래 조건과 공유 자원 잔여량 검증 분리 |
 | [ADR-124](ADR-124-management-api-vertical-slices.md) | Accepted | 관리 API의 소유권과 순차 수직 슬라이스 |
+| [ADR-125](ADR-125-publication-unknown-execution-recovery.md) | Accepted | publication 결과 불명 조사와 시도별 복구 |
+| [ADR-126](ADR-126-native-customer-support-inquiries.md) | Accepted | 고객 문의 접수와 공개 답변 |
+| [ADR-127](ADR-127-customer-selection-for-point-operations.md) | Accepted | 고객 선택으로 운영 포인트 계정 연결 |
+| [ADR-128](ADR-128-operation-target-selection-and-workflow-discovery.md) | Accepted | 운영 대상 선택과 상담 요청 탐색 |
+| [ADR-129](ADR-129-support-console-query-completion.md) | Accepted | 상담 현황·주문 요약·통합 승인함의 조회 경계 |
+| [ADR-130](ADR-130-perf-selective-database-cutover.md) | Accepted | 기존 perf 데이터를 보존하는 새 DB 선별 이관 |
+| [ADR-133](ADR-133-immediate-checkout-and-store-preparation.md) | Accepted | 장바구니 즉시 결제와 수락 시 준비시간 |
+| [ADR-134](ADR-134-post-approval-benefit-use-and-recovery.md) | Accepted | 승인 후 혜택 원자 사용과 미성립 승인 복구 |
+| [ADR-135](ADR-135-store-hours-payment-gate-and-cutoff.md) | Accepted | Store 영업시간 결제 gate와 단조 cutoff |
