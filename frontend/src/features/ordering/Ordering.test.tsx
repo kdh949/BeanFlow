@@ -253,8 +253,17 @@ describe("store detail", () => {
 
     renderStore();
 
-    expect(await screen.findByText("영업 중")).toBeInTheDocument();
-    expect(screen.getByText("주문 쉬는 중")).toBeInTheDocument();
+    const storeInformation = await screen.findByRole("button", { name: "매장 정보" });
+    const storeActions = screen.getByRole("group", { name: "매장 작업" });
+    const favoriteAction = await screen.findByRole("button", { name: /즐겨찾기 추가/ });
+    expect(storeActions).toContainElement(storeInformation);
+    expect(storeActions).toContainElement(favoriteAction);
+    expect(storeInformation).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("영업 중")).not.toBeVisible();
+    await userEvent.click(storeInformation);
+    expect(storeInformation).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("영업 중")).toBeVisible();
+    expect(screen.getByText("주문 쉬는 중")).toBeVisible();
     expect(screen.getByText(/현재 주문을 받지 않아요/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /아메리카노/ })).toBeDisabled();
   });

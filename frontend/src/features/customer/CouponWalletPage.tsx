@@ -10,6 +10,7 @@ import { Button, ButtonLink } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
 import { shortDateTime, won } from "../../lib/format";
 import { couponSelection, useCouponSelection } from "./couponSelection";
+import { couponReturnTarget } from "./couponNavigation";
 
 type WalletPage = components["schemas"]["CustomerCouponWalletPage"];
 type WalletItem = components["schemas"]["CustomerCouponWalletItem"];
@@ -75,10 +76,11 @@ export function CouponWalletPage() {
 
   if (!wallet && !error) return <LoadingState label="이 매장에서 사용할 쿠폰을 확인하는 중" />;
   if (!wallet) return <ErrorState error={error} retry={() => void load()} />;
+  const returnTarget = couponReturnTarget(searchParams.get("returnTo"), storeId, wallet.store.name);
 
   return (
     <div className="customer-page coupon-wallet-page">
-      <Link className="back-link" to={`/app/stores/${storeId}`}><ArrowLeft size={17} /> {wallet.store.name}</Link>
+      <Link className="back-link" to={returnTarget.to}><ArrowLeft size={17} /> {returnTarget.label}</Link>
       <PageHeading
         title={`${wallet.store.name} 쿠폰`}
       />
