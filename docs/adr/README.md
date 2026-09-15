@@ -126,3 +126,4 @@
 | [ADR-122](ADR-122-external-keycloak-deployment.md) | Accepted | 외부 Keycloak을 사용하는 배포 모드 |
 | [ADR-123](ADR-123-order-quote-trade-terms-and-shared-availability.md) | Accepted | 주문 견적의 거래 조건과 공유 자원 잔여량 검증 분리 |
 | [ADR-124](ADR-124-management-api-vertical-slices.md) | Accepted | 관리 API의 소유권과 순차 수직 슬라이스 |
+| [ADR-132](ADR-132-visitor-demo-workspace.md) | Accepted | 방문자별 데모 공간과 상태 기반 안내 |

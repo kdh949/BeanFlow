@@ -22,7 +22,13 @@ internal class RuntimeOpenApiParityTest(
     @Test
     fun `runtime OpenAPI operations exactly match public Spring MVC mappings`() {
         val actual = springMvcOperations()
-        val documented = OpenApiOperationInventory.load(RUNTIME_OPENAPI)
+        // The default context intentionally has visitor demo provisioning disabled.
+        // The enabled demo context verifies its complete mapping set in DemoWorkspaceIntegrationTest.
+        val documented =
+            OpenApiOperationInventory
+                .load(RUNTIME_OPENAPI)
+                .filterNot { it.path.startsWith("/api/v1/demo/") && it.path != "/api/v1/demo/config" }
+                .toSet()
 
         assertThat(actual)
             .withFailMessage(
@@ -59,7 +65,7 @@ internal class RuntimeOpenApiParityTest(
     }
 }
 
-private data class HttpOperation(
+internal data class HttpOperation(
     val path: String,
     val method: String,
 ) : Comparable<HttpOperation> {
@@ -68,7 +74,7 @@ private data class HttpOperation(
     override fun toString(): String = "$method $path"
 }
 
-private object OpenApiOperationInventory {
+internal object OpenApiOperationInventory {
     private val pathLine = Regex("^  (/[^:]*):\\s*$")
     private val methodLine = Regex("^    (get|post|put|patch|delete|head|options):\\s*$")
     private val referenceLine = Regex("^    \\${'$'}ref:\\s*[\\\"]([^\\\"]+)[\\\"]\\s*$")

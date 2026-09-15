@@ -42,6 +42,8 @@ internal class MerchantAccountEntity(
     val createdAt: Instant,
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant,
+    @Column(name = "demo_expires_at")
+    var demoExpiresAt: Instant? = null,
     @Version
     var version: Long = 0,
 ) {
