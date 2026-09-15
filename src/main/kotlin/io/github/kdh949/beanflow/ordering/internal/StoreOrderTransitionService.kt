@@ -3,7 +3,6 @@ package io.github.kdh949.beanflow.ordering.internal
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderAcceptedV1
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
-import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
 import io.github.kdh949.beanflow.identity.api.StoreAccessOperations
 import io.github.kdh949.beanflow.identity.api.StoreActor
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
@@ -13,6 +12,8 @@ import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationCaseView
 import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
+import io.github.kdh949.beanflow.ordering.api.OrderRejectionCause
+import io.github.kdh949.beanflow.ordering.api.OrderRejectionSourceActorType
 import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshotOperations
 import io.github.kdh949.beanflow.payment.api.ApprovedPaymentSettlementOperations
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
@@ -249,10 +250,11 @@ internal class StoreOrderTransitionService(
                     actorId = actor.actorId.toString(),
                     actorType =
                         when (actor.role) {
-                            StoreActorRole.OWNER -> OrderRejectionActorType.STORE_OWNER
-                            StoreActorRole.STAFF -> OrderRejectionActorType.STORE_STAFF
+                            StoreActorRole.OWNER -> OrderRejectionSourceActorType.STORE_OWNER
+                            StoreActorRole.STAFF -> OrderRejectionSourceActorType.STORE_STAFF
                         },
                 ),
+            cause = OrderRejectionCause.STORE_REJECTION,
             reason = reason,
             now = now,
             correlationId = correlationId,

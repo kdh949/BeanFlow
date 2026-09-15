@@ -2,6 +2,8 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.operations.api.AcceptanceTimeoutWorkReprocessingCaseOperations
 import io.github.kdh949.beanflow.operations.api.OpenReprocessingCaseCommand
+import io.github.kdh949.beanflow.ordering.api.OrderRejectionCause
+import io.github.kdh949.beanflow.ordering.api.OrderRejectionSourceActorType
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -93,7 +95,10 @@ internal class AcceptanceTimeoutWorkService(
         }
         return when (order.state) {
             OrderState.REJECTED -> {
-                if (order.rejectionReason == TIMEOUT_REASON &&
+                if (order.rejectionCause == OrderRejectionCause.ACCEPTANCE_TIMEOUT &&
+                    order.rejectionActorType == OrderRejectionSourceActorType.SYSTEM_TIMEOUT &&
+                    order.rejectionEventId != null &&
+                    order.rejectionTerminalVersion == order.version &&
                     order.rejectedAt?.let { !it.isBefore(claim.acceptanceDeadlineAt) } == true
                 ) {
                     AcceptanceTimeoutSourceOutcome.REJECTED
@@ -230,7 +235,6 @@ internal class AcceptanceTimeoutWorkService(
 
     private companion object {
         const val MAX_ATTEMPTS = 4
-        const val TIMEOUT_REASON = "STORE_ACCEPTANCE_TIMEOUT"
         const val CLAIM_LEASE_EXPIRED = "CLAIM_LEASE_EXPIRED"
         const val TIMEOUT_SOURCE_CONFLICT = "TIMEOUT_SOURCE_CONFLICT"
         const val UNEXPECTED_FAILURE = "UNEXPECTED_FAILURE"

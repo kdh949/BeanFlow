@@ -11,6 +11,8 @@ import io.github.kdh949.beanflow.operations.api.OpenOrderCompensationCaseCommand
 import io.github.kdh949.beanflow.operations.api.OrderCompensationCaseView
 import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationTrigger
+import io.github.kdh949.beanflow.ordering.api.OrderRejectionCause
+import io.github.kdh949.beanflow.ordering.api.OrderRejectionSourceActorType
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.context.ApplicationEventPublisher
@@ -21,7 +23,7 @@ import java.time.Instant
 
 internal data class RejectionActor(
     val actorId: String,
-    val actorType: OrderRejectionActorType,
+    val actorType: OrderRejectionSourceActorType,
 )
 
 @Component
@@ -35,18 +37,19 @@ internal class OrderRejectionCoordinator(
     fun reject(
         order: OrderEntity,
         actor: RejectionActor,
+        cause: OrderRejectionCause,
         reason: String,
         now: Instant,
         correlationId: String,
         causationId: String,
     ): OrderCompensationCaseView {
-        order.reject(now, reason)
+        val eventId = identifierSource.next()
+        val terminalOrderVersion = order.version + 1
+        order.reject(now, reason, cause, actor.actorType, eventId, terminalOrderVersion)
         val couponPolicy =
             policyOperations.current(ExpiredBenefitRestorationTrigger.STORE_REJECTION, ExpiredBenefitType.COUPON)
         val pointsPolicy =
             policyOperations.current(ExpiredBenefitRestorationTrigger.STORE_REJECTION, ExpiredBenefitType.POINTS)
-        val eventId = identifierSource.next()
-        val terminalOrderVersion = order.version + 1
         val sourceReference = "order:${order.id}:rejection:$terminalOrderVersion"
         val recovery =
             compensationOperations.open(
@@ -85,7 +88,7 @@ internal class OrderRejectionCoordinator(
                 customerId = order.customerId,
                 storeId = order.storeId,
                 actorId = actor.actorId,
-                actorType = actor.actorType,
+                actorType = actor.actorType.toEventActorType(),
                 reason = reason.trim(),
                 rejectedAt = now,
                 couponPolicy = couponPolicy.toEventSnapshot(),
@@ -116,4 +119,6 @@ internal class OrderRejectionCoordinator(
             mode = mode.name,
             compensationValidityDays = compensationValidityDays,
         )
+
+    private fun OrderRejectionSourceActorType.toEventActorType(): OrderRejectionActorType = OrderRejectionActorType.valueOf(name)
 }
