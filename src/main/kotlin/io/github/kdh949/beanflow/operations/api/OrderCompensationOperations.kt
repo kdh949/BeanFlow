@@ -134,6 +134,7 @@ data class OpenOrderCompensationCaseCommand(
     val pointsRequired: Boolean,
     val correlationId: String,
     val now: Instant,
+    val pickupRequired: Boolean = true,
 )
 
 interface OrderCompensationOperations {

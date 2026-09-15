@@ -50,6 +50,7 @@ data class ClaimOneTimePaymentConfirmationCommand(
     val paymentKey: String,
     val amountKrw: Long,
     val now: Instant,
+    val providerConfirmationDeadline: Instant? = null,
 )
 
 enum class OneTimePaymentConfirmationClaimState {

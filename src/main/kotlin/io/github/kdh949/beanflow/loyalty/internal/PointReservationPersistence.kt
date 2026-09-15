@@ -96,8 +96,8 @@ internal class PointReservationEntity(
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     var state: PointReservationState,
-    @Column(name = "reservation_expires_at", nullable = false)
-    val reservationExpiresAt: Instant,
+    @Column(name = "reservation_expires_at")
+    val reservationExpiresAt: Instant?,
     @Column(name = "source_reference", nullable = false)
     val sourceReference: String,
     @Column(name = "created_at", nullable = false)

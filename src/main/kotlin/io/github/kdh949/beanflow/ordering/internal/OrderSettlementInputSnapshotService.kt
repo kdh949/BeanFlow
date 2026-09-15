@@ -26,6 +26,19 @@ import java.time.Instant
 import java.util.HexFormat
 import java.util.UUID
 
+private data class SettlementOrderInput(
+    val id: UUID,
+    val storeId: UUID,
+    val subtotalKrw: Long,
+    val couponDiscountKrw: Long,
+    val pointsAppliedKrw: Long,
+    val payableKrw: Long,
+)
+
+private fun Order.settlementInput() = SettlementOrderInput(id, storeId, subtotalKrw, couponDiscountKrw, pointsAppliedKrw, payableKrw)
+
+private fun OrderEntity.settlementInput() = SettlementOrderInput(id, storeId, subtotalKrw, couponDiscountKrw, pointsAppliedKrw, payableKrw)
+
 @Service
 internal class OrderSettlementInputSnapshotService(
     private val repository: OrderSettlementInputSnapshotJpaRepository,
@@ -34,6 +47,23 @@ internal class OrderSettlementInputSnapshotService(
     @Transactional(propagation = Propagation.MANDATORY)
     fun materialize(
         order: Order,
+        terms: StoreSettlementTermsSnapshot,
+        coupon: CouponReservationQuote?,
+        points: PointReservationResult?,
+        createdAt: Instant,
+    ): OrderSettlementInputSnapshot = materialize(order.settlementInput(), terms, coupon, points, createdAt)
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun materializeImmediate(
+        order: OrderEntity,
+        terms: StoreSettlementTermsSnapshot,
+        coupon: CouponReservationQuote?,
+        points: PointReservationResult?,
+        createdAt: Instant,
+    ): OrderSettlementInputSnapshot = materialize(order.settlementInput(), terms, coupon, points, createdAt)
+
+    private fun materialize(
+        order: SettlementOrderInput,
         terms: StoreSettlementTermsSnapshot,
         coupon: CouponReservationQuote?,
         points: PointReservationResult?,
@@ -78,7 +108,7 @@ internal class OrderSettlementInputSnapshotService(
         }
 
     private fun calculate(
-        order: Order,
+        order: SettlementOrderInput,
         terms: StoreSettlementTermsSnapshot,
         coupon: CouponReservationQuote?,
         points: PointReservationResult?,
@@ -134,7 +164,7 @@ internal class OrderSettlementInputSnapshotService(
     }
 
     private fun validateTerms(
-        order: Order,
+        order: SettlementOrderInput,
         terms: StoreSettlementTermsSnapshot,
         createdAt: Instant,
     ) {
@@ -149,7 +179,7 @@ internal class OrderSettlementInputSnapshotService(
     }
 
     private fun couponSource(
-        order: Order,
+        order: SettlementOrderInput,
         coupon: CouponReservationQuote?,
     ): CouponSource {
         if (coupon == null) {
@@ -197,7 +227,7 @@ internal class OrderSettlementInputSnapshotService(
     }
 
     private fun pointSource(
-        order: Order,
+        order: SettlementOrderInput,
         points: PointReservationResult?,
     ): PointSource {
         if (points == null) {

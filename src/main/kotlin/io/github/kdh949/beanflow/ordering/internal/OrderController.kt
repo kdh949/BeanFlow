@@ -33,7 +33,8 @@ import java.util.UUID
 
 data class CreateOrderRequest(
     val storeId: UUID,
-    val pickupSlotId: UUID,
+    @Deprecated("Omit for immediate checkout; retained for legacy recovery compatibility")
+    val pickupSlotId: UUID? = null,
     @field:NotEmpty
     val lines: List<@Valid CreateOrderLineRequest>,
     val couponIssuanceId: UUID?,
@@ -45,7 +46,8 @@ data class CreateOrderRequest(
 
 data class OrderQuoteRequest(
     val storeId: UUID,
-    val pickupSlotId: UUID,
+    @Deprecated("Omit for immediate checkout; retained for legacy recovery compatibility")
+    val pickupSlotId: UUID? = null,
     @field:NotEmpty
     val lines: List<@Valid CreateOrderLineRequest>,
     val couponIssuanceId: UUID?,
@@ -61,7 +63,8 @@ data class CreateOrderLineRequest(
 )
 
 data class ReorderOrderRequest(
-    val pickupSlotId: UUID,
+    @Deprecated("Omit for immediate checkout; retained for legacy recovery compatibility")
+    val pickupSlotId: UUID? = null,
     val couponIssuanceId: UUID?,
     @field:Min(0)
     val pointsToUseKrw: Long,

@@ -38,6 +38,7 @@ internal data class StoreOrderActionRequest(
     val expectedStatus: StoreOrderExpectedStatus,
     @field:Size(max = 500)
     val reason: String?,
+    val preparationMinutes: Int? = null,
 )
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -46,6 +47,7 @@ internal data class StoreOrderBoardLifecycleResponse(
     val acceptedAt: Instant?,
     val preparingAt: Instant?,
     val readyAt: Instant?,
+    val estimatedReadyAt: Instant? = null,
 )
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -55,8 +57,8 @@ internal data class StoreOrderBoardItemResponse(
     val pickupBusinessDate: LocalDate,
     val lane: StoreOrderBoardLane?,
     val status: String,
-    val pickupWindowStart: Instant,
-    val pickupWindowEnd: Instant,
+    val pickupWindowStart: Instant?,
+    val pickupWindowEnd: Instant?,
     val itemSummary: String,
     val acceptanceDeadlineAt: Instant?,
     val acceptancePhase: StoreOrderAcceptancePhase?,

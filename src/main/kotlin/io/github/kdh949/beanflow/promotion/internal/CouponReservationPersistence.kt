@@ -157,8 +157,8 @@ internal class CouponReservationEntity(
     val platformCouponCostKrw: Long,
     @Column(name = "store_coupon_cost_krw", nullable = false)
     val storeCouponCostKrw: Long,
-    @Column(name = "reservation_expires_at", nullable = false)
-    val reservationExpiresAt: Instant,
+    @Column(name = "reservation_expires_at")
+    val reservationExpiresAt: Instant?,
     @Column(name = "source_reference", nullable = false)
     val sourceReference: String,
     @Column(name = "created_at", nullable = false)

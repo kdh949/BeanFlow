@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
+import java.time.LocalTime
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
@@ -57,6 +58,39 @@ internal class FastReorderServiceTest
                     String::class.java,
                 ),
             ).containsExactly("CREATE_ORDER", "REORDER_ORDER_V1")
+        }
+
+        @Test
+        fun `terminal legacy source can create a slotless immediate reorder without new reservations`() {
+            val source = sourceOrder()
+            OrderCreationDatabaseFixture.insertOperatingHours(
+                jdbcTemplate,
+                source.fixture.storeId,
+                LocalTime.MIDNIGHT,
+                LocalTime.of(23, 59),
+            )
+
+            val response = reorderOrder.reorder("reorder-immediate-01", source.command().copy(pickupSlotId = null))
+            val reorderedId =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT id FROM ordering_order WHERE id <> ?",
+                        UUID::class.java,
+                        source.orderId,
+                    ),
+                )
+
+            assertThat(response.status).withFailMessage(response.body).isEqualTo(201)
+            assertThat(response.body).contains("\"state\":\"PENDING_PAYMENT\"")
+            assertThat(
+                jdbcTemplate.queryForMap(
+                    "SELECT checkout_mode, pickup_slot_id, reservation_expires_at FROM ordering_order WHERE id = ?",
+                    reorderedId,
+                ),
+            ).containsEntry("checkout_mode", "IMMEDIATE")
+                .containsEntry("pickup_slot_id", null)
+                .containsEntry("reservation_expires_at", null)
+            assertThat(count("fulfillment_pickup_reservation")).isOne()
         }
 
         @Test

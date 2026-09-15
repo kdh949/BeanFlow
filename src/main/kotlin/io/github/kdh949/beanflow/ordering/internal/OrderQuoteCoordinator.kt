@@ -10,6 +10,9 @@ import io.github.kdh949.beanflow.merchant.api.MerchantOrderQuoteSnapshot
 import io.github.kdh949.beanflow.merchant.api.QuoteOrderLine
 import io.github.kdh949.beanflow.merchant.api.StoreDisplaySnapshot
 import io.github.kdh949.beanflow.merchant.api.StoreDisplaySnapshotOperations
+import io.github.kdh949.beanflow.merchant.api.StoreOrderAvailabilityOperations
+import io.github.kdh949.beanflow.merchant.api.StoreOrderAvailabilityReason
+import io.github.kdh949.beanflow.merchant.api.StoreOrderAvailabilitySnapshot
 import io.github.kdh949.beanflow.merchant.api.StoreSettlementTermsOperations
 import io.github.kdh949.beanflow.merchant.api.StoreSettlementTermsSnapshot
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyQuoteOperations
@@ -43,7 +46,8 @@ internal data class OrderQuoteCalculation(
     val response: OrderQuoteResponse,
     val menu: MerchantOrderQuoteSnapshot,
     val storeDisplay: StoreDisplaySnapshot,
-    val pickup: PickupQuoteSnapshot,
+    val pickup: PickupQuoteSnapshot?,
+    val availability: StoreOrderAvailabilitySnapshot?,
     val coupon: CouponQuoteSnapshot?,
     val points: PointQuoteSnapshot?,
     val pricing: OrderPricing,
@@ -60,6 +64,7 @@ internal class OrderQuoteCoordinator(
     private val couponQuoteOperations: CouponQuoteOperations,
     private val pointQuoteOperations: PointQuoteOperations,
     private val pointAccrualPolicyOperations: OrdinaryPointAccrualPolicyQuoteOperations,
+    private val storeOrderAvailabilityOperations: StoreOrderAvailabilityOperations,
     private val clock: Clock,
     private val phaseTelemetry: PerformancePhaseTelemetry,
 ) {
@@ -90,7 +95,6 @@ internal class OrderQuoteCoordinator(
         lock: Boolean,
     ): OrderQuoteCalculation {
         validate(command)
-        val quotedAt = clock.instant()
         val quoteLines = command.lines.map { QuoteOrderLine(it.menuId, it.optionIds, it.quantity) }
         val menu =
             if (lock) {
@@ -99,6 +103,17 @@ internal class OrderQuoteCoordinator(
                 merchantQuoteOperations.inspectForQuote(command.storeId, quoteLines)
             }
         requireMenuIdentity(command, menu)
+        val quotedAt = clock.instant()
+        val availability =
+            if (command.pickupSlotId == null) {
+                if (lock) {
+                    storeOrderAvailabilityOperations.lockForOrderCommitment(command.storeId, quotedAt)
+                } else {
+                    storeOrderAvailabilityOperations.inspect(command.storeId, quotedAt)
+                }.also(::requireAvailable)
+            } else {
+                null
+            }
         val storeDisplay = storeDisplayOperations.require(command.storeId)
         val settlementTerms = settlementTermsOperations.findApplicable(command.storeId, quotedAt)
         val pointAccrualPolicy =
@@ -108,10 +123,12 @@ internal class OrderQuoteCoordinator(
                 pointAccrualPolicyOperations.inspectForQuote(command.storeId)
             }
         val pickup =
-            if (lock) {
-                pickupQuoteOperations.lockForOrderCreation(command.storeId, command.pickupSlotId)
-            } else {
-                pickupQuoteOperations.inspect(command.storeId, command.pickupSlotId)
+            command.pickupSlotId?.let { pickupSlotId ->
+                if (lock) {
+                    pickupQuoteOperations.lockForOrderCreation(command.storeId, pickupSlotId)
+                } else {
+                    pickupQuoteOperations.inspect(command.storeId, pickupSlotId)
+                }
             }
         val grossLines = grossLines(menu.lines)
         val coupon =
@@ -177,6 +194,7 @@ internal class OrderQuoteCoordinator(
                 pricing = pricing,
                 settlementTerms = settlementTerms,
                 pointAccrualPolicy = pointAccrualPolicy,
+                availability = availability,
                 publicLines = publicLines,
                 publicPricing = publicPricing,
             )
@@ -186,19 +204,32 @@ internal class OrderQuoteCoordinator(
                     quotedAt = quotedAt,
                     quoteFingerprint = fingerprint,
                     store = OrderQuoteStore(command.storeId, storeDisplay.name),
-                    pickupWindow = OrderQuotePickupWindow(pickup.startsAt, pickup.endsAt),
+                    pickupWindow = pickup?.let { OrderQuotePickupWindow(it.startsAt, it.endsAt) },
                     lines = publicLines,
                     pricing = publicPricing,
                 ),
             menu = menu,
             storeDisplay = storeDisplay,
             pickup = pickup,
+            availability = availability,
             coupon = coupon,
             points = points,
             pricing = pricing,
             settlementTerms = settlementTerms,
             pointAccrualPolicy = pointAccrualPolicy,
         )
+    }
+
+    private fun requireAvailable(availability: StoreOrderAvailabilitySnapshot) {
+        if (availability.available) return
+        val code =
+            when (availability.reason) {
+                StoreOrderAvailabilityReason.AVAILABLE -> FailureCode.DEPENDENCY_UNAVAILABLE
+                StoreOrderAvailabilityReason.STORE_HOURS_NOT_CONFIGURED -> FailureCode.STORE_HOURS_NOT_CONFIGURED
+                StoreOrderAvailabilityReason.STORE_CLOSED -> FailureCode.STORE_CLOSED
+                StoreOrderAvailabilityReason.STORE_NOT_ACCEPTING_ORDERS -> FailureCode.STORE_NOT_ACCEPTING_ORDERS
+            }
+        throw DomainFailure(code, "Store is not available for a new order")
     }
 
     private fun validate(command: OrderQuoteCommand) {
@@ -238,13 +269,13 @@ internal class OrderQuoteCoordinator(
 }
 
 internal object OrderQuoteFingerprint {
-    private const val VERSION = "order-quote-fingerprint/v6"
+    private const val VERSION = "order-quote-fingerprint/v7"
 
     fun calculate(
         command: OrderQuoteCommand,
         menu: MerchantOrderQuoteSnapshot,
         storeDisplay: StoreDisplaySnapshot,
-        pickup: PickupQuoteSnapshot,
+        pickup: PickupQuoteSnapshot?,
         coupon: CouponQuoteSnapshot?,
         points: PointQuoteSnapshot?,
         pricing: OrderPricing,
@@ -252,6 +283,7 @@ internal object OrderQuoteFingerprint {
         pointAccrualPolicy: SelectedOrdinaryPointAccrualPolicy,
         publicLines: List<OrderQuoteLine>,
         publicPricing: OrderQuotePricing,
+        availability: StoreOrderAvailabilitySnapshot?,
     ): String {
         val canonical =
             CanonicalFields()
@@ -260,6 +292,7 @@ internal object OrderQuoteFingerprint {
                     value(command.customerId)
                     value(command.storeId)
                     value(command.pickupSlotId)
+                    value(if (command.pickupSlotId == null) "IMMEDIATE" else "LEGACY_RESERVED")
                     value(command.couponIssuanceId)
                     value(command.pointsToUseKrw)
                     size(command.lines.size)
@@ -287,11 +320,21 @@ internal object OrderQuoteFingerprint {
                     }
                     value(storeDisplay.storeId)
                     value(storeDisplay.name)
-                    value(pickup.pickupSlotId)
-                    value(pickup.storeId)
-                    value(pickup.startsAt)
-                    value(pickup.endsAt)
-                    value(pickup.capacity)
+                    nullable(pickup) { current ->
+                        value(current.pickupSlotId)
+                        value(current.storeId)
+                        value(current.startsAt)
+                        value(current.endsAt)
+                        value(current.capacity)
+                    }
+                    nullable(availability) { current ->
+                        value(current.reason)
+                        value(current.businessDate)
+                        value(current.orderingWindowOpensAt)
+                        value(current.orderingWindowClosesAt)
+                        value(current.displayVersion)
+                        value(current.orderingPolicyVersion)
+                    }
                     // ADR-123: shared usage is checked under owner locks, not a customer trade term.
                     nullable(coupon) { current ->
                         value(current.couponIssuanceId)

@@ -6,7 +6,7 @@ import java.util.UUID
 data class OrderQuoteCommand(
     val customerId: UUID,
     val storeId: UUID,
-    val pickupSlotId: UUID,
+    val pickupSlotId: UUID? = null,
     val lines: List<CreateOrderLineCommand>,
     val couponIssuanceId: UUID?,
     val pointsToUseKrw: Long,
@@ -42,7 +42,7 @@ data class OrderQuoteResponse(
     val quotedAt: Instant,
     val quoteFingerprint: String,
     val store: OrderQuoteStore,
-    val pickupWindow: OrderQuotePickupWindow,
+    val pickupWindow: OrderQuotePickupWindow?,
     val lines: List<OrderQuoteLine>,
     val pricing: OrderQuotePricing,
     val guarantee: String = "NONE",

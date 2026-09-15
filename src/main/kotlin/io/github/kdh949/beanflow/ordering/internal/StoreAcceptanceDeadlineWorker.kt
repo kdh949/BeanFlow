@@ -3,6 +3,8 @@ package io.github.kdh949.beanflow.ordering.internal
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.event.EventListener
 import org.springframework.data.domain.PageRequest
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -27,9 +29,21 @@ internal class StoreAcceptanceDeadlineWorker(
         runOnce()
     }
 
+    @EventListener(ApplicationReadyEvent::class)
+    fun runStartupOverdueScan() {
+        runOnce()
+    }
+
     fun runOnce(): Int {
         val now = clock.instant()
         val page = PageRequest.of(0, chunkSize)
+        orderRepository.findImmediateCheckoutDueIds(now, page).forEach { orderId ->
+            try {
+                service.expireImmediateDraft(orderId, now)
+            } catch (failure: RuntimeException) {
+                logger.error("immediate_checkout_expiry orderId={} outcome=FAILED", orderId, failure)
+            }
+        }
         orderRepository.findAcceptanceWarningDueIds(now, page).forEach { orderId ->
             try {
                 val outcome = service.requestWarning(orderId, now)

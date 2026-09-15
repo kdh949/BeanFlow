@@ -194,6 +194,9 @@ internal class OneTimePaymentService(
         ) {
             callbackMismatch()
         }
+        if (command.providerConfirmationDeadline?.let { !command.now.isBefore(it) } == true) {
+            conflict(FailureCode.STORE_CLOSED, "Store ordering window has closed")
+        }
 
         attempt.claim(command.paymentKey, payloadHash, identifierSource.next(), command.now)
         payment.approvalState = PaymentApprovalState.APPROVING

@@ -35,6 +35,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.LocalTime
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
@@ -211,6 +212,56 @@ internal class CustomerCancellationCommandIntegrationTest
         }
 
         @Test
+        fun `customer and support cancellation preserve slotless immediate history without fake releases`() {
+            val customerFixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, customerFixture)
+            OrderCreationDatabaseFixture.insertOperatingHours(
+                jdbcTemplate,
+                customerFixture.storeId,
+                LocalTime.of(0, 1),
+                LocalTime.of(23, 59),
+            )
+            val customerOrderId = createOrder(customerFixture, "immediate-customer-cancel-create", immediate = true)
+
+            assertThat(
+                cancel(customerOrderId, customerFixture.customerId, "immediate-customer-cancel", "ORDER_MISTAKE", null).status,
+            ).isEqualTo(200)
+            assertThat(value("SELECT state FROM ordering_order WHERE id = ?", customerOrderId)).isEqualTo("CANCELLED")
+            assertThat(count("fulfillment_pickup_reservation")).isZero()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record WHERE action LIKE 'PICKUP_RESERVATION_RELEASED_BY_%'",
+                    Long::class.java,
+                ),
+            ).isZero()
+
+            val supportFixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, supportFixture)
+            OrderCreationDatabaseFixture.insertOperatingHours(
+                jdbcTemplate,
+                supportFixture.storeId,
+                LocalTime.of(0, 1),
+                LocalTime.of(23, 59),
+            )
+            val supportOrderId = createOrder(supportFixture, "immediate-support-cancel-create", immediate = true)
+            val report = supportOrderCancellations.cancel(supportCancellationCommand(supportOrderId, expectedVersion = 0))
+
+            assertThat(report.result).isEqualTo(SupportOrderChangeOwnerResult.APPLIED)
+            assertThat(report.previousPickupSlotId).isNull()
+            assertThat(report.currentPickupSlotId).isNull()
+            assertThat(value("SELECT cancellation_cause FROM ordering_order WHERE id = ?", supportOrderId))
+                .isEqualTo("SUPPORT_REQUEST")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM ordering_support_order_change_history WHERE order_id = ? AND previous_pickup_slot_id IS NULL AND current_pickup_slot_id IS NULL",
+                    Long::class.java,
+                    supportOrderId,
+                ),
+            ).isOne()
+            assertThat(count("fulfillment_pickup_reservation")).isZero()
+        }
+
+        @Test
         fun `support pickup reschedule updates owner models once and replays exact source`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
@@ -308,7 +359,7 @@ internal class CustomerCancellationCommandIntegrationTest
                 StoreTransitionActor(storeActorId, setOf(StoreActorRole.STAFF)),
                 orderId,
                 "support-accepted-store",
-                StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null),
+                StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null, 10),
             )
             val currentVersion = number("SELECT version FROM ordering_order WHERE id = ?", orderId)
             val unauthorized = supportCancellationCommand(orderId, currentVersion)
@@ -783,7 +834,7 @@ internal class CustomerCancellationCommandIntegrationTest
                             StoreTransitionActor(storeActorId, setOf(StoreActorRole.STAFF)),
                             orderId,
                             "accept-race-store",
-                            StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null),
+                            StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null, 10),
                         )
                     }
                 }
@@ -862,14 +913,19 @@ internal class CustomerCancellationCommandIntegrationTest
             key: String,
             couponIssuanceId: UUID? = null,
             pointsToUseKrw: Long = 0,
+            immediate: Boolean = false,
         ): UUID {
             val coupon = couponIssuanceId?.let { "\"couponIssuanceId\":\"$it\"," }.orEmpty()
-            val quote =
-                orderQuoteUseCase.attachCurrentQuote(
-                    fixture.command(
+            val pickup = if (immediate) "" else "\"pickupSlotId\":\"${fixture.pickupSlotId}\","
+            val command =
+                fixture
+                    .command(
                         pointsToUseKrw = pointsToUseKrw,
                         couponIssuanceId = couponIssuanceId,
-                    ),
+                    ).let { if (immediate) it.copy(pickupSlotId = null) else it }
+            val quote =
+                orderQuoteUseCase.attachCurrentQuote(
+                    command,
                 )
             mockMvc
                 .perform(
@@ -881,7 +937,7 @@ internal class CustomerCancellationCommandIntegrationTest
                             """
                             {
                               "storeId":"${fixture.storeId}",
-                              "pickupSlotId":"${fixture.pickupSlotId}",
+                              $pickup
                               "lines":[{"menuId":"${fixture.menuId}","optionIds":[],"quantity":1}],
                               $coupon
                               "pointsToUseKrw":$pointsToUseKrw,

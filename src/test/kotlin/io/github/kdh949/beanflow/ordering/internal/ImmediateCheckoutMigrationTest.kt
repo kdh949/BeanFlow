@@ -43,7 +43,7 @@ internal class ImmediateCheckoutMigrationTest : IsolatedPostgresSupport() {
     }
 
     @Test
-    fun `V89 accepts a slotless immediate draft and rejects a hidden lease`() {
+    fun `V90 accepts a slotless immediate draft without a settlement snapshot and rejects a hidden lease`() {
         flyway().migrate()
         val orderId = UUID.randomUUID()
         insertImmediate(orderId)
@@ -63,6 +63,24 @@ internal class ImmediateCheckoutMigrationTest : IsolatedPostgresSupport() {
                 orderId,
             )
         }.isInstanceOf(DataIntegrityViolationException::class.java)
+    }
+
+    @Test
+    fun `V90 permits immediate draft expiry but still requires settlement input for paid orders`() {
+        flyway().migrate()
+        val draftOrderId = UUID.randomUUID()
+        insertImmediate(draftOrderId)
+
+        jdbc.update(
+            "UPDATE ordering_order SET state = 'EXPIRED', updated_at = ordering_window_closes_at WHERE id = ?",
+            draftOrderId,
+        )
+        assertThat(jdbc.queryForObject("SELECT state FROM ordering_order WHERE id = ?", String::class.java, draftOrderId))
+            .isEqualTo("EXPIRED")
+
+        assertThatThrownBy { insertImmediatePaidWithoutSettlement(UUID.randomUUID()) }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
+            .hasMessageContaining("Order requires exactly one settlement input snapshot")
     }
 
     @Test
@@ -118,11 +136,11 @@ internal class ImmediateCheckoutMigrationTest : IsolatedPostgresSupport() {
     }
 
     private fun insertImmediate(orderId: UUID) {
-        withoutOrderUserTriggers {
-            val reference = OrderCreationDatabaseFixture.registerPublicReference(jdbc, orderId)
+        val reference = OrderCreationDatabaseFixture.registerPublicReference(jdbc, orderId)
+        withoutPointAccrualSourceTrigger {
             jdbc.update(
                 """
-                INSERT INTO ordering_order (
+                    INSERT INTO ordering_order (
                     id, customer_id, store_id, pickup_slot_id, state,
                     subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw, currency,
                     reservation_expires_at, created_at, updated_at, version,
@@ -141,6 +159,42 @@ internal class ImmediateCheckoutMigrationTest : IsolatedPostgresSupport() {
                 LocalDate.parse("2026-09-16"),
                 Timestamp.from(Instant.parse("2026-09-16T09:00:00Z")),
             )
+        }
+    }
+
+    private fun insertImmediatePaidWithoutSettlement(orderId: UUID) {
+        val reference = OrderCreationDatabaseFixture.registerPublicReference(jdbc, orderId)
+        withoutPointAccrualSourceTrigger {
+            jdbc.update(
+                """
+                INSERT INTO ordering_order (
+                    id, customer_id, store_id, pickup_slot_id, state,
+                    subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw, currency,
+                    reservation_expires_at, paid_at, acceptance_warning_at, acceptance_deadline_at,
+                    created_at, updated_at, version,
+                    public_reference, pickup_business_date, pickup_sequence, store_name_snapshot,
+                    pickup_window_start_snapshot, pickup_window_end_snapshot,
+                    checkout_mode, ordering_window_closes_at, checkout_input_snapshot, checkout_input_schema_version
+                ) VALUES (?, ?, ?, NULL, 'PAID', 1000, 0, 0, 1000, 'KRW', NULL,
+                    TIMESTAMPTZ '2026-09-16 01:00:00Z', TIMESTAMPTZ '2026-09-16 01:02:00Z',
+                    TIMESTAMPTZ '2026-09-16 01:03:00Z', TIMESTAMPTZ '2026-09-16 01:00:00Z',
+                    TIMESTAMPTZ '2026-09-16 01:00:00Z', 0, ?, DATE '2026-09-16', 1, 'BeanFlow',
+                    NULL, NULL, 'IMMEDIATE', TIMESTAMPTZ '2026-09-16 09:00:00Z', '{"schemaVersion":1}'::jsonb, 1)
+                """.trimIndent(),
+                orderId,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                reference,
+            )
+        }
+    }
+
+    private fun withoutPointAccrualSourceTrigger(block: () -> Unit) {
+        jdbc.execute("ALTER TABLE ordering_order DISABLE TRIGGER ordering_order_requires_point_accrual_source")
+        try {
+            block()
+        } finally {
+            jdbc.execute("ALTER TABLE ordering_order ENABLE TRIGGER ordering_order_requires_point_accrual_source")
         }
     }
 

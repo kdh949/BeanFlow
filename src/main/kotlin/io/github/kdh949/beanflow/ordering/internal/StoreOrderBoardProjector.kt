@@ -88,7 +88,7 @@ internal class StoreOrderBoardProjector(
             acceptanceDeadlineAt = order.acceptanceDeadlineAt,
             acceptancePhase = presentation.acceptancePhase,
             allowedActions = presentation.allowedActions,
-            lifecycle = lifecycle.toBoardResponse(),
+            lifecycle = lifecycle.toBoardResponse(order.estimatedReadyAt),
             compensationRecovery = result.compensationRecovery,
         )
     }
@@ -102,7 +102,21 @@ internal class StoreOrderBoardProjector(
         val state = parseState(order.state)
         val lifecycle = order.lifecycle()
         OrderLifecycleProjection.validate(state, lifecycle)
-        if (order.pickupSequence <= 0 || !order.pickupWindowEnd.isAfter(order.pickupWindowStart)) {
+        val validPickupWindow =
+            when {
+                order.pickupWindowStart == null && order.pickupWindowEnd == null -> {
+                    true
+                }
+
+                order.pickupWindowStart != null && order.pickupWindowEnd != null -> {
+                    order.pickupWindowEnd.isAfter(order.pickupWindowStart)
+                }
+
+                else -> {
+                    false
+                }
+            }
+        if (order.pickupSequence <= 0 || !validPickupWindow) {
             dependency("Store order board projection is invalid")
         }
         PublicOrderReference.parse(order.publicReference)
@@ -125,7 +139,7 @@ internal class StoreOrderBoardProjector(
             acceptanceDeadlineAt = order.acceptanceDeadlineAt,
             acceptancePhase = presentation.acceptancePhase,
             allowedActions = presentation.allowedActions,
-            lifecycle = lifecycle.toBoardResponse(),
+            lifecycle = lifecycle.toBoardResponse(order.estimatedReadyAt),
             compensationRecovery = compensationRecovery,
         )
     }
@@ -156,9 +170,9 @@ internal class StoreOrderBoardProjector(
     private fun StoreOrderBoardOrderProjection.lifecycle(): PersistedOrderLifecycle =
         PersistedOrderLifecycle(paidAt, acceptedAt, preparingAt, readyAt, completedAt)
 
-    private fun PersistedOrderLifecycle.toBoardResponse(): StoreOrderBoardLifecycleResponse? =
+    private fun PersistedOrderLifecycle.toBoardResponse(estimatedReadyAt: Instant?): StoreOrderBoardLifecycleResponse? =
         takeIf(PersistedOrderLifecycle::hasOccurredEvent)?.let {
-            StoreOrderBoardLifecycleResponse(it.paidAt, it.acceptedAt, it.preparingAt, it.readyAt)
+            StoreOrderBoardLifecycleResponse(it.paidAt, it.acceptedAt, it.preparingAt, it.readyAt, estimatedReadyAt)
         }
 
     private fun dependency(message: String): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, message)

@@ -28,8 +28,9 @@
   `OrderCreationWorkflow`, `AcceptanceTimeoutWorkWorker`, 고객 commerce/transaction 화면이다. 슬롯 영향 경로는
   `OrderQuoteCoordinator`, `StoreOrderTransitionService`도 달라졌다. 차이는 성능 계측과 고객 탐색 동선이
   중심이며 즉시 주문 계약은 아직 없다.
-- 현재는 quote/create/reorder가 `pickupSlotId`를 필수로 받고 Order 생성에서 Pickup/Coupon/Point를 예약한다.
-  settlement input은 Order 생성 때 materialize되며 Payment 결과에서 세 예약을 confirm한 뒤 PAID가 된다.
+- M2/M3 작업 head에서는 신규 quote/create/reorder가 슬롯 없이 IMMEDIATE 초안을 만들고, 승인 후 transaction에서
+  Coupon/Point 실제 사용·최종 settlement input·Payment 승인·Order PAID를 함께 확정한다. 기존
+  LEGACY_RESERVED 생성·confirm·복구 경로는 그대로 병존한다.
 
 ## Definitions
 
@@ -74,8 +75,10 @@ PostgreSQL/Storybook/E2E와 legacy 회귀 검증을 구현한다.
 
 ## Architecture and Transaction Boundaries
 
-- Identity의 membership shared lock을 먼저 얻고 Merchant Store commerce root shared/exclusive lock 규칙을
-  보존한다. Ordering은 Merchant repository를 직접 사용하지 않고 public availability Port를 소비한다.
+- 매장 관리 쓰기는 기존 Identity membership shared lock → Merchant Store exclusive lock 순서를 보존한다.
+  고객 Tx A는 Merchant quote owner가 Store shared lock을 먼저 얻고 availability Port가 같은 Store 행을
+  재사용한 뒤 point-accrual/pickup/coupon/point owner lock으로 진행한다. Ordering은 Merchant repository를
+  직접 사용하지 않는다.
 - schedule replacement는 Store exclusive lock 아래 같은 transaction에서 현재 cutoff를 단조 감소시킨다.
   Ordering listener 실패를 숨기고 profile만 commit하지 않는다.
 - Tx A는 Store shared lock과 owner quote를 읽어 typed input snapshot과 Order를 저장한다. 혜택 owner write와
@@ -84,7 +87,10 @@ PostgreSQL/Storybook/E2E와 legacy 회귀 검증을 구현한다.
   lock 밖이다.
 - Tx C는 replay/current winner 확인 후 Store→Order→Payment claim→Coupon issuance→PointAccount→PointLot
   순서를 현재 restore/refund 경로와 대조해 적용한다.
-- 확정 업무 실패만 Tx D로 보내고 DB/timeout/deadlock/snapshot corruption은 UNKNOWN/RECONCILING으로 둔다.
+- 혜택 부족·마감 같은 확정 업무 실패와 Tx C의 DB/timeout/deadlock/snapshot 무결성 실패는 서로 다른 code로
+  유지한다. 승인 사실을 이미 얻은 경우 모두 rollback 뒤 Tx D에서 현재 Order/Payment 승자를 다시 잠그고,
+  승자가 아니면 `PAYMENT_COMMITMENT_FAILED`와 late void/refund recovery를 저장한다. Tx D 자체가 DB 장애로
+  실패하면 성공으로 위장하지 않고 503과 기존 approval lookup claim을 남겨 재조정한다.
 
 ## Alternatives Considered
 
@@ -102,12 +108,15 @@ queue를 제외했다. 기존 Order/Payment/owner ledger/reconciliation/acceptan
 
 ## Data and Migration
 
-V89는 additive/constraint replacement migration으로 작성한다.
+V89는 availability와 mode/cutoff/input/준비시간의 additive migration이고, 이미 push된 migration을 수정하지
+않기 위해 M2의 승인 후 혜택·복구 제약 보완은 V90으로 작성한다.
 
 - `ordering_order.checkout_mode`, nullable pickup/time/lease, `ordering_window_closes_at`, typed
   `checkout_input_snapshot`, `preparation_minutes`, `estimated_ready_at`.
 - IMMEDIATE/LEGACY별 CHECK, conditional warning/deadline, accept/ETA pair와 정확한 산식.
 - Coupon/Point reservation expiry는 direct USED에만 null을 허용하고 RESERVED에는 필수다.
+- PENDING/EXPIRED/CANCELLED IMMEDIATE 초안은 final settlement input이 없어야 하고, PAID는 정확히 하나의 유효한
+  final snapshot을 가져야 한다.
 - Support cancel/history의 신규 slot 없는 경로만 nullable로 만들고 legacy FK/history는 보존한다.
 - 현재 due query와 보드 sort에 필요한 실제 query 기반 index만 추가한다.
 - fresh install, V86 fixture와 최종 stack baseline upgrade를 PostgreSQL Testcontainers로 검증한다.
@@ -148,13 +157,68 @@ Stacked Draft PR topology는 `M0 docs → M1 schema/availability → M2/M3 trans
 | query/UI | T44~T50 | board SQL/cursor/ETag, cart/callback/history Storybook/E2E |
 | migration/구조/정산 | T52~T55 | V86/current upgrade, direct SQL CHECK, Modulith/ArchUnit, settlement regression |
 
-세부 case와 실제 test method/명령/결과는 구현하면서 아래 Progress와 Outcomes에 갱신한다. T17/T18은 loser
-승인의 환불 수렴, T20/T21은 모든 경제 write rollback까지 확인해야 통과다.
+아래 명령 키는 이 문서의 Validation Commands와 Outcomes에 전체 명령을 보존한다. `EDGE`는 표에 적힌 정확한
+test method pattern으로 실행한 targeted Gradle command다. `PARTIAL`은 구현 증거가 있어도 시나리오의 모든
+경계/장애를 아직 실행하지 않았다는 뜻이다.
 
-M1에서 T01~T05의 같은 날 `[open, close)`, 미설정, 수동 OFF, 단축/연장 판정을
-`StoreOrderAvailabilityPolicyTest` 5개 case에 연결했다. T52의 V86→V89와 fresh install, slotless/lease 금지,
-cutoff/snapshot 불변성은 `ImmediateCheckoutMigrationTest`와 `FlywayMigrationSmokeTest` 4개 case에 연결했다.
-마감 단축과 실제 승인/수락의 PostgreSQL 경합(T31~T35)은 M2/M3 transaction 구현과 함께 남아 있다.
+| ID | 실제 test file / case | 명령 | 현재 결과 |
+|---|---|---|---|
+| T01 | `StoreOrderAvailabilityPolicyTest#same-day Seoul window is open-inclusive and close-exclusive` | M1 | PASSED |
+| T02 | `StoreOrderAvailabilityPolicyTest#missing hours fail closed without inventing a window` | M1 | PARTIAL — invalid source 직접 주입은 M5 |
+| T03 | 주소/다음 요일만 변경하는 Merchant 통합 case | M5 | NOT RUN |
+| T04 | Store exclusive 변경과 Tx C shared lock 경합 | M5 | NOT RUN |
+| T05 | `ImmediateCheckoutMigrationTest#V89 permits cutoff shortening...`, `OneTimeCheckoutIntegrationTest#approved immediate callback replays...` | M1, EDGE | PARTIAL — 다음 날 callback은 M5 |
+| T06 | `OrderQuoteIntegrationTest#quote returns...without reserving`, `OneTimeCheckoutIntegrationTest#immediate checkout keeps resources unreserved...` | M2 | PASSED |
+| T07 | `OneTimeCheckoutIntegrationTest#immediate checkout keeps resources unreserved...` | M2 | PASSED |
+| T08 | 같은 case의 6분 후 승인 | M2 | PASSED |
+| T09 | `OrderQuoteIntegrationTest`의 owner state/price/option/coupon stale cases | M2 | PARTIAL — IMMEDIATE 판매중지 경합은 M5 |
+| T10 | 같은 입력 create key PostgreSQL 동시성 | M5 | NOT RUN |
+| T11 | create key payload mismatch API | M5 | NOT RUN |
+| T12 | `OrderControllerContractTest#payment confirmation enforces order ownership...` | M2 | PASSED |
+| T13 | `OneTimeCheckoutIntegrationTest#tampered amount and order binding fail before Provider confirmation` | M2 | PASSED |
+| T14 | `OneTimeCheckoutIntegrationTest#first immediate callback at store close is rejected before Provider confirmation` | EDGE | PASSED |
+| T15 | `OneTimeCheckoutIntegrationTest#approved immediate callback replays after store close...` | EDGE | PASSED |
+| T16 | `OneTimeCheckoutIntegrationTest#two approved immediate payments competing for one coupon...`의 승인 전 reservation 0 | EDGE | PASSED |
+| T17 | 같은 coupon case의 병렬 callback, loser `LATE_VOID=SUCCEEDED`, winner PAID | EDGE | PASSED |
+| T18 | `OneTimeCheckoutIntegrationTest#two approved immediate payments competing for one point balance...` | EDGE | PASSED |
+| T19 | `OneTimeCheckoutIntegrationTest#approval replaces an expired quoted point lot...` | EDGE | PASSED |
+| T20 | `OneTimeCheckoutIntegrationTest#point shortage after immediate coupon use rolls every benefit back...` | EDGE | PASSED |
+| T21 | `OneTimeCheckoutIntegrationTest#settlement snapshot failure rolls back point use...` | EDGE | PASSED |
+| T22 | `OneTimeCheckoutIntegrationTest#approved immediate callback replays...` | EDGE | PARTIAL — 혜택 USE 중복 직접 count는 M5 |
+| T23 | T17/T18의 동시 Tx D loser 선택과 winner PAID 재확인 | EDGE | PASSED |
+| T24 | T21의 Tx C rollback→Tx D commit | EDGE | PARTIAL — process kill/restart는 M5 |
+| T25 | `OneTimeCheckoutIntegrationTest#unknown confirmation is recovered...` | M2 | PARTIAL — 5분 이상 고정 clock은 M5 |
+| T26 | IMMEDIATE UNKNOWN의 마감 후 승인 lookup | M5 | NOT RUN |
+| T27 | `OneTimeCheckoutIntegrationTest#zero payable immediate order commits...without Provider` | M2 | PASSED |
+| T28 | 영업시간 밖 0원 주문 Provider 0회 | M5 | NOT RUN |
+| T29 | 0원 혜택 경합/rollback | M5 | NOT RUN |
+| T30 | `OrderEntityLifecycleTest#acceptance fails at exact...`, 즉시 마감 동률/조기마감 lifecycle cases | M3, EDGE | PASSED |
+| T31 | `StoreOrderLifecycleIntegrationTest#early close removes an impossible warning...` | EDGE | PASSED |
+| T32 | `StoreOrderLifecycleIntegrationTest#acceptance and timeout race produces exactly one...` | M3 | PASSED |
+| T33 | 같은 race case | M3 | PARTIAL — lock 대기 중 clock 전진 전용 case는 M5 |
+| T34 | 수락 뒤 마감 변경에도 상태 보존 | M5 | NOT RUN |
+| T35 | 조기마감 반복 listener의 cutoff 비연장 | EDGE | PARTIAL — 기존 timeout work source replay는 M5 |
+| T36 | `CustomerCancellationCommandIntegrationTest#customer cancellation and store acceptance race...` | M3 | PARTIAL — 마감과 상담 취소 3-way는 M5 |
+| T37 | `StoreOrderLifecycleIntegrationTest#immediate paid timeout...needs no pickup restoration` | M3 | PASSED |
+| T38 | `OrderTerminationResourceListenerIntegrationTest`, `EventPublicationRecoveryIntegrationTest` | M3 | PASSED |
+| T39 | T17/T18 loser void 실행 | EDGE | PARTIAL — timeout/duplicate recovery callback은 M5 |
+| T40 | `OrderEntityLifecycleTest#acceptance preparation...`, `StoreOrderLifecycleIntegrationTest#public and UUID acceptance APIs require...` | M3, EDGE | PASSED |
+| T41 | `StoreOrderLifecycleIntegrationTest#store transition replays same command...`의 10분 replay/15분 key mismatch | EDGE | PASSED |
+| T42 | `StoreOrderLifecycleIntegrationTest#public and UUID acceptance APIs require...` | EDGE | PASSED |
+| T43 | `OrderEntityLifecycleTest#paid order follows the complete store lifecycle` | M3 | PARTIAL — ETA 경과 clock 전용 case는 M5 |
+| T44 | `StoreOrderBoardIntegrationTest`의 정렬/cursor/ETag/concurrency cases | M3 | PARTIAL — frontend 소비자는 M4 |
+| T45 | 슬롯 0개 탐색→완료 E2E | M4/M5 | NOT RUN |
+| T46 | `CustomerOrderQueryIntegrationTest`, payment current/recovery 응답 | M3 | PARTIAL — UI 상태는 M4 |
+| T47 | SDK fail/취소 뒤 cart 보존 | M4 | NOT RUN |
+| T48 | 응답 유실/새로고침 재조회 | M4 | NOT RUN |
+| T49 | cart revision multi-tab guard | M4 | NOT RUN |
+| T50 | fail callback과 UNKNOWN 재조회 | M4 | PARTIAL — backend UNKNOWN은 M2 PASSED |
+| T51 | `CustomerCancellationCommandIntegrationTest#customer and support cancellation preserve slotless immediate history...` | EDGE | PASSED |
+| T52 | `ImmediateCheckoutMigrationTest#V89 preserves V86...`, `FlywayMigrationSmokeTest#fresh database...` | M1/M2 | PASSED |
+| T53 | `ImmediateCheckoutMigrationTest`의 IMMEDIATE nullable/lease/snapshot/cutoff direct SQL cases | M2 | PASSED |
+| T54 | `ModularityTests`, `SupportArchitectureTest`, `AuthenticationArchUnitTest` | M3/M5 | PASSED |
+| T55 | `StoreOrderLifecycleIntegrationTest` 완료/부분환불/정산 snapshot 회귀 | M3 | PARTIAL — IMMEDIATE 전체 완료 E2E는 M5 |
+| T56 | `OneTimeCheckoutIntegrationTest#concurrent startup overdue scans expire one immediate draft exactly once` | EDGE | PASSED |
 
 ## Validation Commands
 
@@ -177,6 +241,26 @@ npm run test:storybook:docs
 npm run build-storybook
 npm run build
 npm run test:sites
+```
+
+M2/M3에서 실제 실행한 묶음 명령은 다음과 같다.
+
+```bash
+# M2
+./gradlew test --tests '*OneTimeCheckoutIntegrationTest' --tests '*ImmediateCheckoutMigrationTest' \
+  --tests '*OrderQuoteIntegrationTest' --tests '*FastReorderServiceTest' \
+  --tests '*PaymentConfirmationIntegrationTest' --tests '*OrderSettlementInputSnapshotIntegrationTest' \
+  --tests '*BenefitOnlyOrderCreationTest' --tests '*OrderControllerContractTest'
+
+# M3
+./gradlew test --tests '*StoreOrderLifecycleIntegrationTest' --tests '*StoreOrderBoardIntegrationTest' \
+  --tests '*OrderEntityLifecycleTest' --tests '*CustomerOrderQueryIntegrationTest' \
+  --tests '*CustomerCancellationCommandIntegrationTest' --tests '*OrderTerminationResourceListenerIntegrationTest' \
+  --tests '*EventPublicationRecoveryIntegrationTest' --tests '*SupportArchitectureTest' \
+  --tests '*AuthenticationArchUnitTest'
+
+# EDGE는 표의 test method를 아래 형식으로 개별 실행했다.
+./gradlew spotlessApply test --tests '*<test method pattern>*'
 ```
 
 Storybook은 live MCP의 `list-all-documentation → get-documentation → story instructions → preview →
@@ -204,8 +288,10 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
 - [x] BR amendment와 ADR-133~135 등록.
 - [x] 2026-09-16 M1 Merchant availability port, membership→Store lock 순서, V89 additive schema,
   checkout/cutoff/input/준비시간 매핑, current-window 단축 listener 구현.
-- [ ] M2 transaction/benefit/recovery 구현과 경합·장애 검증.
-- [ ] M3 lifecycle/preparation/compensation 구현과 검증.
+- [x] 2026-09-16 M2 slotless quote/create/reorder, 승인 후 direct benefit use·final settlement·Payment/PAID
+  원자 확정, 0원 BENEFIT_ONLY, Tx D late void/refund recovery와 approval lookup 재조정 구현.
+- [x] 2026-09-16 M3 unpaid store-close expiry, paid acceptance deadline/조건부 경고/기동 scan,
+  `STORE_CLOSED`, source-aware `PICKUP NOT_REQUIRED`, 1~120분 단회 수락과 nullable query/support 계약 구현.
 - [ ] M4 query/API/UI/Storybook 전환과 검증.
 - [ ] M5 전체 검증, stacked PR 생성과 release gate 기록.
 
@@ -218,6 +304,10 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
 - ADR registry가 파일 ADR-125~130을 누락하고 있어 신규 ADR 등록과 함께 현재 파일 목록을 보완했다.
 - V16의 deferred point-accrual completeness trigger 때문에 schema fixture의 bare Order insert는 USER trigger를
   명시적으로 비활성화한 격리 fixture로만 만들었다. 제품 경로는 기존 snapshot 생성을 우회하지 않는다.
+- Hibernate/Jackson의 기본 JSON mapper는 `Instant`를 serialize하지 못했다. 애플리케이션의 configured
+  `tools.jackson` ObjectMapper로 checkout input을 String JSON으로 저장/복원해 Tx A 재계산을 제거했다.
+- PostgreSQL은 read-only transaction의 `SELECT ... FOR SHARE`를 거부했다. callback preflight를 짧은 쓰기 가능
+  transaction으로 두고 shared lock 해제 후에만 Provider를 호출하도록 경계를 검증했다.
 
 ## Decision Log
 
@@ -226,6 +316,9 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
 | 2026-09-16 | origin/main a8821fd 기준의 격리 worktree 사용 | dirty checkout과 사용자 변경 보존 |
 | 2026-09-16 | V89, ADR-133~135 사용 | 열린 V87/V88 및 ADR-132와 번호 충돌 방지 |
 | 2026-09-16 | IMMEDIATE/LEGACY_RESERVED 병존 | 과거 주문·event·정산·recovery 보존 |
+| 2026-09-16 | Tx A/C/D와 기존 Payment recovery 재사용 | 선예약 제거와 승인 복구를 함께 만족 |
+| 2026-09-16 | schedule을 신규 결제 gate로 사용 | 사용자 확정 영업시간 계약과 원래 영업 구간 보존 |
+| 2026-09-16 | provider callback preflight와 Tx C availability 재검증 병행 | 마감/OFF 뒤 불필요한 confirm을 막고 동시 변경은 승인 반환으로 수렴 |
 
 ## Outcomes
 
@@ -233,13 +326,22 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
 - M1 경계/스키마: availability 5 tests, V89/전체 Flyway 4 tests, Order domain/entity 19 tests Passed.
 - M1 구조/통합: `MerchantDisplayContentAuditRollbackIntegrationTest`, `StoreOrderLifecycleIntegrationTest`,
   `ModularityTests`, `SupportArchitectureTest` Passed.
+- M2 묶음: 8개 결제/견적/migration/정산/API test class, `BUILD SUCCESSFUL in 2m 56s`.
+- M3 묶음: 9개 lifecycle/query/cancellation/event/architecture test class, `BUILD SUCCESSFUL in 2m 1s`.
+- M2/M3 통합 회귀: 결제, V86→V90 migration, quote/reorder, lifecycle, board/query, cancellation,
+  publication recovery와 architecture 14개 test class, `BUILD SUCCESSFUL in 3m 29s`.
+- 최신 HEAD 핵심 회귀: `spotlessCheck`와 결제, V90 migration, lifecycle, cancellation, Modulith/ArchUnit
+  7개 test class, `BUILD SUCCESSFUL in 1m 57s`.
+- EDGE: 마감 전 PG 차단/승인 replay, 수동 OFF, coupon·point 병렬 승인 경합과 loser void, 실제 PointLot
+  issuer 정산, 부분 혜택·snapshot 실패 rollback, 준비시간 API/멱등성, 조기마감 경고, slotless 고객·상담 취소,
+  동시 startup overdue scan을 개별 실행해 Passed. T19의 첫 실행은 존재하지 않는 checkout JSON Lot 상세를
+  기대해 Failed 후 해당 잘못된 assertion을 제거했고 실제 allocation/정산 assertion은 Passed했다.
 - 공유 DB inventory, 배포, 실제 PG와 공유 부하는 범위 밖이며 release gate로 Pending이다.
-| 2026-09-16 | Tx A/C/D와 기존 Payment recovery 재사용 | 선예약 제거와 승인 복구를 함께 만족 |
-| 2026-09-16 | schedule을 신규 결제 gate로 사용 | 사용자 확정 C04와 원래 영업 구간 보존 |
 
 ## Outcomes & Retrospective
 
-M0 계약 문서화가 완료됐다. 로컬 구현/검증, PR과 출시 준비 결과는 이후 milestone에서 갱신한다.
+M0~M3 계약·backend 구현과 targeted PostgreSQL 검증이 완료됐다. M4 frontend/OpenAPI/Storybook 전환과 M5
+전체 검증은 다음 stack에서 이어간다. 현재 stack은 migration writer/release ordering이 해결되기 전 Draft다.
 
 ## Revision Notes
 

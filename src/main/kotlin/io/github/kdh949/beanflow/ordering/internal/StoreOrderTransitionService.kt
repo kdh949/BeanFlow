@@ -84,7 +84,12 @@ internal class StoreOrderTransitionService(
         val payloadHash =
             phaseTelemetry.observe(PerformanceOperation.STORE_TRANSITION, PerformanceStage.TRANSITION_PREPARE) {
                 validate(request)
-                CanonicalStoreOrderTransitionPayload.hash(orderId, request.targetState, request.reason)
+                CanonicalStoreOrderTransitionPayload.hash(
+                    orderId,
+                    request.targetState,
+                    request.reason,
+                    request.preparationMinutes,
+                )
             }
         return transition(
             actor = actor,
@@ -107,7 +112,7 @@ internal class StoreOrderTransitionService(
         val (transitionRequest, payloadHash) =
             phaseTelemetry.observe(PerformanceOperation.STORE_TRANSITION, PerformanceStage.TRANSITION_PREPARE) {
                 val targetState = StoreOrderBoardPresentationPolicy.targetState(request.action, request.expectedStatus)
-                val preparedRequest = StoreOrderTransitionRequest(targetState, request.reason)
+                val preparedRequest = StoreOrderTransitionRequest(targetState, request.reason, request.preparationMinutes)
                 validate(preparedRequest)
                 preparedRequest to CanonicalStoreOrderTransitionPayload.hashBoardAction(orderId, request)
             }
@@ -183,7 +188,7 @@ internal class StoreOrderTransitionService(
         val recovery =
             when (request.targetState) {
                 StoreOrderTargetState.ACCEPTED -> {
-                    order.accept(now)
+                    order.accept(now, requireNotNull(request.preparationMinutes))
                     publishAccepted(order, now, correlationId, causationId)
                     null
                 }
@@ -401,6 +406,8 @@ internal class StoreOrderTransitionService(
             acceptanceWarningRequestedAt = order.acceptanceWarningRequestedAt,
             acceptanceDeadlineAt = order.acceptanceDeadlineAt,
             acceptedAt = order.acceptedAt,
+            preparationMinutes = order.preparationMinutes,
+            estimatedReadyAt = order.estimatedReadyAt,
             rejectedAt = order.rejectedAt,
             preparingAt = order.preparingAt,
             readyAt = order.readyAt,
@@ -441,6 +448,19 @@ internal class StoreOrderTransitionService(
             throw DomainFailure(
                 FailureCode.INVALID_REQUEST,
                 "Rejection reason must contain between 1 and 500 characters",
+            )
+        }
+        if (request.targetState == StoreOrderTargetState.ACCEPTED) {
+            if (request.preparationMinutes !in 1..120) {
+                throw DomainFailure(
+                    FailureCode.INVALID_REQUEST,
+                    "Preparation minutes must be between 1 and 120 when accepting an order",
+                )
+            }
+        } else if (request.preparationMinutes != null) {
+            throw DomainFailure(
+                FailureCode.INVALID_REQUEST,
+                "Preparation minutes are only accepted for the ACCEPTED transition",
             )
         }
     }

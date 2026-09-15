@@ -65,7 +65,7 @@ internal class StoreOrderBoardPaging(
                     StoreOrderBoardLane.PREPARING,
                     StoreOrderBoardLane.READY,
                     -> {
-                        order.pickupWindowStart
+                        order.pickupWindowStart ?: order.estimatedReadyAt ?: dependency("Store order has no board sort time")
                     }
                 },
             orderId = order.orderId,

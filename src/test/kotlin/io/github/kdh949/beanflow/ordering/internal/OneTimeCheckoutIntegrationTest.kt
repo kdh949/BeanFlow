@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
+import io.github.kdh949.beanflow.payment.internal.GatewayRecoveryResult
 import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -27,6 +28,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -39,6 +41,7 @@ import java.util.concurrent.TimeUnit
         "beanflow.reservation-expiry.initial-delay-ms=3600000",
         "beanflow.audit-retention.initial-delay-ms=3600000",
         "beanflow.payment.reconciliation.initial-delay-ms=3600000",
+        "beanflow.store-acceptance.initial-delay-ms=3600000",
         "beanflow.checkout.frontend-base-url=https://checkout.beanflow.test",
     ],
 )
@@ -51,6 +54,7 @@ internal class OneTimeCheckoutIntegrationTest
         private val publicCheckout: PublicCheckoutService,
         private val mockMvc: MockMvc,
         private val reconciliationWorker: PaymentReconciliationWorker,
+        private val acceptanceDeadlineWorker: StoreAcceptanceDeadlineWorker,
         private val gateway: ScriptedTestPaymentGateway,
         private val testClock: PickupSlotPaymentDeadlineTestClock,
         private val jdbcTemplate: JdbcTemplate,
@@ -318,6 +322,612 @@ internal class OneTimeCheckoutIntegrationTest
         }
 
         @Test
+        fun `immediate checkout keeps resources unreserved and remains payable beyond five minutes`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            val orderId = pendingImmediateOrder(fixture, "immediate-six-minute-order")
+
+            assertThat(value<String>("SELECT checkout_mode FROM ordering_order WHERE id = ?", orderId)).isEqualTo("IMMEDIATE")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT reservation_expires_at FROM ordering_order WHERE id = ?",
+                    Timestamp::class.java,
+                    orderId,
+                ),
+            ).isNull()
+            assertThat(value<Long>("SELECT count(*) FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId)).isZero()
+            assertThat(value<Long>("SELECT count(*) FROM promotion_coupon_reservation WHERE order_id = ?", orderId)).isZero()
+            assertThat(value<Long>("SELECT count(*) FROM loyalty_point_reservation WHERE order_id = ?", orderId)).isZero()
+
+            val prepared = checkoutService.prepare(fixture.customerId, orderId, "immediate-six-minute-prepare")
+            assertThat(prepared.expiresAt).isEqualTo(Instant.parse("2026-08-12T09:00:00Z"))
+            testClock.set(Instant.parse("2026-08-12T03:06:00Z"))
+            gateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Approved("immediate-six-minute", 1_000, "KRW"))
+
+            val response =
+                checkoutService.confirm(
+                    fixture.customerId,
+                    prepared.paymentId,
+                    "immediate-six-minute-confirm",
+                    OneTimePaymentConfirmationRequest("immediate-six-minute", prepared.providerOrderId, 1_000),
+                )
+
+            assertThat(response.status).isEqualTo(200)
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PAID")
+            assertThat(value<Long>("SELECT count(*) FROM ordering_order_settlement_input_snapshot WHERE order_id = ?", orderId)).isOne()
+        }
+
+        @Test
+        fun `first immediate callback at store close is rejected before Provider confirmation`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            val orderId = pendingImmediateOrder(fixture, "immediate-closed-callback-order")
+            val prepared = checkoutService.prepare(fixture.customerId, orderId, "immediate-closed-callback-prepare")
+            val request =
+                OneTimePaymentConfirmationRequest(
+                    paymentKey = "immediate-closed-callback",
+                    orderId = prepared.providerOrderId,
+                    amount = 1_000,
+                )
+            testClock.set(prepared.expiresAt)
+            gateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Approved(request.paymentKey, request.amount, "KRW"))
+
+            assertThatThrownBy {
+                checkoutService.confirm(
+                    fixture.customerId,
+                    prepared.paymentId,
+                    "immediate-closed-callback-confirm",
+                    request,
+                )
+            }.isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.STORE_CLOSED)
+            }
+
+            assertNoProviderCalls()
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PENDING_PAYMENT")
+            assertThat(value<String>("SELECT state FROM payment_one_time_attempt WHERE payment_id = ?", prepared.paymentId))
+                .isEqualTo("READY")
+        }
+
+        @Test
+        fun `approved immediate callback replays after store close without another Provider confirmation`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            val orderId = pendingImmediateOrder(fixture, "immediate-approved-replay-order")
+            val prepared = checkoutService.prepare(fixture.customerId, orderId, "immediate-approved-replay-prepare")
+            val request =
+                OneTimePaymentConfirmationRequest(
+                    paymentKey = "immediate-approved-replay",
+                    orderId = prepared.providerOrderId,
+                    amount = 1_000,
+                )
+            gateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Approved(request.paymentKey, request.amount, "KRW"))
+            assertThat(
+                checkoutService
+                    .confirm(
+                        fixture.customerId,
+                        prepared.paymentId,
+                        "immediate-approved-replay-confirm",
+                        request,
+                    ).status,
+            ).isEqualTo(200)
+
+            testClock.set(prepared.expiresAt)
+            val replay =
+                checkoutService.confirm(
+                    fixture.customerId,
+                    prepared.paymentId,
+                    "immediate-approved-replay-confirm",
+                    request,
+                )
+
+            assertThat(replay.status).isEqualTo(200)
+            assertThat(replay.replay).isTrue()
+            assertThat(gateway.oneTimeConfirmationCalls.get()).isOne()
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PAID")
+        }
+
+        @Test
+        fun `manual ordering off blocks a new immediate confirmation without cancelling an existing paid order`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            val paidOrderId = pendingImmediateOrder(fixture, "immediate-before-manual-off")
+            val paidAttempt = checkoutService.prepare(fixture.customerId, paidOrderId, "immediate-before-manual-off-prepare")
+            gateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Approved("before-manual-off", 1_000, "KRW"))
+            assertThat(
+                checkoutService
+                    .confirm(
+                        fixture.customerId,
+                        paidAttempt.paymentId,
+                        "immediate-before-manual-off-confirm",
+                        OneTimePaymentConfirmationRequest("before-manual-off", paidAttempt.providerOrderId, 1_000),
+                    ).status,
+            ).isEqualTo(200)
+
+            val command = fixture.command().copy(pickupSlotId = null)
+            assertThat(createOrderUseCase.create("immediate-after-manual-off", orderQuoteUseCase.attachCurrentQuote(command)).status)
+                .isEqualTo(201)
+            val pendingOrderId =
+                requireNotNull(
+                    jdbcTemplate.queryForList("SELECT id FROM ordering_order WHERE id <> ?", UUID::class.java, paidOrderId).single(),
+                )
+            val pendingAttempt =
+                checkoutService.prepare(fixture.customerId, pendingOrderId, "immediate-after-manual-off-prepare")
+            jdbcTemplate.update("UPDATE merchant_store SET accepting_orders = false WHERE id = ?", fixture.storeId)
+            gateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Approved("after-manual-off", 1_000, "KRW"))
+
+            assertThatThrownBy {
+                checkoutService.confirm(
+                    fixture.customerId,
+                    pendingAttempt.paymentId,
+                    "immediate-after-manual-off-confirm",
+                    OneTimePaymentConfirmationRequest("after-manual-off", pendingAttempt.providerOrderId, 1_000),
+                )
+            }.isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.STORE_NOT_ACCEPTING_ORDERS)
+            }
+
+            assertThat(gateway.oneTimeConfirmationCalls.get()).isOne()
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", paidOrderId)).isEqualTo("PAID")
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", pendingOrderId)).isEqualTo("PENDING_PAYMENT")
+            assertThat(value<String>("SELECT state FROM payment_one_time_attempt WHERE payment_id = ?", pendingAttempt.paymentId))
+                .isEqualTo("READY")
+        }
+
+        @Test
+        fun `immediate unpaid draft expires at the immutable store close cutoff`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            val orderId = pendingImmediateOrder(fixture, "immediate-store-close-draft")
+            val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+
+            testClock.set(Instant.parse("2026-08-12T09:00:00Z"))
+            acceptanceDeadlineWorker.runOnce()
+
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("EXPIRED")
+            assertThat(value<Long>("SELECT count(*) FROM ordering_order_settlement_input_snapshot WHERE order_id = ?", orderId)).isZero()
+            assertThat(
+                value<Long>(
+                    "SELECT count(*) FROM operations_audit_record WHERE target_id = ? AND action = 'ORDER_EXPIRED_AT_STORE_CLOSE'",
+                    orderId,
+                ),
+            ).isOne()
+            assertThat(publicCheckout.get(fixture.customerId, reference).canPay).isFalse()
+        }
+
+        @Test
+        fun `concurrent startup overdue scans expire one immediate draft exactly once`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            val orderId = pendingImmediateOrder(fixture, "immediate-startup-overdue")
+            testClock.set(Instant.parse("2026-08-12T09:00:00Z"))
+            val barrier = java.util.concurrent.CyclicBarrier(2)
+            val executor = Executors.newFixedThreadPool(2)
+            try {
+                val scans =
+                    List(2) {
+                        executor.submit {
+                            barrier.await()
+                            acceptanceDeadlineWorker.runStartupOverdueScan()
+                        }
+                    }
+                scans.forEach { it.get(10, TimeUnit.SECONDS) }
+            } finally {
+                executor.shutdownNow()
+            }
+
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("EXPIRED")
+            assertThat(
+                value<Long>(
+                    "SELECT count(*) FROM operations_audit_record WHERE target_id = ? AND action = 'ORDER_EXPIRED_AT_STORE_CLOSE'",
+                    orderId,
+                ),
+            ).isOne()
+        }
+
+        @Test
+        fun `two approved immediate payments competing for one coupon leave one paid and recover the loser`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, priceKrw = 2_000)
+            OrderCreationDatabaseFixture.insertOperatingHours(jdbcTemplate, fixture.storeId)
+            val couponId = OrderCreationDatabaseFixture.insertFixedCoupon(jdbcTemplate, fixture, 1_000)
+            val command = fixture.command(couponIssuanceId = couponId).copy(pickupSlotId = null)
+
+            assertThat(createOrderUseCase.create("immediate-coupon-first", orderQuoteUseCase.attachCurrentQuote(command)).status)
+                .isEqualTo(201)
+            val firstOrderId = value<UUID>("SELECT id FROM ordering_order")
+            assertThat(createOrderUseCase.create("immediate-coupon-second", orderQuoteUseCase.attachCurrentQuote(command)).status)
+                .isEqualTo(201)
+            val secondOrderId =
+                requireNotNull(
+                    jdbcTemplate.queryForList("SELECT id FROM ordering_order WHERE id <> ?", UUID::class.java, firstOrderId).single(),
+                )
+
+            assertThat(value<Long>("SELECT count(*) FROM promotion_coupon_reservation")).isZero()
+            val first = checkoutService.prepare(fixture.customerId, firstOrderId, "immediate-coupon-first-prepare")
+            val second = checkoutService.prepare(fixture.customerId, secondOrderId, "immediate-coupon-second-prepare")
+            gateway.enqueueOneTimeConfirmation(
+                ProviderPaymentResult.Approved("coupon-winner", 1_000, "KRW"),
+                ProviderPaymentResult.Approved("coupon-loser", 1_000, "KRW"),
+            )
+
+            val executor = Executors.newFixedThreadPool(2)
+            val results =
+                try {
+                    listOf(
+                        executor.submit<Pair<UUID, Int>> {
+                            firstOrderId to
+                                checkoutService
+                                    .confirm(
+                                        fixture.customerId,
+                                        first.paymentId,
+                                        "immediate-coupon-first-confirm",
+                                        OneTimePaymentConfirmationRequest("coupon-winner", first.providerOrderId, 1_000),
+                                    ).status
+                        },
+                        executor.submit<Pair<UUID, Int>> {
+                            secondOrderId to
+                                checkoutService
+                                    .confirm(
+                                        fixture.customerId,
+                                        second.paymentId,
+                                        "immediate-coupon-second-confirm",
+                                        OneTimePaymentConfirmationRequest("coupon-loser", second.providerOrderId, 1_000),
+                                    ).status
+                        },
+                    ).map { it.get(10, TimeUnit.SECONDS) }
+                } finally {
+                    executor.shutdownNow()
+                }
+            assertThat(results.map(Pair<UUID, Int>::second)).containsExactlyInAnyOrder(200, 202)
+            val winnerOrderId = results.single { it.second == 200 }.first
+            val loserOrderId = results.single { it.second == 202 }.first
+            val loserPaymentId = if (loserOrderId == firstOrderId) first.paymentId else second.paymentId
+
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", winnerOrderId)).isEqualTo("PAID")
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", loserOrderId)).isEqualTo("CANCELLED")
+            assertThat(value<String>("SELECT cancellation_cause FROM ordering_order WHERE id = ?", loserOrderId))
+                .isEqualTo("PAYMENT_COMMITMENT_FAILED")
+            assertThat(value<String>("SELECT payment_commitment_failure_code FROM ordering_order WHERE id = ?", loserOrderId))
+                .isEqualTo("COUPON_NOT_AVAILABLE")
+            assertThat(value<Long>("SELECT count(*) FROM promotion_coupon_reservation WHERE state = 'USED'")).isOne()
+            assertThat(value<Long>("SELECT count(*) FROM fulfillment_pickup_reservation")).isZero()
+            assertThatThrownBy {
+                jdbcTemplate.update("UPDATE promotion_coupon_reservation SET state = 'RELEASED' WHERE state = 'USED'")
+            }.isInstanceOf(org.springframework.dao.DataIntegrityViolationException::class.java)
+
+            gateway.enqueueVoid(GatewayRecoveryResult.Succeeded)
+            assertThat(reconciliationWorker.runOnce()).isEqualTo(1)
+            assertThat(gateway.voidCalls.get()).isOne()
+            assertThat(
+                value<String>("SELECT status FROM payment_reconciliation WHERE payment_id = ? AND kind = 'LATE_VOID'", loserPaymentId),
+            ).isEqualTo("SUCCEEDED")
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", winnerOrderId)).isEqualTo("PAID")
+        }
+
+        @Test
+        fun `immediate approval consumes point lots and uses final issuer allocation for settlement`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, priceKrw = 2_000)
+            OrderCreationDatabaseFixture.insertOperatingHours(jdbcTemplate, fixture.storeId)
+            val (accountId, lotId) =
+                OrderCreationDatabaseFixture.insertPoints(
+                    jdbcTemplate,
+                    fixture.customerId,
+                    500,
+                    issuerType = "STORE",
+                    issuerReference = fixture.storeId.toString(),
+                )
+            val command = fixture.command(pointsToUseKrw = 500).copy(pickupSlotId = null)
+            val creation = createOrderUseCase.create("immediate-point-approval", orderQuoteUseCase.attachCurrentQuote(command))
+            assertThat(creation.status).withFailMessage(creation.body).isEqualTo(201)
+            val orderId = value<UUID>("SELECT id FROM ordering_order")
+            assertThat(value<Long>("SELECT count(*) FROM loyalty_point_reservation WHERE order_id = ?", orderId)).isZero()
+
+            val prepared = checkoutService.prepare(fixture.customerId, orderId, "immediate-point-prepare")
+            gateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Approved("immediate-point-payment", 1_500, "KRW"))
+            val response =
+                checkoutService.confirm(
+                    fixture.customerId,
+                    prepared.paymentId,
+                    "immediate-point-confirm",
+                    OneTimePaymentConfirmationRequest("immediate-point-payment", prepared.providerOrderId, 1_500),
+                )
+
+            assertThat(response.status).isEqualTo(200)
+            assertThat(value<Long>("SELECT available_points_krw FROM loyalty_point_account WHERE id = ?", accountId)).isZero()
+            assertThat(value<Long>("SELECT available_amount_krw FROM loyalty_point_lot WHERE id = ?", lotId)).isZero()
+            assertThat(value<String>("SELECT state FROM loyalty_point_reservation WHERE order_id = ?", orderId)).isEqualTo("USED")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT reservation_expires_at FROM loyalty_point_reservation WHERE order_id = ?",
+                    Timestamp::class.java,
+                    orderId,
+                ),
+            ).isNull()
+            assertThat(
+                value<Long>("SELECT point_cost_krw FROM ordering_order_settlement_input_snapshot WHERE order_id = ?", orderId),
+            ).isEqualTo(500)
+            assertThat(value<Long>("SELECT count(*) FROM loyalty_point_transaction WHERE type = 'USE'")).isOne()
+            assertThatThrownBy {
+                jdbcTemplate.update("UPDATE loyalty_point_reservation SET state = 'RELEASED' WHERE order_id = ?", orderId)
+            }.isInstanceOf(org.springframework.dao.DataIntegrityViolationException::class.java)
+        }
+
+        @Test
+        fun `approval replaces an expired quoted point lot and settles from the actually used issuer`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, priceKrw = 2_000)
+            OrderCreationDatabaseFixture.insertOperatingHours(jdbcTemplate, fixture.storeId)
+            val (accountId, quotedLotId) =
+                OrderCreationDatabaseFixture.insertPoints(
+                    jdbcTemplate,
+                    fixture.customerId,
+                    500,
+                    issuerType = "PLATFORM",
+                    issuerReference = "platform:quoted-lot",
+                )
+            val usedLotId = UUID.randomUUID()
+            jdbcTemplate.update(
+                "UPDATE loyalty_point_lot SET expires_at = ? WHERE id = ?",
+                Timestamp.from(Instant.parse("2026-08-12T03:01:00Z")),
+                quotedLotId,
+            )
+            jdbcTemplate.update(
+                """
+                WITH changed_account AS (
+                    UPDATE loyalty_point_account
+                    SET available_points_krw = available_points_krw + 500
+                    WHERE id = ?
+                    RETURNING id
+                )
+                INSERT INTO loyalty_point_lot (
+                    id, point_account_id, available_amount_krw, reserved_amount_krw, expires_at,
+                    issuer_type, issuer_reference
+                )
+                SELECT ?, id, 500, 0, ?, 'STORE', ? FROM changed_account
+                """.trimIndent(),
+                accountId,
+                usedLotId,
+                Timestamp.from(Instant.parse("2035-01-01T00:00:00Z")),
+                fixture.storeId.toString(),
+            )
+            val command = fixture.command(pointsToUseKrw = 500).copy(pickupSlotId = null)
+            val creation = createOrderUseCase.create("immediate-expired-point-lot", orderQuoteUseCase.attachCurrentQuote(command))
+            assertThat(creation.status).withFailMessage(creation.body).isEqualTo(201)
+            val orderId = value<UUID>("SELECT id FROM ordering_order")
+
+            val prepared = checkoutService.prepare(fixture.customerId, orderId, "immediate-expired-point-lot-prepare")
+            testClock.set(Instant.parse("2026-08-12T03:02:00Z"))
+            gateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Approved("expired-point-lot-payment", 1_500, "KRW"))
+            val response =
+                checkoutService.confirm(
+                    fixture.customerId,
+                    prepared.paymentId,
+                    "immediate-expired-point-lot-confirm",
+                    OneTimePaymentConfirmationRequest("expired-point-lot-payment", prepared.providerOrderId, 1_500),
+                )
+
+            assertThat(response.status).isEqualTo(200)
+            assertThat(value<Long>("SELECT available_amount_krw FROM loyalty_point_lot WHERE id = ?", quotedLotId)).isEqualTo(500)
+            assertThat(value<Long>("SELECT available_amount_krw FROM loyalty_point_lot WHERE id = ?", usedLotId)).isZero()
+            assertThat(
+                value<Long>("SELECT point_cost_krw FROM ordering_order_settlement_input_snapshot WHERE order_id = ?", orderId),
+            ).isEqualTo(500)
+            assertThat(
+                value<String>(
+                    """
+                    SELECT l.issuer_reference
+                    FROM loyalty_point_reservation_allocation a
+                    JOIN loyalty_point_reservation r ON r.id = a.point_reservation_id
+                    JOIN loyalty_point_lot l ON l.id = a.point_lot_id
+                    WHERE r.order_id = ?
+                    """.trimIndent(),
+                    orderId,
+                ),
+            ).isEqualTo(fixture.storeId.toString())
+        }
+
+        @Test
+        fun `two approved immediate payments competing for one point balance leave one paid and recover the loser`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            OrderCreationDatabaseFixture.insertOperatingHours(jdbcTemplate, fixture.storeId)
+            val (accountId) = OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, fixture.customerId, 500)
+            val command = fixture.command(pointsToUseKrw = 500).copy(pickupSlotId = null)
+
+            assertThat(createOrderUseCase.create("immediate-points-first", orderQuoteUseCase.attachCurrentQuote(command)).status)
+                .isEqualTo(201)
+            val firstOrderId = value<UUID>("SELECT id FROM ordering_order")
+            assertThat(createOrderUseCase.create("immediate-points-second", orderQuoteUseCase.attachCurrentQuote(command)).status)
+                .isEqualTo(201)
+            val secondOrderId =
+                requireNotNull(
+                    jdbcTemplate.queryForList("SELECT id FROM ordering_order WHERE id <> ?", UUID::class.java, firstOrderId).single(),
+                )
+
+            assertThat(value<Long>("SELECT count(*) FROM loyalty_point_reservation")).isZero()
+            val first = checkoutService.prepare(fixture.customerId, firstOrderId, "immediate-points-first-prepare")
+            val second = checkoutService.prepare(fixture.customerId, secondOrderId, "immediate-points-second-prepare")
+            gateway.enqueueOneTimeConfirmation(
+                ProviderPaymentResult.Approved("points-winner", 500, "KRW"),
+                ProviderPaymentResult.Approved("points-loser", 500, "KRW"),
+            )
+
+            val executor = Executors.newFixedThreadPool(2)
+            val results =
+                try {
+                    listOf(
+                        executor.submit<Pair<UUID, Int>> {
+                            firstOrderId to
+                                checkoutService
+                                    .confirm(
+                                        fixture.customerId,
+                                        first.paymentId,
+                                        "immediate-points-first-confirm",
+                                        OneTimePaymentConfirmationRequest("points-winner", first.providerOrderId, 500),
+                                    ).status
+                        },
+                        executor.submit<Pair<UUID, Int>> {
+                            secondOrderId to
+                                checkoutService
+                                    .confirm(
+                                        fixture.customerId,
+                                        second.paymentId,
+                                        "immediate-points-second-confirm",
+                                        OneTimePaymentConfirmationRequest("points-loser", second.providerOrderId, 500),
+                                    ).status
+                        },
+                    ).map { it.get(10, TimeUnit.SECONDS) }
+                } finally {
+                    executor.shutdownNow()
+                }
+            assertThat(results.map(Pair<UUID, Int>::second)).containsExactlyInAnyOrder(200, 202)
+            val winnerOrderId = results.single { it.second == 200 }.first
+            val loserOrderId = results.single { it.second == 202 }.first
+            val loserPaymentId = if (loserOrderId == firstOrderId) first.paymentId else second.paymentId
+
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", winnerOrderId)).isEqualTo("PAID")
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", loserOrderId)).isEqualTo("CANCELLED")
+            assertThat(value<String>("SELECT payment_commitment_failure_code FROM ordering_order WHERE id = ?", loserOrderId))
+                .isEqualTo("POINT_BALANCE_INSUFFICIENT")
+            assertThat(value<Long>("SELECT available_points_krw FROM loyalty_point_account WHERE id = ?", accountId)).isZero()
+            assertThat(value<Long>("SELECT count(*) FROM loyalty_point_reservation WHERE state = 'USED'")).isOne()
+            assertThat(value<Long>("SELECT count(*) FROM loyalty_point_transaction WHERE type = 'USE'")).isOne()
+
+            gateway.enqueueVoid(GatewayRecoveryResult.Succeeded)
+            assertThat(reconciliationWorker.runOnce()).isEqualTo(1)
+            assertThat(gateway.voidCalls.get()).isOne()
+            assertThat(
+                value<String>("SELECT status FROM payment_reconciliation WHERE payment_id = ? AND kind = 'LATE_VOID'", loserPaymentId),
+            ).isEqualTo("SUCCEEDED")
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", winnerOrderId)).isEqualTo("PAID")
+        }
+
+        @Test
+        fun `zero payable immediate order commits benefits and paid state atomically without Provider`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            OrderCreationDatabaseFixture.insertOperatingHours(jdbcTemplate, fixture.storeId)
+            OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, fixture.customerId, 1_000)
+            val command = fixture.command(pointsToUseKrw = 1_000).copy(pickupSlotId = null)
+
+            val creation =
+                createOrderUseCase.create(
+                    "immediate-benefit-only",
+                    orderQuoteUseCase.attachCurrentQuote(command),
+                )
+            assertThat(creation.status).withFailMessage(creation.body).isEqualTo(201)
+            assertThat(value<Long>("SELECT count(*) FROM ordering_order")).isOne()
+            val orderId = value<UUID>("SELECT id FROM ordering_order")
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PAID")
+            assertThat(value<String>("SELECT checkout_mode FROM ordering_order WHERE id = ?", orderId)).isEqualTo("IMMEDIATE")
+            assertThat(value<String>("SELECT state FROM loyalty_point_reservation WHERE order_id = ?", orderId)).isEqualTo("USED")
+            assertThat(value<Long>("SELECT count(*) FROM ordering_order_settlement_input_snapshot WHERE order_id = ?", orderId)).isOne()
+            assertThat(value<Long>("SELECT count(*) FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId)).isZero()
+            assertThat(value<Long>("SELECT count(*) FROM payment_payment WHERE order_id = ?", orderId)).isOne()
+            assertThat(value<String>("SELECT approval_state FROM payment_payment WHERE order_id = ?", orderId)).isEqualTo("APPROVED")
+            assertNoProviderCalls()
+        }
+
+        @Test
+        fun `settlement snapshot failure rolls back point use and schedules approved payment recovery`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, priceKrw = 2_000)
+            OrderCreationDatabaseFixture.insertOperatingHours(jdbcTemplate, fixture.storeId)
+            val (accountId) = OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, fixture.customerId, 500)
+            val command = fixture.command(pointsToUseKrw = 500).copy(pickupSlotId = null)
+            val creation = createOrderUseCase.create("immediate-snapshot-failure", orderQuoteUseCase.attachCurrentQuote(command))
+            assertThat(creation.status).withFailMessage(creation.body).isEqualTo(201)
+            val orderId = value<UUID>("SELECT id FROM ordering_order")
+            val prepared = checkoutService.prepare(fixture.customerId, orderId, "immediate-snapshot-failure-prepare")
+            gateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Approved("snapshot-failure-payment", 1_500, "KRW"))
+            jdbcTemplate.execute(
+                "ALTER TABLE ordering_order_settlement_input_snapshot " +
+                    "ADD CONSTRAINT test_reject_immediate_settlement_snapshot CHECK (order_id <> '$orderId'::uuid)",
+            )
+            val response =
+                try {
+                    checkoutService.confirm(
+                        fixture.customerId,
+                        prepared.paymentId,
+                        "immediate-snapshot-failure-confirm",
+                        OneTimePaymentConfirmationRequest("snapshot-failure-payment", prepared.providerOrderId, 1_500),
+                    )
+                } finally {
+                    jdbcTemplate.execute(
+                        "ALTER TABLE ordering_order_settlement_input_snapshot " +
+                            "DROP CONSTRAINT test_reject_immediate_settlement_snapshot",
+                    )
+                }
+
+            assertThat(response.status).isEqualTo(202)
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("CANCELLED")
+            assertThat(value<String>("SELECT payment_commitment_failure_code FROM ordering_order WHERE id = ?", orderId))
+                .isEqualTo("SETTLEMENT_INPUT_UNAVAILABLE")
+            assertThat(value<Long>("SELECT available_points_krw FROM loyalty_point_account WHERE id = ?", accountId)).isEqualTo(500)
+            assertThat(value<Long>("SELECT count(*) FROM loyalty_point_reservation WHERE order_id = ?", orderId)).isZero()
+            assertThat(value<Long>("SELECT count(*) FROM ordering_order_settlement_input_snapshot WHERE order_id = ?", orderId)).isZero()
+            assertThat(
+                value<String>("SELECT status FROM payment_reconciliation WHERE payment_id = ? AND kind = 'LATE_VOID'", prepared.paymentId),
+            ).isEqualTo("SCHEDULED")
+        }
+
+        @Test
+        fun `point shortage after immediate coupon use rolls every benefit back and schedules approved payment recovery`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, priceKrw = 2_000)
+            OrderCreationDatabaseFixture.insertOperatingHours(jdbcTemplate, fixture.storeId)
+            val couponId = OrderCreationDatabaseFixture.insertFixedCoupon(jdbcTemplate, fixture, 500)
+            val (accountId, lotId) = OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, fixture.customerId, 500)
+            val command = fixture.command(couponIssuanceId = couponId, pointsToUseKrw = 500).copy(pickupSlotId = null)
+            val creation = createOrderUseCase.create("immediate-partial-benefit-failure", orderQuoteUseCase.attachCurrentQuote(command))
+            assertThat(creation.status).withFailMessage(creation.body).isEqualTo(201)
+            val orderId = value<UUID>("SELECT id FROM ordering_order")
+            val prepared = checkoutService.prepare(fixture.customerId, orderId, "immediate-partial-benefit-prepare")
+
+            jdbcTemplate.update(
+                """
+                WITH changed_account AS (
+                    UPDATE loyalty_point_account SET available_points_krw = 0 WHERE id = ? RETURNING id
+                )
+                UPDATE loyalty_point_lot SET available_amount_krw = 0
+                WHERE id = ? AND point_account_id = (SELECT id FROM changed_account)
+                """.trimIndent(),
+                accountId,
+                lotId,
+            )
+            gateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Approved("partial-benefit-failure", 1_000, "KRW"))
+
+            val response =
+                checkoutService.confirm(
+                    fixture.customerId,
+                    prepared.paymentId,
+                    "immediate-partial-benefit-confirm",
+                    OneTimePaymentConfirmationRequest("partial-benefit-failure", prepared.providerOrderId, 1_000),
+                )
+
+            assertThat(response.status).isEqualTo(202)
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("CANCELLED")
+            assertThat(value<String>("SELECT payment_commitment_failure_code FROM ordering_order WHERE id = ?", orderId))
+                .isEqualTo("POINT_BALANCE_INSUFFICIENT")
+            assertThat(value<String>("SELECT state FROM promotion_coupon_issuance WHERE id = ?", couponId)).isEqualTo("AVAILABLE")
+            assertThat(value<Long>("SELECT count(*) FROM promotion_coupon_reservation WHERE order_id = ?", orderId)).isZero()
+            assertThat(value<Long>("SELECT count(*) FROM loyalty_point_reservation WHERE order_id = ?", orderId)).isZero()
+            assertThat(value<Long>("SELECT count(*) FROM ordering_order_settlement_input_snapshot WHERE order_id = ?", orderId)).isZero()
+            assertThat(
+                value<String>("SELECT status FROM payment_reconciliation WHERE payment_id = ? AND kind = 'LATE_VOID'", prepared.paymentId),
+            ).isEqualTo("SCHEDULED")
+        }
+
+        @Test
         fun `tampered amount and order binding fail before Provider confirmation`() {
             val fixture = OrderCreationFixture()
             val orderId = pendingOrder(fixture, "one-time-tamper-order")
@@ -430,6 +1040,18 @@ internal class OneTimeCheckoutIntegrationTest
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             assertThat(createOrderUseCase.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command())).status)
                 .isEqualTo(201)
+            return value("SELECT id FROM ordering_order")
+        }
+
+        private fun pendingImmediateOrder(
+            fixture: OrderCreationFixture,
+            key: String,
+        ): UUID {
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            OrderCreationDatabaseFixture.insertOperatingHours(jdbcTemplate, fixture.storeId)
+            val command = fixture.command().copy(pickupSlotId = null)
+            val response = createOrderUseCase.create(key, orderQuoteUseCase.attachCurrentQuote(command))
+            assertThat(response.status).withFailMessage(response.body).isEqualTo(201)
             return value("SELECT id FROM ordering_order")
         }
 

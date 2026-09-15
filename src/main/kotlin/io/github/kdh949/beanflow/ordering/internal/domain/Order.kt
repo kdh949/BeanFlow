@@ -2,6 +2,8 @@ package io.github.kdh949.beanflow.ordering.internal.domain
 
 import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
 import io.github.kdh949.beanflow.merchant.api.OptionSnapshot
+import io.github.kdh949.beanflow.merchant.api.StoreSettlementTermsSnapshot
+import io.github.kdh949.beanflow.promotion.api.CouponQuoteSnapshot
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import java.time.Duration
@@ -36,6 +38,8 @@ data class CheckoutInputSnapshot(
     val couponDiscountKrw: Long,
     val pointsAppliedKrw: Long,
     val payableKrw: Long,
+    val settlementTerms: StoreSettlementTermsSnapshot,
+    val couponQuote: CouponQuoteSnapshot?,
 )
 
 data class OrderLineSnapshot(
@@ -57,14 +61,17 @@ data class OrderDisplayIdentitySnapshot(
     val pickupBusinessDate: LocalDate,
     val pickupSequence: Long,
     val storeName: String,
-    val pickupWindowStart: Instant,
-    val pickupWindowEnd: Instant,
+    val pickupWindowStart: Instant?,
+    val pickupWindowEnd: Instant?,
 ) {
     init {
         require(PUBLIC_REFERENCE_FORMAT.matches(publicReference)) { "Public order reference format is invalid" }
         require(pickupSequence > 0) { "Pickup sequence must be positive" }
         require(storeName == storeName.trim() && storeName.length in 1..200) { "Store display name is invalid" }
-        require(pickupWindowEnd.isAfter(pickupWindowStart)) { "Pickup window is invalid" }
+        require(
+            (pickupWindowStart == null && pickupWindowEnd == null) ||
+                (pickupWindowStart != null && pickupWindowEnd != null && pickupWindowEnd.isAfter(pickupWindowStart)),
+        ) { "Pickup window is invalid" }
     }
 
     val pickupNumber: String
@@ -79,7 +86,7 @@ class Order private constructor(
     val id: UUID,
     val customerId: UUID,
     val storeId: UUID,
-    val pickupSlotId: UUID,
+    val pickupSlotId: UUID?,
     val displayIdentity: OrderDisplayIdentitySnapshot,
     val state: OrderState,
     val lines: List<OrderLineSnapshot>,
@@ -183,6 +190,119 @@ class Order private constructor(
                 checkoutMode = CheckoutMode.LEGACY_RESERVED,
                 orderingWindowClosesAt = null,
                 checkoutInputSnapshot = null,
+            )
+        }
+
+        fun pendingImmediate(
+            id: UUID,
+            customerId: UUID,
+            storeId: UUID,
+            displayIdentity: OrderDisplayIdentitySnapshot,
+            lineIds: List<UUID>,
+            quotes: List<MenuLineQuote>,
+            pricing: OrderPricing,
+            createdAt: Instant,
+            orderingWindowClosesAt: Instant,
+            checkoutInputSnapshot: CheckoutInputSnapshot,
+        ): Order =
+            immediate(
+                id,
+                customerId,
+                storeId,
+                displayIdentity,
+                lineIds,
+                quotes,
+                pricing,
+                createdAt,
+                orderingWindowClosesAt,
+                checkoutInputSnapshot,
+                paid = false,
+            )
+
+        fun benefitOnlyImmediatePaid(
+            id: UUID,
+            customerId: UUID,
+            storeId: UUID,
+            displayIdentity: OrderDisplayIdentitySnapshot,
+            lineIds: List<UUID>,
+            quotes: List<MenuLineQuote>,
+            pricing: OrderPricing,
+            createdAt: Instant,
+            orderingWindowClosesAt: Instant,
+            checkoutInputSnapshot: CheckoutInputSnapshot,
+        ): Order =
+            immediate(
+                id,
+                customerId,
+                storeId,
+                displayIdentity,
+                lineIds,
+                quotes,
+                pricing,
+                createdAt,
+                orderingWindowClosesAt,
+                checkoutInputSnapshot,
+                paid = true,
+            )
+
+        private fun immediate(
+            id: UUID,
+            customerId: UUID,
+            storeId: UUID,
+            displayIdentity: OrderDisplayIdentitySnapshot,
+            lineIds: List<UUID>,
+            quotes: List<MenuLineQuote>,
+            pricing: OrderPricing,
+            createdAt: Instant,
+            orderingWindowClosesAt: Instant,
+            checkoutInputSnapshot: CheckoutInputSnapshot,
+            paid: Boolean,
+        ): Order {
+            if (quotes.size != pricing.lines.size || lineIds.size != quotes.size) {
+                invalid("Quote, pricing and line identifiers must have the same size")
+            }
+            if (!orderingWindowClosesAt.isAfter(createdAt)) invalid("Store ordering window has closed")
+            if (paid && (pricing.payable != Krw.ZERO || pricing.pointsApplied == Krw.ZERO)) {
+                invalid("A BENEFIT_ONLY order requires zero payable and positive applied points")
+            }
+            if (!paid && pricing.payable == Krw.ZERO) invalid("A pending-payment order must have a positive payable amount")
+            if (displayIdentity.pickupWindowStart != null || displayIdentity.pickupWindowEnd != null) {
+                invalid("An immediate order must not contain a pickup window")
+            }
+            if (checkoutInputSnapshot.subtotalKrw != pricing.subtotal.value ||
+                checkoutInputSnapshot.couponDiscountKrw != pricing.couponDiscount.value ||
+                checkoutInputSnapshot.pointsAppliedKrw != pricing.pointsApplied.value ||
+                checkoutInputSnapshot.payableKrw != pricing.payable.value
+            ) {
+                invalid("Immediate checkout input does not match pricing")
+            }
+            val paidAt = createdAt.takeIf { paid }
+            val deadline = paidAt?.let { minOf(it.plus(ACCEPTANCE_DEADLINE_DELAY), orderingWindowClosesAt) }
+            if (deadline != null && !deadline.isAfter(createdAt)) invalid("Store ordering window has closed")
+            val warningAt =
+                deadline?.let { finalDeadline ->
+                    paidAt?.plus(ACCEPTANCE_WARNING_DELAY)?.takeIf { it.isBefore(finalDeadline) }
+                }
+            return Order(
+                id = id,
+                customerId = customerId,
+                storeId = storeId,
+                pickupSlotId = null,
+                displayIdentity = displayIdentity,
+                state = if (paid) OrderState.PAID else OrderState.PENDING_PAYMENT,
+                lines = snapshots(lineIds, quotes, pricing),
+                subtotalKrw = pricing.subtotal.value,
+                couponDiscountKrw = pricing.couponDiscount.value,
+                pointsAppliedKrw = pricing.pointsApplied.value,
+                payableKrw = pricing.payable.value,
+                createdAt = createdAt,
+                reservationExpiresAt = null,
+                paidAt = paidAt,
+                acceptanceWarningAt = warningAt,
+                acceptanceDeadlineAt = deadline,
+                checkoutMode = CheckoutMode.IMMEDIATE,
+                orderingWindowClosesAt = orderingWindowClosesAt,
+                checkoutInputSnapshot = checkoutInputSnapshot,
             )
         }
 

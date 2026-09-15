@@ -21,6 +21,7 @@ internal class OrderRejectedPickupListener(
 ) {
     @ApplicationModuleListener(id = "beanflow.order-compensation.order-rejected.pickup.v1")
     fun on(event: OrderRejectedV1) {
+        if (!event.pickupRequired) return
         release(
             event.orderId,
             event.rejectedAt,
@@ -31,6 +32,7 @@ internal class OrderRejectedPickupListener(
 
     @ApplicationModuleListener(id = "beanflow.order-compensation.order-cancelled.pickup.v1")
     fun on(event: OrderCancelledV1) {
+        if (!event.pickupRequired) return
         release(
             event.orderId,
             event.cancelledAt,

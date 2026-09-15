@@ -10,8 +10,8 @@ internal data class CustomerOrderSummaryResponse(
     val storeName: String,
     val status: String,
     val orderedAt: Instant,
-    val pickupWindowStart: Instant,
-    val pickupWindowEnd: Instant,
+    val pickupWindowStart: Instant?,
+    val pickupWindowEnd: Instant?,
     val totalAmountKrw: Long,
     val currency: String,
     val itemSummary: String,
@@ -50,6 +50,8 @@ internal data class OrderLifecycleResponse(
     val preparingAt: Instant?,
     val readyAt: Instant?,
     val completedAt: Instant?,
+    val preparationMinutes: Int?,
+    val estimatedReadyAt: Instant?,
 )
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -64,12 +66,14 @@ internal data class CustomerOrderDetailResponse(
     val storeName: String,
     val status: String,
     val orderedAt: Instant,
-    val pickupWindowStart: Instant,
-    val pickupWindowEnd: Instant,
+    val pickupWindowStart: Instant?,
+    val pickupWindowEnd: Instant?,
     val pricing: CustomerOrderPricingResponse,
     val lifecycle: OrderLifecycleResponse?,
     val lines: List<CustomerOrderLineResponse>,
     val allowedActions: List<CustomerOrderAllowedAction>,
     val paymentRecovery: CancellationRefundRecoverySummary? = null,
     val reservationExpiresAt: Instant? = null,
+    val checkoutMode: String,
+    val paymentDeadlineAt: Instant?,
 )
