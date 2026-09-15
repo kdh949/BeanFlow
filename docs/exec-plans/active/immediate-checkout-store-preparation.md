@@ -151,6 +151,11 @@ Stacked Draft PR topology는 `M0 docs → M1 schema/availability → M2/M3 trans
 세부 case와 실제 test method/명령/결과는 구현하면서 아래 Progress와 Outcomes에 갱신한다. T17/T18은 loser
 승인의 환불 수렴, T20/T21은 모든 경제 write rollback까지 확인해야 통과다.
 
+M1에서 T01~T05의 같은 날 `[open, close)`, 미설정, 수동 OFF, 단축/연장 판정을
+`StoreOrderAvailabilityPolicyTest` 5개 case에 연결했다. T52의 V86→V89와 fresh install, slotless/lease 금지,
+cutoff/snapshot 불변성은 `ImmediateCheckoutMigrationTest`와 `FlywayMigrationSmokeTest` 4개 case에 연결했다.
+마감 단축과 실제 승인/수락의 PostgreSQL 경합(T31~T35)은 M2/M3 transaction 구현과 함께 남아 있다.
+
 ## Validation Commands
 
 ```bash
@@ -197,7 +202,8 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
 - [x] 첨부 confirmed→README→plan→task→decision→verification과 evidence/manifest 대조.
 - [x] Storybook MCP live catalog의 BeanFlow identity 확인.
 - [x] BR amendment와 ADR-133~135 등록.
-- [ ] M1 schema/availability 구현과 PostgreSQL 검증.
+- [x] 2026-09-16 M1 Merchant availability port, membership→Store lock 순서, V89 additive schema,
+  checkout/cutoff/input/준비시간 매핑, current-window 단축 listener 구현.
 - [ ] M2 transaction/benefit/recovery 구현과 경합·장애 검증.
 - [ ] M3 lifecycle/preparation/compensation 구현과 검증.
 - [ ] M4 query/API/UI/Storybook 전환과 검증.
@@ -210,6 +216,8 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
 - 원 checkout의 V87/V88은 각각 열린 PR #189/#190과 연관된다. origin/main은 V86이므로 이 stack은 V89를
   사용하되 repository-wide migration release 순서를 별도 gate로 유지한다.
 - ADR registry가 파일 ADR-125~130을 누락하고 있어 신규 ADR 등록과 함께 현재 파일 목록을 보완했다.
+- V16의 deferred point-accrual completeness trigger 때문에 schema fixture의 bare Order insert는 USER trigger를
+  명시적으로 비활성화한 격리 fixture로만 만들었다. 제품 경로는 기존 snapshot 생성을 우회하지 않는다.
 
 ## Decision Log
 
@@ -218,6 +226,14 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
 | 2026-09-16 | origin/main a8821fd 기준의 격리 worktree 사용 | dirty checkout과 사용자 변경 보존 |
 | 2026-09-16 | V89, ADR-133~135 사용 | 열린 V87/V88 및 ADR-132와 번호 충돌 방지 |
 | 2026-09-16 | IMMEDIATE/LEGACY_RESERVED 병존 | 과거 주문·event·정산·recovery 보존 |
+
+## Outcomes
+
+- M0 문서 검증: `scripts/verify-docs.sh` Passed (18 tests, 57 policies, 133 ADRs, 377 Markdown, 108 ExecPlans).
+- M1 경계/스키마: availability 5 tests, V89/전체 Flyway 4 tests, Order domain/entity 19 tests Passed.
+- M1 구조/통합: `MerchantDisplayContentAuditRollbackIntegrationTest`, `StoreOrderLifecycleIntegrationTest`,
+  `ModularityTests`, `SupportArchitectureTest` Passed.
+- 공유 DB inventory, 배포, 실제 PG와 공유 부하는 범위 밖이며 release gate로 Pending이다.
 | 2026-09-16 | Tx A/C/D와 기존 Payment recovery 재사용 | 선예약 제거와 승인 복구를 함께 만족 |
 | 2026-09-16 | schedule을 신규 결제 gate로 사용 | 사용자 확정 C04와 원래 영업 구간 보존 |
 

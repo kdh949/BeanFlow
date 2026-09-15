@@ -21,6 +21,23 @@ enum class OrderState {
     CANCELLED,
 }
 
+enum class CheckoutMode {
+    LEGACY_RESERVED,
+    IMMEDIATE,
+}
+
+data class CheckoutInputSnapshot(
+    val schemaVersion: Int,
+    val couponIssuanceId: UUID?,
+    val pointsToUseKrw: Long,
+    val quoteFingerprint: String,
+    val cartRevision: Long?,
+    val subtotalKrw: Long,
+    val couponDiscountKrw: Long,
+    val pointsAppliedKrw: Long,
+    val payableKrw: Long,
+)
+
 data class OrderLineSnapshot(
     val id: UUID,
     val lineSequence: Int,
@@ -75,6 +92,9 @@ class Order private constructor(
     val paidAt: Instant?,
     val acceptanceWarningAt: Instant?,
     val acceptanceDeadlineAt: Instant?,
+    val checkoutMode: CheckoutMode,
+    val orderingWindowClosesAt: Instant?,
+    val checkoutInputSnapshot: CheckoutInputSnapshot?,
 ) {
     companion object {
         private val ACCEPTANCE_WARNING_DELAY: Duration = Duration.ofMinutes(2)
@@ -119,6 +139,9 @@ class Order private constructor(
                 paidAt = null,
                 acceptanceWarningAt = null,
                 acceptanceDeadlineAt = null,
+                checkoutMode = CheckoutMode.LEGACY_RESERVED,
+                orderingWindowClosesAt = null,
+                checkoutInputSnapshot = null,
             )
         }
 
@@ -157,6 +180,9 @@ class Order private constructor(
                 paidAt = createdAt,
                 acceptanceWarningAt = createdAt.plus(ACCEPTANCE_WARNING_DELAY),
                 acceptanceDeadlineAt = createdAt.plus(ACCEPTANCE_DEADLINE_DELAY),
+                checkoutMode = CheckoutMode.LEGACY_RESERVED,
+                orderingWindowClosesAt = null,
+                checkoutInputSnapshot = null,
             )
         }
 

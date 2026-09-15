@@ -2,6 +2,8 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
+import io.github.kdh949.beanflow.ordering.internal.domain.CheckoutInputSnapshot
+import io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -63,6 +65,11 @@ internal class OrderEntity(
     paidAtAtCreation: Instant? = null,
     acceptanceWarningAtAtCreation: Instant? = null,
     acceptanceDeadlineAtAtCreation: Instant? = null,
+    checkoutMode: CheckoutMode = CheckoutMode.LEGACY_RESERVED,
+    orderingWindowClosesAt: Instant? = null,
+    checkoutInputSnapshot: CheckoutInputSnapshot? = null,
+    preparationMinutesAtCreation: Int? = null,
+    estimatedReadyAtAtCreation: Instant? = null,
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant,
     updatedAt: Instant,
@@ -73,6 +80,21 @@ internal class OrderEntity(
     @Column(nullable = false)
     var state: OrderState = state
         protected set
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "checkout_mode", nullable = false, length = 32)
+    val checkoutMode: CheckoutMode = checkoutMode
+
+    @Column(name = "ordering_window_closes_at")
+    var orderingWindowClosesAt: Instant? = orderingWindowClosesAt
+        protected set
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "checkout_input_snapshot", columnDefinition = "jsonb")
+    val checkoutInputSnapshot: CheckoutInputSnapshot? = checkoutInputSnapshot
+
+    @Column(name = "checkout_input_schema_version")
+    val checkoutInputSchemaVersion: Int? = checkoutInputSnapshot?.schemaVersion
 
     @Column(name = "reservation_expires_at")
     var reservationExpiresAt: Instant? = reservationExpiresAt
@@ -96,6 +118,14 @@ internal class OrderEntity(
 
     @Column(name = "accepted_at")
     var acceptedAt: Instant? = null
+        protected set
+
+    @Column(name = "preparation_minutes")
+    var preparationMinutes: Int? = preparationMinutesAtCreation
+        protected set
+
+    @Column(name = "estimated_ready_at")
+    var estimatedReadyAt: Instant? = estimatedReadyAtAtCreation
         protected set
 
     @Column(name = "rejected_at")
@@ -145,8 +175,15 @@ internal class OrderEntity(
         state = OrderState.PAID
         reservationExpiresAt = null
         paidAt = now
-        acceptanceWarningAt = now.plus(ACCEPTANCE_WARNING_DELAY)
-        acceptanceDeadlineAt = now.plus(ACCEPTANCE_DEADLINE_DELAY)
+        val defaultDeadline = now.plus(ACCEPTANCE_DEADLINE_DELAY)
+        val deadline =
+            when (checkoutMode) {
+                CheckoutMode.LEGACY_RESERVED -> defaultDeadline
+                CheckoutMode.IMMEDIATE -> minOf(defaultDeadline, requireNotNull(orderingWindowClosesAt))
+            }
+        if (!deadline.isAfter(now)) conflict("Store ordering window has closed")
+        acceptanceWarningAt = now.plus(ACCEPTANCE_WARNING_DELAY).takeIf { it.isBefore(deadline) }
+        acceptanceDeadlineAt = deadline
         updatedAt = now
     }
 

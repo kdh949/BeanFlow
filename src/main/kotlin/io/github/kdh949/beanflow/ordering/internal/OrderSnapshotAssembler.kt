@@ -29,6 +29,9 @@ internal class OrderSnapshotAssembler(
             paidAtAtCreation = order.paidAt,
             acceptanceWarningAtAtCreation = order.acceptanceWarningAt,
             acceptanceDeadlineAtAtCreation = order.acceptanceDeadlineAt,
+            checkoutMode = order.checkoutMode,
+            orderingWindowClosesAt = order.orderingWindowClosesAt,
+            checkoutInputSnapshot = order.checkoutInputSnapshot,
             createdAt = order.createdAt,
             updatedAt = order.createdAt,
         )
