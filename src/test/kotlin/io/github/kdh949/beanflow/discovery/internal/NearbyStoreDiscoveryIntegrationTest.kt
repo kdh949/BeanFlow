@@ -23,7 +23,6 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.RequestPostProcessor
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import java.sql.Timestamp
 import java.time.Clock
 import java.time.Duration
 import java.util.Base64
@@ -79,7 +78,6 @@ internal class NearbyStoreDiscoveryIntegrationTest
             insertStore(store(3), "Closed cafe", longitude = 127.0005, latitude = 37.5, acceptingOrders = false)
             insertStore(store(4), "Pickup disabled cafe", longitude = 127.0006, latitude = 37.5, pickupEnabled = false)
             attachImage(store(1))
-            insertPickupSlot(store(1))
 
             mockMvc
                 .perform(nearby(radiusMeters = "1000"))
@@ -90,17 +88,14 @@ internal class NearbyStoreDiscoveryIntegrationTest
                 .andExpect(jsonPath("$.items[0].distanceMeters").value(0))
                 .andExpect(jsonPath("$.items[0].orderingAvailable").value(true))
                 .andExpect(jsonPath("$.items[0].pickupAvailable").value(true))
-                .andExpect(jsonPath("$.items[0].nextPickupWindow.startsAt").isString)
-                .andExpect(jsonPath("$.items[0].nextPickupWindow.endsAt").isString)
-                .andExpect(jsonPath("$.items[0].customerDisplay.operatingStatus").value("UNSPECIFIED"))
+                .andExpect(jsonPath("$.items[0].nextPickupWindow").doesNotExist())
+                .andExpect(jsonPath("$.items[0].customerDisplay.operatingStatus").value("OPEN"))
                 .andExpect(jsonPath("$.items[0].open").doesNotExist())
                 .andExpect(jsonPath("$.items[0].image.url").isString)
                 .andExpect(jsonPath("$.items[0].image.expiresAt").isString)
                 .andExpect(jsonPath("$.items[1].storeId").value(store(2).toString()))
                 .andExpect(jsonPath("$.items[1].distanceMeters").value(353))
-                // 슬롯이 없는 매장은 결과에 남되 픽업 불가로 표시된다. Milestone 6 이전에는
-                // `acceptingOrders && pickupEnabled`라서 항상 true였다.
-                .andExpect(jsonPath("$.items[1].pickupAvailable").value(false))
+                .andExpect(jsonPath("$.items[1].pickupAvailable").value(true))
                 .andExpect(jsonPath("$.items[1].nextPickupWindow").doesNotExist())
                 .andExpect(jsonPath("$.items[1].image").doesNotExist())
                 .andExpect(jsonPath("$.items[0].distanceMicrometers").doesNotExist())
@@ -109,31 +104,31 @@ internal class NearbyStoreDiscoveryIntegrationTest
         }
 
         @Test
-        fun `pickupAvailable means a reservable slot exists rather than owner pickup state`() {
-            insertStore(store(1), "Reservable cafe", longitude = 127.0, latitude = 37.5)
-            insertStore(store(2), "Fully booked cafe", longitude = 127.001, latitude = 37.5)
-            insertStore(store(3), "Already started cafe", longitude = 127.002, latitude = 37.5)
-            insertStore(store(4), "Beyond horizon cafe", longitude = 127.003, latitude = 37.5)
-            insertPickupSlot(store(1))
-            insertPickupSlot(store(2), capacity = 2, reserved = 1, confirmed = 1)
-            insertPickupSlot(store(3), startsIn = Duration.ofMinutes(-30))
-            insertPickupSlot(store(4), startsIn = Duration.ofDays(8))
+        fun `pickupAvailable means immediate ordering is open even when no slot exists`() {
+            insertStore(store(1), "Slotless open cafe", longitude = 127.0, latitude = 37.5)
+            insertStore(store(2), "Hours closed cafe", longitude = 127.001, latitude = 37.5, currentlyOpen = false)
+            insertStore(
+                store(3),
+                "Hours missing cafe",
+                longitude = 127.002,
+                latitude = 37.5,
+                operatingHoursConfigured = false,
+            )
 
             mockMvc
                 .perform(nearby(radiusMeters = "1000"))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$.items.length()").value(4))
+                .andExpect(jsonPath("$.items.length()").value(3))
                 .andExpect(jsonPath("$.items[0].pickupAvailable").value(true))
                 .andExpect(jsonPath("$.items[1].pickupAvailable").value(false))
                 .andExpect(jsonPath("$.items[2].pickupAvailable").value(false))
-                .andExpect(jsonPath("$.items[3].pickupAvailable").value(false))
+                .andExpect(jsonPath("$.items[0].nextPickupWindow").doesNotExist())
         }
 
         @Test
-        fun `pickupAvailable filter keeps only stores with a reservable slot`() {
-            insertStore(store(1), "Slotless cafe", longitude = 127.0, latitude = 37.5)
-            insertStore(store(2), "Reservable cafe", longitude = 127.001, latitude = 37.5)
-            insertPickupSlot(store(2))
+        fun `pickupAvailable filter keeps only stores open for immediate ordering`() {
+            insertStore(store(1), "Hours closed cafe", longitude = 127.0, latitude = 37.5, currentlyOpen = false)
+            insertStore(store(2), "Slotless open cafe", longitude = 127.001, latitude = 37.5)
 
             mockMvc
                 .perform(nearby(radiusMeters = "1000", pickupAvailable = "true"))
@@ -141,7 +136,7 @@ internal class NearbyStoreDiscoveryIntegrationTest
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].storeId").value(store(2).toString()))
 
-            // 필터를 끄면 슬롯 없는 매장도 남는다. 두 필터는 독립이다(ADR-103 A6).
+            // 필터를 끄면 영업시간이 닫힌 매장도 탐색 결과에는 남는다.
             mockMvc
                 .perform(nearby(radiusMeters = "1000", pickupAvailable = "false"))
                 .andExpect(status().isOk)
@@ -165,11 +160,17 @@ internal class NearbyStoreDiscoveryIntegrationTest
         fun `an availability filtered page pages on without gaps or duplicates`() {
             val ordered = (0 until 6).map { store(20 + it) }
             ordered.forEachIndexed { index, storeId ->
-                insertStore(storeId, "Cafe $index", longitude = 127.0 + index * 0.001, latitude = 37.5)
+                insertStore(
+                    storeId,
+                    "Cafe $index",
+                    longitude = 127.0 + index * 0.001,
+                    latitude = 37.5,
+                    currentlyOpen = false,
+                )
             }
             // 가용 매장은 처음과 마지막뿐이다. 가운데 넷은 필터에 걸려 page를 짧게 만든다.
-            insertPickupSlot(ordered.first())
-            insertPickupSlot(ordered.last())
+            replaceOperatingHours(ordered.first(), currentlyOpen = true)
+            replaceOperatingHours(ordered.last(), currentlyOpen = true)
 
             val firstBody =
                 mockMvc
@@ -207,8 +208,6 @@ internal class NearbyStoreDiscoveryIntegrationTest
         fun `a cursor issued without the availability filter is rejected once the filter is on`() {
             insertStore(store(1), "Near cafe", longitude = 127.0, latitude = 37.5)
             insertStore(store(2), "Far cafe", longitude = 127.001, latitude = 37.5)
-            insertPickupSlot(store(1))
-            insertPickupSlot(store(2))
             val unfiltered =
                 nextCursor(
                     mockMvc
@@ -545,6 +544,8 @@ internal class NearbyStoreDiscoveryIntegrationTest
             latitude: Double,
             acceptingOrders: Boolean = true,
             pickupEnabled: Boolean = true,
+            operatingHoursConfigured: Boolean = true,
+            currentlyOpen: Boolean = true,
         ) {
             jdbcTemplate.update(
                 "INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, ?, ?, 0)",
@@ -562,6 +563,9 @@ internal class NearbyStoreDiscoveryIntegrationTest
                 longitude,
                 latitude,
             )
+            if (operatingHoursConfigured) {
+                replaceOperatingHours(storeId, currentlyOpen)
+            }
         }
 
         private fun attachImage(storeId: UUID) {
@@ -578,32 +582,34 @@ internal class NearbyStoreDiscoveryIntegrationTest
             )
         }
 
-        /**
-         * One pickup slot. The default is reservable inside the seven-day window; the parameters
-         * exist so a test can place a slot outside the window or with no seats left.
-         */
-        private fun insertPickupSlot(
+        private fun replaceOperatingHours(
             storeId: UUID,
-            startsIn: Duration = Duration.ofDays(1),
-            capacity: Long = 4,
-            reserved: Long = 0,
-            confirmed: Long = 0,
+            currentlyOpen: Boolean,
         ) {
-            val startsAt = clock.instant().plus(startsIn)
             jdbcTemplate.update(
                 """
-                INSERT INTO fulfillment_pickup_slot (
-                    id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count, version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                INSERT INTO merchant_store_customer_display_profile (
+                    store_id, address_line, directions_hint, version, created_at, updated_at
+                ) VALUES (?, NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT (store_id) DO NOTHING
                 """.trimIndent(),
-                UUID.randomUUID(),
                 storeId,
-                Timestamp.from(startsAt),
-                Timestamp.from(startsAt.plus(Duration.ofMinutes(20))),
-                capacity,
-                reserved,
-                confirmed,
             )
+            jdbcTemplate.update("DELETE FROM merchant_store_operating_hours WHERE store_id = ?", storeId)
+            (1..7).forEach { dayOfWeek ->
+                jdbcTemplate.update(
+                    """
+                    INSERT INTO merchant_store_operating_hours (
+                        store_id, day_of_week, closed, opens_at, closes_at
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """.trimIndent(),
+                    storeId,
+                    dayOfWeek,
+                    !currentlyOpen,
+                    if (currentlyOpen) java.time.LocalTime.MIDNIGHT else null,
+                    if (currentlyOpen) java.time.LocalTime.of(23, 59, 59) else null,
+                )
+            }
         }
 
         private fun nextCursor(body: String): String =

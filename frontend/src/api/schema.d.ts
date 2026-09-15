@@ -402,9 +402,9 @@ export interface paths {
          *     그것을 내림한 정수 미터 표시값을 반환합니다. 요청값이 범위를 벗어나면 400을 반환합니다.
          *
          *     이 endpoint는 픽업 주문을 받고 있는 매장만 반환합니다. pickupAvailable은 거기서
-         *     reservable slot inside the seven-day window(7일 창 안의 예약 가능한 슬롯)가 있는
-         *     매장으로 더 좁히며, same meaning as on GET /stores/search(GET /stores/search와 동일한
-         *     의미)입니다. 특정 시점의 사영이며 슬롯을 예약하지 않습니다. 이 필터는 공간 질의 뒤에
+         *     현재 Asia/Seoul 영업시간이 OPEN인 매장으로 더 좁히며, GET /stores/search와 같은
+         *     의미입니다. legacy pickup slot 존재 여부는 보지 않으며 quote와 주문 확정에서 정책을
+         *     다시 검증합니다. 이 필터는 공간 질의 뒤에
          *     적용되므로 한 page가 limit보다 짧아도 nextCursor가 함께 나올 수 있고, 그 cursor는
          *     마지막 반환 row가 아니라 last examined candidate(마지막으로 검사한 candidate)에
          *     앵커됩니다.
@@ -438,8 +438,9 @@ export interface paths {
          *     returns 400. Coordinates are request-only and never persisted or written to logs.
          *     openOnly retains its transport spelling but means that the Store is currently accepting
          *     orders with pickup enabled (`orderingAvailable=true`);
-         *     pickupAvailable additionally requires a reservable slot and is a point-in-time
-         *     projection that does not reserve one. Both default to unset, and a closed store
+         *     pickupAvailable additionally requires the current Asia/Seoul same-day operating status to
+         *     be OPEN. It does not require a legacy pickup slot and is only a point-in-time hint; quote
+         *     and order commitment revalidate the policy. Both filters default to unset, and a closed store
          *     is then still returned with its status in the flags. The relevance score itself
          *     is not part of the response.
          */
@@ -625,7 +626,7 @@ export interface paths {
         put?: never;
         /**
          * 현재 owner 상태로 비예약 주문 견적 계산
-         * @description 메뉴·옵션·픽업 슬롯·쿠폰·포인트와 주문 정책을 현재 상태로 검증하고
+         * @description 메뉴·옵션·쿠폰·포인트와 매장 영업·주문 정책을 현재 상태로 검증하고
          *     서버 권위 금액 및 opaque quoteFingerprint를 반환합니다. 이 계산은 Order,
          *     reservation, Payment, idempotency record, Audit, event를 만들지 않으며 Provider를
          *     호출하지 않습니다. quotedAt은 정보 필드이고 fingerprint 입력이 아닙니다.
@@ -683,13 +684,13 @@ export interface paths {
          * 종료된 주문을 원본으로 새 주문 생성(재주문)
          * @description 소유 고객은 COMPLETED, CANCELLED, REJECTED, EXPIRED 상태의 원본(source)
          *     주문으로만 재주문할 수 있습니다. 서버는 메뉴 ID, 정규화된 옵션 ID, 수량만
-         *     복사한 뒤 현재 시점의 Merchant 가격과 판매 상태를 다시 검증하고, 기존과 동일한
-         *     원자적 예약(reservation) 흐름을 사용합니다. 과거의 혜택, 결제, 픽업 슬롯,
+         *     복사한 뒤 현재 시점의 Merchant 가격과 판매 상태를 다시 검증하고, 신규 주문과 동일한
+         *     비예약 즉시 결제 흐름을 사용합니다. 과거의 혜택, 결제, 픽업 슬롯,
          *     정산 스냅샷은 절대 복사하지 않습니다. 원본 항목 중 하나라도 더 이상 이용할
          *     수 없으면 요청 전체가 실패하며, 부분 주문은 생성되지 않습니다.
          *
          *     멱등성(idempotency) 범위는 actor ID, REORDER_ORDER_V1, Idempotency-Key로
-         *     결정됩니다. 정규 payload는 sourceOrderId, pickupSlotId, couponIssuanceId
+         *     결정됩니다. 정규 payload는 sourceOrderId, couponIssuanceId
          *     (null 포함), pointsToUseKrw로 구성됩니다. 동일 key/동일 payload로 종료
          *     상태를 재요청하면 최초 응답의 상태 코드와 본문을 그대로 재생합니다. 원본이나
          *     요청 내용이 다르면 최초 주문 응답을 노출하지 않고 IDEMPOTENCY_KEY_REUSED를
@@ -7311,7 +7312,9 @@ export interface components {
             name: string;
             /** @description acceptingOrders와 pickupEnabled가 모두 true인 주문 가능성입니다. 영업시간 상태가 아닙니다. */
             orderingAvailable: boolean;
+            /** @description 주문받기와 pickup이 활성화되고 현재 Asia/Seoul 영업시간이 OPEN인지 나타냅니다. */
             pickupAvailable: boolean;
+            /** @description Legacy compatibility field. Immediate-order discovery omits it and never invents an ETA. */
             nextPickupWindow?: components["schemas"]["NextPickupWindow"];
             customerDisplay: components["schemas"]["CustomerStoreDisplay"];
             distanceMeters?: number;
@@ -7370,7 +7373,7 @@ export interface components {
          *       "orderingAvailable": true,
          *       "pickupAvailable": true,
          *       "customerDisplay": {
-         *         "operatingStatus": "UNSPECIFIED"
+         *         "operatingStatus": "OPEN"
          *       }
          *     }
          */
@@ -7384,6 +7387,7 @@ export interface components {
             distanceMeters: number;
             orderingAvailable: boolean;
             pickupAvailable: boolean;
+            /** @description Legacy compatibility field. Immediate-order discovery omits it and never invents an ETA. */
             nextPickupWindow?: components["schemas"]["NextPickupWindow"];
             customerDisplay: components["schemas"]["CustomerStoreDisplay"];
             image?: components["schemas"]["StorefrontImage"];
@@ -7409,7 +7413,7 @@ export interface components {
          *           "orderingAvailable": true,
          *           "pickupAvailable": true,
          *           "customerDisplay": {
-         *             "operatingStatus": "UNSPECIFIED"
+         *             "operatingStatus": "OPEN"
          *           }
          *         }
          *       ],
@@ -7437,7 +7441,9 @@ export interface components {
             distanceMeters?: number;
             /** @description 현재 Store가 주문 수락과 pickup을 모두 활성화했는지 나타냅니다. 영업시간 상태가 아닙니다. */
             orderingAvailable: boolean;
+            /** @description 주문받기와 pickup이 활성화되고 현재 Asia/Seoul 영업시간이 OPEN인지 나타냅니다. */
             pickupAvailable: boolean;
+            /** @description Legacy compatibility field. Immediate-order discovery omits it and never invents an ETA. */
             nextPickupWindow?: components["schemas"]["NextPickupWindow"];
             customerDisplay: components["schemas"]["CustomerStoreDisplay"];
             /** @description Menus of this store that the query matched, most relevant first. Empty when none matched. */
@@ -7545,7 +7551,6 @@ export interface components {
         MoneyKrw: number;
         OrderQuoteRequest: {
             storeId: components["schemas"]["Identifier"];
-            pickupSlotId: components["schemas"]["Identifier"];
             lines: components["schemas"]["CreateOrderLineRequest"][];
             couponIssuanceId?: components["schemas"]["Identifier"];
             pointsToUseKrw: components["schemas"]["MoneyKrw"];
@@ -7553,10 +7558,6 @@ export interface components {
         OrderQuoteStore: {
             storeId: components["schemas"]["Identifier"];
             name: string;
-        };
-        OrderQuotePickupWindow: {
-            startsAt: components["schemas"]["DateTime"];
-            endsAt: components["schemas"]["DateTime"];
         };
         OrderQuoteLine: {
             menuId: components["schemas"]["Identifier"];
@@ -7575,10 +7576,9 @@ export interface components {
         };
         OrderQuote: {
             quotedAt: components["schemas"]["DateTime"];
-            /** @description order-quote-fingerprint/v3으로 생성한 opaque 거래 조건 사전조건입니다. 공유 슬롯의 사용량 및 기술적 version은 비교하지 않으며 최종 주문의 잠금 아래에서 현재 가용성을 별도로 검증합니다. 가격·구성·혜택·픽업 시간/정원 변경은 재확인이 필요합니다. */
+            /** @description order-quote-fingerprint/v7으로 생성한 opaque 거래 조건 사전조건입니다. 가격·구성·혜택·Store 영업/주문 정책 변경은 최종 주문의 잠금 아래에서 재검증합니다. */
             quoteFingerprint: string;
             store: components["schemas"]["OrderQuoteStore"];
-            pickupWindow: components["schemas"]["OrderQuotePickupWindow"];
             lines: components["schemas"]["OrderQuoteLine"][];
             pricing: components["schemas"]["OrderQuotePricing"];
             /** @enum {string} */
@@ -7586,11 +7586,10 @@ export interface components {
         };
         /**
          * @description 신규 주문 생성 요청입니다. 서버 소유 장바구니가 없으므로 주문 항목 전체를 한
-         *     번에 보냅니다. 메뉴 가격, 픽업 슬롯, 쿠폰, 포인트를 이 요청 하나의
-         *     트랜잭션에서 모두 재검증·예약합니다.
+         *     번에 보냅니다. 신규 IMMEDIATE 주문은 픽업 슬롯과 혜택을 예약하지 않으며,
+         *     메뉴·금액·거래조건 snapshot만 고정합니다.
          * @example {
          *       "storeId": "9f1c2a3b-4d5e-6f70-8192-a3b4c5d6e7f8",
-         *       "pickupSlotId": "1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
          *       "lines": [
          *         {
          *           "menuId": "c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f",
@@ -7607,7 +7606,6 @@ export interface components {
          */
         CreateOrderRequest: {
             storeId: components["schemas"]["Identifier"];
-            pickupSlotId: components["schemas"]["Identifier"];
             /** @description 주문할 메뉴 목록. 최소 1개 이상이어야 합니다. */
             lines: components["schemas"]["CreateOrderLineRequest"][];
             couponIssuanceId?: components["schemas"]["Identifier"];
@@ -7701,11 +7699,11 @@ export interface components {
             lastUpdatedAt?: components["schemas"]["DateTime"];
         } & (unknown & unknown & unknown & unknown & unknown & unknown);
         /**
-         * @description 주문이 취소된 직접 원인입니다. `CUSTOMER_REQUEST`는 고객 요청, `SUPPORT_REQUEST`는 고객센터 처리, `PAYMENT_DECLINED`는 결제 승인 거절을 뜻합니다.
+         * @description 주문이 취소된 직접 원인입니다. `PAYMENT_COMMITMENT_FAILED`는 PG 승인 뒤 로컬 혜택·정산 확정이 성립하지 않아 결제 복구 중인 경우입니다.
          * @example CUSTOMER_REQUEST
          * @enum {string}
          */
-        CancellationCause: "CUSTOMER_REQUEST" | "PAYMENT_DECLINED" | "SUPPORT_REQUEST";
+        CancellationCause: "CUSTOMER_REQUEST" | "PAYMENT_DECLINED" | "PAYMENT_COMMITMENT_FAILED" | "SUPPORT_REQUEST";
         /**
          * @description 고객이 선택한 주문 취소 사유입니다. 시스템이 기록하는 취소 원인과 별도로 사용됩니다.
          * @example CHANGED_MIND
@@ -7766,13 +7764,13 @@ export interface components {
              */
             pickupBusinessDate: string;
             storeName: string;
-            /** @description 고객이 선택한 픽업 가능 구간의 시작 시각입니다. */
-            pickupWindowStart: components["schemas"]["DateTime"];
-            /** @description 고객이 선택한 픽업 가능 구간의 종료 시각입니다. */
-            pickupWindowEnd: components["schemas"]["DateTime"];
+            /** @description LEGACY_RESERVED 주문의 픽업 구간 시작입니다. IMMEDIATE에는 없습니다. */
+            pickupWindowStart?: components["schemas"]["DateTime"];
+            /** @description LEGACY_RESERVED 주문의 픽업 구간 종료입니다. IMMEDIATE에는 없습니다. */
+            pickupWindowEnd?: components["schemas"]["DateTime"];
             /** @description 주문의 현재 상태입니다. */
             state: components["schemas"]["OrderState"];
-            /** @description 결제 대기 예약이 만료되는 시각입니다. */
+            /** @description LEGACY_RESERVED 결제 대기 예약의 만료 시각이며 IMMEDIATE 주문에는 없습니다. */
             reservationExpiresAt?: components["schemas"]["DateTime"];
             /** @description 주문에 포함된 주문 항목 목록입니다. */
             lines: components["schemas"]["OrderLine"][];
@@ -7798,6 +7796,10 @@ export interface components {
             acceptanceDeadlineAt?: components["schemas"]["DateTime"];
             /** @description 매장이 주문을 수락한 시각입니다. */
             acceptedAt?: components["schemas"]["DateTime"];
+            /** @description 최초 수락에서 한 번 정한 준비시간입니다. */
+            preparationMinutes?: number;
+            /** @description acceptedAt 기준으로 계산해 고정한 예상 준비시각입니다. 자동 상태 전이 기준이 아닙니다. */
+            estimatedReadyAt?: components["schemas"]["DateTime"];
             /** @description 매장이 주문을 거절한 시각입니다. */
             rejectedAt?: components["schemas"]["DateTime"];
             /** @description 주문 제조가 시작된 시각입니다. */
@@ -7819,12 +7821,12 @@ export interface components {
             /** @description 리소스가 마지막으로 변경된 시각입니다. */
             updatedAt: components["schemas"]["DateTime"];
         };
-        /** @description 결제 대기 상태(`PENDING_PAYMENT`)로 생성된 주문입니다. 예약이 만료되기 전에 결제를 완료해야 합니다. */
+        /** @description 결제 대기 상태(`PENDING_PAYMENT`)로 생성된 주문입니다. IMMEDIATE는 영업 마감 cutoff, legacy는 예약 lease를 따릅니다. */
         PendingPaymentOrder: components["schemas"]["Order"] & {
             /** @constant */
             state?: "PENDING_PAYMENT";
-            /** @description 이 시각까지 결제를 완료하지 않으면 예약과 주문이 만료됩니다. */
-            reservationExpiresAt: components["schemas"]["DateTime"];
+            /** @description LEGACY_RESERVED에서만 존재하는 예약 만료 시각입니다. */
+            reservationExpiresAt?: components["schemas"]["DateTime"];
             /**
              * Format: int64
              * @description 결제해야 할 남은 금액(원). 1원 이상입니다.
@@ -7899,15 +7901,13 @@ export interface components {
         };
         /**
          * @description 재주문(reorder) 요청입니다. 메뉴 구성은 원본 주문에서 그대로 복사되므로 여기서는
-         *     새 픽업 슬롯과 쿠폰/포인트 사용 여부만 지정합니다.
+         *     쿠폰/포인트 사용 여부만 지정합니다. 신규 재주문은 슬롯 없이 즉시 결제로 진행합니다.
          * @example {
-         *       "pickupSlotId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
          *       "couponIssuanceId": null,
          *       "pointsToUseKrw": 0
          *     }
          */
         ReorderOrderRequest: {
-            pickupSlotId: components["schemas"]["Identifier"];
             couponIssuanceId?: components["schemas"]["Identifier"];
             pointsToUseKrw: components["schemas"]["MoneyKrw"];
         };
@@ -7985,10 +7985,7 @@ export interface components {
          *         "pickupNumber": "A-12",
          *         "pickupBusinessDate": "2026-08-15",
          *         "storeName": "성수 1호점",
-         *         "pickupWindowStart": "2026-08-15T10:00:00+09:00",
-         *         "pickupWindowEnd": "2026-08-15T10:15:00+09:00",
          *         "state": "PENDING_PAYMENT",
-         *         "reservationExpiresAt": "2026-08-15T09:45:00+09:00",
          *         "lines": [
          *           {
          *             "orderLineId": "9b7a4e2a-8b8e-1a2b-3c4d-5e6f7a8b9c0d",
@@ -8036,8 +8033,6 @@ export interface components {
          *         "pickupNumber": "A-12",
          *         "pickupBusinessDate": "2026-08-15",
          *         "storeName": "성수 1호점",
-         *         "pickupWindowStart": "2026-08-15T10:00:00+09:00",
-         *         "pickupWindowEnd": "2026-08-15T10:15:00+09:00",
          *         "state": "PAID",
          *         "lines": [
          *           {
@@ -8170,8 +8165,8 @@ export interface components {
             storeName: string;
             status: components["schemas"]["OrderState"];
             orderedAt: components["schemas"]["DateTime"];
-            pickupWindowStart: components["schemas"]["DateTime"];
-            pickupWindowEnd: components["schemas"]["DateTime"];
+            pickupWindowStart?: components["schemas"]["DateTime"];
+            pickupWindowEnd?: components["schemas"]["DateTime"];
             /** @description Coupon discount and point use after the final amount payable by the customer. */
             totalAmountKrw: components["schemas"]["MoneyKrw"];
             currency: components["schemas"]["Currency"];
@@ -8264,6 +8259,10 @@ export interface components {
             preparingAt?: components["schemas"]["DateTime"];
             readyAt?: components["schemas"]["DateTime"];
             completedAt?: components["schemas"]["DateTime"];
+            /** @description 최초 매장 수락에서 한 번 정해진 준비시간입니다. */
+            preparationMinutes?: number;
+            /** @description 최초 acceptedAt과 preparationMinutes로 계산해 저장한 예상 준비시각입니다. 자동 상태 전이 기준이 아닙니다. */
+            estimatedReadyAt?: components["schemas"]["DateTime"];
         };
         CustomerOrderLine: {
             lineSequence: number;
@@ -8294,19 +8293,22 @@ export interface components {
         };
         CustomerOrderDetail: {
             orderReference: string;
-            /**
-             * @description Server-supplied opaque store identifier. It exists so the customer can
-             *     read that store's current pickup slots when reordering; no customer
-             *     screen accepts it as input.
-             */
+            /** @description Server-supplied opaque store identifier used to bind a reorder to its original Store. */
             storeId: components["schemas"]["Identifier"];
             pickupNumber: string;
             storeName: string;
             status: components["schemas"]["OrderState"];
             reservationExpiresAt?: components["schemas"]["DateTime"];
+            /**
+             * @description 신규 즉시 주문과 과거 슬롯 예약 주문을 구분합니다.
+             * @enum {string}
+             */
+            checkoutMode: "IMMEDIATE" | "LEGACY_RESERVED";
+            /** @description 현재 결제 시도의 서버 소유 종료 경계입니다. IMMEDIATE는 영업 마감 cutoff, legacy는 예약 lease입니다. */
+            paymentDeadlineAt?: components["schemas"]["DateTime"];
             orderedAt: components["schemas"]["DateTime"];
-            pickupWindowStart: components["schemas"]["DateTime"];
-            pickupWindowEnd: components["schemas"]["DateTime"];
+            pickupWindowStart?: components["schemas"]["DateTime"];
+            pickupWindowEnd?: components["schemas"]["DateTime"];
             pricing: components["schemas"]["CustomerOrderPricing"];
             lifecycle?: components["schemas"]["OrderLifecycle"];
             lines: components["schemas"]["CustomerOrderLine"][];
@@ -8768,6 +8770,8 @@ export interface components {
             acceptedAt?: components["schemas"]["DateTime"];
             preparingAt?: components["schemas"]["DateTime"];
             readyAt?: components["schemas"]["DateTime"];
+            /** @description 최초 수락 때 고정한 예상 준비시각이며 READY 자동 전이 기준이 아닙니다. */
+            estimatedReadyAt?: components["schemas"]["DateTime"];
         };
         /**
          * @description 주문 거절이나 고객 취소 뒤 환불·쿠폰·포인트 복구가 어디까지 진행됐는지 스토어에 보여 주는 요약입니다. 내부 오류와 재시도 횟수는 포함하지 않습니다.
@@ -8840,10 +8844,10 @@ export interface components {
             lane?: "PENDING_ACCEPTANCE" | "ACCEPTED" | "PREPARING" | "READY";
             /** @description 현재 주문 상태입니다. */
             status: components["schemas"]["OrderState"];
-            /** @description 고객이 선택한 픽업 가능 구간의 시작 시각입니다. */
-            pickupWindowStart: components["schemas"]["DateTime"];
-            /** @description 고객이 선택한 픽업 가능 구간의 종료 시각입니다. */
-            pickupWindowEnd: components["schemas"]["DateTime"];
+            /** @description LEGACY_RESERVED 주문에서 고객이 선택한 픽업 구간 시작입니다. IMMEDIATE 주문에는 없습니다. */
+            pickupWindowStart?: components["schemas"]["DateTime"];
+            /** @description LEGACY_RESERVED 주문에서 고객이 선택한 픽업 구간 종료입니다. IMMEDIATE 주문에는 없습니다. */
+            pickupWindowEnd?: components["schemas"]["DateTime"];
             /** @description 메뉴와 수량을 매장 화면용으로 축약한 한 줄 요약입니다. */
             itemSummary: string;
             /** @description 매장이 주문을 수락해야 하는 마감 시각입니다. */
@@ -8909,6 +8913,8 @@ export interface components {
             expectedStatus: "PAID" | "ACCEPTED" | "PREPARING" | "READY";
             /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason?: string;
+            /** @description ACCEPT에서만 필수인 준비시간입니다. 같은 수락 요청 재시도에서 변경할 수 없습니다. */
+            preparationMinutes?: number;
         };
         MerchantRefundSelection: {
             lineSequence: number;
@@ -10712,10 +10718,16 @@ export interface components {
             version: number;
             /** Format: date-time */
             orderedAt: string;
-            /** Format: date-time */
-            pickupWindowStart: string;
-            /** Format: date-time */
-            pickupWindowEnd: string;
+            /**
+             * Format: date-time
+             * @description LEGACY_RESERVED 주문의 픽업 구간 시작이며 IMMEDIATE 주문에는 없습니다.
+             */
+            pickupWindowStart?: string | null;
+            /**
+             * Format: date-time
+             * @description LEGACY_RESERVED 주문의 픽업 구간 종료이며 IMMEDIATE 주문에는 없습니다.
+             */
+            pickupWindowEnd?: string | null;
             /** Format: int64 */
             subtotalKrw: number;
             /** Format: int64 */
@@ -14540,7 +14552,7 @@ export interface operations {
                  * @example 1500
                  */
                 radiusMeters: components["parameters"]["RadiusMeters"];
-                /** @description true로 지정하면 7일 창 안에 예약 가능한 슬롯이 남아 있는 매장만 반환합니다. 픽업 설정만으로는 충족되지 않습니다. */
+                /** @description true로 지정하면 주문받기와 pickup이 활성화되고 현재 영업시간이 OPEN인 매장만 반환합니다. legacy pickup slot은 필요하지 않습니다. */
                 pickupAvailable?: boolean;
                 /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
@@ -15046,8 +15058,8 @@ export interface operations {
         };
         responses: {
             /**
-             * @description 새 Order, 필요한 모든 예약(reservation)과 불변 스냅샷, 가격 비교
-             *     결과, 최초 멱등 응답이 모두 커밋됐습니다.
+             * @description 새 Order, 불변 입력 스냅샷, 가격 비교 결과와 최초 멱등 응답이 모두
+             *     커밋됐습니다. 신규 즉시 주문은 픽업 슬롯과 혜택을 예약하지 않습니다.
              */
             201: {
                 headers: {

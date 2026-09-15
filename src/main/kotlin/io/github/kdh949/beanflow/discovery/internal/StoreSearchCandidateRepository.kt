@@ -48,11 +48,8 @@ internal data class StoreSearchCandidate(
     val distanceMicrometers: Long,
     /**
      * `acceptingOrders && pickupEnabled` — the owner half of `pickupAvailable` and exactly what the
-     * `openOnly` filter matches (ADR-103 A6).
-     *
-     * The public `pickupAvailable` is this conjoined with Fulfillment's slot-existence answer. The
-     * field is deliberately not called `pickupAvailable`: this query cannot see slots, and naming
-     * it after the public flag is how the weaker meaning reached the response before Milestone 6.
+     * legacy-named `openOnly` filter matches (ADR-103 A6). Discovery combines this with Merchant's
+     * current operating status; the search index never reads legacy Fulfillment slots.
      */
     val orderingAvailable: Boolean,
     val matchedKinds: Set<StoreSearchTermKind>,

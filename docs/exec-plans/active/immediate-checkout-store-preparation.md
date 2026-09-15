@@ -31,6 +31,13 @@
 - M2/M3 작업 head에서는 신규 quote/create/reorder가 슬롯 없이 IMMEDIATE 초안을 만들고, 승인 후 transaction에서
   Coupon/Point 실제 사용·최종 settlement input·Payment 승인·Order PAID를 함께 확정한다. 기존
   LEGACY_RESERVED 생성·confirm·복구 경로는 그대로 병존한다.
+- M4 작업 head에서는 실제 customer/store/support route가 nullable pickup, server-owned payment cutoff,
+  preparation ETA와 cart revision guard를 소비한다. OpenAPI 원본에서 즉시 주문 예시의 슬롯·5분 lease를 제거하고
+  runtime schema를 다시 생성했다. 공개 quote/create/reorder request는 legacy `pickupSlotId`를 더 이상 받지 않으며,
+  내부 legacy 생성 command만 과거 fixture·조회·복구 검증을 위해 유지한다.
+- 고객 상세·검색·인근·즐겨찾기·최근매장의 `pickupAvailable`은 Store owner state와 현재 Asia/Seoul 영업시간
+  `OPEN`을 함께 만족할 때만 true다. 신규 탐색은 Fulfillment 슬롯을 읽지 않고 `nextPickupWindow`를 생략하며,
+  quote와 Tx A/C가 실제 주문 가능성을 다시 검증한다.
 
 ## Definitions
 
@@ -72,6 +79,7 @@ PostgreSQL/Storybook/E2E와 legacy 회귀 검증을 구현한다.
 13. 성공 확인 전 cart를 비우지 않고 시작/current revision이 같을 때만 비운다.
 14. 실제 생성된 자원만 복구하며 PICKUP 없는 신규 주문은 NOT_REQUIRED다.
 15. 공개 번호, 과거 슬롯·snapshot·event·원장·정산 사실을 보존한다.
+16. 슬롯이 0개여도 현재 영업 중인 매장은 탐색 가능해야 하며, 탐색 응답에서 준비 ETA를 지어내지 않는다.
 
 ## Architecture and Transaction Boundaries
 
@@ -130,10 +138,14 @@ gate이며 이번 로컬 작업에서 DB를 변경하지 않는다.
 ## API and Event Contracts
 
 - quote/create/reorder 신규 request에서 pickup input을 제거하고 quote fingerprint를 v7로 올린다.
+- 제거된 pickup input을 알 수 없는 JSON 필드로 보낸 신규 공개 요청은 400으로 거절한다. nullable 내부 command는
+  과거 주문 materialization과 legacy 회귀에만 남기고 public controller가 전달하지 않는다.
 - draft `201`, PAID confirm `200`, UNKNOWN/reconciling/recovery `202`, closed/stale `409`, dependency `503`을
   구분한다. 기존 Payment 조회·refund/reconciliation은 마감 후에도 허용한다.
 - `ACCEPT`에는 preparationMinutes가 필수이고 다른 action에 보내면 400이다. UUID 호환 endpoint도 같다.
 - customer history/detail, board/cursor/ETag, discovery availability, Support nullable history를 함께 전환한다.
+- discovery의 즉시 주문 가용성은 `orderingAvailable && operatingStatus == OPEN`이다. legacy slot batch는 신규
+  상세·검색·인근·즐겨찾기·최근매장 경로에서 호출하지 않고 `nextPickupWindow`를 만들지 않는다.
 - 기존 OrderRejected/OrderCancelled/OrderReady/OrderCompleted event version을 유지한다. 신규 reason을 소비자와
   audit parser에서 검증하며 legacy publication target을 삭제하지 않는다.
 
@@ -175,8 +187,8 @@ test method pattern으로 실행한 targeted Gradle command다. `PARTIAL`은 구
 | T07 | `OneTimeCheckoutIntegrationTest#immediate checkout keeps resources unreserved...` | M2 | PASSED |
 | T08 | 같은 case의 6분 후 승인 | M2 | PASSED |
 | T09 | `OrderQuoteIntegrationTest`의 owner state/price/option/coupon stale cases | M2 | PARTIAL — IMMEDIATE 판매중지 경합은 M5 |
-| T10 | 같은 입력 create key PostgreSQL 동시성 | M5 | NOT RUN |
-| T11 | create key payload mismatch API | M5 | NOT RUN |
+| T10 | `CreateOrderConcurrencyTest#concurrent identical key executes one order transaction` | M5 | PARTIAL — 공통 PostgreSQL idempotency는 PASSED, IMMEDIATE 전용 병렬 fixture는 없음 |
+| T11 | `CreateOrderServiceTest#same key with different payload...` | M5 | PASSED |
 | T12 | `OrderControllerContractTest#payment confirmation enforces order ownership...` | M2 | PASSED |
 | T13 | `OneTimeCheckoutIntegrationTest#tampered amount and order binding fail before Provider confirmation` | M2 | PASSED |
 | T14 | `OneTimeCheckoutIntegrationTest#first immediate callback at store close is rejected before Provider confirmation` | EDGE | PASSED |
@@ -208,14 +220,14 @@ test method pattern으로 실행한 targeted Gradle command다. `PARTIAL`은 구
 | T40 | `OrderEntityLifecycleTest#acceptance preparation...`, `StoreOrderLifecycleIntegrationTest#public and UUID acceptance APIs require...` | M3, EDGE | PASSED |
 | T41 | `StoreOrderLifecycleIntegrationTest#store transition replays same command...`의 10분 replay/15분 key mismatch | EDGE | PASSED |
 | T42 | `StoreOrderLifecycleIntegrationTest#public and UUID acceptance APIs require...` | EDGE | PASSED |
-| T43 | `OrderEntityLifecycleTest#paid order follows the complete store lifecycle` | M3 | PARTIAL — ETA 경과 clock 전용 case는 M5 |
-| T44 | `StoreOrderBoardIntegrationTest`의 정렬/cursor/ETag/concurrency cases | M3 | PARTIAL — frontend 소비자는 M4 |
-| T45 | 슬롯 0개 탐색→완료 E2E | M4/M5 | NOT RUN |
-| T46 | `CustomerOrderQueryIntegrationTest`, payment current/recovery 응답 | M3 | PARTIAL — UI 상태는 M4 |
-| T47 | SDK fail/취소 뒤 cart 보존 | M4 | NOT RUN |
-| T48 | 응답 유실/새로고침 재조회 | M4 | NOT RUN |
-| T49 | cart revision multi-tab guard | M4 | NOT RUN |
-| T50 | fail callback과 UNKNOWN 재조회 | M4 | PARTIAL — backend UNKNOWN은 M2 PASSED |
+| T43 | `OrderEntityLifecycleTest#paid order follows...`, 명시적 상태 전이와 고정 ETA assertion | M3/M5 | PASSED |
+| T44 | backend board 정렬/cursor/ETag와 `storeOrderBoardModel.test.ts` IMMEDIATE ETA 정렬 | M3/M4 | PASSED |
+| T45 | no-slot discovery detail/search/nearby/favorite/recent PostgreSQL tests, customer/store/checkout/board Story와 backend create→accept→complete tests | M4/M5 | PARTIAL — 단일 실제 browser+backend E2E는 NOT RUN |
+| T46 | `CustomerOrderQueryIntegrationTest`, order detail/payment recovery Storybook 상태 | M3/M4 | PASSED |
+| T47 | `PaymentCallbackPages.test.tsx#queries server status...`의 fail callback cart/attempt 보존 | M4 | PASSED |
+| T48 | `PaymentCallbackPages.test.tsx#uses status GET...`, `#never sends a second confirmation...` | M4 | PASSED |
+| T49 | `Ordering.test.tsx#clears only...`, payment callback changed-cart/changed-coupon tests | M4 | PASSED |
+| T50 | fail callback status-only, UNKNOWN polling/no-new-payment tests와 backend lookup recovery | M2/M4 | PASSED |
 | T51 | `CustomerCancellationCommandIntegrationTest#customer and support cancellation preserve slotless immediate history...` | EDGE | PASSED |
 | T52 | `ImmediateCheckoutMigrationTest#V89 preserves V86...`, `FlywayMigrationSmokeTest#fresh database...` | M1/M2 | PASSED |
 | T53 | `ImmediateCheckoutMigrationTest`의 IMMEDIATE nullable/lease/snapshot/cutoff direct SQL cases | M2 | PASSED |
@@ -298,8 +310,16 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
   `STORE_CLOSED`, source-aware `PICKUP NOT_REQUIRED`, 1~120분 단회 수락과 nullable query/support 계약 구현.
 - [x] 2026-09-16 Stacked PR CI artifact에서 legacy approval lookup과 만료의 DB 경합이 즉시주문 전용 Tx D로
   잘못 진입하는 호환성 결함을 확인하고, 종료 주문 late-approval 수렴과 진행 주문 fail-closed 재시도를 구현.
-- [ ] M4 query/API/UI/Storybook 전환과 검증.
-- [ ] M5 전체 검증, stacked PR 생성과 release gate 기록.
+- [x] 2026-09-16 M4 nullable query/OpenAPI 생성 타입, 슬롯 없는 cart/create/reorder, server `PAID` 뒤
+  revision-guarded cart·coupon 선택 정리, payment callback 복구, 준비시간 board와 영업시간/이미지 관리 화면 전환.
+- [x] 2026-09-16 public quote/create/reorder의 legacy pickup writer 차단, frozen V1 종료 event 보존,
+  Support nullable overview, slotless demo·load 계약 전환과 현재 HEAD targeted 회귀 검증.
+- [x] 2026-09-16 slot-zero 매장이 현재 영업 중이면 상세·검색·인근·즐겨찾기·최근매장에서 즉시 주문 가능으로
+  노출되도록 discovery의 Fulfillment slot batch 의존 제거, OpenAPI/fixture/query-count 계약 전환.
+- [x] M5 로컬 전체 검증. PostgreSQL migration, 전체 backend suite, 최종 backend build, frontend
+  unit/type/design/build, focused MCP와 전체 Storybook browser suite는 Passed.
+- [ ] release gate: migration writer 순서, 공유 DB inventory, 실제 Toss 계정, 배포 후 canary와 공유 환경 부하.
+  이번 요청 범위의 Stacked PR은 Draft로 유지한다.
 
 ## Surprises & Discoveries
 
@@ -317,6 +337,19 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
 - 분할 CI에서 legacy approval lookup과 만료가 동시에 Order를 잠글 때 첫 승인 반영 transaction이 rollback되고,
   관측한 PG 승인이 즉시주문 전용 Tx D의 mode guard에 막혀 UNKNOWN에 남는 경합이 드러났다. Tx D는 legacy
   종료 상태만 late recovery로 수렴시키고 PENDING_PAYMENT는 변경하지 않는 회귀 계약(T57)을 추가했다.
+- 기존 `OrderRejectedV1`/`OrderCancelledV1`에 pickup flag를 추가하면 frozen event 계약이 깨진다. V1 payload는
+  보존하고 listener가 같은 transaction에서 생성된 compensation PICKUP step을 조회해 legacy `PROCESSING`과
+  IMMEDIATE `NOT_REQUIRED`를 구분한다.
+- public request의 optional legacy `pickupSlotId`는 "신규 실행 경로에서 무시"가 아니라 여전히 신규 writer를
+  허용하는 계약이었다. 공개 DTO/OpenAPI에서 제거하고 unknown field로 거절하되 내부 command와 legacy fixture는
+  보존해 신규 writer 차단과 과거 read/recovery를 분리했다.
+- Storybook MCP의 broad run은 Vitest watch process와 63320 포트를 남기며 transport를 종료했다. 변경 핵심
+  story는 MCP `run-story-tests(a11y=true)`로 검증했고 전체 118 files/755 stories는 같은 browser project의
+  `npm run test:storybook:ci`로 별도 통과시켰다.
+- M4 최종 검토에서 고객 탐색의 `pickupAvailable`이 여전히 Fulfillment reservable-slot batch로 계산돼 슬롯 0개
+  매장을 checkout 전에 제외한다는 계약 누락을 발견했다. BR-47/50과 ADR-103/117을 먼저 amend한 뒤 Merchant
+  owner state+현재 영업시간 projection으로 전환했고, 상세 endpoint의 SQL 수는 2에서 1로 줄었다. 동일 조건
+  성능 측정은 하지 않았으므로 성능 개선으로 주장하지 않는다.
 
 ## Decision Log
 
@@ -328,6 +361,7 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
 | 2026-09-16 | Tx A/C/D와 기존 Payment recovery 재사용 | 선예약 제거와 승인 복구를 함께 만족 |
 | 2026-09-16 | schedule을 신규 결제 gate로 사용 | 사용자 확정 영업시간 계약과 원래 영업 구간 보존 |
 | 2026-09-16 | provider callback preflight와 Tx C availability 재검증 병행 | 마감/OFF 뒤 불필요한 confirm을 막고 동시 변경은 승인 반환으로 수렴 |
+| 2026-09-16 | discovery 즉시 주문 가용성에서 legacy slot batch 제거 | 슬롯 0개 매장의 탐색→결제 진입을 허용하고 영업시간 미설정은 fail-closed로 유지 |
 
 ## Outcomes
 
@@ -348,12 +382,39 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
   issuer 정산, 부분 혜택·snapshot 실패 rollback, 준비시간 API/멱등성, 조기마감 경고, slotless 고객·상담 취소,
   동시 startup overdue scan을 개별 실행해 Passed. T19의 첫 실행은 존재하지 않는 checkout JSON Lot 상세를
   기대해 Failed 후 해당 잘못된 assertion을 제거했고 실제 allocation/정산 assertion은 Passed했다.
+- M4 frontend: 생성 타입/typecheck, 37 unit files/256 tests, presentation boundary 10, product copy 11,
+  design adherence, Vite production build와 Sites 4 tests Passed. callback cart 보존 보강 뒤 해당 22 tests도
+  다시 Passed.
+- Storybook: 핵심 cart/checkout/order/store/board/schedule/payment/support 상태는 live MCP
+  `run-story-tests(a11y=true)` Passed. 전체 browser project는 118 files/755 stories Passed, 정적 build와
+  Docs smoke는 122 docs entries/15 stateful docs/47 surfaces Passed. broad MCP 단일 호출은 runner가 watch
+  process/63320을 남겨 Blocked였고 동일 전체 project 결과로 대체했다고 주장하지 않는다.
+- 최신 OpenAPI: 문서 18 tests, 57 policies, 133 ADRs, 377 Markdown, 108 ExecPlans와 258/292 target,
+  248/282 runtime path/operation semantic verification Passed. runtime schema를 원본에서 재생성했고 Support
+  nullable pickup 소비자까지 typecheck했다.
+- M5 migration/OpenAPI: PostgreSQL 17 fresh V1→V90, V86→V90, V90 direct CHECK/trigger와 runtime parity,
+  `spotlessCheck` Passed (`BUILD SUCCESSFUL in 1m 24s`).
+- M5 current-HEAD targeted 회귀: 공개 create/quote/reorder, 고객 인증, payment setup repair, slotless 고객 취소,
+  V51 legacy 불변성→최신 nullable upgrade, board query plan/index, frozen event·publication recovery,
+  runtime OpenAPI parity와 demo guard 13개 test class Passed (`BUILD SUCCESSFUL in 5m 6s`).
+- M5 demo/load 계약: `bash -n scripts/demo/smoke.sh`, load contract 5 tests와 실제 k6 9개 정상·오류·UNKNOWN
+  시나리오 Passed. 실제 공유 환경 부하를 실행한 결과는 아니다.
+- M5 frontend current-HEAD: typecheck/API 재생성, 37 unit files/257 tests, presentation 10, product copy 11,
+  design adherence, Vite/Sites build와 Sites 4 tests, Storybook browser 118 files/755 tests Passed. 최종 정적
+  Storybook build와 Docs 122 entries/15 stateful docs/47 state surfaces smoke도 Passed.
+- M5 slot-zero discovery: 상세/검색/인근/즐겨찾기/최근매장과 query-count를 포함한 핵심 76 tests Passed,
+  이어서 Discovery 패키지 전체와 runtime OpenAPI parity를 단독 실행해 `BUILD SUCCESSFUL in 3m 20s`.
+- M5 전체 backend suite: 1,784 tests 중 1,782 Passed, failures/errors 0. 명시적 opt-in 대용량 nearby
+  benchmark와 AIStor Free 외부 환경 통합 2건은 Skipped. `./gradlew test`는 `BUILD SUCCESSFUL in 58m 29s`,
+  동일 소스의 `./gradlew build -x test`는 `BUILD SUCCESSFUL in 2s`.
 - 공유 DB inventory, 배포, 실제 PG와 공유 부하는 범위 밖이며 release gate로 Pending이다.
 
 ## Outcomes & Retrospective
 
-M0~M3 계약·backend 구현과 targeted PostgreSQL 검증이 완료됐다. M4 frontend/OpenAPI/Storybook 전환과 M5
-전체 검증은 다음 stack에서 이어간다. 현재 stack은 migration writer/release ordering이 해결되기 전 Draft다.
+M0~M5의 로컬 정책·schema·backend·frontend/OpenAPI 전환과 PostgreSQL/Storybook/전체 backend 검증을
+완료했다. 단일 실제 browser+backend E2E, opt-in 110k nearby benchmark, AIStor Free 외부 통합은 실행하지
+않았고 공유 DB inventory, 실제 Toss 계정, 배포와 공유 부하는 별도 release gate다. migration writer/release
+ordering이 해제되기 전 stack은 Draft로 유지한다.
 
 ## Revision Notes
 

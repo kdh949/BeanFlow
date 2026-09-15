@@ -7,8 +7,8 @@ import java.util.UUID
  * A customer may hold at most this many favorite stores.
  *
  * Without a cap, one customer can favorite every store on the platform and make a single GET
- * hydrate that many ids through Merchant and Fulfillment. The bound belongs to the contract, not
- * only to the query, because the write path is what has to refuse.
+ * hydrate that many Merchant display rows. The bound belongs to the contract, not only to the
+ * query, because the write path is what has to refuse.
  */
 const val MAX_FAVORITE_STORES: Int = 200
 

@@ -3,10 +3,10 @@ package io.github.kdh949.beanflow.discovery.internal
 import io.github.kdh949.beanflow.discovery.api.CustomerStoreDisplayView
 import io.github.kdh949.beanflow.discovery.api.CustomerStoreOperatingDayView
 import io.github.kdh949.beanflow.discovery.api.CustomerStoreOperatingHoursView
-import io.github.kdh949.beanflow.discovery.api.NextPickupWindowView
 import io.github.kdh949.beanflow.discovery.api.StoreOperatingStatus
-import io.github.kdh949.beanflow.fulfillment.api.PickupAvailabilityView
+import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileProjection
 import io.github.kdh949.beanflow.merchant.api.StoreCustomerDisplayProjection
+import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryDisplayProjection
 import java.time.Instant
 import java.time.ZoneId
 
@@ -34,7 +34,17 @@ internal fun StoreCustomerDisplayProjection.toCustomerView(now: Instant): Custom
     )
 }
 
-internal fun PickupAvailabilityView.toCustomerView() = NextPickupWindowView(startsAt, endsAt)
+internal fun StoreDiscoveryDisplayProjection.immediateOrderingAvailable(now: Instant): Boolean =
+    immediateOrderingAvailable(customerDisplay.toCustomerView(now))
+
+internal fun StoreDiscoveryDisplayProjection.immediateOrderingAvailable(display: CustomerStoreDisplayView): Boolean =
+    orderingAvailable && display.operatingStatus == StoreOperatingStatus.OPEN
+
+internal fun NearbyStoreProfileProjection.immediateOrderingAvailable(now: Instant): Boolean =
+    immediateOrderingAvailable(customerDisplay.toCustomerView(now))
+
+internal fun NearbyStoreProfileProjection.immediateOrderingAvailable(display: CustomerStoreDisplayView): Boolean =
+    orderingAvailable && display.operatingStatus == StoreOperatingStatus.OPEN
 
 private fun io.github.kdh949.beanflow.merchant.api.StoreWeeklyOperatingHours.operatingStatus(now: Instant): StoreOperatingStatus {
     val local = now.atZone(SEOUL_ZONE)

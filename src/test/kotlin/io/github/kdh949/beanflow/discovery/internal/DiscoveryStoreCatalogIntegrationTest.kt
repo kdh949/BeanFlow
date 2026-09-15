@@ -298,26 +298,10 @@ internal class DiscoveryStoreCatalogIntegrationTest
         }
 
         @Test
-        fun `the store read names the store and reports whether pickup is actually reservable`() {
+        fun `the store read reports slotless immediate ordering from owner state and operating hours`() {
             insertDiscoveryProfile(storeId, "BeanFlow Yeouido")
             insertCustomerDisplayProfile(storeId, "서울시 영등포구", "여의도역 3번 출구")
-            insertCompleteSchedule(storeId, mondayOpen = false)
-            insertSlot(
-                storeId,
-                clock.instant().plus(Duration.ofMinutes(10)),
-                clock.instant().plus(Duration.ofMinutes(20)),
-                capacity = 1,
-                reservedCount = 1,
-            )
-            val startsAt = clock.instant().plus(Duration.ofMinutes(30))
-            val endsAt = clock.instant().plus(Duration.ofMinutes(60))
-            insertSlot(storeId, startsAt, endsAt, capacity = 2)
-            insertSlot(
-                storeId,
-                clock.instant().plus(Duration.ofHours(2)),
-                clock.instant().plus(Duration.ofHours(3)),
-                capacity = 2,
-            )
+            insertCompleteSchedule(storeId, mondayOpen = true)
 
             val body =
                 mockMvc
@@ -327,11 +311,10 @@ internal class DiscoveryStoreCatalogIntegrationTest
                     .andExpect(jsonPath("$.name").value("BeanFlow Yeouido"))
                     .andExpect(jsonPath("$.orderingAvailable").value(true))
                     .andExpect(jsonPath("$.pickupAvailable").value(true))
-                    .andExpect(jsonPath("$.nextPickupWindow.startsAt").value(startsAt.toString()))
-                    .andExpect(jsonPath("$.nextPickupWindow.endsAt").value(endsAt.toString()))
+                    .andExpect(jsonPath("$.nextPickupWindow").doesNotExist())
                     .andExpect(jsonPath("$.customerDisplay.addressLine").value("서울시 영등포구"))
                     .andExpect(jsonPath("$.customerDisplay.directionsHint").value("여의도역 3번 출구"))
-                    .andExpect(jsonPath("$.customerDisplay.operatingStatus").value("CLOSED"))
+                    .andExpect(jsonPath("$.customerDisplay.operatingStatus").value("OPEN"))
                     .andExpect(jsonPath("$.customerDisplay.operatingHours.timezone").value("Asia/Seoul"))
                     .andExpect(jsonPath("$.customerDisplay.operatingHours.days.length()").value(7))
                     .andExpect(jsonPath("$.open").doesNotExist())
@@ -344,13 +327,12 @@ internal class DiscoveryStoreCatalogIntegrationTest
                 "name",
                 "orderingAvailable",
                 "pickupAvailable",
-                "nextPickupWindow",
                 "customerDisplay",
             )
         }
 
         @Test
-        fun `a store with no reservable slot is named but not advertised as pickup available`() {
+        fun `a store with no operating schedule is named but not advertised as pickup available`() {
             insertDiscoveryProfile(storeId, "BeanFlow Yeouido")
 
             mockMvc

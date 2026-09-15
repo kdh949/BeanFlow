@@ -6,8 +6,10 @@ import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.notification.internal.ScriptedTestNotificationProvider
 import io.github.kdh949.beanflow.operations.internal.PaymentCancellationSetupIntegrityWorker
+import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.api.OrderingSupportOrderCancellationOperations
 import io.github.kdh949.beanflow.ordering.api.OrderingSupportPickupRescheduleOperations
+import io.github.kdh949.beanflow.ordering.api.OrderingSupportTimelineOperations
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
 import io.github.kdh949.beanflow.ordering.api.SupportOrderCancellationCommand
 import io.github.kdh949.beanflow.ordering.api.SupportOrderChangeOwnerResult
@@ -76,6 +78,8 @@ internal class CustomerCancellationCommandIntegrationTest
         private val setupIntegrityWorker: PaymentCancellationSetupIntegrityWorker,
         private val supportPickupReschedules: OrderingSupportPickupRescheduleOperations,
         private val supportOrderCancellations: OrderingSupportOrderCancellationOperations,
+        private val supportTimelineOrders: OrderingSupportTimelineOperations,
+        private val createOrderUseCase: CreateOrderUseCase,
         private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val clock: CustomerCancellationTestClock,
     ) {
@@ -232,6 +236,10 @@ internal class CustomerCancellationCommandIntegrationTest
                 LocalTime.of(23, 59),
             )
             val customerOrderId = createOrder(customerFixture, "immediate-customer-cancel-create", immediate = true)
+            val overview = supportTimelineOrders.findOrderOverviews(setOf(customerOrderId)).single()
+
+            assertThat(overview.pickupWindowStart).isNull()
+            assertThat(overview.pickupWindowEnd).isNull()
 
             assertThat(
                 cancel(customerOrderId, customerFixture.customerId, "immediate-customer-cancel", "ORDER_MISTAKE", null).status,
@@ -926,7 +934,6 @@ internal class CustomerCancellationCommandIntegrationTest
             immediate: Boolean = false,
         ): UUID {
             val coupon = couponIssuanceId?.let { "\"couponIssuanceId\":\"$it\"," }.orEmpty()
-            val pickup = if (immediate) "" else "\"pickupSlotId\":\"${fixture.pickupSlotId}\","
             val command =
                 fixture
                     .command(
@@ -937,6 +944,17 @@ internal class CustomerCancellationCommandIntegrationTest
                 orderQuoteUseCase.attachCurrentQuote(
                     command,
                 )
+            if (!immediate) {
+                assertThat(createOrderUseCase.create(key, quote).status).isEqualTo(201)
+                return requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT order_id FROM ordering_idempotency_record WHERE actor_id = ? AND idempotency_key = ?",
+                        UUID::class.java,
+                        fixture.customerId,
+                        key,
+                    ),
+                )
+            }
             mockMvc
                 .perform(
                     post("/api/v1/orders")
@@ -947,7 +965,6 @@ internal class CustomerCancellationCommandIntegrationTest
                             """
                             {
                               "storeId":"${fixture.storeId}",
-                              $pickup
                               "lines":[{"menuId":"${fixture.menuId}","optionIds":[],"quantity":1}],
                               $coupon
                               "pointsToUseKrw":$pointsToUseKrw,

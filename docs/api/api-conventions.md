@@ -196,12 +196,16 @@ reason과 evidence를
 
 `POST /api/v1/orders`의 201 body는 `{order, payment?}` 형태의 상태별 생성 결과다.
 
-- 외부 결제가 필요한 variant는 `order.state=PENDING_PAYMENT`,
-  `reservationExpiresAt` 필수, `payment` 필드 없음이다.
+- 신규 외부 결제가 필요한 variant는 `order.state=PENDING_PAYMENT`,
+  `reservationExpiresAt`과 `payment` 필드가 없다. 영업 마감 cutoff는 서버가 소유하며
+  Payment attempt/detail projection으로만 노출한다. 과거 `LEGACY_RESERVED` replay는 기존
+  `reservationExpiresAt`을 보존한다.
 - payable 0인 variant는 `order.state=PAID`, `payableKrw=0`,
   active `reservationExpiresAt` 없음, `payment.type=BENEFIT_ONLY`,
   `payment.approvalState=APPROVED`, `approvedAmountKrw=0`이 필수다.
-- 두 variant 모두 Order와 필요한 예약·Payment가 commit된 뒤에만 201을 반환한다.
+- 두 variant 모두 Order와 필수 immutable snapshot이 commit된 뒤에만 201을 반환한다.
+  IMMEDIATE Tx A는 Pickup/Coupon/Point를 예약하지 않으며 0원 variant만 같은 transaction에서
+  실제 혜택 사용·최종 정산 입력·Payment 승인·Order PAID까지 확정한다.
 - 같은 주문 생성 idempotency key/payload replay도 저장된 최초 201 envelope를
   그대로 반환한다.
 
@@ -217,11 +221,12 @@ reason과 evidence를
   `409 REORDER_SOURCE_STATE_INVALID`다.
 - 서버는 source line의 `menuId`, 정규화된 `optionIds`, `quantity`만 입력으로 재사용한다.
   과거 이름·가격·혜택·결제·환불·pickup slot·예약·정산 snapshot은 복사하지 않는다.
-- request body는 새 `pickupSlotId`와 `pointsToUseKrw`를 필수로, 새로 적용할
-  `couponIssuanceId`를 선택적으로 받는다. 결제수단은 받지 않으며 1원 이상 결제는 생성된
-  Order의 기존 payment-confirmation 명령으로 별도 승인한다.
-- Merchant 가격·판매 가능성·MenuConfiguration, Fulfillment slot,
-  Promotion coupon, Loyalty point를 기존 주문 생성 transaction에서 모두 다시 검증·예약한다.
+- request body는 `pointsToUseKrw`를 필수로, 새로 적용할 `couponIssuanceId`를 선택적으로
+  받는다. `pickupSlotId`는 unknown field로 거절하며 결제수단도 받지 않는다. 1원 이상 결제는
+  생성된 Order의 기존 payment-confirmation 명령으로 별도 승인한다.
+- Merchant 가격·판매 가능성·MenuConfiguration, Store 영업시간·주문받기와 선택한 혜택을
+  다시 검증한다. Tx A에서는 Fulfillment·Promotion·Loyalty owner write를 만들지 않고,
+  PG 승인 뒤 Tx C에서 혜택을 원자 사용한다.
   하나라도 사용할 수 없으면 `409 REORDER_ITEMS_UNAVAILABLE` 또는 기존 owner conflict로
   전체 실패하며 부분 Order를 만들거나 품목을 자동 삭제하지 않는다.
 - legacy source line에 검증된 정규화 option ID snapshot이 없으면 옵션명이나 현재 Merchant
@@ -361,8 +366,9 @@ contracts; Plan 10 does not implement those later projections.
   key로 owner 작업을 다시 실행하지 않는다. 공식 운영자 해결 command가 생기기 전에는
   terminal body를 추정하거나 DB row를 직접 변경하지 않는다.
 - 빠른 재주문은 주문 생성과 분리된 operation `REORDER_ORDER_V1`을 사용하되 같은
-  사전등록 모델을 쓴다. canonical payload는 `sourceOrderId`, `pickupSlotId`,
-  `couponIssuanceId`(null 포함), `pointsToUseKrw`이고 source line은 immutable source
+  사전등록 모델을 쓴다. 신규 공개 request의 canonical 입력은 `sourceOrderId`,
+  `couponIssuanceId`(null 포함), `pointsToUseKrw`다. 내부 hash의 legacy slot 위치는 과거
+  idempotency replay를 위해 null mode marker로 남지만 공개 입력으로 받지 않는다. source line은 immutable source
   snapshot이므로 hash에 중복 직렬화하지 않는다. 같은 key를 다른 source 또는 request에
   사용하면 `409 IDEMPOTENCY_KEY_REUSED`, 같은 key/payload가 `PROCESSING`이면
   `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`와 `Retry-After`다. `MANUAL_REVIEW`이면

@@ -89,8 +89,6 @@ internal class RecentStoreEndpointIntegrationTest {
         insertOrder(excludedStore, "PENDING_PAYMENT", now, 4)
         insertOrder(noLongerPublicStore, "READY", now, 5)
         jdbc.update("DELETE FROM merchant_store_discovery_profile WHERE store_id = ?", noLongerPublicStore.storeId)
-        insertPickupSlot(newestStore.storeId, now)
-
         mockMvc
             .perform(get("/api/v1/me/recent-stores").with(customerJwt(customerId)))
             .andExpect(status().isOk)
@@ -99,11 +97,11 @@ internal class RecentStoreEndpointIntegrationTest {
             .andExpect(jsonPath("$.items[0].name").value("최근 주문 최신 매장"))
             .andExpect(jsonPath("$.items[0].orderingAvailable").value(true))
             .andExpect(jsonPath("$.items[0].pickupAvailable").value(true))
-            .andExpect(jsonPath("$.items[0].nextPickupWindow.startsAt").isString)
-            .andExpect(jsonPath("$.items[0].customerDisplay.operatingStatus").value("UNSPECIFIED"))
+            .andExpect(jsonPath("$.items[0].nextPickupWindow").doesNotExist())
+            .andExpect(jsonPath("$.items[0].customerDisplay.operatingStatus").value("OPEN"))
             .andExpect(jsonPath("$.items[0].distanceMeters").doesNotExist())
             .andExpect(jsonPath("$.items[1].storeId").value(olderStore.storeId.toString()))
-            .andExpect(jsonPath("$.items[1].pickupAvailable").value(false))
+            .andExpect(jsonPath("$.items[1].pickupAvailable").value(true))
             .andExpect(jsonPath("$.items[1].nextPickupWindow").doesNotExist())
     }
 
@@ -209,24 +207,30 @@ internal class RecentStoreEndpointIntegrationTest {
                 name,
                 fixture.storeId,
             )
+            insertOpenOperatingHours(fixture.storeId)
         }
 
-    private fun insertPickupSlot(
-        storeId: UUID,
-        now: Instant,
-    ) {
-        val startsAt = now.plus(Duration.ofDays(1))
+    private fun insertOpenOperatingHours(storeId: UUID) {
         jdbc.update(
             """
-            INSERT INTO fulfillment_pickup_slot (
-                id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count, version
-            ) VALUES (?, ?, ?, ?, 4, 0, 0, 0)
+            INSERT INTO merchant_store_customer_display_profile (
+                store_id, address_line, directions_hint, version, created_at, updated_at
+            ) VALUES (?, NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (store_id) DO NOTHING
             """.trimIndent(),
-            UUID.randomUUID(),
             storeId,
-            Timestamp.from(startsAt),
-            Timestamp.from(startsAt.plus(Duration.ofMinutes(20))),
         )
+        (1..7).forEach { dayOfWeek ->
+            jdbc.update(
+                """
+                INSERT INTO merchant_store_operating_hours (
+                    store_id, day_of_week, closed, opens_at, closes_at
+                ) VALUES (?, ?, false, TIME '00:00:00', TIME '23:59:59')
+                """.trimIndent(),
+                storeId,
+                dayOfWeek,
+            )
+        }
     }
 
     private fun insertOrder(

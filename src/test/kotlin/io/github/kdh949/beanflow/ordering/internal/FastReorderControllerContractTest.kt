@@ -23,6 +23,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.LocalTime
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
@@ -50,7 +51,7 @@ internal class FastReorderControllerContractTest
                 .andExpect(status().isCreated)
                 .andExpect(header().string("X-Correlation-Id", matchesPattern(".+")))
                 .andExpect(jsonPath("$.order.state").value("PENDING_PAYMENT"))
-                .andExpect(jsonPath("$.order.reservationExpiresAt").isString)
+                .andExpect(jsonPath("$.order.reservationExpiresAt").doesNotExist())
                 .andExpect(jsonPath("$.priceComparison.hasPriceChanges").value(true))
                 .andExpect(jsonPath("$.priceComparison.sourceSubtotalKrw").value(1_000))
                 .andExpect(jsonPath("$.priceComparison.currentSubtotalKrw").value(1_200))
@@ -85,7 +86,7 @@ internal class FastReorderControllerContractTest
                         .with(csrf())
                         .header("Idempotency-Key", "reorder-auth-0001")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(source.fixture.pickupSlotId)),
+                        .content(body()),
                 ).andExpect(status().isUnauthorized)
             mockMvc
                 .perform(
@@ -108,7 +109,7 @@ internal class FastReorderControllerContractTest
                         .with(customer(fixture.customerId))
                         .header("Idempotency-Key", "reorder-missing-http")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(fixture.pickupSlotId)),
+                        .content(body()),
                 ).andExpect(status().isNotFound)
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
 
@@ -141,7 +142,7 @@ internal class FastReorderControllerContractTest
                         source,
                         "reorder-extra-001",
                         requestBody =
-                            """{"pickupSlotId":"${source.fixture.pickupSlotId}","pointsToUseKrw":0,"pastPrice":1000}""",
+                            """{"pointsToUseKrw":0,"pastPrice":1000}""",
                     ),
                 ).andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
@@ -151,7 +152,16 @@ internal class FastReorderControllerContractTest
                         source,
                         "reorder-actor-id",
                         requestBody =
-                            """{"pickupSlotId":"${source.fixture.pickupSlotId}","pointsToUseKrw":0,"customerId":"${UUID.randomUUID()}"}""",
+                            """{"pointsToUseKrw":0,"customerId":"${UUID.randomUUID()}"}""",
+                    ),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            mockMvc
+                .perform(
+                    request(
+                        source,
+                        "reorder-legacy-slot",
+                        requestBody = """{"pickupSlotId":"${source.fixture.pickupSlotId}","pointsToUseKrw":0}""",
                     ),
                 ).andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
@@ -232,6 +242,12 @@ internal class FastReorderControllerContractTest
         private fun sourceOrder(terminal: Boolean = true): SourceFixture {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            OrderCreationDatabaseFixture.insertOperatingHours(
+                jdbcTemplate,
+                fixture.storeId,
+                LocalTime.of(0, 1),
+                LocalTime.of(23, 59),
+            )
             check(
                 createOrder
                     .create(
@@ -250,7 +266,7 @@ internal class FastReorderControllerContractTest
             customerId: UUID = source.fixture.customerId,
             role: String = "ROLE_CUSTOMER",
             pointsToUseKrw: Long = 0,
-            requestBody: String = body(source.fixture.pickupSlotId, pointsToUseKrw),
+            requestBody: String = body(pointsToUseKrw),
         ) = post("/api/v1/orders/{sourceOrderId}/reorders", source.orderId)
             .with(csrf())
             .with(customer(customerId, role))
@@ -263,10 +279,7 @@ internal class FastReorderControllerContractTest
             role: String = "ROLE_CUSTOMER",
         ) = jwt().jwt { it.subject(customerId.toString()) }.authorities(SimpleGrantedAuthority(role))
 
-        private fun body(
-            pickupSlotId: UUID,
-            pointsToUseKrw: Long = 0,
-        ): String = """{"pickupSlotId":"$pickupSlotId","pointsToUseKrw":$pointsToUseKrw}"""
+        private fun body(pointsToUseKrw: Long = 0): String = """{"pointsToUseKrw":$pointsToUseKrw}"""
 
         private data class SourceFixture(
             val fixture: OrderCreationFixture,
@@ -276,7 +289,7 @@ internal class FastReorderControllerContractTest
                 ReorderOrderCommand(
                     customerId = fixture.customerId,
                     sourceOrderId = orderId,
-                    pickupSlotId = fixture.pickupSlotId,
+                    pickupSlotId = null,
                     couponIssuanceId = null,
                     pointsToUseKrw = 0,
                 )

@@ -272,6 +272,7 @@ describe("customer login and signup states", () => {
 describe("customer logout", () => {
   it("clears customer cart and submit intents but keeps operator token state", async () => {
     localStorage.setItem("beanflow.customer.cart.v1", '{"version":1}');
+    sessionStorage.setItem("beanflow.customer.checkout-cart.BF-7K3M-9Q2P", '{}');
     sessionStorage.setItem("beanflow.idempotency.payment.order-1", "key");
     sessionStorage.setItem("beanflow.payment-attempt.payment-1", "{}");
     authToken.set("operator-access-token");
@@ -284,6 +285,7 @@ describe("customer logout", () => {
 
     await waitFor(() => expect(remove).toHaveBeenCalled());
     expect(localStorage.getItem("beanflow.customer.cart.v1")).toBeNull();
+    expect(sessionStorage.getItem("beanflow.customer.checkout-cart.BF-7K3M-9Q2P")).toBeNull();
     expect(sessionStorage.getItem("beanflow.idempotency.payment.order-1")).toBeNull();
     expect(sessionStorage.getItem("beanflow.payment-attempt.payment-1")).toBeNull();
     expect(authToken.get()).toBe("operator-access-token");

@@ -200,6 +200,12 @@ Pickup consumer는 `OrderCancelledV1`을
 `restorationTrigger = CUSTOMER_CANCELLATION`으로 매핑하고 공통
 `RELEASED_AFTER_TERMINATION` 전이를 호출한다. `OrderRejectedV1`은
 `STORE_REJECTION`으로 매핑한다. trigger를 source 문자열에서 추론하지 않는다.
+두 V1 payload에는 pickup 필요 여부를 추가하지 않는다. producer transaction이 만든
+`OrderCompensationCase`의 PICKUP step이 `NOT_REQUIRED` 또는 `SUCCEEDED`이면 listener는
+owner 호출 없이 완료하고, 그 밖의 상태에서만 release를 실행한다. Case나 PICKUP step이
+없으면 신규 주문이라고 추측하거나 가짜 release를 만들지 않고
+`DEPENDENCY_UNAVAILABLE`로 publication을 실패시킨다. 이 routing source는 슬롯 없는
+IMMEDIATE 주문과 기존 LEGACY_RESERVED publication replay에 공통으로 적용한다.
 
 Coupon과 Points consumer는 event의 해당 benefit policy snapshot을 owner 복원
 metadata에 저장한다. 결과 type/disposition과 별도로 source, trigger,

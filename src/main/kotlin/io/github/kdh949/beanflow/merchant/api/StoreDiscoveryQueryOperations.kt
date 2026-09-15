@@ -17,9 +17,9 @@ interface StoreDiscoveryQueryOperations {
      * returned; the caller asks for one extra row when it needs a next-page probe.
      *
      * "Pickup-capable" is owner state only: the store is accepting orders and has pickup enabled.
-     * Whether a reservable slot actually exists is Fulfillment's answer
-     * (`PickupAvailabilityQueryOperations`), so Merchant does not project it (ADR-103 2026-08-15
-     * Amendment).
+     * Discovery combines that state with the same-day Merchant operating-hours projection to
+     * publish current immediate-order availability. Legacy Fulfillment slots do not participate in
+     * the new customer discovery path (ADR-103 2026-09-16 Immediate Checkout Amendment).
      */
     fun findPickupCapableStoresNear(query: NearbyStoreProfileQuery): List<NearbyStoreProfileProjection>
 
@@ -65,9 +65,9 @@ data class NearbyStoreProfileCursor(
  * Current owner state for one store. [distanceMicrometers] is the canonical sort and cursor value;
  * the public contract exposes its floored integer-meter display value.
  *
- * There is deliberately no `pickupAvailable` here. Merchant knowing only `acceptingOrders` and
- * `pickupEnabled` is exactly how the weaker meaning used to leak into the nearby response; leaving
- * the field out makes re-deriving it impossible rather than merely discouraged.
+ * There is deliberately no `pickupAvailable` here. Discovery derives the effective flag from this
+ * owner state and [customerDisplay]'s current operating status so the response cannot drift from
+ * the shared Merchant schedule policy.
  */
 data class NearbyStoreProfileProjection(
     val storeId: UUID,
@@ -81,8 +81,9 @@ data class NearbyStoreProfileProjection(
 /**
  * A non-spatial current display projection for a customer-owned store reference.
  *
- * [orderingAvailable] is only Merchant's owner state. Discovery combines it with Fulfillment's
- * reservable-slot batch answer before publishing `pickupAvailable` and `nextPickupWindow`.
+ * [orderingAvailable] is only Merchant's owner state. Discovery combines it with the same-day
+ * operating-hours projection before publishing immediate-order `pickupAvailable` and omits the
+ * legacy `nextPickupWindow`.
  */
 data class StoreDiscoveryDisplayProjection(
     val storeId: UUID,

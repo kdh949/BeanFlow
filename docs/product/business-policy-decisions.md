@@ -2175,10 +2175,17 @@
 - **Location:** 좌표는 선택이다. latitude와 longitude는 둘 다 주거나 둘 다 생략하고, 좌표 없이
   radius만 주면 400이다. 좌표를 주면 `radiusMeters`가 필수이며 `1..10000`이다. 좌표가 없으면
   `distanceMeters`를 응답에서 생략한다. 정밀 좌표 보존 금지는 `BR-28`을 그대로 따른다.
-- **Filters:** `pickupAvailable=true`는 7일 안에 실제 예약 가능한 슬롯이 있는 매장만 남긴다.
-  `openOnly=true`는 `acceptingOrders && pickupEnabled`만 요구한다. 두 필터는 독립이고 동시 지정은
-  AND다. 둘 다 미지정이 기본이며 그때 닫힌 매장도 결과에 포함하고 상태는 `open`,
-  `pickupAvailable` 플래그로 표시한다.
+- **Immediate Checkout Search Amendment (2026-09-16):** 신규 고객 탐색에서
+  `pickupAvailable=true`와 응답의 `pickupAvailable`은 더 이상 슬롯 존재를 뜻하지 않는다. 현재
+  `acceptingOrders && pickupEnabled`이고 BR-50의 완전한 영업시간이 `OPEN`일 때만 true다. 슬롯 0개인
+  매장도 이 조건을 만족하면 검색·가까운 매장·즐겨찾기·최근 주문·추천·상세에서 즉시 주문 가능하다.
+  `nextPickupWindow`는 신규 탐색 결과에서 만들지 않으며 준비 ETA나 가상 슬롯으로 대체하지 않는다.
+  과거 `LEGACY_RESERVED` 주문 조회·지원 변경과 `/pickup-slots` API의 유효 범위는 보존한다.
+- **Filters:** `pickupAvailable=true`는 현재 영업시간이 `OPEN`이고
+  `acceptingOrders && pickupEnabled`인 매장만 남긴다. `openOnly=true`는 기존 transport 호환을 위해
+  owner state인 `acceptingOrders && pickupEnabled`만 요구한다. 두 필터는 독립이고 동시 지정은 AND다.
+  둘 다 미지정이 기본이며 그때 닫힌 매장도 결과에 포함하고 `orderingAvailable`,
+  `customerDisplay.operatingStatus`, `pickupAvailable`을 각각 표시한다.
 - **Response:** 항목은 매장 표시 정보, 브랜드(있을 때), 지역, `matchReason` term 종류 집합,
   좌표가 있을 때 `distanceMeters`, `open`, `pickupAvailable`, 매장당 최대 3개의 `matchedMenus`를
   포함한다. `matchedMenus`는 `(가중 유사도 DESC, 메뉴명 ASC, 메뉴ID ASC)` 순이며 매칭 메뉴가 없으면
@@ -2204,9 +2211,9 @@
   `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`다. 재색인은 매장 단위 transaction으로 계속 진행하며
   결과는 성공·skip 수와 실패 매장 ID를 반환한다. 실패 ID가 있으면 `complete=false`로 명시해
   부분 처리를 완전 성공으로 표현하지 않는다.
-- **Failure Policy:** `pg_trgm` extension 부재, 색인 조회 실패, Merchant·Fulfillment 장애는 모두
+- **Failure Policy:** `pg_trgm` extension 부재, 색인 조회 실패와 Merchant display 장애는 모두
   503이다. 빈 목록, 캐시된 결과 또는 순차 검색 fallback으로 대체하지 않는다. 결과 0건은 정상
-  200이며 장애와 구분한다.
+  200이며 장애와 구분한다. 신규 즉시 주문 탐색은 Fulfillment slot read를 호출하지 않는다.
 - **Privacy:** 검색어, 토큰, 정밀 좌표를 DB, AuditRecord, application log, metric tag, trace
   attribute 또는 이벤트에 저장하지 않는다. 색인 테이블에 저장하는 것은 매장의 공개 속성이며
   사용자의 검색어가 아니다.
@@ -2465,6 +2472,12 @@
 - **Pickup Display:** `nextPickupWindow`는 Store policy와 ADR-076의 `startsAt > now`, 7일 horizon,
   capacity를 만족하는 가장 이른 실제 slot이다. 없으면 생략하며 준비시간을 저장·추정하지 않는다.
   목록은 Fulfillment batch/read를 사용해 Store별 N+1 query를 만들지 않는다.
+- **Immediate Checkout Discovery Amendment (2026-09-16):** 위 Pickup Display는 legacy 슬롯 API와
+  과거 주문·지원 동선에만 남는다. 신규 customer Store summary/detail/search의 `pickupAvailable`은
+  `orderingAvailable && operatingStatus == OPEN`인 현재 즉시 주문 가능성이고 `nextPickupWindow`는
+  생략한다. schedule 미설정은 `UNSPECIFIED`이므로 false이며 슬롯 read 장애를 신규 탐색 장애로
+  전파하거나 임의의 준비시간을 만들지 않는다. quote/Tx A/confirm/Tx C가 BR-50 owner policy를 다시
+  검증하므로 이 read projection은 결제 보장이 아니다.
 - **Failure Policy:** profile 미설정은 address/hours 생략과 `UNSPECIFIED`인 정상 결과다. profile
   read 또는 schedule invariant 실패는 503이며 미설정·CLOSED·빈 값으로 대체하지 않는다. stale
   expected version, invalid tuple, cross-store Menu와 권한 부족은 partial write나 Audit-only 성공 없이

@@ -41,6 +41,7 @@ import org.springframework.transaction.support.TransactionTemplate
 import java.sql.Timestamp
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
@@ -636,6 +637,12 @@ internal class CustomerAuthenticationIntegrationTest(
             requireNotNull(login(csrf, "other.user", VALID_PASSWORD).andReturn().response.getCookie("BEANFLOW_CUSTOMER_SESSION"))
         val fixture = OrderCreationFixture(customerId = ownerId)
         OrderCreationDatabaseFixture.insertBase(jdbc, fixture)
+        OrderCreationDatabaseFixture.insertOperatingHours(
+            jdbc,
+            fixture.storeId,
+            LocalTime.of(0, 1),
+            LocalTime.of(23, 59),
+        )
 
         mockMvc
             .perform(
@@ -645,6 +652,16 @@ internal class CustomerAuthenticationIntegrationTest(
                     .header("Idempotency-Key", "customer-session-owner-001")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(orderRequestBody(fixture, otherId)),
+            ).andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+        mockMvc
+            .perform(
+                post("/api/v1/orders")
+                    .cookie(ownerSession, csrf)
+                    .header(CSRF_HEADER, csrf.value)
+                    .header("Idempotency-Key", "customer-session-owner-002")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(orderRequestBody(fixture, null)),
             ).andExpect(status().isCreated)
         val order = jdbc.queryForMap("SELECT id, customer_id FROM ordering_order")
         assertThat(order["customer_id"]).isEqualTo(ownerId)
@@ -765,14 +782,14 @@ internal class CustomerAuthenticationIntegrationTest(
 
     private fun orderRequestBody(
         fixture: OrderCreationFixture,
-        forgedCustomerId: UUID,
+        forgedCustomerId: UUID?,
     ): String {
-        val quote = orderQuoteUseCase.attachCurrentQuote(fixture.command())
+        val quote = orderQuoteUseCase.attachCurrentQuote(fixture.command().copy(pickupSlotId = null))
+        val forgedActor = forgedCustomerId?.let { "\"customerId\": \"$it\"," }.orEmpty()
         return """
             {
-              "customerId": "$forgedCustomerId",
+              $forgedActor
               "storeId": "${fixture.storeId}",
-              "pickupSlotId": "${fixture.pickupSlotId}",
               "lines": [
                 {
                   "menuId": "${fixture.menuId}",

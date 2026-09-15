@@ -80,7 +80,7 @@ offline / retryable-failure / terminal-failure / unauthorized / forbidden
 | `5e 오프라인` | 고객 | 결제 중 단절의 결과 확인 | Payment | `GET /payments/{paymentId}` | P0 | 있음. 재승인 없이 기존 attempt를 조회한다(ADR-007). |
 | `1a 홈` | 고객 | 활성 주문·재주문·주변 매장 | Ordering, Discovery | `GET /me/orders?status=ACTIVE`, `GET /me/store-recommendations`, `GET /stores/nearby` | P0 | 실제 주문·추천·주문 가능/운영시간·다음 픽업 projection과 실패/빈 상태 UI가 연결됐다. |
 | `1b 매장 찾기` | 고객 | 반경·필터·정렬 탐색 | Discovery | `GET /stores/nearby`, `GET /stores/search` | P0 | 이름·메뉴 검색, 이미지, 주문 가능/운영시간·다음 픽업 projection과 위치 거부/빈/실패 상태가 연결됐다. |
-| `1c 매장 상세` | 고객 | 메뉴·슬롯 확인 | Merchant, Fulfillment | `GET /stores/{storeId}`, `GET /stores/{storeId}/menus`, `GET /stores/{storeId}/pickup-slots` | P0 | Store 표시 profile, menu 표시 metadata와 실제 earliest pickup을 제공한다(ADR-076/117). |
+| `1c 매장 상세` | 고객 | 운영시간·주문 가능 여부·메뉴 확인 | Merchant | `GET /stores/{storeId}`, `GET /stores/{storeId}/menus` | P0 | Store 표시 profile과 menu 표시 metadata를 제공한다. 슬롯 조회는 신규 고객 동선이 사용하지 않는다(ADR-133/135). |
 | `1d 주문 추적` | 고객 | 상태·픽업번호·실제 진행 시각 추적 | Ordering | `GET /me/orders/{orderReference}` | P0 | public reference, pickup number, immutable pricing과 실제 lifecycle projection/UI가 연결됐다(ADR-099). |
 | `4a 장바구니` | 고객 | 서버 견적의 상품·혜택·결제 금액 확인 | Ordering | `POST /me/order-quotes`, `POST /orders` | P0 | 서버 Cart Aggregate는 만들지 않는다. 비예약 quote fingerprint를 최종 잠금 재검증하고 stale은 새 key 재확인을 요구한다(ADR-116). |
 | `2a 결제` | 고객 | 결제 요청 | Ordering, Payment | `POST /orders`, `POST /orders/{orderId}/payment-attempts`, `GET /payment-config` | P0 | 있음(ADR-080). `결제수단 선택`은 제거한다(충돌 C-2). |
@@ -94,7 +94,7 @@ offline / retryable-failure / terminal-failure / unauthorized / forbidden
 | `4f 마이` | 고객 | 계정 허브·로그아웃 | Identity | `GET /me`, `DELETE /auth/customer/sessions/current` (신규) | P0 | 없음. |
 | `3a 포인트` | 고객 | 잔액·만료·원장 | Loyalty | `GET /me/points`, `GET /me/point-transactions` (신규 facade) | P0 | Account 조회는 있음. `accountId`를 Session actor로 해석하고 가입과 0원 계정을 원자 생성한다(ADR-109). |
 | `3b 지갑` | 고객 | 선불 지갑 | — | 없음 | Non-goal | 이미 [Non-goals](non-goals.md)다. 화면은 참고 표기로 유지한다. |
-| `3c 재주문 재검증` | 고객 | 재검증된 재주문 | Ordering | `POST /me/orders/{orderReference}/reorders` | P0 | Session 소유권·주문번호 facade와 변경/슬롯 재선택/삭제 품목 UI가 연결됐다(ADR-077). |
+| `3c 재주문 재검증` | 고객 | 재검증된 즉시 재주문 | Ordering | `POST /me/orders/{orderReference}/reorders` | P0 | Session 소유권·주문번호 facade와 가격 변경/삭제 품목 UI가 연결됐다. 신규 재주문은 슬롯 입력을 받지 않는다(ADR-077/133). |
 
 ## A-2 상태 계약
 
@@ -107,7 +107,7 @@ offline / retryable-failure / terminal-failure / unauthorized / forbidden
 | `1c 매장 상세` | `sold-out-item`, `slot-closed` | 품절 메뉴는 숨기지 않고 비활성으로 노출한다. |
 | `1d 주문 추적` | `PENDING_PAYMENT`, `PAID`, `ACCEPTED`, `PREPARING`, `READY`, `COMPLETED`, `CANCELLED` | 알림 실패는 준비 완료 상태를 바꾸지 않는다(ADR-019). |
 | `4a 장바구니` | `price-changed`, `availability-changed` | 담기 시점 금액을 결제 금액으로 신뢰하지 않는다. |
-| `2a 결제` | `preparing`, `window-open`, `confirming` | 준비 실패, 창 이탈, 승인 거절, 슬롯 lease 만료를 분리한다. |
+| `2a 결제` | `preparing`, `window-open`, `confirming` | 준비 실패, 창 이탈, 승인 거절, 영업 마감과 결과불명을 분리한다. |
 | `2b 결제 예외` | `duplicate-detected`, `menu-unavailable` | 자동 환불 진행 중을 성공으로 표시하지 않는다. |
 | `4c 주문 내역` | `first-page`, `has-more`, `cursor-invalid`, `range-filtered` | 만료·변조 cursor와 잘못된 기간(`from > to`)은 목록 없음이 아니라 400이다(ADR-070). |
 | `4b 쿠폰·프로모션` | `loading`, `empty`, `applicable`, `STORE_NOT_APPLICABLE`; issuance의 `issuable`, `already-issued`, `exhausted`, `not-in-period`은 P1 | wallet query 실패를 빈 목록으로 바꾸지 않는다. `minimumOrderKrw`는 정보이며 checkout이 실제 주문금액을 다시 검증한다. 발급 상태는 ADR-107 범위를 유지한다. |
@@ -147,7 +147,7 @@ one-coupon rule과 concurrent consumption을 다시 검증하는 최종 권한�
 | `2b 이의제기 상세` | 점주 | 이의제기 접수·근거 확인 | Dispute | `POST /settlement-items/{itemId}/disputes`, `GET /stores/{storeId}/disputes` | P0(접수) / P1(상세·재실행 미리보기) | 접수·판정 서비스와 점주 store-scoped 목록 있음(Plan 90). |
 | `1a 대시보드` | 점주 | KPI 요약 | Analytics | `GET /stores/{storeId}/summary` (신규) | P1 | 없음. Analytics projection 계획은 별도 ExecPlan이다. |
 | `4b 메뉴·가격` | 점주 | 메뉴·옵션·가격 관리 | Merchant | `GET /stores/{storeId}/menus`, `GET/PUT /stores/{storeId}/menus/{menuId}/display-content` | P1 | 이름·설명·분류 표시 metadata의 versioned read/write는 구현됐다. 가격·옵션 authoring은 여전히 없다. |
-| `3b 영업시간·슬롯 설정` | 점주 | 슬롯 정원·휴무 | Merchant, Fulfillment | `GET/PUT /stores/{storeId}/customer-display`, `GET/PUT /stores/{storeId}/pickup-slot-policies` (후자는 신규) | P1 | 고객 표시용 7일 운영시간 full replacement는 구현됐다. 슬롯 정원·휴무 정책 쓰기는 여전히 없다. |
+| `3b 영업시간·이미지 설정` | 점주 | 주간 영업시간·매장 이미지 관리 | Merchant | `GET/PUT /stores/{storeId}/customer-display`, store image API | P0 | 7일 같은 날 단일 구간 full replacement와 기존 이미지 관리를 유지한다. 신규 즉시 주문에는 슬롯 정원 UI가 없다. |
 | `3c 포인트·쿠폰 정책` | 점주 | 매장 적립·쿠폰 규칙 | Operations, Promotion | `GET/PATCH /operations/policies/ordinary-point-accrual/stores/{storeId}` | P1 | 있음. 단 현재는 운영자 permission 전용이다(충돌 C-5). |
 | `3a 매출 분석` | 점주 | 순매출·환불률·객단가 | Analytics | `GET /stores/{storeId}/analytics` (신규) | P1 (Analytics ExecPlan 완료 후) | 없음. 지표는 BR-31의 두 지표만 소비하고 새로 정의하지 않는다(MD-2026-012). |
 | `4d 직원·권한` | 점주 | 직원 초대·역할·PIN | Identity | `GET/POST/DELETE /stores/{storeId}/members` (신규) | P1 | `StoreMembership` 모델 있음. 관리 API·PIN 없음(충돌 C-6). |
@@ -163,7 +163,7 @@ one-coupon rule과 concurrent consumption을 다시 검증하는 최종 권한�
 | `2b 이의제기 상세` | `접수`, `심사 중`, `판정`, `재이의` | held 금액은 확정 정산을 덮어쓰지 않는다(ADR-008, ADR-018). |
 | `4b 메뉴·가격` | `draft`, `saved`, `version-conflict` | 가격 변경은 기존 주문 스냅샷을 바꾸지 않는다(ADR-004). |
 | `1c 메뉴 판매 상태` | `available`, `sold-out` | 점주가 품절과 판매 재개를 직접 설정한다. |
-| `3b 영업시간·슬롯 설정` | `has-reservation`, `applies-next-slot` | 이미 예약된 슬롯의 정원을 소급 축소하지 않는다. |
+| `3b 영업시간·이미지 설정` | `missing-hours`, `early-close` | 영업시간 미설정은 신규 결제를 차단하고 마감 단축은 기존 cutoff를 줄이기만 한다. |
 
 ---
 
