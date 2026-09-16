@@ -69,4 +69,3 @@ Billing Key/BrandPay는 독립 제품 결정으로 다룬다.
   [ADR-123](ADR-123-order-quote-trade-terms-and-shared-availability.md)
 - [ADR-134](ADR-134-post-approval-benefit-use-and-recovery.md),
   [ADR-135](ADR-135-store-hours-payment-gate-and-cutoff.md)
-
