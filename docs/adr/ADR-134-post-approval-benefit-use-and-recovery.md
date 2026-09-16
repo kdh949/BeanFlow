@@ -80,4 +80,3 @@ snapshot, Payment lookup과 환불 recovery를 재사용한다.
   [ADR-071](ADR-071-settlement-input-snapshot-foundation.md)
 - [ADR-133](ADR-133-immediate-checkout-and-store-preparation.md),
   [ADR-135](ADR-135-store-hours-payment-gate-and-cutoff.md)
-
