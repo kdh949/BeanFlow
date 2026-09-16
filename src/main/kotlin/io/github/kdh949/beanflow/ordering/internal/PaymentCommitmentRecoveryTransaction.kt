@@ -47,9 +47,6 @@ internal class PaymentCommitmentRecoveryTransaction(
         if (order.customerId != customerId) {
             throw DomainFailure(FailureCode.ACCESS_DENIED, "Order belongs to another customer")
         }
-        if (order.checkoutMode != CheckoutMode.IMMEDIATE) {
-            throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "Payment commitment recovery only applies to immediate checkout")
-        }
         val current = payments.current(paymentId)
         if (order.state == OrderState.PAID) {
             if (current.approvalState != "APPROVED") {
@@ -60,7 +57,8 @@ internal class PaymentCommitmentRecoveryTransaction(
             }
             return responses.current(current, orderReferences.resolveOwned(customerId, orderId), replay = true)
         }
-        if (order.state == OrderState.CANCELLED &&
+        if (order.checkoutMode == CheckoutMode.IMMEDIATE &&
+            order.state == OrderState.CANCELLED &&
             order.cancellationCause == OrderCancellationCause.PAYMENT_COMMITMENT_FAILED
         ) {
             return responses.current(current, orderReferences.resolveOwned(customerId, orderId), replay = true)
@@ -71,10 +69,18 @@ internal class PaymentCommitmentRecoveryTransaction(
                 "Approved payment cannot be compensated before the committed order winner is resolved",
             )
         }
-        if (order.state == OrderState.PENDING_PAYMENT) {
-            order.cancelAfterPaymentCommitmentFailed(now, failureCode)
+        val beforeState = order.state
+        if (order.checkoutMode == CheckoutMode.IMMEDIATE) {
+            if (order.state == OrderState.PENDING_PAYMENT) {
+                order.cancelAfterPaymentCommitmentFailed(now, failureCode)
+            } else if (order.state !in setOf(OrderState.CANCELLED, OrderState.EXPIRED, OrderState.REJECTED)) {
+                throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "Order state does not allow payment commitment recovery")
+            }
         } else if (order.state !in setOf(OrderState.CANCELLED, OrderState.EXPIRED, OrderState.REJECTED)) {
-            throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "Order state does not allow payment commitment recovery")
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Legacy payment commitment remains unresolved and must be retried",
+            )
         }
 
         val body =
@@ -109,7 +115,7 @@ internal class PaymentCommitmentRecoveryTransaction(
                     targetId = paymentId,
                     occurredAt = now,
                     reason = failureCode,
-                    beforeSummary = mapOf("orderState" to "PENDING_PAYMENT"),
+                    beforeSummary = mapOf("orderState" to beforeState.name),
                     afterSummary = mapOf("orderState" to order.state.name, "recoveryState" to "REQUESTED"),
                     correlationId = current.correlationId,
                     sourceReference = "payment:$paymentId:commitment-recovery",
