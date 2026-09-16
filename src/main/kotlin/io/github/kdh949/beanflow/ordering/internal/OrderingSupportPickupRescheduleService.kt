@@ -39,12 +39,15 @@ internal class OrderingSupportPickupRescheduleService(
         validate(command)
         histories.findBySourceReference(command.sourceReference)?.let { return replay(it, command) }
         val order = orders.findLockedById(command.orderId) ?: notFound()
+        if (order.pickupSlotId == null) {
+            throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, "Immediate orders do not have a pickup slot to reschedule")
+        }
         if (order.state in POST_ACCEPTANCE_RESOLUTION_STATES) return resolutionRequired(order)
         if (order.version != command.expectedOrderVersion) stale()
         if (order.state == OrderState.ACCEPTED && command.acceptedStoreAuthorizationId == null) denied()
 
         val previousState = order.state.name
-        val previousSlotId = order.pickupSlotId
+        val previousSlotId = requireNotNull(order.pickupSlotId)
         val now = clock.instant().truncatedTo(ChronoUnit.MICROS)
         val pickup =
             pickupReservations.reschedule(
@@ -62,7 +65,7 @@ internal class OrderingSupportPickupRescheduleService(
                 previousState,
                 order.state.name,
                 previousSlotId,
-                order.pickupSlotId,
+                requireNotNull(order.pickupSlotId),
                 order.version + 1,
                 null,
                 command.sourceReference,
@@ -78,7 +81,7 @@ internal class OrderingSupportPickupRescheduleService(
                 order.storeId,
                 order.version + 1,
                 previousSlotId,
-                order.pickupSlotId,
+                requireNotNull(order.pickupSlotId),
                 now,
                 correlationId,
             ),

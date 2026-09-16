@@ -100,6 +100,8 @@ internal class GetOrderService(
             acceptanceWarningRequestedAt = order.acceptanceWarningRequestedAt,
             acceptanceDeadlineAt = order.acceptanceDeadlineAt,
             acceptedAt = order.acceptedAt,
+            preparationMinutes = order.preparationMinutes,
+            estimatedReadyAt = order.estimatedReadyAt,
             rejectedAt = order.rejectedAt,
             preparingAt = order.preparingAt,
             readyAt = order.readyAt,

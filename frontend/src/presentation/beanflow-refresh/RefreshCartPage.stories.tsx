@@ -1,14 +1,15 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, waitFor } from "storybook/test";
+import { expect, mocked, userEvent, waitFor } from "storybook/test";
 import { HttpResponse, http } from "msw";
-import { catalogHandlers, ids, pointsHandlers, signedInHandlers, storeIdentityHandlers } from "../../../.storybook/fixtures";
+import { catalogHandlers, ids, pointsHandlers, publicCheckout, signedInHandlers, storeIdentityHandlers } from "../../../.storybook/fixtures";
 import { CART_STORAGE_KEY, cart } from "../../features/ordering/cart";
+import { requestTossStandardPayment } from "../../payment/toss";
 import { RefreshCartPage } from "./CustomerCommercePages";
 
 const line = { menuId: ids.menu, optionIds: [], quantity: 2, display: { menuName: "오트 라떼", optionNames: [], unitPriceKrw: 6_400, imageUrl: "/demo/catalog/cafe-latte.webp" } };
 const secondLine = { menuId: "20000000-0000-4000-8000-000000000002", optionIds: [], quantity: 1, display: { menuName: "카페라떼", optionNames: [], unitPriceKrw: 5_000, imageUrl: "/demo/catalog/caramel-macchiato.webp" } };
 let imageReads = 0;
-const quote = { quotedAt: "2026-08-15T03:10:00Z", quoteFingerprint: "a".repeat(64), store: { storeId: ids.store, name: "시청점" }, pickupWindow: { startsAt: "2026-08-15T03:20:00Z", endsAt: "2026-08-15T03:30:00Z" }, lines: [{ menuId: ids.menu, menuName: "오트 라떼", quantity: 2, optionNames: [], lineTotalKrw: 12_800 }, { menuId: secondLine.menuId, menuName: "카페라떼", quantity: 1, optionNames: [], lineTotalKrw: 5_000 }], pricing: { subtotalKrw: 17_800, couponDiscountKrw: 0, pointsAppliedKrw: 0, payableKrw: 17_800, currency: "KRW" }, guarantee: "NONE" };
+const quote = { quotedAt: "2026-08-15T03:10:00Z", quoteFingerprint: "a".repeat(64), store: { storeId: ids.store, name: "시청점" }, lines: [{ menuId: ids.menu, menuName: "오트 라떼", quantity: 2, optionNames: [], lineTotalKrw: 12_800 }, { menuId: secondLine.menuId, menuName: "카페라떼", quantity: 1, optionNames: [], lineTotalKrw: 5_000 }], pricing: { subtotalKrw: 17_800, couponDiscountKrw: 0, pointsAppliedKrw: 0, payableKrw: 17_800, currency: "KRW" }, guarantee: "NONE" };
 
 const meta = {
   title: "Pages/Refresh/Customer/Cart",
@@ -24,7 +25,12 @@ const meta = {
       return HttpResponse.json({ ...quote, lines, pricing: { ...quote.pricing, subtotalKrw, pointsAppliedKrw: body.pointsToUseKrw, payableKrw: subtotalKrw - body.pointsToUseKrw } });
     })] },
   },
-  beforeEach: () => { cart.clear(); cart.add({ storeId: ids.store, storeName: "시청점" }, line); cart.add({ storeId: ids.store, storeName: "시청점" }, secondLine); },
+  beforeEach: () => {
+    mocked(requestTossStandardPayment).mockClear().mockResolvedValue(undefined);
+    cart.clear();
+    cart.add({ storeId: ids.store, storeName: "시청점" }, line);
+    cart.add({ storeId: ids.store, storeName: "시청점" }, secondLine);
+  },
 } satisfies Meta<typeof RefreshCartPage>;
 
 export default meta;
@@ -33,22 +39,62 @@ type Story = StoryObj<typeof meta>;
 export const WithItems: Story = {
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("시청점")).toBeVisible();
-    await userEvent.click(await canvas.findByRole("radio", { name: /7잔 가능/ }));
     await expect(await canvas.findByRole("button", { name: /17,800.*주문하기/ })).toBeEnabled();
     await expect(canvas.getByText("결제 금액")).toBeVisible();
+    await expect(canvas.getByText(/픽업 시간을 고르지 않아도/)).toBeVisible();
   },
 };
 
-/** The same time on two days must be distinguishable before reserving a slot. */
-export const DifferentPickupDates: Story = {
-  parameters: { msw: { handlers: [http.get("/api/v1/stores/:storeId/pickup-slots", () => HttpResponse.json({ items: [
-    { pickupSlotId: ids.slot, startsAt: "2026-08-15T03:20:00Z", endsAt: "2026-08-15T03:30:00Z", remainingCapacity: 7 },
-    { pickupSlotId: "30000000-0000-4000-8000-000000000002", startsAt: "2026-08-16T03:20:00Z", endsAt: "2026-08-16T03:30:00Z", remainingCapacity: 7 },
-  ] })), ...meta.parameters.msw.handlers] } },
+/** A store with no legacy pickup slots still supports the immediate checkout path. */
+export const NoPickupSlotsRequired: Story = {
+  parameters: { msw: { handlers: [...meta.parameters.msw.handlers] } },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByRole("radio", { name: /8월 15일.*토.*12:20/ })).toBeVisible();
-    await userEvent.click(canvas.getByRole("radio", { name: /8월 16일.*일.*12:20/ }));
-    await expect(canvas.getByRole("radio", { name: /8월 16일/ })).toBeChecked();
+    await expect(await canvas.findByRole("button", { name: /17,800.*주문하기/ })).toBeEnabled();
+    await expect(canvas.queryByRole("radio", { name: /잔 가능/ })).not.toBeInTheDocument();
+  },
+};
+
+/** The order action prepares its one-time attempt and opens Toss without a second click. */
+export const LaunchesTossFromOrderAction: Story = {
+  tags: ["!autodocs"],
+  parameters: { msw: { handlers: [
+    http.post("/api/v1/orders", () => HttpResponse.json({
+      order: {
+        id: ids.order,
+        publicReference: publicCheckout.order.orderReference,
+        state: "PENDING_PAYMENT",
+      },
+    }, { status: 201 })),
+    http.get("/api/v1/me/orders/:orderReference/checkout", () => HttpResponse.json({
+      ...publicCheckout,
+      order: { ...publicCheckout.order, status: "PENDING_PAYMENT" },
+      canPay: true,
+    })),
+    http.post("/api/v1/me/orders/:orderReference/payment-attempts", () => HttpResponse.json({
+      paymentId: ids.payment,
+      orderReference: publicCheckout.order.orderReference,
+      state: "READY",
+      providerOrderId: "bf_cart_payment",
+      customerKey: "bf_customer_key",
+      orderName: "오트 라떼 외 1건",
+      amount: { value: 17_800, currency: "KRW" },
+      method: "CARD",
+      successUrl: "https://checkout.beanflow.test/success",
+      failUrl: "https://checkout.beanflow.test/fail",
+      expiresAt: publicCheckout.order.paymentDeadlineAt,
+      updatedAt: "2026-08-15T03:00:00Z",
+      correlationId: "CART-CHECKOUT-1",
+    })),
+    http.get("/api/v1/payment-config", () => HttpResponse.json({ clientKey: "test_ck_storybook" })),
+    ...meta.parameters.msw.handlers,
+  ] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: /17,800.*주문하기/ }));
+    await waitFor(() => expect(mocked(requestTossStandardPayment)).toHaveBeenCalledWith(
+      "test_ck_storybook",
+      expect.objectContaining({ orderId: "bf_cart_payment", amount: { value: 17_800, currency: "KRW" } }),
+    ));
+    await expect(cart.read()).toMatchObject({ status: "ready", cart: { lines: [line, secondLine] } });
   },
 };
 
@@ -56,7 +102,6 @@ export const DifferentPickupDates: Story = {
 export const CurrentQuoteNames: Story = {
   parameters: { msw: { handlers: [http.post("/api/v1/me/order-quotes", () => HttpResponse.json({ ...quote, lines: [{ ...quote.lines[0], menuName: "시그니처 오트 라떼", optionNames: ["오트 밀크"] }, quote.lines[1]] })), ...meta.parameters.msw.handlers] } },
   play: async ({ canvas }) => {
-    await userEvent.click(await canvas.findByRole("radio", { name: /7잔 가능/ }));
     await expect(await canvas.findByText("시그니처 오트 라떼")).toBeVisible();
     await expect(canvas.getByText("오트 밀크")).toBeVisible();
     await expect(canvas.queryByText("오트 라떼")).not.toBeInTheDocument();
@@ -109,7 +154,6 @@ export const Corrupt: Story = {
 export const PointsAndRemoval: Story = {
   tags: ["!autodocs"],
   play: async ({ canvas }) => {
-    await userEvent.click(await canvas.findByRole("radio", { name: /7잔 가능/ }));
     await expect(await canvas.findByRole("button", { name: /17,800.*주문하기/ })).toBeEnabled();
     await userEvent.click(await canvas.findByRole("button", { name: "전액 사용" }));
     await expect(await canvas.findByRole("button", { name: /16,300.*주문하기/ })).toBeEnabled();
@@ -142,7 +186,6 @@ export const EditOptions: Story = {
   tags: ["!autodocs"],
   parameters: { msw: { handlers: [http.get("/api/v1/stores/:storeId/menus/:menuId/configurations", () => HttpResponse.json({ items: [{ configurationId: "basic", optionIds: [], available: true }, { configurationId: "shot", optionIds: ["extra-shot"], available: true }] })), http.get("/api/v1/stores/:storeId/menus", () => HttpResponse.json({ items: [{ menuId: ids.menu, name: "오트 라떼", basePriceKrw: 6400, available: true, options: [{ optionId: "extra-shot", name: "샷 추가", additionalPriceKrw: 500, available: true }] }] })), ...meta.parameters.msw.handlers] } },
   play: async ({ canvas }) => {
-    await userEvent.click(await canvas.findByRole("radio", { name: /7잔 가능/ }));
     await expect(await canvas.findByRole("button", { name: /17,800.*주문하기/ })).toBeEnabled();
     await userEvent.click(await canvas.findByRole("button", { name: "오트 라떼 옵션 변경" }));
     await userEvent.click(await canvas.findByRole("radio", { name: /샷 추가/ }));

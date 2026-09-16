@@ -8,7 +8,7 @@ internal object CanonicalReorderPayload {
     fun hash(command: ReorderOrderCommand): String {
         val canonical =
             """{"couponIssuanceId":${command.couponIssuanceId?.let { "\"$it\"" } ?: "null"},""" +
-                """"pickupSlotId":"${command.pickupSlotId}","pointsToUseKrw":${command.pointsToUseKrw},""" +
+                """"pickupSlotId":${command.pickupSlotId?.let { "\"$it\"" } ?: "null"},"pointsToUseKrw":${command.pointsToUseKrw},""" +
                 """"sourceOrderId":"${command.sourceOrderId}"}"""
         return MessageDigest
             .getInstance("SHA-256")

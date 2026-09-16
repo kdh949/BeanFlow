@@ -46,8 +46,8 @@ describe("store order board model", () => {
     }), now)).toBe("제조 시작 후 2분 경과");
   });
 
-  it("sorts business dates, pickup windows, and reference ties without mutating the source", () => {
-    const late = item({ orderReference: "ORD-LATE", pickupWindowStart: "2026-08-20T03:30:00Z" });
+  it("sorts business dates, lane deadlines, and reference ties without mutating the source", () => {
+    const late = item({ orderReference: "ORD-LATE", pickupWindowStart: undefined, pickupWindowEnd: undefined, acceptanceDeadlineAt: "2026-08-20T03:30:00Z" });
     const tieB = item({ orderReference: "ORD-B" });
     const tieA = item({ orderReference: "ORD-A" });
     const source = board([late, tieB, tieA]);
@@ -58,6 +58,15 @@ describe("store order board model", () => {
     expect(sorted.groups.at(1)?.items.map((entry) => entry.orderReference)).toEqual(["ORD-A", "ORD-B", "ORD-LATE"]);
     expect(source.groups.at(0)?.items).toEqual([late, tieB, tieA]);
     expect(sorted.overflow).toBe(source.overflow);
+  });
+
+  it("sorts immediate accepted work by its persisted ready estimate", () => {
+    const later = item({ orderReference: "ORD-LATER", lane: "ACCEPTED", status: "ACCEPTED", pickupWindowStart: undefined, pickupWindowEnd: undefined, lifecycle: { acceptedAt: "2026-08-20T03:01:00Z", estimatedReadyAt: "2026-08-20T03:20:00Z" } });
+    const sooner = item({ orderReference: "ORD-SOONER", lane: "ACCEPTED", status: "ACCEPTED", pickupWindowStart: undefined, pickupWindowEnd: undefined, lifecycle: { acceptedAt: "2026-08-20T03:02:00Z", estimatedReadyAt: "2026-08-20T03:10:00Z" } });
+
+    const sorted = sortStoreOrderBoard(board([later, sooner]).groups, []);
+
+    expect(sorted.groups.at(1)?.items.map((entry) => entry.orderReference)).toEqual(["ORD-SOONER", "ORD-LATER"]);
   });
 
   it("moves a changed item to its new business date and lane exactly once", () => {

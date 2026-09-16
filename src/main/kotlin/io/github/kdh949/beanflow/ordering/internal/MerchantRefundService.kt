@@ -59,8 +59,8 @@ internal data class MerchantRefundPreviewTotalsResponse(
 )
 
 internal data class MerchantRefundPickupWindowResponse(
-    val startsAt: Instant,
-    val endsAt: Instant,
+    val startsAt: Instant?,
+    val endsAt: Instant?,
 )
 
 internal data class MerchantRefundPricingResponse(

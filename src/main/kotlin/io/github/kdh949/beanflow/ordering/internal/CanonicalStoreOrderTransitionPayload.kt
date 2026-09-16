@@ -9,8 +9,9 @@ internal object CanonicalStoreOrderTransitionPayload {
         orderId: UUID,
         targetState: StoreOrderTargetState,
         reason: String?,
+        preparationMinutes: Int?,
     ): String {
-        val canonical = "$orderId|${targetState.name}|${reason?.trim().orEmpty()}"
+        val canonical = "$orderId|${targetState.name}|${reason?.trim().orEmpty()}|${preparationMinutes ?: ""}"
         return digest(canonical)
     }
 
@@ -19,7 +20,8 @@ internal object CanonicalStoreOrderTransitionPayload {
         request: StoreOrderActionRequest,
     ): String {
         val canonical =
-            "$orderId|${request.action.name}|${request.expectedStatus.name}|${request.reason?.trim().orEmpty()}"
+            "$orderId|${request.action.name}|${request.expectedStatus.name}|${request.reason?.trim().orEmpty()}|" +
+                (request.preparationMinutes ?: "")
         return digest(canonical)
     }
 

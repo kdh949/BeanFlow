@@ -14,6 +14,8 @@ internal data class CustomerOrderCandidateProjection(
     val createdAt: Instant,
     val state: String,
     val reservationExpiresAt: Instant?,
+    val checkoutMode: String,
+    val orderingWindowClosesAt: Instant?,
 )
 
 internal data class CustomerOrderHeaderProjection(
@@ -24,14 +26,16 @@ internal data class CustomerOrderHeaderProjection(
     val storeName: String,
     val state: String,
     val createdAt: Instant,
-    val pickupWindowStart: Instant,
-    val pickupWindowEnd: Instant,
+    val pickupWindowStart: Instant?,
+    val pickupWindowEnd: Instant?,
     val subtotalKrw: Long,
     val couponDiscountKrw: Long,
     val pointsAppliedKrw: Long,
     val payableKrw: Long,
     val currency: String,
     val reservationExpiresAt: Instant?,
+    val checkoutMode: String,
+    val orderingWindowClosesAt: Instant?,
     val acceptanceDeadlineAt: Instant?,
     val cancellationCause: String?,
     val paidAt: Instant?,
@@ -39,6 +43,8 @@ internal data class CustomerOrderHeaderProjection(
     val preparingAt: Instant?,
     val readyAt: Instant?,
     val completedAt: Instant?,
+    val preparationMinutes: Int?,
+    val estimatedReadyAt: Instant?,
     val version: Long,
 )
 
@@ -63,7 +69,8 @@ internal class CustomerOrderQueryRepository(
             buildString {
                 append(
                     """
-                    SELECT id, customer_id, created_at, state, reservation_expires_at
+                    SELECT id, customer_id, created_at, state, reservation_expires_at,
+                           checkout_mode, ordering_window_closes_at
                       FROM ordering_order
                      WHERE customer_id = ?
                        AND created_at >= ?
@@ -123,7 +130,8 @@ internal class CustomerOrderQueryRepository(
         return jdbcTemplate
             .query(
                 """
-                SELECT id, customer_id, created_at, state, reservation_expires_at
+                SELECT id, customer_id, created_at, state, reservation_expires_at,
+                       checkout_mode, ordering_window_closes_at
                   FROM ordering_order
                  WHERE public_reference = ?
                 """.trimIndent(),
@@ -170,6 +178,8 @@ internal class CustomerOrderQueryRepository(
         createdAt = resultSet.getTimestamp("created_at").toInstant(),
         state = resultSet.getString("state"),
         reservationExpiresAt = resultSet.getTimestamp("reservation_expires_at")?.toInstant(),
+        checkoutMode = resultSet.getString("checkout_mode"),
+        orderingWindowClosesAt = resultSet.getTimestamp("ordering_window_closes_at")?.toInstant(),
     )
 
     private fun header(
@@ -183,14 +193,16 @@ internal class CustomerOrderQueryRepository(
         storeName = resultSet.getString("store_name_snapshot"),
         state = resultSet.getString("state"),
         createdAt = resultSet.getTimestamp("created_at").toInstant(),
-        pickupWindowStart = resultSet.getTimestamp("pickup_window_start_snapshot").toInstant(),
-        pickupWindowEnd = resultSet.getTimestamp("pickup_window_end_snapshot").toInstant(),
+        pickupWindowStart = resultSet.getTimestamp("pickup_window_start_snapshot")?.toInstant(),
+        pickupWindowEnd = resultSet.getTimestamp("pickup_window_end_snapshot")?.toInstant(),
         subtotalKrw = resultSet.getLong("subtotal_krw"),
         couponDiscountKrw = resultSet.getLong("coupon_discount_krw"),
         pointsAppliedKrw = resultSet.getLong("points_applied_krw"),
         payableKrw = resultSet.getLong("payable_krw"),
         currency = resultSet.getString("currency"),
         reservationExpiresAt = resultSet.getTimestamp("reservation_expires_at")?.toInstant(),
+        checkoutMode = resultSet.getString("checkout_mode"),
+        orderingWindowClosesAt = resultSet.getTimestamp("ordering_window_closes_at")?.toInstant(),
         acceptanceDeadlineAt = resultSet.getTimestamp("acceptance_deadline_at")?.toInstant(),
         cancellationCause = resultSet.getString("cancellation_cause"),
         paidAt = resultSet.getTimestamp("paid_at")?.toInstant(),
@@ -198,6 +210,8 @@ internal class CustomerOrderQueryRepository(
         preparingAt = resultSet.getTimestamp("preparing_at")?.toInstant(),
         readyAt = resultSet.getTimestamp("ready_at")?.toInstant(),
         completedAt = resultSet.getTimestamp("completed_at")?.toInstant(),
+        preparationMinutes = resultSet.getObject("preparation_minutes", Integer::class.java)?.toInt(),
+        estimatedReadyAt = resultSet.getTimestamp("estimated_ready_at")?.toInstant(),
         version = resultSet.getLong("version"),
     )
 
@@ -221,8 +235,10 @@ internal class CustomerOrderQueryRepository(
             SELECT id, store_id, public_reference, pickup_sequence, store_name_snapshot, state, created_at,
                    pickup_window_start_snapshot, pickup_window_end_snapshot,
                    subtotal_krw, coupon_discount_krw, points_applied_krw, payable_krw, currency,
-                   reservation_expires_at, acceptance_deadline_at, cancellation_cause,
-                   paid_at, accepted_at, preparing_at, ready_at, completed_at, version
+               reservation_expires_at, checkout_mode, ordering_window_closes_at,
+               acceptance_deadline_at, cancellation_cause,
+                   paid_at, accepted_at, preparing_at, ready_at, completed_at,
+                   preparation_minutes, estimated_ready_at, version
               FROM ordering_order
             """.trimIndent()
         val LINE_SELECT =

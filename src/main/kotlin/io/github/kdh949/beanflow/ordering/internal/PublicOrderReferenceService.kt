@@ -49,8 +49,9 @@ internal class PublicOrderReferenceService(
 
     /**
      * Resolves the owned source order from its public reference and hands the
-     * internal ID to the existing fast reorder transaction. State, price
-     * and slot revalidation stay in that use case and are not duplicated here.
+     * internal ID to the existing fast reorder transaction. State and price
+     * revalidation stay in that use case and are not duplicated here. New
+     * reorders are always IMMEDIATE.
      */
     fun reorderCustomerOrder(
         customerId: UUID,
@@ -65,7 +66,7 @@ internal class PublicOrderReferenceService(
                 ReorderOrderCommand(
                     customerId = customerId,
                     sourceOrderId = resolved.orderId,
-                    pickupSlotId = request.pickupSlotId,
+                    pickupSlotId = null,
                     couponIssuanceId = request.couponIssuanceId,
                     pointsToUseKrw = request.pointsToUseKrw,
                 ),

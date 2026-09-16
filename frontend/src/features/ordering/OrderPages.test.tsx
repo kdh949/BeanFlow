@@ -342,21 +342,15 @@ describe("customer reorder", () => {
 
   it("sends the public reference with no source identifier or price", async () => {
     document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
-    vi.spyOn(customerApi, "GET").mockImplementation(async (path: string) => {
-      if (path === "/stores/{storeId}/pickup-slots") {
-        return response({ items: [{ pickupSlotId: "slot-1", startsAt: "2026-08-16T02:00:00Z", endsAt: "2026-08-16T02:10:00Z", remainingCapacity: 3 }] }) as never;
-      }
-      return response(reorderable) as never;
-    });
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response(reorderable) as never);
     const post = vi.spyOn(customerApi, "POST").mockResolvedValue(
-      response({ order: { orderId: "order-2", publicReference: "BF-2345-6789", payableKrw: 4500 }, priceComparison: { hasPriceChanges: false } }) as never,
+      response({ order: { orderId: "order-2", publicReference: "BF-2345-6789", payableKrw: 4500, state: "PENDING_PAYMENT" }, priceComparison: { hasPriceChanges: false } }) as never,
     );
 
     renderAt("/app/orders/BF-7K3M-9Q2P");
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: /같은 메뉴로 다시 주문/ }));
-    await user.click(await screen.findByRole("radio", { name: /가능/ }));
-    await user.click(screen.getByRole("button", { name: "이 시간으로 주문" }));
+    await user.click(screen.getByRole("button", { name: "현재 조건으로 주문" }));
 
     await waitFor(() => expect(post).toHaveBeenCalled());
     expect(post.mock.calls[0]?.[0]).toBe("/me/orders/{orderReference}/reorders");
@@ -365,7 +359,7 @@ describe("customer reorder", () => {
         path: { orderReference: "BF-7K3M-9Q2P" },
         header: { "X-BEANFLOW-CSRF": "customer-csrf-token" },
       },
-      body: { pickupSlotId: "slot-1", pointsToUseKrw: 0 },
+      body: { pointsToUseKrw: 0 },
     });
     expect(JSON.stringify(post.mock.calls[0]?.[1])).not.toContain("sourceOrderId");
     document.cookie = "BEANFLOW_CUSTOMER_XSRF=; Max-Age=0; path=/";
@@ -373,12 +367,7 @@ describe("customer reorder", () => {
 
   it("reports the server revalidation reason per item", async () => {
     document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
-    vi.spyOn(customerApi, "GET").mockImplementation(async (path: string) => {
-      if (path === "/stores/{storeId}/pickup-slots") {
-        return response({ items: [{ pickupSlotId: "slot-1", startsAt: "2026-08-16T02:00:00Z", endsAt: "2026-08-16T02:10:00Z", remainingCapacity: 3 }] }) as never;
-      }
-      return response(reorderable) as never;
-    });
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response(reorderable) as never);
     vi.spyOn(customerApi, "POST").mockResolvedValue({
       error: {
         code: "REORDER_ITEMS_UNAVAILABLE",
@@ -391,8 +380,7 @@ describe("customer reorder", () => {
     renderAt("/app/orders/BF-7K3M-9Q2P");
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: /같은 메뉴로 다시 주문/ }));
-    await user.click(await screen.findByRole("radio", { name: /가능/ }));
-    await user.click(screen.getByRole("button", { name: "이 시간으로 주문" }));
+    await user.click(screen.getByRole("button", { name: "현재 조건으로 주문" }));
 
     expect(await screen.findByText("지금 그대로 다시 주문할 수 없어요")).toBeInTheDocument();
     expect(screen.getByText("지금은 판매하지 않아요")).toBeInTheDocument();

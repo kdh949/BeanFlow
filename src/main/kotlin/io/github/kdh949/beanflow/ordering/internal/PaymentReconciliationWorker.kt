@@ -7,13 +7,16 @@ import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.payment.api.ProviderRecoveryOutcome
 import io.github.kdh949.beanflow.payment.api.ProviderRecoveryResult
 import io.github.kdh949.beanflow.payment.api.ProviderTransportFailure
+import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.WorkerOwner
 import io.github.kdh949.beanflow.shared.api.WorkerTelemetry
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.dao.DataAccessException
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
+import org.springframework.transaction.TransactionException
 import java.time.Clock
 import java.time.Duration
 
@@ -21,6 +24,7 @@ import java.time.Duration
 internal class PaymentReconciliationWorker(
     private val reconciliationOperations: PaymentReconciliationOperations,
     private val resultTransaction: PaymentResultTransaction,
+    private val commitmentRecovery: PaymentCommitmentRecoveryTransaction,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry,
     private val workerTelemetry: WorkerTelemetry,
@@ -87,13 +91,42 @@ internal class PaymentReconciliationWorker(
 
                     is ProviderPaymentResult.Approved -> {
                         if (result.amountKrw == work.requestedAmountKrw && result.currency == work.currency) {
-                            resultTransaction.apply(
-                                work.customerId,
-                                work.orderId,
-                                work.paymentId,
-                                result,
-                                now,
-                            )
+                            try {
+                                resultTransaction.apply(
+                                    work.customerId,
+                                    work.orderId,
+                                    work.paymentId,
+                                    result,
+                                    now,
+                                )
+                            } catch (failure: ImmediatePaymentCommitmentFailure) {
+                                commitmentRecovery.recoverApproved(
+                                    work.customerId,
+                                    work.orderId,
+                                    work.paymentId,
+                                    result,
+                                    failure.failureCode.name,
+                                    now,
+                                )
+                            } catch (failure: DataAccessException) {
+                                commitmentRecovery.recoverApproved(
+                                    work.customerId,
+                                    work.orderId,
+                                    work.paymentId,
+                                    result,
+                                    FailureCode.DEPENDENCY_UNAVAILABLE.name,
+                                    now,
+                                )
+                            } catch (failure: TransactionException) {
+                                commitmentRecovery.recoverApproved(
+                                    work.customerId,
+                                    work.orderId,
+                                    work.paymentId,
+                                    result,
+                                    FailureCode.DEPENDENCY_UNAVAILABLE.name,
+                                    now,
+                                )
+                            }
                         } else {
                             resultTransaction.reconcileMismatch(work, result, now)
                         }

@@ -7,6 +7,8 @@ import { customerApi } from "../../api/customerClient";
 import { attemptStorage } from "./paymentAttempt";
 import { resetConfirmationGuard } from "./usePaymentResolution";
 import { PaymentFailPage, PaymentSuccessPage, clearPaymentSuccessQuery, failureMessage } from "./PaymentResultPages";
+import { cart } from "../ordering/cart";
+import { couponSelection } from "../customer/couponSelection";
 
 type ApprovalState = "READY" | "APPROVING" | "APPROVED" | "FAILED" | "UNKNOWN" | "RECONCILING" | "MANUAL_REVIEW";
 
@@ -56,6 +58,9 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.useRealTimers();
+  sessionStorage.clear();
+  cart.clear();
+  couponSelection.clear();
   document.cookie = "BEANFLOW_CUSTOMER_XSRF=; Max-Age=0; path=/";
 });
 
@@ -95,6 +100,66 @@ describe("payment success callback sequencing", () => {
     expect(screen.getByRole("link", { name: "주문 상태 보기" })).toHaveAttribute("href", "/app/orders/BF-7K3M-9Q2P");
     expect(get).toHaveBeenCalledTimes(1);
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it("clears only the unchanged cart after the server reports APPROVED", async () => {
+    cart.add({ storeId: "store-1", storeName: "성수" }, { menuId: "menu-1", optionIds: [], quantity: 1, display: { menuName: "아메리카노", optionNames: [], unitPriceKrw: 4_500 } });
+    const started = cart.read();
+    if (started.status !== "ready") throw new Error("cart must be ready");
+    couponSelection.select({ storeId: "store-1", couponIssuanceId: "coupon-1", label: "1천원 할인" });
+    attemptStorage.save({ paymentId: "payment-id" } as never, {
+      cartRevision: started.cart.revision,
+      cartStoreId: "store-1",
+      couponIssuanceId: "coupon-1",
+    });
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response(payment("APPROVED")) as never);
+
+    renderAt("/app/payments/payment-id/success");
+
+    await screen.findByText("결제가 완료됐어요");
+    await waitFor(() => expect(cart.read()).toEqual({ status: "empty" }));
+    expect(couponSelection.get()).toBeNull();
+    expect(attemptStorage.get("payment-id")).toBeNull();
+  });
+
+  it("preserves a cart changed in another tab while payment was pending", async () => {
+    cart.add({ storeId: "store-1", storeName: "성수" }, { menuId: "menu-1", optionIds: [], quantity: 1, display: { menuName: "아메리카노", optionNames: [], unitPriceKrw: 4_500 } });
+    const started = cart.read();
+    if (started.status !== "ready") throw new Error("cart must be ready");
+    couponSelection.select({ storeId: "store-1", couponIssuanceId: "coupon-2", label: "2천원 할인" });
+    attemptStorage.save({ paymentId: "payment-id" } as never, {
+      cartRevision: started.cart.revision,
+      cartStoreId: "store-1",
+      couponIssuanceId: "coupon-2",
+    });
+    cart.setQuantity(0, 2);
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response(payment("APPROVED")) as never);
+
+    renderAt("/app/payments/payment-id/success");
+
+    await screen.findByText("결제가 완료됐어요");
+    expect(cart.read()).toMatchObject({ status: "ready", cart: { lines: [{ quantity: 2 }] } });
+    expect(couponSelection.get()).toMatchObject({ couponIssuanceId: "coupon-2" });
+  });
+
+  it("preserves a newly selected coupon while clearing the unchanged checkout cart", async () => {
+    cart.add({ storeId: "store-1", storeName: "성수" }, { menuId: "menu-1", optionIds: [], quantity: 1, display: { menuName: "아메리카노", optionNames: [], unitPriceKrw: 4_500 } });
+    const started = cart.read();
+    if (started.status !== "ready") throw new Error("cart must be ready");
+    couponSelection.select({ storeId: "store-1", couponIssuanceId: "coupon-1", label: "1천원 할인" });
+    attemptStorage.save({ paymentId: "payment-id" } as never, {
+      cartRevision: started.cart.revision,
+      cartStoreId: "store-1",
+      couponIssuanceId: "coupon-1",
+    });
+    couponSelection.select({ storeId: "store-1", couponIssuanceId: "coupon-2", label: "2천원 할인" });
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response(payment("APPROVED")) as never);
+
+    renderAt("/app/payments/payment-id/success");
+
+    await screen.findByText("결제가 완료됐어요");
+    await waitFor(() => expect(cart.read()).toEqual({ status: "empty" }));
+    expect(couponSelection.get()).toMatchObject({ couponIssuanceId: "coupon-2" });
   });
 
   it("never reports an unapproved payment as completed on the success URL", async () => {
@@ -265,6 +330,10 @@ describe("payment confirmation recovery", () => {
 
 describe("payment fail callback reconciliation", () => {
   it("queries server status and never posts confirmation", async () => {
+    cart.add({ storeId: "store-1", storeName: "성수" }, { menuId: "menu-1", optionIds: [], quantity: 1, display: { menuName: "아메리카노", optionNames: [], unitPriceKrw: 4_500 } });
+    const started = cart.read();
+    if (started.status !== "ready") throw new Error("cart must be ready");
+    attemptStorage.save({ paymentId: "payment-id" } as never, { cartRevision: started.cart.revision, cartStoreId: "store-1" });
     const get = vi.spyOn(customerApi, "GET").mockResolvedValue(response(payment("READY")) as never);
     const post = vi.spyOn(customerApi, "POST");
 
@@ -274,6 +343,8 @@ describe("payment fail callback reconciliation", () => {
     expect(get).toHaveBeenCalledTimes(1);
     expect(post).not.toHaveBeenCalled();
     expect(screen.getByRole("link", { name: "주문 상태 보기" })).toHaveAttribute("href", "/app/orders/BF-7K3M-9Q2P");
+    expect(cart.read()).toMatchObject({ status: "ready", cart: { revision: started.cart.revision } });
+    expect(attemptStorage.get("payment-id")).not.toBeNull();
   });
 
   it("does not offer a new payment while the server is reconciling", async () => {

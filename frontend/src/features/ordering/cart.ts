@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import { onCustomerLogout } from "../shared/customerLogout";
 
 export const CART_STORAGE_KEY = "beanflow.customer.cart.v1";
-const CART_SCHEMA_VERSION = 1;
+const CART_SCHEMA_VERSION = 2;
 
 /**
  * `display` is a snapshot for rendering only. The server recomputes price,
@@ -18,6 +18,7 @@ export type CartLine = {
 
 export type Cart = {
   version: typeof CART_SCHEMA_VERSION;
+  revision: string;
   storeId: string;
   storeName: string;
   lines: CartLine[];
@@ -63,6 +64,15 @@ function isCartLine(value: unknown): value is CartLine {
   );
 }
 
+function legacyRevision(raw: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < raw.length; index += 1) {
+    hash ^= raw.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `legacy-${(hash >>> 0).toString(16)}`;
+}
+
 function parse(raw: string): CartState {
   let value: unknown;
   try {
@@ -72,12 +82,22 @@ function parse(raw: string): CartState {
   }
   if (typeof value !== "object" || value === null) return { status: "corrupt" };
   const cart = value as Record<string, unknown>;
-  if (cart.version !== CART_SCHEMA_VERSION) return { status: "corrupt" };
+  if (cart.version !== 1 && cart.version !== CART_SCHEMA_VERSION) return { status: "corrupt" };
   if (typeof cart.storeId !== "string" || cart.storeId.length === 0) return { status: "corrupt" };
   if (typeof cart.storeName !== "string") return { status: "corrupt" };
   if (!Array.isArray(cart.lines) || !cart.lines.every(isCartLine)) return { status: "corrupt" };
   if (cart.lines.length === 0) return { status: "empty" };
-  return { status: "ready", cart: cart as Cart };
+  if (cart.version === CART_SCHEMA_VERSION && (typeof cart.revision !== "string" || cart.revision.length === 0)) {
+    return { status: "corrupt" };
+  }
+  return {
+    status: "ready",
+    cart: {
+      ...(cart as Omit<Cart, "version" | "revision">),
+      version: CART_SCHEMA_VERSION,
+      revision: cart.version === 1 ? legacyRevision(raw) : cart.revision as string,
+    },
+  };
 }
 
 function read(): CartState {
@@ -87,9 +107,9 @@ function read(): CartState {
   return cached;
 }
 
-function write(cart: Cart) {
+function write(cart: Omit<Cart, "version" | "revision">) {
   if (cart.lines.length === 0) localStorage.removeItem(CART_STORAGE_KEY);
-  else localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+  else localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({ ...cart, version: CART_SCHEMA_VERSION, revision: crypto.randomUUID() }));
   emit();
 }
 
@@ -123,12 +143,12 @@ export const cart = {
     } else {
       lines.push(line);
     }
-    write({ version: CART_SCHEMA_VERSION, storeId: store.storeId, storeName: store.storeName, lines });
+    write({ storeId: store.storeId, storeName: store.storeName, lines });
     return { outcome: "added" };
   },
 
   replaceWith(store: { storeId: string; storeName: string }, line: CartLine) {
-    write({ version: CART_SCHEMA_VERSION, storeId: store.storeId, storeName: store.storeName, lines: [line] });
+    write({ storeId: store.storeId, storeName: store.storeName, lines: [line] });
   },
 
   setQuantity(index: number, quantity: number) {
@@ -137,7 +157,7 @@ export const cart = {
     const lines = state.cart.lines
       .map((line, position) => (position === index ? { ...line, quantity } : line))
       .filter((line) => line.quantity > 0);
-    write({ ...state.cart, lines });
+    write({ storeId: state.cart.storeId, storeName: state.cart.storeName, lines });
   },
 
   /** Edit one configuration and merge quantities if it now matches another line. */
@@ -150,12 +170,23 @@ export const cart = {
       const existing = lines[match]!;
       lines[match] = { ...replacement, quantity: existing.quantity + replacement.quantity };
     } else lines.splice(index, 0, replacement);
-    write({ ...state.cart, lines });
+    write({ storeId: state.cart.storeId, storeName: state.cart.storeName, lines });
   },
 
   clear() {
     localStorage.removeItem(CART_STORAGE_KEY);
     emit();
+  },
+
+  /** Clears only the unchanged cart that started a server-confirmed checkout. */
+  clearIfRevision(revision: string): boolean {
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (raw === null) return false;
+    const current = parse(raw);
+    if (current.status !== "ready" || current.cart.revision !== revision) return false;
+    localStorage.removeItem(CART_STORAGE_KEY);
+    emit();
+    return true;
   },
 };
 

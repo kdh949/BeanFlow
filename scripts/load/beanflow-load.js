@@ -249,7 +249,6 @@ function pollBoard() {
 function createQuotedOrder(customer, requestScenario) {
   const quoteRequest = {
     storeId: fixture.order.storeId,
-    pickupSlotId: fixture.order.pickupSlotIds[exec.scenario.iterationInTest % fixture.order.pickupSlotIds.length],
     lines: fixture.order.lines,
     pointsToUseKrw: fixture.order.pointsToUseKrw || 0,
   };
@@ -367,8 +366,8 @@ function positiveInteger(value, name) {
 }
 
 function validateFixture(value, selectedScenario) {
-  if (!value.order || !value.order.storeId || !Array.isArray(value.order.pickupSlotIds) || !value.order.pickupSlotIds.length) {
-    throw new Error('fixture.order requires storeId and at least one pickupSlotId');
+  if (!value.order || !value.order.storeId) {
+    throw new Error('fixture.order requires storeId');
   }
   if (!Array.isArray(value.order.lines) || !value.order.lines.length) {
     throw new Error('fixture.order.lines must contain at least one menu line');

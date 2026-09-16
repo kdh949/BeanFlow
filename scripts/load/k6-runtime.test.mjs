@@ -33,6 +33,7 @@ for (const [scenario, mode, expectedFailure, expectedApproved] of [
       const send = (status, value) => { response.statusCode = status; response.end(JSON.stringify(value)); };
       if (route === '/api/v1/me/order-quotes') {
         quotes++;
+        assert.equal(Object.hasOwn(JSON.parse(body), 'pickupSlotId'), false);
         if (mode === 'server-error') return send(500, { code: 'INTERNAL_ERROR' });
         if (mode === 'invalid-json') return response.end('not json');
         return send(200, { quoteFingerprint: 'a'.repeat(64) });
@@ -55,7 +56,7 @@ for (const [scenario, mode, expectedFailure, expectedApproved] of [
       const fixture = join(directory, 'fixture.json');
       const testId = `contract-${scenario}-${mode}`;
       const summary = mode === 'runner' ? join(directory, testId, 'summary.json') : join(directory, 'summary.json');
-      await writeFile(fixture, JSON.stringify({ order: { storeId: 'test-store', pickupSlotIds: ['test-slot'], lines: [{ menuId: 'test-menu', quantity: 1 }] }, customerSessions: [{ session: 'fixture-only', xsrf: 'fixture-only' }] }), { mode: 0o600 });
+      await writeFile(fixture, JSON.stringify({ order: { storeId: 'test-store', lines: [{ menuId: 'test-menu', quantity: 1 }] }, customerSessions: [{ session: 'fixture-only', xsrf: 'fixture-only' }] }), { mode: 0o600 });
       const command = mode === 'runner' ? ['python3', fileURLToPath(new URL('./run.py', import.meta.url)), '--output-dir', directory, '--local-only'] : ['k6', 'run', '--quiet', fileURLToPath(new URL('./beanflow-load.js', import.meta.url))];
       const child = spawn(command[0], command.slice(1), {
         env: { ...process.env, BEANFLOW_DEPLOYMENT_ID: 'contract-fixture', BEANFLOW_DATASET_ID: 'contract-v1', BEANFLOW_GRAFANA_URL: 'http://grafana.invalid', BEANFLOW_SUMMARY_PATH: summary, BEANFLOW_BASE_URL: `http://127.0.0.1:${server.address().port}`, BEANFLOW_TEST_ID: testId, BEANFLOW_LOAD_FIXTURE: fixture, BEANFLOW_LOAD_SCENARIO: scenario, BEANFLOW_DURATION: '3s', BEANFLOW_RATE: '1' },

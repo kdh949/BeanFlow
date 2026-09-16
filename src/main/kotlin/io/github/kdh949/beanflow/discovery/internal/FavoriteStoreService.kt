@@ -17,8 +17,8 @@ import java.util.UUID
 /**
  * Customer favorites are owned by Discovery, while a store's public display and owner state remain
  * Merchant-owned. The service keeps those boundaries explicit: favorite ordering comes from the
- * Discovery table, then Merchant hydrates the ids in one bulk query and Fulfillment judges slot
- * availability in one bulk query.
+ * Discovery table, then Merchant hydrates the ids and their current operating schedules in one
+ * bulk query. Legacy Fulfillment slots are not part of immediate-order discovery.
  */
 @Service
 internal class FavoriteStoreService(

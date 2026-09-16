@@ -238,6 +238,8 @@ internal class CustomerOrderReadTransaction(
             allowedActions = CustomerOrderPresentationPolicy.allowedActions(actionFacts(), now),
             paymentRecovery = paymentRecovery,
             reservationExpiresAt = reservationExpiresAt,
+            checkoutMode = checkoutMode,
+            paymentDeadlineAt = reservationExpiresAt ?: orderingWindowClosesAt,
         )
     }
 
@@ -250,12 +252,18 @@ internal class CustomerOrderReadTransaction(
         )
 
     private fun CustomerOrderHeaderProjection.validateHeader() {
+        val validPickupWindow =
+            when {
+                pickupWindowStart == null && pickupWindowEnd == null -> true
+                pickupWindowStart != null && pickupWindowEnd != null -> pickupWindowEnd.isAfter(pickupWindowStart)
+                else -> false
+            }
         if (
             pickupSequence <= 0 || storeName.isBlank() || subtotalKrw < 0 || couponDiscountKrw < 0 ||
             pointsAppliedKrw < 0 || payableKrw < 0 ||
             subtotalKrw != couponDiscountKrw + pointsAppliedKrw + payableKrw ||
             currency != "KRW" ||
-            !pickupWindowEnd.isAfter(pickupWindowStart)
+            !validPickupWindow
         ) {
             dependency("Customer order projection is invalid")
         }
@@ -267,7 +275,15 @@ internal class CustomerOrderReadTransaction(
 
     private fun CustomerOrderHeaderProjection.lifecycleResponse(): OrderLifecycleResponse? =
         lifecycle().takeIf(PersistedOrderLifecycle::hasOccurredEvent)?.let {
-            OrderLifecycleResponse(it.paidAt, it.acceptedAt, it.preparingAt, it.readyAt, it.completedAt)
+            OrderLifecycleResponse(
+                it.paidAt,
+                it.acceptedAt,
+                it.preparingAt,
+                it.readyAt,
+                it.completedAt,
+                preparationMinutes,
+                estimatedReadyAt,
+            )
         }
 
     private fun parseState(raw: String): OrderState =
@@ -309,7 +325,8 @@ internal class CustomerOrderExpiryTransaction(
             candidates
                 .filter { candidate ->
                     parseState(candidate.state) == OrderState.PENDING_PAYMENT &&
-                        (candidate.reservationExpiresAt ?: dependency("Pending-payment order has no reservation deadline")) <= now
+                        candidate.checkoutMode == "LEGACY_RESERVED" &&
+                        (candidate.reservationExpiresAt ?: dependency("Reserved order has no reservation deadline")) <= now
                 }.sortedBy { it.orderId.toString() }
         due.forEach { expiry.expireIfDue(it.orderId, now) }
         if (due.isNotEmpty()) orders.flush()

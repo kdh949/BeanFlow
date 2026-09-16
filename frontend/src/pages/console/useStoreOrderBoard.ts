@@ -193,9 +193,9 @@ export function useStoreOrderBoard() {
     }
   }
 
-  async function transition(item: StoreOrderBoardItem, action: StoreOrderAction, reason?: string) {
+  async function transition(item: StoreOrderBoardItem, action: StoreOrderAction, reason?: string, preparationMinutes?: number) {
     if (!selectedStoreId || busyReference) return;
-    const fingerprint = JSON.stringify({ selectedStoreId, orderReference: item.orderReference, action, expectedStatus: item.status, reason });
+    const fingerprint = JSON.stringify({ selectedStoreId, orderReference: item.orderReference, action, expectedStatus: item.status, reason, preparationMinutes });
     setBusyReference(item.orderReference);
     setError(null);
     setNotice(null);
@@ -209,7 +209,7 @@ export function useStoreOrderBoard() {
             "X-BEANFLOW-CSRF": csrf,
           },
         },
-        body: { action, expectedStatus: item.status as ExpectedStatus, reason },
+        body: { action, expectedStatus: item.status as ExpectedStatus, reason, preparationMinutes },
       });
       const changed = unwrap(result);
       transitionIntent.current.complete();

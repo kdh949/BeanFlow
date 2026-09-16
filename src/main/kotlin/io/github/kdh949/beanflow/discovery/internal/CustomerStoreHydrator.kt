@@ -1,7 +1,6 @@
 package io.github.kdh949.beanflow.discovery.internal
 
 import io.github.kdh949.beanflow.discovery.api.CustomerStoreView
-import io.github.kdh949.beanflow.fulfillment.api.PickupAvailabilityQueryOperations
 import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryDisplayProjection
 import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryQueryOperations
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -14,14 +13,13 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * Hydrates customer-owned store references through Merchant and Fulfillment without creating a
- * Discovery replica. References that no longer have a public Merchant profile are omitted; their
- * source rows or Order snapshots are never changed as a read side effect.
+ * Hydrates customer-owned store references through Merchant without creating a Discovery replica.
+ * References that no longer have a public Merchant profile are omitted; their source rows or Order
+ * snapshots are never changed as a read side effect.
  */
 @Component
 internal class CustomerStoreHydrator(
     private val stores: StoreDiscoveryQueryOperations,
-    private val availability: PickupAvailabilityQueryOperations,
     private val imageViews: StorefrontImageViewResolver,
 ) {
     @Transactional(readOnly = true)
@@ -31,18 +29,17 @@ internal class CustomerStoreHydrator(
     ): List<CustomerStoreView> {
         val orderedIds = storeIds.distinct()
         val displays = visibleStores(orderedIds)
-        val pickupWindows = availability.findEarliestAvailableSlots(displays.map(StoreDiscoveryDisplayProjection::storeId), now)
         val displayByStoreId = displays.associateBy(StoreDiscoveryDisplayProjection::storeId)
         return orderedIds.mapNotNull { storeId ->
             displayByStoreId[storeId]?.let { display ->
-                val nextPickup = if (display.orderingAvailable) pickupWindows[display.storeId] else null
+                val customerDisplay = display.customerDisplay.toCustomerView(now)
                 CustomerStoreView(
                     storeId = display.storeId,
                     name = display.name,
                     orderingAvailable = display.orderingAvailable,
-                    pickupAvailable = nextPickup != null,
-                    nextPickupWindow = nextPickup?.toCustomerView(),
-                    customerDisplay = display.customerDisplay.toCustomerView(now),
+                    pickupAvailable = display.immediateOrderingAvailable(customerDisplay),
+                    nextPickupWindow = null,
+                    customerDisplay = customerDisplay,
                     image = imageViews.resolve(display.imageThumbnailKey),
                 )
             }

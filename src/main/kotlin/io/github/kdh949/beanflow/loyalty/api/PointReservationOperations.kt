@@ -13,6 +13,14 @@ data class ReservePointsCommand(
     val sourceReference: String,
 )
 
+data class UsePointsImmediatelyCommand(
+    val orderId: UUID,
+    val customerId: UUID,
+    val amountKrw: Long,
+    val sourceReference: String,
+    val usedAt: Instant,
+)
+
 enum class PointIssuerType {
     PLATFORM,
     BRAND,
@@ -53,6 +61,9 @@ data class RestorePointsAfterTerminationCommand(
 
 interface PointReservationOperations {
     fun reserve(command: ReservePointsCommand): PointReservationResult
+
+    /** Allocates current lots and commits USE directly without a RESERVED balance. */
+    fun useImmediately(command: UsePointsImmediatelyCommand): PointReservationResult
 
     fun confirm(
         orderId: UUID,

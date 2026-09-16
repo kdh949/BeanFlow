@@ -273,9 +273,8 @@ internal class OrderCompensationService(
                 OrderCompensationStepState.PROCESSING
             }
 
-            OrderCompensationStepType.PICKUP,
-            -> {
-                OrderCompensationStepState.PROCESSING
+            OrderCompensationStepType.PICKUP -> {
+                required(command.pickupRequired)
             }
         }
 

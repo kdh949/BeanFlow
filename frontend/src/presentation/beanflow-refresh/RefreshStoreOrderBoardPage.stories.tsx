@@ -25,14 +25,14 @@ const visualBoard: StoreOrderBoard = {
     pickupBusinessDate: "2026-08-15",
     items: [
       boardOrder,
-      { ...boardOrder, orderReference: "BF-WAIT-002", pickupNumber: "A-143", pickupWindowStart: "2026-08-15T03:30:00Z", acceptancePhase: "OPEN" },
-      { ...boardOrder, orderReference: "BF-WAIT-003", pickupNumber: "A-144", pickupWindowStart: "2026-08-15T03:40:00Z", acceptancePhase: "OPEN" },
-      { ...boardOrder, orderReference: "BF-MAKE-001", pickupNumber: "A-145", pickupWindowStart: "2026-08-15T03:25:00Z", lane: "PREPARING", status: "PREPARING", acceptancePhase: "OPEN", allowedActions: ["MARK_READY"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:01:00Z", preparingAt: "2026-08-15T03:03:00Z" } },
-      { ...boardOrder, orderReference: "BF-MAKE-002", pickupNumber: "A-146", pickupWindowStart: "2026-08-15T03:35:00Z", lane: "PREPARING", status: "PREPARING", acceptancePhase: "OPEN", allowedActions: ["MARK_READY"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:02:00Z", preparingAt: "2026-08-15T03:04:00Z" } },
-      { ...boardOrder, orderReference: "BF-MAKE-003", pickupNumber: "A-147", pickupWindowStart: "2026-08-15T03:45:00Z", lane: "PREPARING", status: "PREPARING", acceptancePhase: "OPEN", allowedActions: ["MARK_READY"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:03:00Z", preparingAt: "2026-08-15T03:05:00Z" } },
-      { ...boardOrder, orderReference: "BF-READY-001", pickupNumber: "A-148", pickupWindowStart: "2026-08-15T03:20:00Z", lane: "READY", status: "READY", acceptancePhase: "OPEN", allowedActions: ["COMPLETE"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:00:00Z", preparingAt: "2026-08-15T03:01:00Z", readyAt: "2026-08-15T03:02:00Z" } },
-      { ...boardOrder, orderReference: "BF-READY-002", pickupNumber: "A-149", pickupWindowStart: "2026-08-15T03:30:00Z", lane: "READY", status: "READY", acceptancePhase: "OPEN", allowedActions: ["COMPLETE"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:00:00Z", preparingAt: "2026-08-15T03:02:00Z", readyAt: "2026-08-15T03:04:00Z" } },
-      { ...boardOrder, orderReference: "BF-READY-003", pickupNumber: "A-150", pickupWindowStart: "2026-08-15T03:40:00Z", lane: "READY", status: "READY", acceptancePhase: "OPEN", allowedActions: ["COMPLETE"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:01:00Z", preparingAt: "2026-08-15T03:03:00Z", readyAt: "2026-08-15T03:05:00Z" } },
+      { ...boardOrder, orderReference: "BF-WAIT-002", pickupNumber: "A-143", acceptanceDeadlineAt: "2026-08-15T03:04:00Z", acceptancePhase: "OPEN" },
+      { ...boardOrder, orderReference: "BF-WAIT-003", pickupNumber: "A-144", acceptanceDeadlineAt: "2026-08-15T03:05:00Z", acceptancePhase: "OPEN" },
+      { ...boardOrder, orderReference: "BF-MAKE-001", pickupNumber: "A-145", lane: "PREPARING", status: "PREPARING", acceptancePhase: "OPEN", allowedActions: ["MARK_READY"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:01:00Z", preparingAt: "2026-08-15T03:03:00Z", estimatedReadyAt: "2026-08-15T03:11:00Z" } },
+      { ...boardOrder, orderReference: "BF-MAKE-002", pickupNumber: "A-146", lane: "PREPARING", status: "PREPARING", acceptancePhase: "OPEN", allowedActions: ["MARK_READY"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:02:00Z", preparingAt: "2026-08-15T03:04:00Z", estimatedReadyAt: "2026-08-15T03:17:00Z" } },
+      { ...boardOrder, orderReference: "BF-MAKE-003", pickupNumber: "A-147", lane: "PREPARING", status: "PREPARING", acceptancePhase: "OPEN", allowedActions: ["MARK_READY"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:03:00Z", preparingAt: "2026-08-15T03:05:00Z", estimatedReadyAt: "2026-08-15T03:23:00Z" } },
+      { ...boardOrder, orderReference: "BF-READY-001", pickupNumber: "A-148", lane: "READY", status: "READY", acceptancePhase: "OPEN", allowedActions: ["COMPLETE"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:00:00Z", preparingAt: "2026-08-15T03:01:00Z", readyAt: "2026-08-15T03:02:00Z", estimatedReadyAt: "2026-08-15T03:10:00Z" } },
+      { ...boardOrder, orderReference: "BF-READY-002", pickupNumber: "A-149", lane: "READY", status: "READY", acceptancePhase: "OPEN", allowedActions: ["COMPLETE"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:00:00Z", preparingAt: "2026-08-15T03:02:00Z", readyAt: "2026-08-15T03:04:00Z", estimatedReadyAt: "2026-08-15T03:15:00Z" } },
+      { ...boardOrder, orderReference: "BF-READY-003", pickupNumber: "A-150", lane: "READY", status: "READY", acceptancePhase: "OPEN", allowedActions: ["COMPLETE"], lifecycle: { ...boardOrder.lifecycle, acceptedAt: "2026-08-15T03:01:00Z", preparingAt: "2026-08-15T03:03:00Z", readyAt: "2026-08-15T03:05:00Z", estimatedReadyAt: "2026-08-15T03:20:00Z" } },
     ],
   }],
   overflow: [],
@@ -44,6 +44,8 @@ export const ActiveOrders: Story = {
     const card = await canvas.findByRole("article", { name: "주문 A-142" });
     await expect(card).toBeVisible();
     await expect(within(card).getByText("아이스 아메리카노 외 1건")).toBeVisible();
+    await expect(within(card).getByRole("spinbutton", { name: "준비시간 (분)" })).toHaveValue(10);
+    await expect(within(card).getByRole("button", { name: "5분" })).toBeVisible();
   },
 };
 

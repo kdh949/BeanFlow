@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
+import io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -34,8 +35,8 @@ internal class OrderEntity(
     val customerId: UUID,
     @Column(name = "store_id", nullable = false)
     val storeId: UUID,
-    @Column(name = "pickup_slot_id", nullable = false)
-    var pickupSlotId: UUID,
+    @Column(name = "pickup_slot_id")
+    var pickupSlotId: UUID?,
     @Column(name = "public_reference", nullable = false, length = 12)
     val publicReference: String,
     @Column(name = "pickup_business_date", nullable = false)
@@ -44,10 +45,10 @@ internal class OrderEntity(
     val pickupSequence: Long,
     @Column(name = "store_name_snapshot", nullable = false, length = 200)
     val storeNameSnapshot: String,
-    @Column(name = "pickup_window_start_snapshot", nullable = false)
-    val pickupWindowStartSnapshot: Instant,
-    @Column(name = "pickup_window_end_snapshot", nullable = false)
-    val pickupWindowEndSnapshot: Instant,
+    @Column(name = "pickup_window_start_snapshot")
+    val pickupWindowStartSnapshot: Instant?,
+    @Column(name = "pickup_window_end_snapshot")
+    val pickupWindowEndSnapshot: Instant?,
     state: OrderState,
     @Column(name = "subtotal_krw", nullable = false)
     val subtotalKrw: Long,
@@ -63,6 +64,12 @@ internal class OrderEntity(
     paidAtAtCreation: Instant? = null,
     acceptanceWarningAtAtCreation: Instant? = null,
     acceptanceDeadlineAtAtCreation: Instant? = null,
+    checkoutMode: CheckoutMode = CheckoutMode.LEGACY_RESERVED,
+    orderingWindowClosesAt: Instant? = null,
+    checkoutInputSnapshotJson: String? = null,
+    checkoutInputSchemaVersionAtCreation: Int? = null,
+    preparationMinutesAtCreation: Int? = null,
+    estimatedReadyAtAtCreation: Instant? = null,
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant,
     updatedAt: Instant,
@@ -73,6 +80,21 @@ internal class OrderEntity(
     @Column(nullable = false)
     var state: OrderState = state
         protected set
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "checkout_mode", nullable = false, length = 32)
+    val checkoutMode: CheckoutMode = checkoutMode
+
+    @Column(name = "ordering_window_closes_at")
+    var orderingWindowClosesAt: Instant? = orderingWindowClosesAt
+        protected set
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "checkout_input_snapshot", columnDefinition = "jsonb")
+    val checkoutInputSnapshotJson: String? = checkoutInputSnapshotJson
+
+    @Column(name = "checkout_input_schema_version")
+    val checkoutInputSchemaVersion: Int? = checkoutInputSchemaVersionAtCreation
 
     @Column(name = "reservation_expires_at")
     var reservationExpiresAt: Instant? = reservationExpiresAt
@@ -96,6 +118,14 @@ internal class OrderEntity(
 
     @Column(name = "accepted_at")
     var acceptedAt: Instant? = null
+        protected set
+
+    @Column(name = "preparation_minutes")
+    var preparationMinutes: Int? = preparationMinutesAtCreation
+        protected set
+
+    @Column(name = "estimated_ready_at")
+    var estimatedReadyAt: Instant? = estimatedReadyAtAtCreation
         protected set
 
     @Column(name = "rejected_at")
@@ -132,6 +162,10 @@ internal class OrderEntity(
     var cancellationDetail: String? = null
         protected set
 
+    @Column(name = "payment_commitment_failure_code", length = 80)
+    var paymentCommitmentFailureCode: String? = null
+        protected set
+
     @Column(name = "rejection_reason", length = 500)
     var rejectionReason: String? = null
         protected set
@@ -145,13 +179,26 @@ internal class OrderEntity(
         state = OrderState.PAID
         reservationExpiresAt = null
         paidAt = now
-        acceptanceWarningAt = now.plus(ACCEPTANCE_WARNING_DELAY)
-        acceptanceDeadlineAt = now.plus(ACCEPTANCE_DEADLINE_DELAY)
+        val defaultDeadline = now.plus(ACCEPTANCE_DEADLINE_DELAY)
+        val deadline =
+            when (checkoutMode) {
+                CheckoutMode.LEGACY_RESERVED -> defaultDeadline
+                CheckoutMode.IMMEDIATE -> minOf(defaultDeadline, requireNotNull(orderingWindowClosesAt))
+            }
+        if (!deadline.isAfter(now)) conflict("Store ordering window has closed")
+        acceptanceWarningAt = now.plus(ACCEPTANCE_WARNING_DELAY).takeIf { it.isBefore(deadline) }
+        acceptanceDeadlineAt = deadline
         updatedAt = now
     }
 
-    fun accept(now: Instant) {
+    fun accept(
+        now: Instant,
+        preparationMinutes: Int,
+    ) {
         requireState(OrderState.PAID, "Only a paid order can be accepted")
+        if (preparationMinutes !in 1..120) {
+            throw DomainFailure(FailureCode.INVALID_REQUEST, "Preparation minutes must be between 1 and 120")
+        }
         val deadline =
             requireNotNull(acceptanceDeadlineAt) {
                 "Paid order has no acceptance deadline"
@@ -161,6 +208,8 @@ internal class OrderEntity(
         }
         state = OrderState.ACCEPTED
         acceptedAt = now
+        this.preparationMinutes = preparationMinutes
+        estimatedReadyAt = now.plus(Duration.ofMinutes(preparationMinutes.toLong()))
         updatedAt = now
     }
 
@@ -231,6 +280,23 @@ internal class OrderEntity(
         updatedAt = now
     }
 
+    fun cancelAfterPaymentCommitmentFailed(
+        now: Instant,
+        failureCode: String,
+    ) {
+        requireState(OrderState.PENDING_PAYMENT, "Only a pending-payment order can fail payment commitment")
+        val normalized = failureCode.trim()
+        if (normalized.isEmpty() || normalized.length > 80 || normalized.any(Char::isISOControl)) {
+            throw DomainFailure(FailureCode.INVALID_REQUEST, "Payment commitment failure code is invalid")
+        }
+        state = OrderState.CANCELLED
+        reservationExpiresAt = null
+        cancelledAt = now
+        cancellationCause = OrderCancellationCause.PAYMENT_COMMITMENT_FAILED
+        paymentCommitmentFailureCode = normalized
+        updatedAt = now
+    }
+
     fun cancelByCustomer(
         now: Instant,
         reasonCode: CustomerCancellationReasonCode,
@@ -284,6 +350,9 @@ internal class OrderEntity(
     ) {
         if (state != OrderState.PENDING_PAYMENT && state != OrderState.PAID && state != OrderState.ACCEPTED) {
             conflict("Order state does not allow support pickup reschedule")
+        }
+        if (checkoutMode == CheckoutMode.IMMEDIATE || pickupSlotId == null) {
+            conflict("Immediate orders do not have a pickup slot to reschedule")
         }
         if (pickupSlotId == nextPickupSlotId) {
             conflict("Order already uses the requested pickup slot")
@@ -389,10 +458,10 @@ internal class OrderingSupportOrderChangeHistoryEntity(
     val previousState: String,
     @Column(name = "current_state", nullable = false, length = 32)
     val currentState: String,
-    @Column(name = "previous_pickup_slot_id", nullable = false)
-    val previousPickupSlotId: UUID,
-    @Column(name = "current_pickup_slot_id", nullable = false)
-    val currentPickupSlotId: UUID,
+    @Column(name = "previous_pickup_slot_id")
+    val previousPickupSlotId: UUID?,
+    @Column(name = "current_pickup_slot_id")
+    val currentPickupSlotId: UUID?,
     @Column(name = "order_version", nullable = false)
     val orderVersion: Long,
     @Column(name = "payment_recovery_state", length = 32)
@@ -484,6 +553,13 @@ internal class StoreCommandIdempotencyEntity(
     val retentionExpiresAt: Instant,
 )
 
+internal interface OrderStoreLockTarget {
+    val customerId: UUID
+    val storeId: UUID
+    val checkoutMode: CheckoutMode
+    val state: OrderState
+}
+
 internal interface OrderJpaRepository : JpaRepository<OrderEntity, UUID> {
     fun findByPublicReference(publicReference: String): OrderEntity?
 
@@ -499,6 +575,15 @@ internal interface OrderJpaRepository : JpaRepository<OrderEntity, UUID> {
 
     fun existsByPublicReference(publicReference: String): Boolean
 
+    @Query(
+        "select beanOrder.customerId as customerId, beanOrder.storeId as storeId, " +
+            "beanOrder.checkoutMode as checkoutMode, beanOrder.state as state " +
+            "from OrderEntity beanOrder where beanOrder.id = :id",
+    )
+    fun findStoreLockTargetById(
+        @Param("id") id: UUID,
+    ): OrderStoreLockTarget?
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select beanOrder from OrderEntity beanOrder where beanOrder.id = :id")
     fun findLockedById(
@@ -512,6 +597,18 @@ internal interface OrderJpaRepository : JpaRepository<OrderEntity, UUID> {
             "order by beanOrder.reservationExpiresAt, beanOrder.id",
     )
     fun findDueIds(
+        @Param("now") now: Instant,
+        pageable: Pageable,
+    ): List<UUID>
+
+    @Query(
+        "select beanOrder.id from OrderEntity beanOrder " +
+            "where beanOrder.state = io.github.kdh949.beanflow.ordering.internal.domain.OrderState.PENDING_PAYMENT " +
+            "and beanOrder.checkoutMode = io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode.IMMEDIATE " +
+            "and beanOrder.orderingWindowClosesAt <= :now " +
+            "order by beanOrder.orderingWindowClosesAt, beanOrder.id",
+    )
+    fun findImmediateCheckoutDueIds(
         @Param("now") now: Instant,
         pageable: Pageable,
     ): List<UUID>

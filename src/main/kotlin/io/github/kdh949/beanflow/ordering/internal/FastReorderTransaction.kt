@@ -26,6 +26,7 @@ internal class FastReorderTransaction(
     private val orderRepository: OrderJpaRepository,
     private val orderLineRepository: OrderLineJpaRepository,
     private val menuQuoteUseCase: MenuQuoteUseCase,
+    private val quoteCoordinator: OrderQuoteCoordinator,
     private val workflow: OrderCreationWorkflow,
     private val responseFactory: FastReorderResponseFactory,
     private val idempotencyService: OrderIdempotencyService,
@@ -112,7 +113,12 @@ internal class FastReorderTransaction(
                 pointsToUseKrw = command.pointsToUseKrw,
             )
         val quotes = sourceLines.map { line -> requireNotNull(availableQuotes[line.id]) }
-        val outcome = workflow.create(orderId, createCommand, quotes)
+        val outcome =
+            if (createCommand.pickupSlotId == null) {
+                workflow.create(orderId, createCommand, preparedQuote = quoteCoordinator.lockForOrderCreation(createCommand))
+            } else {
+                workflow.create(orderId, createCommand, quotes)
+            }
         val comparison = FastReorderPriceComparison.calculate(sourceLines, outcome.order)
         val response = responseFactory.create(outcome, comparison)
         idempotencyService.complete(idempotencyRecordId, outcome.order.id, response)

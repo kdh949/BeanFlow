@@ -5,9 +5,14 @@ import io.github.kdh949.beanflow.merchant.api.StoreCustomerDisplayChange
 import io.github.kdh949.beanflow.merchant.api.StoreCustomerDisplayOperations
 import io.github.kdh949.beanflow.merchant.api.StoreCustomerDisplaySnapshot
 import io.github.kdh949.beanflow.merchant.api.StoreOperatingDay
+import io.github.kdh949.beanflow.merchant.api.StoreOrderAvailabilityOperations
+import io.github.kdh949.beanflow.merchant.api.StoreOrderAvailabilityReason
+import io.github.kdh949.beanflow.merchant.api.StoreOrderAvailabilitySnapshot
+import io.github.kdh949.beanflow.merchant.api.StoreOrderingWindowShortened
 import io.github.kdh949.beanflow.merchant.api.StoreWeeklyOperatingHours
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataAccessException
 import org.springframework.jdbc.core.BatchPreparedStatementSetter
 import org.springframework.jdbc.core.JdbcTemplate
@@ -20,13 +25,16 @@ import java.sql.Time
 import java.sql.Timestamp
 import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.util.UUID
 
 @Service
 internal class StoreCustomerDisplayService(
     private val stores: StoreJpaRepository,
     private val repository: StoreCustomerDisplayRepository,
+    private val events: ApplicationEventPublisher,
 ) : StoreCustomerDisplayOperations {
     @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
     override fun find(storeId: UUID): StoreCustomerDisplaySnapshot =
@@ -56,6 +64,9 @@ internal class StoreCustomerDisplayService(
                 repository.update(replacement, current.version, now)
             }
             repository.replaceHours(command.storeId, replacement.operatingHours?.days.orEmpty())
+            StoreOperatingWindowPolicy
+                .shortening(current, replacement, now)
+                ?.let(events::publishEvent)
             StoreCustomerDisplayChange(current, replacement, true)
         }
 
@@ -143,6 +154,180 @@ internal class StoreCustomerDisplayService(
         const val MAX_ADDRESS_LENGTH = 300
         const val MAX_DIRECTIONS_LENGTH = 200
     }
+}
+
+@Service
+internal class StoreOrderAvailabilityService(
+    private val stores: StoreJpaRepository,
+    private val displays: StoreCustomerDisplayRepository,
+) : StoreOrderAvailabilityOperations {
+    @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
+    override fun inspect(
+        storeId: UUID,
+        at: Instant,
+    ): StoreOrderAvailabilitySnapshot = availability(storeId, at, lockStore = false)
+
+    @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
+    override fun lockForOrderCommitment(
+        storeId: UUID,
+        at: Instant,
+    ): StoreOrderAvailabilitySnapshot = availability(storeId, at, lockStore = true)
+
+    private fun availability(
+        storeId: UUID,
+        at: Instant,
+        lockStore: Boolean,
+    ): StoreOrderAvailabilitySnapshot =
+        try {
+            val store =
+                (if (lockStore) stores.findByIdForShare(storeId) else stores.findById(storeId).orElse(null))
+                    ?: throw DomainFailure(
+                        FailureCode.RESOURCE_NOT_FOUND,
+                        "Store was not found",
+                        targetReference = storeId.toString(),
+                    )
+            StoreOperatingWindowPolicy.evaluate(
+                storeId = storeId,
+                acceptingOrders = store.acceptingOrders,
+                pickupEnabled = store.pickupEnabled,
+                orderingPolicyVersion = store.orderingPolicyVersion,
+                display = displays.find(storeId) ?: StoreCustomerDisplaySnapshot(storeId, null, null, null, 0),
+                at = at,
+            )
+        } catch (failure: DomainFailure) {
+            throw failure
+        } catch (failure: DataAccessException) {
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Store order availability is unavailable").also {
+                it.initCause(failure)
+            }
+        }
+}
+
+internal object StoreOperatingWindowPolicy {
+    private val seoul: ZoneId = ZoneId.of("Asia/Seoul")
+
+    fun evaluate(
+        storeId: UUID,
+        acceptingOrders: Boolean,
+        pickupEnabled: Boolean,
+        orderingPolicyVersion: Long,
+        display: StoreCustomerDisplaySnapshot,
+        at: Instant,
+    ): StoreOrderAvailabilitySnapshot {
+        val local = at.atZone(seoul)
+        val businessDate = local.toLocalDate()
+        val operatingHours = display.operatingHours
+        if (operatingHours == null) {
+            return snapshot(
+                storeId,
+                StoreOrderAvailabilityReason.STORE_HOURS_NOT_CONFIGURED,
+                businessDate,
+                null,
+                null,
+                display.version,
+                orderingPolicyVersion,
+            )
+        }
+        val day =
+            operatingHours.days.singleOrNull { it.dayOfWeek == local.dayOfWeek }
+                ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Store operating hours are incomplete")
+        if (day.closed) {
+            return snapshot(
+                storeId,
+                StoreOrderAvailabilityReason.STORE_CLOSED,
+                businessDate,
+                null,
+                null,
+                display.version,
+                orderingPolicyVersion,
+            )
+        }
+        val opensAt = day.opensAt ?: invalidSource()
+        val closesAt = day.closesAt ?: invalidSource()
+        if (opensAt >= closesAt) invalidSource()
+        val windowOpensAt = businessDate.atTime(opensAt).atZone(seoul).toInstant()
+        val windowClosesAt = businessDate.atTime(closesAt).atZone(seoul).toInstant()
+        if (at.isBefore(windowOpensAt) || !at.isBefore(windowClosesAt)) {
+            return snapshot(
+                storeId,
+                StoreOrderAvailabilityReason.STORE_CLOSED,
+                businessDate,
+                windowOpensAt,
+                windowClosesAt,
+                display.version,
+                orderingPolicyVersion,
+            )
+        }
+        val reason =
+            if (acceptingOrders && pickupEnabled) {
+                StoreOrderAvailabilityReason.AVAILABLE
+            } else {
+                StoreOrderAvailabilityReason.STORE_NOT_ACCEPTING_ORDERS
+            }
+        return snapshot(
+            storeId,
+            reason,
+            businessDate,
+            windowOpensAt,
+            windowClosesAt,
+            display.version,
+            orderingPolicyVersion,
+        )
+    }
+
+    fun shortening(
+        previous: StoreCustomerDisplaySnapshot,
+        current: StoreCustomerDisplaySnapshot,
+        changedAt: Instant,
+    ): StoreOrderingWindowShortened? {
+        val previousClosesAt = activeClosesAt(previous, changedAt) ?: return null
+        val currentClosesAt = activeClosesAt(current, changedAt) ?: changedAt
+        if (!currentClosesAt.isBefore(previousClosesAt)) return null
+        return StoreOrderingWindowShortened(
+            storeId = current.storeId,
+            previousClosesAt = previousClosesAt,
+            shortenedClosesAt = currentClosesAt,
+            displayVersion = current.version,
+            changedAt = changedAt,
+        )
+    }
+
+    private fun activeClosesAt(
+        display: StoreCustomerDisplaySnapshot,
+        at: Instant,
+    ): Instant? {
+        val local = at.atZone(seoul)
+        val day = display.operatingHours?.days?.singleOrNull { it.dayOfWeek == local.dayOfWeek } ?: return null
+        if (day.closed) return null
+        val opensAt = day.opensAt ?: invalidSource()
+        val closesAt = day.closesAt ?: invalidSource()
+        if (opensAt >= closesAt) invalidSource()
+        val businessDate = local.toLocalDate()
+        val opens = businessDate.atTime(opensAt).atZone(seoul).toInstant()
+        val closes = businessDate.atTime(closesAt).atZone(seoul).toInstant()
+        return closes.takeIf { !at.isBefore(opens) && at.isBefore(closes) }
+    }
+
+    private fun snapshot(
+        storeId: UUID,
+        reason: StoreOrderAvailabilityReason,
+        businessDate: LocalDate,
+        opensAt: Instant?,
+        closesAt: Instant?,
+        displayVersion: Long,
+        orderingPolicyVersion: Long,
+    ) = StoreOrderAvailabilitySnapshot(
+        storeId = storeId,
+        available = reason == StoreOrderAvailabilityReason.AVAILABLE,
+        reason = reason,
+        businessDate = businessDate,
+        orderingWindowOpensAt = opensAt,
+        orderingWindowClosesAt = closesAt,
+        displayVersion = displayVersion,
+        orderingPolicyVersion = orderingPolicyVersion,
+    )
+
+    private fun invalidSource(): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Store operating hours are invalid")
 }
 
 private fun StoreCustomerDisplaySnapshot.sameContent(other: StoreCustomerDisplaySnapshot): Boolean =

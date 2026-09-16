@@ -7,6 +7,8 @@ import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
 import io.github.kdh949.beanflow.identity.api.StoreAccessOperations
 import io.github.kdh949.beanflow.identity.api.StoreActor
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
+import io.github.kdh949.beanflow.merchant.api.StoreOrderAvailabilityOperations
+import io.github.kdh949.beanflow.merchant.api.StoreOrderAvailabilityReason
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
@@ -14,6 +16,7 @@ import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationCaseView
 import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshotOperations
+import io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode
 import io.github.kdh949.beanflow.payment.api.ApprovedPaymentSettlementOperations
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -47,6 +50,7 @@ internal class StoreOrderTransitionService(
     private val orderLineRepository: OrderLineJpaRepository,
     private val idempotencyRepository: StoreCommandIdempotencyJpaRepository,
     private val storeAccessOperations: StoreAccessOperations,
+    private val availabilityOperations: StoreOrderAvailabilityOperations,
     private val compensationOperations: OrderCompensationOperations,
     private val rejectionCoordinator: OrderRejectionCoordinator,
     private val settlementInputSnapshots: OrderSettlementInputSnapshotOperations,
@@ -84,7 +88,12 @@ internal class StoreOrderTransitionService(
         val payloadHash =
             phaseTelemetry.observe(PerformanceOperation.STORE_TRANSITION, PerformanceStage.TRANSITION_PREPARE) {
                 validate(request)
-                CanonicalStoreOrderTransitionPayload.hash(orderId, request.targetState, request.reason)
+                CanonicalStoreOrderTransitionPayload.hash(
+                    orderId,
+                    request.targetState,
+                    request.reason,
+                    request.preparationMinutes,
+                )
             }
         return transition(
             actor = actor,
@@ -107,7 +116,7 @@ internal class StoreOrderTransitionService(
         val (transitionRequest, payloadHash) =
             phaseTelemetry.observe(PerformanceOperation.STORE_TRANSITION, PerformanceStage.TRANSITION_PREPARE) {
                 val targetState = StoreOrderBoardPresentationPolicy.targetState(request.action, request.expectedStatus)
-                val preparedRequest = StoreOrderTransitionRequest(targetState, request.reason)
+                val preparedRequest = StoreOrderTransitionRequest(targetState, request.reason, request.preparationMinutes)
                 validate(preparedRequest)
                 preparedRequest to CanonicalStoreOrderTransitionPayload.hashBoardAction(orderId, request)
             }
@@ -146,16 +155,24 @@ internal class StoreOrderTransitionService(
         expectedStatus: StoreOrderExpectedStatus?,
         responseBody: (StoreOrderResult, Instant) -> String,
     ): StoreTransitionHttpResult {
-        val now = clock.instant().truncatedTo(ChronoUnit.MICROS)
-        val order =
-            orderRepository.findLockedById(orderId)
+        val lockTarget =
+            orderRepository.findStoreLockTargetById(orderId)
                 ?: notFound()
         val storeActor =
             storeAccessOperations.requireOrderManagementAccess(
                 actor.actorId,
-                order.storeId,
+                lockTarget.storeId,
                 actor.roles,
             )
+        if (request.targetState == StoreOrderTargetState.ACCEPTED && lockTarget.checkoutMode == CheckoutMode.IMMEDIATE) {
+            availabilityOperations.lockForOrderCommitment(lockTarget.storeId, clock.instant())
+        }
+        val order =
+            orderRepository.findLockedById(orderId)
+                ?: notFound()
+        if (order.storeId != lockTarget.storeId) {
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Order store ownership changed while locking")
+        }
         idempotencyRepository
             .findByActorIdAndOperationAndIdempotencyKey(
                 actor.actorId,
@@ -170,11 +187,25 @@ internal class StoreOrderTransitionService(
                 }
                 return StoreTransitionHttpResult(existing.responseStatus, existing.responseBody)
             }
+        val now = clock.instant().truncatedTo(ChronoUnit.MICROS)
         if (expectedStatus != null && order.state.name != expectedStatus.name) {
             throw DomainFailure(
                 FailureCode.ORDER_STATE_CONFLICT,
                 "Order state changed after the board item was rendered",
             )
+        }
+        if (request.targetState == StoreOrderTargetState.ACCEPTED && order.checkoutMode == CheckoutMode.IMMEDIATE) {
+            val availability = availabilityOperations.inspect(order.storeId, now)
+            if (!availability.available) {
+                val code =
+                    when (availability.reason) {
+                        StoreOrderAvailabilityReason.AVAILABLE -> FailureCode.DEPENDENCY_UNAVAILABLE
+                        StoreOrderAvailabilityReason.STORE_HOURS_NOT_CONFIGURED -> FailureCode.STORE_HOURS_NOT_CONFIGURED
+                        StoreOrderAvailabilityReason.STORE_CLOSED -> FailureCode.STORE_CLOSED
+                        StoreOrderAvailabilityReason.STORE_NOT_ACCEPTING_ORDERS -> FailureCode.STORE_NOT_ACCEPTING_ORDERS
+                    }
+                throw DomainFailure(code, "Store is not available for immediate order acceptance")
+            }
         }
 
         val before = order.state.name
@@ -183,7 +214,7 @@ internal class StoreOrderTransitionService(
         val recovery =
             when (request.targetState) {
                 StoreOrderTargetState.ACCEPTED -> {
-                    order.accept(now)
+                    order.accept(now, requireNotNull(request.preparationMinutes))
                     publishAccepted(order, now, correlationId, causationId)
                     null
                 }
@@ -401,6 +432,8 @@ internal class StoreOrderTransitionService(
             acceptanceWarningRequestedAt = order.acceptanceWarningRequestedAt,
             acceptanceDeadlineAt = order.acceptanceDeadlineAt,
             acceptedAt = order.acceptedAt,
+            preparationMinutes = order.preparationMinutes,
+            estimatedReadyAt = order.estimatedReadyAt,
             rejectedAt = order.rejectedAt,
             preparingAt = order.preparingAt,
             readyAt = order.readyAt,
@@ -441,6 +474,19 @@ internal class StoreOrderTransitionService(
             throw DomainFailure(
                 FailureCode.INVALID_REQUEST,
                 "Rejection reason must contain between 1 and 500 characters",
+            )
+        }
+        if (request.targetState == StoreOrderTargetState.ACCEPTED) {
+            if (request.preparationMinutes !in 1..120) {
+                throw DomainFailure(
+                    FailureCode.INVALID_REQUEST,
+                    "Preparation minutes must be between 1 and 120 when accepting an order",
+                )
+            }
+        } else if (request.preparationMinutes != null) {
+            throw DomainFailure(
+                FailureCode.INVALID_REQUEST,
+                "Preparation minutes are only accepted for the ACCEPTED transition",
             )
         }
     }

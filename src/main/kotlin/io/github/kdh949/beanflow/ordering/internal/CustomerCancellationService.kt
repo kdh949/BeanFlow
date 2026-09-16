@@ -66,13 +66,13 @@ internal sealed interface SupportCancellationTransactionOutcome {
     data class Applied(
         val response: CustomerCancellationHttpResult,
         val previousState: String,
-        val previousPickupSlotId: UUID,
+        val previousPickupSlotId: UUID?,
         val orderVersion: Long,
     ) : SupportCancellationTransactionOutcome
 
     data class ResolutionRequired(
         val currentState: String,
-        val pickupSlotId: UUID,
+        val pickupSlotId: UUID?,
         val orderVersion: Long,
     ) : SupportCancellationTransactionOutcome
 }
@@ -341,9 +341,18 @@ internal class CustomerCancellationTransaction(
         metrics: CustomerCancellationMetricsContext,
     ): CustomerCancellationTransactionOutcome {
         val deadline =
-            order.reservationExpiresAt
-                ?: dependency("Pending-payment order has no reservation deadline")
-        if (!now.isBefore(deadline)) {
+            when (order.checkoutMode) {
+                io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode.LEGACY_RESERVED -> {
+                    order.reservationExpiresAt ?: dependency("Reserved order has no reservation deadline")
+                }
+
+                io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode.IMMEDIATE -> {
+                    order.orderingWindowClosesAt ?: dependency("Immediate order has no ordering cutoff")
+                }
+            }
+        if (order.checkoutMode == io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode.LEGACY_RESERVED &&
+            !now.isBefore(deadline)
+        ) {
             metrics.phase = "expiry"
             metrics.rollbackTarget = "reservation_expiry"
             val expiry = expiryUseCase.expireIfDue(order.id, now)
@@ -355,16 +364,25 @@ internal class CustomerCancellationTransaction(
 
         metrics.phase = "c0"
         metrics.rollbackTarget = "pickup"
-        val pickup = requireApplied("PICKUP", pickupOperations.release(order.id, now, OrderCreationTransaction.pickupSource(order.id)))
+        val pickup =
+            if (order.pickupSlotId == null) {
+                ReservationTransitionReport(ReservationTransitionResult.NOT_REQUIRED, emptyList())
+            } else {
+                requireApplied("PICKUP", pickupOperations.release(order.id, now, OrderCreationTransaction.pickupSource(order.id)))
+            }
         val coupon =
-            if (order.couponDiscountKrw > 0) {
+            if (order.checkoutMode == io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode.IMMEDIATE) {
+                null
+            } else if (order.couponDiscountKrw > 0) {
                 metrics.rollbackTarget = "coupon"
                 requireApplied("COUPON", couponOperations.release(order.id, now, OrderCreationTransaction.couponSource(order.id)))
             } else {
                 null
             }
         val points =
-            if (order.pointsAppliedKrw > 0) {
+            if (order.checkoutMode == io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode.IMMEDIATE) {
+                null
+            } else if (order.pointsAppliedKrw > 0) {
                 metrics.rollbackTarget = "points"
                 requireApplied("POINTS", pointOperations.release(order.id, now, OrderCreationTransaction.pointsSource(order.id)))
             } else {
@@ -508,6 +526,7 @@ internal class CustomerCancellationTransaction(
                     pointsRequired = order.pointsAppliedKrw > 0,
                     correlationId = correlationId,
                     now = now,
+                    pickupRequired = order.pickupSlotId != null,
                 ),
             )
         metrics.rollbackTarget = "notification_delivery"
@@ -901,9 +920,23 @@ internal class CustomerCancellationTransaction(
         detail: String?,
     ) {
         when (context.cause) {
-            OrderCancellationCause.CUSTOMER_REQUEST -> order.cancelByCustomer(now, reasonCode, detail)
-            OrderCancellationCause.SUPPORT_REQUEST -> order.cancelBySupport(now, reasonCode, detail)
-            OrderCancellationCause.PAYMENT_DECLINED -> dependency("Payment decline is not a direct cancellation command")
+            OrderCancellationCause.CUSTOMER_REQUEST -> {
+                order.cancelByCustomer(now, reasonCode, detail)
+            }
+
+            OrderCancellationCause.SUPPORT_REQUEST -> {
+                order.cancelBySupport(now, reasonCode, detail)
+            }
+
+            OrderCancellationCause.PAYMENT_DECLINED -> {
+                dependency("Payment decline is not a direct cancellation command")
+            }
+
+            OrderCancellationCause.PAYMENT_COMMITMENT_FAILED -> {
+                dependency(
+                    "Payment commitment recovery is not a direct cancellation command",
+                )
+            }
         }
     }
 

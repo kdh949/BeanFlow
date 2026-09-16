@@ -369,8 +369,8 @@ internal class LocalDemoScriptGuardTest {
               */me/coupons*)
                 respond 200 '{"items":[{"state":"AVAILABLE","applicable":true}]}'
                 ;;
-              */stores/d1000000-0000-4000-8000-000000000001/pickup-slots)
-                respond 200 '{"items":[{"pickupSlotId":"d6000000-0000-4000-8000-000000000001"}]}'
+              */me/order-quotes)
+                respond 200 '{"quoteFingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
                 ;;
               */point-accounts/d7000000-0000-4000-8000-000000000001/transactions*)
                 respond 200 '{"items":[]}'

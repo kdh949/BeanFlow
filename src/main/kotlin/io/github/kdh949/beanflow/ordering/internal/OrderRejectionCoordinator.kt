@@ -66,6 +66,7 @@ internal class OrderRejectionCoordinator(
                     pointsRequired = order.pointsAppliedKrw > 0,
                     correlationId = correlationId,
                     now = now,
+                    pickupRequired = order.pickupSlotId != null,
                 ),
             )
         eventPublisher.publishEvent(

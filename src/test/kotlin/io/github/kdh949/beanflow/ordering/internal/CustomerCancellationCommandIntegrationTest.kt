@@ -6,8 +6,10 @@ import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
 import io.github.kdh949.beanflow.notification.internal.ScriptedTestNotificationProvider
 import io.github.kdh949.beanflow.operations.internal.PaymentCancellationSetupIntegrityWorker
+import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
 import io.github.kdh949.beanflow.ordering.api.OrderingSupportOrderCancellationOperations
 import io.github.kdh949.beanflow.ordering.api.OrderingSupportPickupRescheduleOperations
+import io.github.kdh949.beanflow.ordering.api.OrderingSupportTimelineOperations
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
 import io.github.kdh949.beanflow.ordering.api.SupportOrderCancellationCommand
 import io.github.kdh949.beanflow.ordering.api.SupportOrderChangeOwnerResult
@@ -22,8 +24,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
@@ -34,10 +39,16 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
+import java.time.Clock
 import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, CustomerCancellationTestClockConfiguration::class)
 @AutoConfigureMockMvc
 @BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
@@ -67,10 +78,14 @@ internal class CustomerCancellationCommandIntegrationTest
         private val setupIntegrityWorker: PaymentCancellationSetupIntegrityWorker,
         private val supportPickupReschedules: OrderingSupportPickupRescheduleOperations,
         private val supportOrderCancellations: OrderingSupportOrderCancellationOperations,
+        private val supportTimelineOrders: OrderingSupportTimelineOperations,
+        private val createOrderUseCase: CreateOrderUseCase,
         private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
+        private val clock: CustomerCancellationTestClock,
     ) {
         @BeforeEach
         fun cleanDatabase() {
+            clock.set(Instant.now().truncatedTo(ChronoUnit.MILLIS))
             awaitPublicationsSettled()
             OrderCreationDatabaseFixture.clean(jdbcTemplate)
             paymentGateway.reset()
@@ -211,6 +226,60 @@ internal class CustomerCancellationCommandIntegrationTest
         }
 
         @Test
+        fun `customer and support cancellation preserve slotless immediate history without fake releases`() {
+            val customerFixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, customerFixture)
+            OrderCreationDatabaseFixture.insertOperatingHours(
+                jdbcTemplate,
+                customerFixture.storeId,
+                LocalTime.of(0, 1),
+                LocalTime.of(23, 59),
+            )
+            val customerOrderId = createOrder(customerFixture, "immediate-customer-cancel-create", immediate = true)
+            val overview = supportTimelineOrders.findOrderOverviews(setOf(customerOrderId)).single()
+
+            assertThat(overview.pickupWindowStart).isNull()
+            assertThat(overview.pickupWindowEnd).isNull()
+
+            assertThat(
+                cancel(customerOrderId, customerFixture.customerId, "immediate-customer-cancel", "ORDER_MISTAKE", null).status,
+            ).isEqualTo(200)
+            assertThat(value("SELECT state FROM ordering_order WHERE id = ?", customerOrderId)).isEqualTo("CANCELLED")
+            assertThat(count("fulfillment_pickup_reservation")).isZero()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_audit_record WHERE action LIKE 'PICKUP_RESERVATION_RELEASED_BY_%'",
+                    Long::class.java,
+                ),
+            ).isZero()
+
+            val supportFixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, supportFixture)
+            OrderCreationDatabaseFixture.insertOperatingHours(
+                jdbcTemplate,
+                supportFixture.storeId,
+                LocalTime.of(0, 1),
+                LocalTime.of(23, 59),
+            )
+            val supportOrderId = createOrder(supportFixture, "immediate-support-cancel-create", immediate = true)
+            val report = supportOrderCancellations.cancel(supportCancellationCommand(supportOrderId, expectedVersion = 0))
+
+            assertThat(report.result).isEqualTo(SupportOrderChangeOwnerResult.APPLIED)
+            assertThat(report.previousPickupSlotId).isNull()
+            assertThat(report.currentPickupSlotId).isNull()
+            assertThat(value("SELECT cancellation_cause FROM ordering_order WHERE id = ?", supportOrderId))
+                .isEqualTo("SUPPORT_REQUEST")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM ordering_support_order_change_history WHERE order_id = ? AND previous_pickup_slot_id IS NULL AND current_pickup_slot_id IS NULL",
+                    Long::class.java,
+                    supportOrderId,
+                ),
+            ).isOne()
+            assertThat(count("fulfillment_pickup_reservation")).isZero()
+        }
+
+        @Test
         fun `support pickup reschedule updates owner models once and replays exact source`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
@@ -308,7 +377,7 @@ internal class CustomerCancellationCommandIntegrationTest
                 StoreTransitionActor(storeActorId, setOf(StoreActorRole.STAFF)),
                 orderId,
                 "support-accepted-store",
-                StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null),
+                StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null, 10),
             )
             val currentVersion = number("SELECT version FROM ordering_order WHERE id = ?", orderId)
             val unauthorized = supportCancellationCommand(orderId, currentVersion)
@@ -446,7 +515,7 @@ internal class CustomerCancellationCommandIntegrationTest
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             val orderId = createOrder(fixture, "ct-create-key")
             approvePayment(orderId, fixture.customerId, 1_000)
-            moveAcceptanceDeadlineToPast(orderId)
+            moveClockPastAcceptanceDeadline(orderId)
 
             val first =
                 cancellationTransaction.execute(
@@ -514,7 +583,7 @@ internal class CustomerCancellationCommandIntegrationTest
                 OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
                 val orderId = createOrder(fixture, "ct-fault-create-$index")
                 approvePayment(orderId, fixture.customerId, 1_000)
-                moveAcceptanceDeadlineToPast(orderId)
+                moveClockPastAcceptanceDeadline(orderId)
 
                 val response =
                     withPersistenceFault(target) {
@@ -783,7 +852,7 @@ internal class CustomerCancellationCommandIntegrationTest
                             StoreTransitionActor(storeActorId, setOf(StoreActorRole.STAFF)),
                             orderId,
                             "accept-race-store",
-                            StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null),
+                            StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null, 10),
                         )
                     }
                 }
@@ -862,15 +931,30 @@ internal class CustomerCancellationCommandIntegrationTest
             key: String,
             couponIssuanceId: UUID? = null,
             pointsToUseKrw: Long = 0,
+            immediate: Boolean = false,
         ): UUID {
             val coupon = couponIssuanceId?.let { "\"couponIssuanceId\":\"$it\"," }.orEmpty()
-            val quote =
-                orderQuoteUseCase.attachCurrentQuote(
-                    fixture.command(
+            val command =
+                fixture
+                    .command(
                         pointsToUseKrw = pointsToUseKrw,
                         couponIssuanceId = couponIssuanceId,
+                    ).let { if (immediate) it.copy(pickupSlotId = null) else it }
+            val quote =
+                orderQuoteUseCase.attachCurrentQuote(
+                    command,
+                )
+            if (!immediate) {
+                assertThat(createOrderUseCase.create(key, quote).status).isEqualTo(201)
+                return requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT order_id FROM ordering_idempotency_record WHERE actor_id = ? AND idempotency_key = ?",
+                        UUID::class.java,
+                        fixture.customerId,
+                        key,
                     ),
                 )
+            }
             mockMvc
                 .perform(
                     post("/api/v1/orders")
@@ -881,7 +965,6 @@ internal class CustomerCancellationCommandIntegrationTest
                             """
                             {
                               "storeId":"${fixture.storeId}",
-                              "pickupSlotId":"${fixture.pickupSlotId}",
                               "lines":[{"menuId":"${fixture.menuId}","optionIds":[],"quantity":1}],
                               $coupon
                               "pointsToUseKrw":$pointsToUseKrw,
@@ -1098,20 +1181,16 @@ internal class CustomerCancellationCommandIntegrationTest
             notificationProvider.reset()
         }
 
-        private fun moveAcceptanceDeadlineToPast(orderId: UUID) {
-            val paidAt = Instant.now().minusSeconds(4 * 60)
-            jdbcTemplate.update(
-                """
-                UPDATE ordering_order
-                SET created_at = ?, paid_at = ?, acceptance_warning_at = ?, acceptance_deadline_at = ?
-                WHERE id = ?
-                """.trimIndent(),
-                Timestamp.from(paidAt.minusSeconds(60)),
-                Timestamp.from(paidAt),
-                Timestamp.from(paidAt.plusSeconds(2 * 60)),
-                Timestamp.from(paidAt.plusSeconds(3 * 60)),
-                orderId,
-            )
+        private fun moveClockPastAcceptanceDeadline(orderId: UUID) {
+            val deadline =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT acceptance_deadline_at FROM ordering_order WHERE id = ?",
+                        Timestamp::class.java,
+                        orderId,
+                    ),
+                )
+            clock.set(deadline.toInstant().plusNanos(1_000))
         }
 
         private fun <T> withPersistenceFault(
@@ -1167,3 +1246,24 @@ internal class CustomerCancellationCommandIntegrationTest
             val operation: String,
         )
     }
+
+@TestConfiguration(proxyBeanMethods = false)
+internal class CustomerCancellationTestClockConfiguration {
+    @Bean
+    @Primary
+    fun customerCancellationClock(): CustomerCancellationTestClock = CustomerCancellationTestClock(Instant.now())
+}
+
+internal class CustomerCancellationTestClock(
+    initial: Instant,
+) : Clock() {
+    private val current = AtomicReference(initial)
+
+    fun set(value: Instant) = current.set(value)
+
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId): Clock = Clock.fixed(instant(), zone)
+
+    override fun instant(): Instant = current.get()
+}

@@ -29,6 +29,10 @@ internal class OrderSnapshotAssembler(
             paidAtAtCreation = order.paidAt,
             acceptanceWarningAtAtCreation = order.acceptanceWarningAt,
             acceptanceDeadlineAtAtCreation = order.acceptanceDeadlineAt,
+            checkoutMode = order.checkoutMode,
+            orderingWindowClosesAt = order.orderingWindowClosesAt,
+            checkoutInputSnapshotJson = order.checkoutInputSnapshot?.let(objectMapper::writeValueAsString),
+            checkoutInputSchemaVersionAtCreation = order.checkoutInputSnapshot?.schemaVersion,
             createdAt = order.createdAt,
             updatedAt = order.createdAt,
         )

@@ -62,8 +62,8 @@ Tx I1: actor + REORDER_ORDER_V1 + key unique arbitration
 commit
 Tx O:  source Order lock + owner/state/option snapshot 검증
        + source menu/normalized option/quantity를 shared order-creation input으로 변환
-       + current quote + Pickup/Coupon/Point reserve
-       + new Order/immutable snapshots/Audit/priceComparison
+       + current quote + Store 영업/주문 가능성 검증
+       + new IMMEDIATE Order/immutable input snapshots/Audit/priceComparison
        + idempotency COMPLETED + first 201 status/body
 commit
 Tx I2: Tx O의 확정 실패 status/body를 idempotency FAILED로 저장
@@ -71,7 +71,7 @@ Tx I2: Tx O의 확정 실패 status/body를 idempotency FAILED로 저장
 
 - source Order lock은 snapshot 읽기와 향후 허용 상태 변화 경쟁을 일관되게 처리한다. source가
   terminal이 아니면 `REORDER_SOURCE_STATE_INVALID`이며 새 Order와 예약을 만들지 않는다.
-- Tx I1과 Tx O 사이 또는 source read와 current owner validation 사이의 메뉴·옵션·가격·slot·
+- Tx I1과 Tx O 사이 또는 source read와 current owner validation 사이의 메뉴·옵션·가격·Store·
   coupon·point 변화는 Tx O가 다시 읽고 잠근 현재 owner 상태로 판정한다. client가 보았던 과거 상태나
   사전 read를 보장하지 않는다.
 - Tx O는 기존 주문 생성 owner orchestration을 transaction-mandatory internal shared boundary로
@@ -81,10 +81,12 @@ Tx I2: Tx O의 확정 실패 status/body를 idempotency FAILED로 저장
   결정적 순서로 수집한 뒤 전체 rollback한다. 부분 Order나 부분 reservation은 없다.
 - current quote가 성공하면 source/current 혜택 전 가격 비교와 changed-line 목록을 같은 Tx O의 최초
   201 body에 고정한다. replay가 현재 가격으로 다시 계산하지 않는다.
-- Tx O가 rollback되면 owner reservation과 new Order가 남지 않는다. Tx I2 실패로 `PROCESSING`이
+- Tx O가 rollback되면 new Order와 input snapshot이 남지 않는다. IMMEDIATE Tx O는 owner reservation을
+  만들지 않는다. Tx I2 실패로 `PROCESSING`이
   남으면 reconciliation이 intended Order와 owner source를 검증하며 새 재주문을 자동 실행하지 않는다.
-- canonical payload는 `sourceOrderId`, `pickupSlotId`, `couponIssuanceId`(null 포함),
-  `pointsToUseKrw`다. source line은 immutable source Order로 식별되므로 payload에 중복하지 않는다.
+- 신규 공개 canonical 입력은 `sourceOrderId`, `couponIssuanceId`(null 포함), `pointsToUseKrw`다.
+  내부 hash의 legacy slot 위치는 과거 idempotency replay를 위해 null mode marker로 유지하고 공개
+  request에서는 받지 않는다. source line은 immutable source Order로 식별되므로 payload에 중복하지 않는다.
 - `COMPLETED`/`FAILED`는 최초 status/body와 함께 90일 retention 만료 시각을 갖는다.
   `PROCESSING`/`MANUAL_REVIEW`는 자동 정리하지 않는다.
 

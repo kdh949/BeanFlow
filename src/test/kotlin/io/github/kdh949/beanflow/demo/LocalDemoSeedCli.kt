@@ -723,7 +723,7 @@ internal class LocalDemoSeeder(
                     ),
                 )
             order.markPaid(orderCreatedAt.plusSeconds(10))
-            order.accept(orderCreatedAt.plusSeconds(20))
+            order.accept(orderCreatedAt.plusSeconds(20), 10)
             order.startPreparing(orderCreatedAt.plusSeconds(30))
             order.markReady(orderCreatedAt.plusSeconds(40))
             order.complete(completedAt)
