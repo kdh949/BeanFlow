@@ -22,8 +22,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
@@ -34,11 +37,15 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
+import java.time.Clock
 import java.time.Instant
 import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, CustomerCancellationTestClockConfiguration::class)
 @AutoConfigureMockMvc
 @BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
@@ -69,9 +76,11 @@ internal class CustomerCancellationCommandIntegrationTest
         private val supportPickupReschedules: OrderingSupportPickupRescheduleOperations,
         private val supportOrderCancellations: OrderingSupportOrderCancellationOperations,
         private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
+        private val clock: CustomerCancellationTestClock,
     ) {
         @BeforeEach
         fun cleanDatabase() {
+            clock.set(Instant.now())
             awaitPublicationsSettled()
             OrderCreationDatabaseFixture.clean(jdbcTemplate)
             paymentGateway.reset()
@@ -497,7 +506,7 @@ internal class CustomerCancellationCommandIntegrationTest
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             val orderId = createOrder(fixture, "ct-create-key")
             approvePayment(orderId, fixture.customerId, 1_000)
-            moveAcceptanceDeadlineToPast(orderId)
+            moveClockPastAcceptanceDeadline(orderId)
 
             val first =
                 cancellationTransaction.execute(
@@ -565,7 +574,7 @@ internal class CustomerCancellationCommandIntegrationTest
                 OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
                 val orderId = createOrder(fixture, "ct-fault-create-$index")
                 approvePayment(orderId, fixture.customerId, 1_000)
-                moveAcceptanceDeadlineToPast(orderId)
+                moveClockPastAcceptanceDeadline(orderId)
 
                 val response =
                     withPersistenceFault(target) {
@@ -1154,20 +1163,16 @@ internal class CustomerCancellationCommandIntegrationTest
             notificationProvider.reset()
         }
 
-        private fun moveAcceptanceDeadlineToPast(orderId: UUID) {
-            val paidAt = Instant.now().minusSeconds(4 * 60)
-            jdbcTemplate.update(
-                """
-                UPDATE ordering_order
-                SET created_at = ?, paid_at = ?, acceptance_warning_at = ?, acceptance_deadline_at = ?
-                WHERE id = ?
-                """.trimIndent(),
-                Timestamp.from(paidAt.minusSeconds(60)),
-                Timestamp.from(paidAt),
-                Timestamp.from(paidAt.plusSeconds(2 * 60)),
-                Timestamp.from(paidAt.plusSeconds(3 * 60)),
-                orderId,
-            )
+        private fun moveClockPastAcceptanceDeadline(orderId: UUID) {
+            val deadline =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT acceptance_deadline_at FROM ordering_order WHERE id = ?",
+                        Timestamp::class.java,
+                        orderId,
+                    ),
+                )
+            clock.set(deadline.toInstant().plusNanos(1_000))
         }
 
         private fun <T> withPersistenceFault(
@@ -1223,3 +1228,24 @@ internal class CustomerCancellationCommandIntegrationTest
             val operation: String,
         )
     }
+
+@TestConfiguration(proxyBeanMethods = false)
+internal class CustomerCancellationTestClockConfiguration {
+    @Bean
+    @Primary
+    fun customerCancellationClock(): CustomerCancellationTestClock = CustomerCancellationTestClock(Instant.now())
+}
+
+internal class CustomerCancellationTestClock(
+    initial: Instant,
+) : Clock() {
+    private val current = AtomicReference(initial)
+
+    fun set(value: Instant) = current.set(value)
+
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId): Clock = Clock.fixed(instant(), zone)
+
+    override fun instant(): Instant = current.get()
+}

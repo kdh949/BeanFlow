@@ -13,8 +13,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
@@ -26,9 +29,12 @@ import java.sql.Timestamp
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, RecentStoreTestClockConfiguration::class)
 @AutoConfigureMockMvc
 @BeanflowIsolatedSpringContext("verifies startup, DDL, or committed state across a transaction boundary")
 @SpringBootTest(
@@ -50,7 +56,7 @@ internal class RecentStoreEndpointIntegrationTest {
     private lateinit var jdbc: JdbcTemplate
 
     @Autowired
-    private lateinit var clock: Clock
+    private lateinit var clock: RecentStoreMutableClock
 
     @Autowired
     private lateinit var createOrderUseCase: CreateOrderUseCase
@@ -63,6 +69,7 @@ internal class RecentStoreEndpointIntegrationTest {
 
     @BeforeEach
     fun clearDatabase() {
+        clock.set(DEFAULT_NOW)
         OrderCreationDatabaseFixture.clean(jdbc)
         jdbc.update("DELETE FROM discovery_customer_favorite_store")
         jdbc.update("DELETE FROM discovery_store_search_term")
@@ -228,6 +235,7 @@ internal class RecentStoreEndpointIntegrationTest {
         createdAt: Instant,
         sequence: Long,
     ) {
+        clock.set(createdAt)
         val response =
             createOrderUseCase.create(
                 "recent-store-$sequence-${UUID.randomUUID()}",
@@ -237,12 +245,6 @@ internal class RecentStoreEndpointIntegrationTest {
         val orderId = orderId(response.body)
         when (state) {
             "PENDING_PAYMENT" -> {
-                jdbc.update(
-                    "UPDATE ordering_order SET created_at = ?, updated_at = ? WHERE id = ?",
-                    Timestamp.from(createdAt),
-                    Timestamp.from(createdAt),
-                    orderId,
-                )
                 return
             }
 
@@ -250,11 +252,10 @@ internal class RecentStoreEndpointIntegrationTest {
                 jdbc.update(
                     """
                     UPDATE ordering_order
-                       SET state = 'EXPIRED', reservation_expires_at = ?, created_at = ?, updated_at = ?, version = version + 1
+                       SET state = 'EXPIRED', reservation_expires_at = ?, updated_at = ?, version = version + 1
                      WHERE id = ?
                     """.trimIndent(),
                     Timestamp.from(createdAt.plus(Duration.ofMinutes(5))),
-                    Timestamp.from(createdAt),
                     Timestamp.from(createdAt),
                     orderId,
                 )
@@ -267,10 +268,9 @@ internal class RecentStoreEndpointIntegrationTest {
                     UPDATE ordering_order
                        SET state = 'CANCELLED', reservation_expires_at = NULL,
                            cancelled_at = ?, cancellation_cause = 'PAYMENT_DECLINED',
-                           created_at = ?, updated_at = ?, version = version + 1
+                           updated_at = ?, version = version + 1
                      WHERE id = ?
                     """.trimIndent(),
-                    Timestamp.from(createdAt),
                     Timestamp.from(createdAt),
                     Timestamp.from(createdAt),
                     orderId,
@@ -293,7 +293,7 @@ internal class RecentStoreEndpointIntegrationTest {
                    paid_at = ?, acceptance_warning_at = ?, acceptance_deadline_at = ?,
                    accepted_at = ?, rejected_at = ?, preparing_at = ?, ready_at = ?, completed_at = ?,
                    rejection_reason = ?,
-                   created_at = ?, updated_at = ?, version = version + 1
+                   updated_at = ?, version = version + 1
              WHERE id = ?
             """.trimIndent(),
             state,
@@ -306,7 +306,6 @@ internal class RecentStoreEndpointIntegrationTest {
             readyAt?.let(Timestamp::from),
             completedAt?.let(Timestamp::from),
             if (state == "REJECTED") "Recent-store test rejection" else null,
-            Timestamp.from(createdAt),
             Timestamp.from(createdAt),
             orderId,
         )
@@ -321,4 +320,29 @@ internal class RecentStoreEndpointIntegrationTest {
         jwt()
             .jwt { it.subject(customerId.toString()).claim("roles", listOf("CUSTOMER")) }
             .authorities(SimpleGrantedAuthority("ROLE_CUSTOMER"))
+
+    private companion object {
+        val DEFAULT_NOW: Instant = Instant.parse("2026-09-16T00:00:00Z")
+    }
+}
+
+@TestConfiguration(proxyBeanMethods = false)
+internal class RecentStoreTestClockConfiguration {
+    @Bean
+    @Primary
+    fun recentStoreClock(): RecentStoreMutableClock = RecentStoreMutableClock(Instant.parse("2026-09-16T00:00:00Z"))
+}
+
+internal class RecentStoreMutableClock(
+    initial: Instant,
+) : Clock() {
+    private val current = AtomicReference(initial)
+
+    fun set(value: Instant) = current.set(value)
+
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId): Clock = Clock.fixed(instant(), zone)
+
+    override fun instant(): Instant = current.get()
 }

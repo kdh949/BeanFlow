@@ -364,15 +364,18 @@ internal object OrderCreationDatabaseFixture {
         storeId: UUID,
         grossPaidKrw: Long,
         createdAt: Instant,
+        insertStore: Boolean = true,
     ) {
         val termsVersionId = UUID.randomUUID()
-        jdbcTemplate.update(
-            """
-            INSERT INTO merchant_store (id, accepting_orders, pickup_enabled)
-            VALUES (?, true, true)
-            """.trimIndent(),
-            storeId,
-        )
+        if (insertStore) {
+            jdbcTemplate.update(
+                """
+                INSERT INTO merchant_store (id, accepting_orders, pickup_enabled)
+                VALUES (?, true, true)
+                """.trimIndent(),
+                storeId,
+            )
+        }
         jdbcTemplate.update(
             """
             INSERT INTO merchant_store_settlement_terms (
