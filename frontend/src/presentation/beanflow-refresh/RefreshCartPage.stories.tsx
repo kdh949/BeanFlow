@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, waitFor } from "storybook/test";
+import { expect, mocked, userEvent, waitFor } from "storybook/test";
 import { HttpResponse, http } from "msw";
-import { catalogHandlers, ids, pointsHandlers, signedInHandlers, storeIdentityHandlers } from "../../../.storybook/fixtures";
+import { catalogHandlers, ids, pointsHandlers, publicCheckout, signedInHandlers, storeIdentityHandlers } from "../../../.storybook/fixtures";
 import { CART_STORAGE_KEY, cart } from "../../features/ordering/cart";
+import { requestTossStandardPayment } from "../../payment/toss";
 import { RefreshCartPage } from "./CustomerCommercePages";
 
 const line = { menuId: ids.menu, optionIds: [], quantity: 2, display: { menuName: "오트 라떼", optionNames: [], unitPriceKrw: 6_400, imageUrl: "/demo/catalog/cafe-latte.webp" } };
@@ -24,7 +25,12 @@ const meta = {
       return HttpResponse.json({ ...quote, lines, pricing: { ...quote.pricing, subtotalKrw, pointsAppliedKrw: body.pointsToUseKrw, payableKrw: subtotalKrw - body.pointsToUseKrw } });
     })] },
   },
-  beforeEach: () => { cart.clear(); cart.add({ storeId: ids.store, storeName: "시청점" }, line); cart.add({ storeId: ids.store, storeName: "시청점" }, secondLine); },
+  beforeEach: () => {
+    mocked(requestTossStandardPayment).mockClear().mockResolvedValue(undefined);
+    cart.clear();
+    cart.add({ storeId: ids.store, storeName: "시청점" }, line);
+    cart.add({ storeId: ids.store, storeName: "시청점" }, secondLine);
+  },
 } satisfies Meta<typeof RefreshCartPage>;
 
 export default meta;
@@ -45,6 +51,50 @@ export const NoPickupSlotsRequired: Story = {
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("button", { name: /17,800.*주문하기/ })).toBeEnabled();
     await expect(canvas.queryByRole("radio", { name: /잔 가능/ })).not.toBeInTheDocument();
+  },
+};
+
+/** The order action prepares its one-time attempt and opens Toss without a second click. */
+export const LaunchesTossFromOrderAction: Story = {
+  tags: ["!autodocs"],
+  parameters: { msw: { handlers: [
+    http.post("/api/v1/orders", () => HttpResponse.json({
+      order: {
+        id: ids.order,
+        publicReference: publicCheckout.order.orderReference,
+        state: "PENDING_PAYMENT",
+      },
+    }, { status: 201 })),
+    http.get("/api/v1/me/orders/:orderReference/checkout", () => HttpResponse.json({
+      ...publicCheckout,
+      order: { ...publicCheckout.order, status: "PENDING_PAYMENT" },
+      canPay: true,
+    })),
+    http.post("/api/v1/me/orders/:orderReference/payment-attempts", () => HttpResponse.json({
+      paymentId: ids.payment,
+      orderReference: publicCheckout.order.orderReference,
+      state: "READY",
+      providerOrderId: "bf_cart_payment",
+      customerKey: "bf_customer_key",
+      orderName: "오트 라떼 외 1건",
+      amount: { value: 17_800, currency: "KRW" },
+      method: "CARD",
+      successUrl: "https://checkout.beanflow.test/success",
+      failUrl: "https://checkout.beanflow.test/fail",
+      expiresAt: publicCheckout.order.paymentDeadlineAt,
+      updatedAt: "2026-08-15T03:00:00Z",
+      correlationId: "CART-CHECKOUT-1",
+    })),
+    http.get("/api/v1/payment-config", () => HttpResponse.json({ clientKey: "test_ck_storybook" })),
+    ...meta.parameters.msw.handlers,
+  ] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: /17,800.*주문하기/ }));
+    await waitFor(() => expect(mocked(requestTossStandardPayment)).toHaveBeenCalledWith(
+      "test_ck_storybook",
+      expect.objectContaining({ orderId: "bf_cart_payment", amount: { value: 17_800, currency: "KRW" } }),
+    ));
+    await expect(cart.read()).toMatchObject({ status: "ready", cart: { lines: [line, secondLine] } });
   },
 };
 

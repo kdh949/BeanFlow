@@ -10,15 +10,15 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
-import { ApiRequestError, SubmissionIntent, idempotencyKey, unwrap } from "../../api/client";
+import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
 import { couponSelection, useCouponSelection } from "../../features/customer/couponSelection";
 import { couponWalletPath } from "../../features/customer/couponNavigation";
 import { useAttentionRefresh } from "../../features/shared/useAttentionRefresh";
 import { useResource } from "../../features/shared/useResource";
 import { shortDateTime, shortTime, won } from "../../lib/format";
-import { requestTossStandardPayment } from "../../payment/toss";
-import { attemptStorage, checkoutCartStorage } from "../../features/payment/paymentAttempt";
+import { checkoutCartStorage } from "../../features/payment/paymentAttempt";
+import { launchOneTimeCheckout } from "../../features/payment/launchOneTimeCheckout";
 import { cart } from "../../features/ordering/cart";
 import { pickupNumberNote } from "../../features/ordering/orderPresentation";
 import { reorderFailure } from "../../features/ordering/reorderFailures";
@@ -66,13 +66,7 @@ export function RefreshCheckoutPage() {
     if (paying) return;
     setPaying(true); setFailure(null);
     try {
-      const current = await read();
-      if (!current.canPay) { reload(); return; }
-      const attempt = current.readyAttempt ?? unwrap(await customerApi.POST("/me/orders/{orderReference}/payment-attempts", { params: { path: { orderReference }, header: { "Idempotency-Key": idempotencyKey(`payment-attempt.${orderReference}`), ...(await customerCsrfHeader()) } } }));
-      if (attempt.state !== "READY") { reload(); return; }
-      attemptStorage.save(attempt, checkoutCartStorage.get(orderReference) ?? undefined);
-      const config = unwrap(await customerApi.GET("/payment-config"));
-      await requestTossStandardPayment(config.clientKey, { customerKey: attempt.customerKey, method: attempt.method, amount: attempt.amount, orderId: attempt.providerOrderId, orderName: attempt.orderName, successUrl: attempt.successUrl, failUrl: attempt.failUrl });
+      await launchOneTimeCheckout(orderReference);
     } catch (error) { setFailure(error); }
     finally { setPaying(false); reload(); }
   }

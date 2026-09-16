@@ -24,6 +24,7 @@ import { orderConflictGuidance, shouldRotateIdempotencyKey } from "../../feature
 import { useResource } from "../../features/shared/useResource";
 import { PointUseField, usePointUse } from "../../features/loyalty/PointUseField";
 import { checkoutCartStorage } from "../../features/payment/paymentAttempt";
+import { launchOneTimeCheckout } from "../../features/payment/launchOneTimeCheckout";
 import { FavoriteStoreButton } from "../../features/customer/FavoriteStoresPage";
 import { won } from "../../lib/format";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar } from "./RefreshShared";
@@ -197,7 +198,16 @@ function RefreshCartContents({ storeId, savedStoreName, revision, lines }: { sto
         }
         checkoutCartStorage.remove(created.publicReference);
       }
-      navigate(created.state === "PENDING_PAYMENT" ? `/app/orders/${created.publicReference}/checkout` : `/app/orders/${created.publicReference}`);
+      if (created.state === "PENDING_PAYMENT") {
+        try {
+          if (await launchOneTimeCheckout(created.publicReference)) return;
+        } catch {
+          // The checkout route owns explicit recovery for an interrupted SDK or attempt request.
+        }
+        navigate(`/app/orders/${created.publicReference}/checkout`);
+        return;
+      }
+      navigate(`/app/orders/${created.publicReference}`);
     } catch (error) {
       const current = staleQuote(error);
       if (current) setQuoteState({ status: "stale", quote: current });
