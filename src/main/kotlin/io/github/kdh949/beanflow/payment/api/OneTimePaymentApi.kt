@@ -75,6 +75,9 @@ interface OneTimePaymentOperations {
 
     fun prepare(command: PrepareOneTimePaymentCommand): OneTimePaymentAttemptView
 
+    /** Returns the current result only when this exact callback was already claimed. */
+    fun replayClaimedConfirmation(command: ClaimOneTimePaymentConfirmationCommand): OneTimePaymentConfirmationClaim?
+
     fun claimConfirmation(command: ClaimOneTimePaymentConfirmationCommand): OneTimePaymentConfirmationClaim
 
     fun requestProviderConfirmation(paymentId: UUID): ProviderPaymentResult

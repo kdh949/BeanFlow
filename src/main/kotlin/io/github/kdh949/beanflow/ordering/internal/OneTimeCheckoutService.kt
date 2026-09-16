@@ -96,19 +96,34 @@ internal class OneTimeCheckoutService(
         if (idempotencyKey.length !in 8..128) {
             throw DomainFailure(FailureCode.INVALID_REQUEST, "Confirmation Idempotency-Key is invalid")
         }
-        val now = clock.instant()
+        val requestedAt = clock.instant()
         val current = payments.current(customerId, paymentId)
-        val providerConfirmationDeadline = preparation.immediateConfirmationDeadline(customerId, current.orderId, now)
+        val unguardedCommand =
+            ClaimOneTimePaymentConfirmationCommand(
+                actorId = customerId,
+                paymentId = paymentId,
+                providerOrderId = request.orderId,
+                paymentKey = request.paymentKey,
+                amountKrw = request.amount,
+                now = requestedAt,
+            )
+        payments.replayClaimedConfirmation(unguardedCommand)?.let {
+            return customerResponse(customerId, it.payment, replay = true)
+        }
+        val gate =
+            try {
+                preparation.immediateConfirmationGate(customerId, current.orderId, requestedAt)
+            } catch (failure: DomainFailure) {
+                payments.replayClaimedConfirmation(unguardedCommand)?.let {
+                    return customerResponse(customerId, it.payment, replay = true)
+                }
+                throw failure
+            }
         val claim =
             payments.claimConfirmation(
-                ClaimOneTimePaymentConfirmationCommand(
-                    actorId = customerId,
-                    paymentId = paymentId,
-                    providerOrderId = request.orderId,
-                    paymentKey = request.paymentKey,
-                    amountKrw = request.amount,
-                    now = now,
-                    providerConfirmationDeadline = providerConfirmationDeadline,
+                unguardedCommand.copy(
+                    now = gate.checkedAt,
+                    providerConfirmationDeadline = gate.deadline,
                 ),
             )
         if (claim.state == OneTimePaymentConfirmationClaimState.CURRENT) {
@@ -185,6 +200,11 @@ internal class OneTimeCheckoutService(
         )
 }
 
+internal data class OneTimeConfirmationGate(
+    val deadline: java.time.Instant?,
+    val checkedAt: java.time.Instant,
+)
+
 @Service
 internal class OneTimePaymentPreparationTransaction(
     private val orders: OrderJpaRepository,
@@ -192,22 +212,27 @@ internal class OneTimePaymentPreparationTransaction(
     private val expiryUseCase: ReservationExpiryUseCase,
     private val payments: OneTimePaymentOperations,
     private val availabilityOperations: StoreOrderAvailabilityOperations,
+    private val clock: Clock,
 ) {
     @Transactional
-    fun immediateConfirmationDeadline(
+    fun immediateConfirmationGate(
         customerId: UUID,
         orderId: UUID,
-        now: java.time.Instant,
-    ): java.time.Instant? {
+        requestedAt: java.time.Instant,
+    ): OneTimeConfirmationGate {
         val order =
             orders.findById(orderId).orElse(null)
                 ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
         if (order.customerId != customerId) {
             throw DomainFailure(FailureCode.ACCESS_DENIED, "Order belongs to another customer")
         }
-        if (order.checkoutMode != CheckoutMode.IMMEDIATE) return null
+        if (order.checkoutMode != CheckoutMode.IMMEDIATE) return OneTimeConfirmationGate(null, requestedAt)
+        var checkedAt = requestedAt
+        var deadline = order.orderingWindowClosesAt
         if (order.state == OrderState.PENDING_PAYMENT) {
-            val availability = availabilityOperations.lockForOrderCommitment(order.storeId, now)
+            availabilityOperations.lockForOrderCommitment(order.storeId, requestedAt)
+            checkedAt = clock.instant()
+            val availability = availabilityOperations.inspect(order.storeId, checkedAt)
             if (!availability.available) {
                 val code =
                     when (availability.reason) {
@@ -215,11 +240,16 @@ internal class OneTimePaymentPreparationTransaction(
                         StoreOrderAvailabilityReason.STORE_HOURS_NOT_CONFIGURED -> FailureCode.STORE_HOURS_NOT_CONFIGURED
                         StoreOrderAvailabilityReason.STORE_CLOSED -> FailureCode.STORE_CLOSED
                         StoreOrderAvailabilityReason.STORE_NOT_ACCEPTING_ORDERS -> FailureCode.STORE_NOT_ACCEPTING_ORDERS
-                    }
+                }
                 throw DomainFailure(code, "Store is not available for immediate payment confirmation")
             }
+            deadline =
+                minOf(
+                    requireNotNull(deadline) { "Immediate order cutoff is missing" },
+                    requireNotNull(availability.orderingWindowClosesAt) { "Available Store window has no close" },
+                )
         }
-        return order.orderingWindowClosesAt
+        return OneTimeConfirmationGate(deadline, checkedAt)
     }
 
     @Transactional

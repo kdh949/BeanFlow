@@ -161,28 +161,22 @@ internal class OneTimePaymentService(
     }
 
     @Transactional
+    override fun replayClaimedConfirmation(
+        command: ClaimOneTimePaymentConfirmationCommand,
+    ): OneTimePaymentConfirmationClaim? {
+        val (payment, attempt) = lockConfirmation(command)
+        if (attempt.callbackPayloadHash == null) return null
+        requireMatchingClaim(attempt, command)
+        return currentClaim(payment)
+    }
+
+    @Transactional
     override fun claimConfirmation(command: ClaimOneTimePaymentConfirmationCommand): OneTimePaymentConfirmationClaim {
-        val payment =
-            payments.findLockedById(command.paymentId)
-                ?: conflict(FailureCode.RESOURCE_NOT_FOUND, "Payment was not found")
-        if (payment.customerId != command.actorId) {
-            conflict(FailureCode.ACCESS_DENIED, "Payment belongs to another customer")
-        }
-        if (payment.type != PaymentType.EXTERNAL || payment.paymentMethodId != null) {
-            conflict(FailureCode.ORDER_STATE_CONFLICT, "Payment is not a one-time checkout")
-        }
-        val attempt =
-            attempts.findLockedByPaymentId(command.paymentId)
-                ?: dependency("One-time payment attempt is missing")
+        val (payment, attempt) = lockConfirmation(command)
         val payloadHash = callbackHash(command)
         if (attempt.callbackPayloadHash != null) {
-            if (attempt.callbackPayloadHash != payloadHash || attempt.paymentKey != command.paymentKey) {
-                callbackMismatch()
-            }
-            return OneTimePaymentConfirmationClaim(
-                OneTimePaymentConfirmationClaimState.CURRENT,
-                payment.toExternalView(reconciliation.findByPaymentIdAndKind(payment.id, ReconciliationKind.APPROVAL_LOOKUP)),
-            )
+            requireMatchingClaim(attempt, command)
+            return currentClaim(payment)
         }
         if (
             attempt.state != OneTimePaymentAttemptState.READY ||
@@ -215,6 +209,39 @@ internal class OneTimePaymentService(
             payment.toExternalView(work),
         )
     }
+
+    private fun lockConfirmation(
+        command: ClaimOneTimePaymentConfirmationCommand,
+    ): Pair<PaymentEntity, OneTimePaymentAttemptEntity> {
+        val payment =
+            payments.findLockedById(command.paymentId)
+                ?: conflict(FailureCode.RESOURCE_NOT_FOUND, "Payment was not found")
+        if (payment.customerId != command.actorId) {
+            conflict(FailureCode.ACCESS_DENIED, "Payment belongs to another customer")
+        }
+        if (payment.type != PaymentType.EXTERNAL || payment.paymentMethodId != null) {
+            conflict(FailureCode.ORDER_STATE_CONFLICT, "Payment is not a one-time checkout")
+        }
+        val attempt =
+            attempts.findLockedByPaymentId(command.paymentId)
+                ?: dependency("One-time payment attempt is missing")
+        return payment to attempt
+    }
+
+    private fun requireMatchingClaim(
+        attempt: OneTimePaymentAttemptEntity,
+        command: ClaimOneTimePaymentConfirmationCommand,
+    ) {
+        if (attempt.callbackPayloadHash != callbackHash(command) || attempt.paymentKey != command.paymentKey) {
+            callbackMismatch()
+        }
+    }
+
+    private fun currentClaim(payment: PaymentEntity): OneTimePaymentConfirmationClaim =
+        OneTimePaymentConfirmationClaim(
+            OneTimePaymentConfirmationClaimState.CURRENT,
+            payment.toExternalView(reconciliation.findByPaymentIdAndKind(payment.id, ReconciliationKind.APPROVAL_LOOKUP)),
+        )
 
     override fun requestProviderConfirmation(paymentId: UUID): ProviderPaymentResult {
         val payment =

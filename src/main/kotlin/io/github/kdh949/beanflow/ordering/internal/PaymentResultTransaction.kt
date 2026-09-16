@@ -30,6 +30,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 
@@ -55,6 +56,7 @@ internal class PaymentResultTransaction(
     private val orderReferenceProjection: PaymentOrderReferenceProjection,
     private val meterRegistry: MeterRegistry,
     private val objectMapper: ObjectMapper,
+    private val clock: Clock,
 ) {
     @Transactional
     fun apply(
@@ -229,9 +231,11 @@ internal class PaymentResultTransaction(
         orderId: UUID,
         paymentId: UUID,
         result: ProviderPaymentResult.Approved,
-        now: Instant,
+        resultAt: Instant,
     ): StoredHttpResponse {
-        val order = lockOwnedForApproval(customerId, orderId, now)
+        val locked = lockOwnedForApproval(customerId, orderId, resultAt)
+        val order = locked.order
+        val now = locked.checkedAt
         expireIfDue(order, now)
         val exact = result.amountKrw == order.payableKrw && result.currency == order.currency
         val late = order.state == OrderState.EXPIRED || order.state == OrderState.CANCELLED
@@ -481,18 +485,21 @@ internal class PaymentResultTransaction(
     private fun lockOwnedForApproval(
         customerId: UUID,
         orderId: UUID,
-        now: Instant,
-    ): OrderEntity {
+        resultAt: Instant,
+    ): LockedApproval {
         val initial =
-            orderRepository.findById(orderId).orElse(null)
+            orderRepository.findStoreLockTargetById(orderId)
                 ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order was not found")
         if (initial.customerId != customerId) {
             throw DomainFailure(FailureCode.ACCESS_DENIED, "Order belongs to another customer")
         }
+        var checkedAt = resultAt
         if (initial.checkoutMode == CheckoutMode.IMMEDIATE && initial.state == OrderState.PENDING_PAYMENT) {
             val availability =
                 try {
-                    availabilityOperations.lockForOrderCommitment(initial.storeId, now)
+                    availabilityOperations.lockForOrderCommitment(initial.storeId, resultAt)
+                    checkedAt = clock.instant()
+                    availabilityOperations.inspect(initial.storeId, checkedAt)
                 } catch (failure: DomainFailure) {
                     if (failure.code == FailureCode.DEPENDENCY_UNAVAILABLE) {
                         throw ImmediatePaymentCommitmentFailure(failure.code, failure.message, failure)
@@ -512,12 +519,17 @@ internal class PaymentResultTransaction(
                         FailureCode.SETTLEMENT_INPUT_UNAVAILABLE,
                         "Immediate order cutoff is missing",
                     )
-            if (!now.isBefore(cutoff)) {
+            if (!checkedAt.isBefore(cutoff)) {
                 throw ImmediatePaymentCommitmentFailure(FailureCode.STORE_CLOSED, "Store ordering window has closed")
             }
         }
-        return locked
+        return LockedApproval(locked, checkedAt)
     }
+
+    private data class LockedApproval(
+        val order: OrderEntity,
+        val checkedAt: Instant,
+    )
 
     private fun confirmationBody(
         paymentId: UUID,

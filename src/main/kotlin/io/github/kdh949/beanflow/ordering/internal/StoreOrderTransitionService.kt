@@ -7,6 +7,8 @@ import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
 import io.github.kdh949.beanflow.identity.api.StoreAccessOperations
 import io.github.kdh949.beanflow.identity.api.StoreActor
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
+import io.github.kdh949.beanflow.merchant.api.StoreOrderAvailabilityOperations
+import io.github.kdh949.beanflow.merchant.api.StoreOrderAvailabilityReason
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
@@ -14,6 +16,7 @@ import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OrderCompensationCaseView
 import io.github.kdh949.beanflow.operations.api.OrderCompensationOperations
 import io.github.kdh949.beanflow.ordering.api.OrderSettlementInputSnapshotOperations
+import io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode
 import io.github.kdh949.beanflow.payment.api.ApprovedPaymentSettlementOperations
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -47,6 +50,7 @@ internal class StoreOrderTransitionService(
     private val orderLineRepository: OrderLineJpaRepository,
     private val idempotencyRepository: StoreCommandIdempotencyJpaRepository,
     private val storeAccessOperations: StoreAccessOperations,
+    private val availabilityOperations: StoreOrderAvailabilityOperations,
     private val compensationOperations: OrderCompensationOperations,
     private val rejectionCoordinator: OrderRejectionCoordinator,
     private val settlementInputSnapshots: OrderSettlementInputSnapshotOperations,
@@ -151,16 +155,24 @@ internal class StoreOrderTransitionService(
         expectedStatus: StoreOrderExpectedStatus?,
         responseBody: (StoreOrderResult, Instant) -> String,
     ): StoreTransitionHttpResult {
-        val now = clock.instant().truncatedTo(ChronoUnit.MICROS)
-        val order =
-            orderRepository.findLockedById(orderId)
+        val lockTarget =
+            orderRepository.findStoreLockTargetById(orderId)
                 ?: notFound()
         val storeActor =
             storeAccessOperations.requireOrderManagementAccess(
                 actor.actorId,
-                order.storeId,
+                lockTarget.storeId,
                 actor.roles,
             )
+        if (request.targetState == StoreOrderTargetState.ACCEPTED && lockTarget.checkoutMode == CheckoutMode.IMMEDIATE) {
+            availabilityOperations.lockForOrderCommitment(lockTarget.storeId, clock.instant())
+        }
+        val order =
+            orderRepository.findLockedById(orderId)
+                ?: notFound()
+        if (order.storeId != lockTarget.storeId) {
+            throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Order store ownership changed while locking")
+        }
         idempotencyRepository
             .findByActorIdAndOperationAndIdempotencyKey(
                 actor.actorId,
@@ -175,11 +187,25 @@ internal class StoreOrderTransitionService(
                 }
                 return StoreTransitionHttpResult(existing.responseStatus, existing.responseBody)
             }
+        val now = clock.instant().truncatedTo(ChronoUnit.MICROS)
         if (expectedStatus != null && order.state.name != expectedStatus.name) {
             throw DomainFailure(
                 FailureCode.ORDER_STATE_CONFLICT,
                 "Order state changed after the board item was rendered",
             )
+        }
+        if (request.targetState == StoreOrderTargetState.ACCEPTED && order.checkoutMode == CheckoutMode.IMMEDIATE) {
+            val availability = availabilityOperations.inspect(order.storeId, now)
+            if (!availability.available) {
+                val code =
+                    when (availability.reason) {
+                        StoreOrderAvailabilityReason.AVAILABLE -> FailureCode.DEPENDENCY_UNAVAILABLE
+                        StoreOrderAvailabilityReason.STORE_HOURS_NOT_CONFIGURED -> FailureCode.STORE_HOURS_NOT_CONFIGURED
+                        StoreOrderAvailabilityReason.STORE_CLOSED -> FailureCode.STORE_CLOSED
+                        StoreOrderAvailabilityReason.STORE_NOT_ACCEPTING_ORDERS -> FailureCode.STORE_NOT_ACCEPTING_ORDERS
+                    }
+                throw DomainFailure(code, "Store is not available for immediate order acceptance")
+            }
         }
 
         val before = order.state.name

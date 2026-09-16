@@ -553,6 +553,13 @@ internal class StoreCommandIdempotencyEntity(
     val retentionExpiresAt: Instant,
 )
 
+internal interface OrderStoreLockTarget {
+    val customerId: UUID
+    val storeId: UUID
+    val checkoutMode: CheckoutMode
+    val state: OrderState
+}
+
 internal interface OrderJpaRepository : JpaRepository<OrderEntity, UUID> {
     fun findByPublicReference(publicReference: String): OrderEntity?
 
@@ -567,6 +574,15 @@ internal interface OrderJpaRepository : JpaRepository<OrderEntity, UUID> {
     ): OrderEntity?
 
     fun existsByPublicReference(publicReference: String): Boolean
+
+    @Query(
+        "select beanOrder.customerId as customerId, beanOrder.storeId as storeId, " +
+            "beanOrder.checkoutMode as checkoutMode, beanOrder.state as state " +
+            "from OrderEntity beanOrder where beanOrder.id = :id",
+    )
+    fun findStoreLockTargetById(
+        @Param("id") id: UUID,
+    ): OrderStoreLockTarget?
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select beanOrder from OrderEntity beanOrder where beanOrder.id = :id")

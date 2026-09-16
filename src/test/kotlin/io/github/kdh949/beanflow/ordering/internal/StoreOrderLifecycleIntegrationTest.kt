@@ -17,6 +17,7 @@ import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -781,6 +782,61 @@ internal class StoreOrderLifecycleIntegrationTest
         }
 
         @Test
+        fun `immediate acceptance waits for the Store writer and observes its closed schedule`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidImmediateOrder(fixture, "store-accept-schedule-lock-order")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "STAFF", "ACTIVE")
+
+            requireNotNull(jdbcTemplate.dataSource).connection.use { writer: java.sql.Connection ->
+                writer.autoCommit = false
+                writer.prepareStatement("SELECT id FROM merchant_store WHERE id = ? FOR UPDATE").use { statement ->
+                    statement.setObject(1, fixture.storeId)
+                    statement.executeQuery().use { assertThat(it.next()).isTrue() }
+                }
+                val executor = Executors.newSingleThreadExecutor()
+                try {
+                    val acceptance =
+                        executor.submit<Result<Int>> {
+                            runCatching {
+                                transitionService
+                                    .transition(
+                                        StoreTransitionActor(actorId, setOf(StoreActorRole.STAFF)),
+                                        orderId,
+                                        "store-accept-schedule-lock-key",
+                                        StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null, 10),
+                                    ).status
+                            }
+                        }
+                    awaitStoreLockWait()
+                    val currentDay = Instant.now().atZone(ZoneId.of("Asia/Seoul")).dayOfWeek.value
+                    writer.prepareStatement(
+                        """
+                        UPDATE merchant_store_operating_hours
+                           SET closed = true, opens_at = NULL, closes_at = NULL
+                         WHERE store_id = ? AND day_of_week = ?
+                        """.trimIndent(),
+                    ).use { statement ->
+                        statement.setObject(1, fixture.storeId)
+                        statement.setInt(2, currentDay)
+                        assertThat(statement.executeUpdate()).isOne()
+                    }
+                    writer.commit()
+
+                    assertThatThrownBy { acceptance.get(5, TimeUnit.SECONDS).getOrThrow() }
+                        .isInstanceOfSatisfying(DomainFailure::class.java) {
+                            assertThat(it.code).isEqualTo(FailureCode.STORE_CLOSED)
+                        }
+                } finally {
+                    runCatching { writer.rollback() }
+                    executor.shutdownNow()
+                }
+            }
+
+            assertThat(orderRepository.findById(orderId).orElseThrow().state).isEqualTo(OrderState.PAID)
+        }
+
+        @Test
         fun `manual rejection and timeout race create one rejection case and one event`() {
             val fixture = OrderCreationFixture()
             val orderId = paidOrder(fixture, "store-reject-timeout-order")
@@ -1104,6 +1160,21 @@ internal class StoreOrderLifecycleIntegrationTest
             sql: String,
             vararg args: Any,
         ): Long = value(sql, *args)
+
+        private fun awaitStoreLockWait() {
+            await("Store row lock") {
+                count(
+                    """
+                    SELECT count(*)
+                      FROM pg_stat_activity
+                     WHERE datname = current_database()
+                       AND pid <> pg_backend_pid()
+                       AND wait_event_type = 'Lock'
+                       AND query ILIKE '%merchant_store%'
+                    """.trimIndent(),
+                ) > 0
+            }
+        }
 
         private inline fun <reified T : Any> value(
             sql: String,

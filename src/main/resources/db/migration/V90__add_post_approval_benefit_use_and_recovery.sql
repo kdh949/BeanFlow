@@ -156,6 +156,11 @@ BEGIN
 END;
 $$;
 
+CREATE CONSTRAINT TRIGGER ordering_order_update_requires_settlement_input_snapshot
+    AFTER UPDATE OF state, paid_at ON ordering_order
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION validate_order_settlement_input_snapshot();
+
 ALTER TABLE ordering_order
     DROP CONSTRAINT chk_order_state_lifecycle,
     ADD CONSTRAINT chk_order_state_lifecycle

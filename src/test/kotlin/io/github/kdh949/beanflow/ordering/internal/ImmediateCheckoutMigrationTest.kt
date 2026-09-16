@@ -81,6 +81,24 @@ internal class ImmediateCheckoutMigrationTest : IsolatedPostgresSupport() {
         assertThatThrownBy { insertImmediatePaidWithoutSettlement(UUID.randomUUID()) }
             .isInstanceOf(DataIntegrityViolationException::class.java)
             .hasMessageContaining("Order requires exactly one settlement input snapshot")
+
+        val updatedOrderId = UUID.randomUUID()
+        insertImmediate(updatedOrderId)
+        assertThatThrownBy {
+            jdbc.update(
+                """
+                UPDATE ordering_order
+                   SET state = 'PAID',
+                       paid_at = created_at,
+                       acceptance_warning_at = created_at + interval '2 minutes',
+                       acceptance_deadline_at = created_at + interval '3 minutes',
+                       updated_at = created_at
+                 WHERE id = ?
+                """.trimIndent(),
+                updatedOrderId,
+            )
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+            .hasMessageContaining("Order requires exactly one settlement input snapshot")
     }
 
     @Test

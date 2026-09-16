@@ -428,6 +428,96 @@ internal class OneTimeCheckoutIntegrationTest
         }
 
         @Test
+        fun `unknown immediate callback replays after store close without another Provider confirmation`() {
+            testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            val orderId = pendingImmediateOrder(fixture, "immediate-unknown-replay-order")
+            val prepared = checkoutService.prepare(fixture.customerId, orderId, "immediate-unknown-replay-prepare")
+            val request =
+                OneTimePaymentConfirmationRequest(
+                    paymentKey = "immediate-unknown-replay",
+                    orderId = prepared.providerOrderId,
+                    amount = 1_000,
+                )
+            gateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Unknown("TIMEOUT"))
+            assertThat(
+                checkoutService
+                    .confirm(
+                        fixture.customerId,
+                        prepared.paymentId,
+                        "immediate-unknown-replay-confirm",
+                        request,
+                    ).status,
+            ).isEqualTo(202)
+
+            testClock.set(prepared.expiresAt)
+            val replay =
+                checkoutService.confirm(
+                    fixture.customerId,
+                    prepared.paymentId,
+                    "immediate-unknown-replay-confirm",
+                    request,
+                )
+
+            assertThat(replay.status).isEqualTo(202)
+            assertThat(replay.replay).isTrue()
+            assertThat(gateway.oneTimeConfirmationCalls.get()).isOne()
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PENDING_PAYMENT")
+        }
+
+        @Test
+        fun `immediate confirmation rechecks time after waiting for the Store lock`() {
+            testClock.set(Instant.parse("2026-08-12T08:59:59.900Z"))
+            val fixture = OrderCreationFixture()
+            val orderId = pendingImmediateOrder(fixture, "immediate-lock-wait-order")
+            val prepared = checkoutService.prepare(fixture.customerId, orderId, "immediate-lock-wait-prepare")
+            val request =
+                OneTimePaymentConfirmationRequest(
+                    paymentKey = "immediate-lock-wait",
+                    orderId = prepared.providerOrderId,
+                    amount = 1_000,
+                )
+            gateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Approved(request.paymentKey, request.amount, "KRW"))
+
+            requireNotNull(jdbcTemplate.dataSource).connection.use { lockConnection: java.sql.Connection ->
+                lockConnection.autoCommit = false
+                lockConnection.prepareStatement("SELECT id FROM merchant_store WHERE id = ? FOR UPDATE").use { statement ->
+                    statement.setObject(1, fixture.storeId)
+                    statement.executeQuery().use { assertThat(it.next()).isTrue() }
+                }
+                val executor = Executors.newSingleThreadExecutor()
+                try {
+                    val confirmation =
+                        executor.submit<Result<Int>> {
+                            runCatching {
+                                checkoutService
+                                    .confirm(
+                                        fixture.customerId,
+                                        prepared.paymentId,
+                                        "immediate-lock-wait-confirm",
+                                        request,
+                                    ).status
+                            }
+                        }
+                    awaitStoreLockWait()
+                    testClock.set(prepared.expiresAt)
+                    lockConnection.commit()
+
+                    assertThatThrownBy { confirmation.get(5, TimeUnit.SECONDS).getOrThrow() }
+                        .isInstanceOfSatisfying(DomainFailure::class.java) {
+                            assertThat(it.code).isEqualTo(FailureCode.STORE_CLOSED)
+                        }
+                } finally {
+                    runCatching { lockConnection.rollback() }
+                    executor.shutdownNow()
+                }
+            }
+
+            assertNoProviderCalls()
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PENDING_PAYMENT")
+        }
+
+        @Test
         fun `manual ordering off blocks a new immediate confirmation without cancelling an existing paid order`() {
             testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
             val fixture = OrderCreationFixture()
@@ -1078,6 +1168,28 @@ internal class OneTimeCheckoutIntegrationTest
             assertThat(body)
                 .contains("\"orderReference\":\"$orderReference\"")
                 .doesNotContain("\"orderId\"")
+        }
+
+        private fun awaitStoreLockWait() {
+            repeat(250) {
+                val waiting =
+                    requireNotNull(
+                        jdbcTemplate.queryForObject(
+                            """
+                            SELECT count(*)
+                              FROM pg_stat_activity
+                             WHERE datname = current_database()
+                               AND pid <> pg_backend_pid()
+                               AND wait_event_type = 'Lock'
+                               AND query ILIKE '%merchant_store%'
+                            """.trimIndent(),
+                            Long::class.java,
+                        ),
+                    )
+                if (waiting > 0) return
+                Thread.sleep(20)
+            }
+            error("Timed out waiting for a Store row lock")
         }
 
         private inline fun <reified T : Any> value(
