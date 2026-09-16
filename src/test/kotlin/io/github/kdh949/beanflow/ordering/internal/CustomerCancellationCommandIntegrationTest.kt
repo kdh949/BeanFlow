@@ -42,6 +42,7 @@ import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 
@@ -80,7 +81,7 @@ internal class CustomerCancellationCommandIntegrationTest
     ) {
         @BeforeEach
         fun cleanDatabase() {
-            clock.set(Instant.now())
+            clock.set(Instant.now().truncatedTo(ChronoUnit.MILLIS))
             awaitPublicationsSettled()
             OrderCreationDatabaseFixture.clean(jdbcTemplate)
             paymentGateway.reset()
