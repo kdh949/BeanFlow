@@ -569,7 +569,6 @@ internal class CustomerCancellationTransaction(
                 pointsRequired = order.pointsAppliedKrw > 0,
                 couponPolicy = couponPolicy.toEventSnapshot(),
                 pointsPolicy = pointsPolicy.toEventSnapshot(),
-                pickupRequired = order.pickupSlotId != null,
             ),
         )
         val recovery =

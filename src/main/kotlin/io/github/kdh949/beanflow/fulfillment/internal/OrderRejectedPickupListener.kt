@@ -21,7 +21,7 @@ internal class OrderRejectedPickupListener(
 ) {
     @ApplicationModuleListener(id = "beanflow.order-compensation.order-rejected.pickup.v1")
     fun on(event: OrderRejectedV1) {
-        if (!event.pickupRequired) return
+        if (!pickupReleaseRequired(event.orderId)) return
         release(
             event.orderId,
             event.rejectedAt,
@@ -32,7 +32,7 @@ internal class OrderRejectedPickupListener(
 
     @ApplicationModuleListener(id = "beanflow.order-compensation.order-cancelled.pickup.v1")
     fun on(event: OrderCancelledV1) {
-        if (!event.pickupRequired) return
+        if (!pickupReleaseRequired(event.orderId)) return
         release(
             event.orderId,
             event.cancelledAt,
@@ -69,5 +69,19 @@ internal class OrderRejectedPickupListener(
             null,
             terminatedAt,
         )
+    }
+
+    private fun pickupReleaseRequired(orderId: java.util.UUID): Boolean {
+        val pickup =
+            compensationOperations
+                .findByOrderId(orderId)
+                ?.steps
+                ?.singleOrNull { it.type == OrderCompensationStepType.PICKUP }
+                ?: throw DomainFailure(
+                    FailureCode.DEPENDENCY_UNAVAILABLE,
+                    "Pickup compensation requirement could not be resolved",
+                )
+        return pickup.state != OrderCompensationStepState.NOT_REQUIRED &&
+            pickup.state != OrderCompensationStepState.SUCCEEDED
     }
 }

@@ -94,7 +94,6 @@ internal class OrderRejectionCoordinator(
                 paymentRequired = order.payableKrw > 0,
                 couponRequired = order.couponDiscountKrw > 0,
                 pointsRequired = order.pointsAppliedKrw > 0,
-                pickupRequired = order.pickupSlotId != null,
             ),
         )
         TransactionSynchronizationManager.registerSynchronization(

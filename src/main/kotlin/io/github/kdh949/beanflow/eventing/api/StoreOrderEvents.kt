@@ -35,7 +35,6 @@ data class OrderRejectedV1(
     val paymentRequired: Boolean,
     val couponRequired: Boolean,
     val pointsRequired: Boolean,
-    val pickupRequired: Boolean = true,
 )
 
 data class BenefitRestorationPolicySnapshotV1(
@@ -52,7 +51,6 @@ data class OrderCancelledV1(
     val pointsRequired: Boolean,
     val couponPolicy: BenefitRestorationPolicySnapshotV1,
     val pointsPolicy: BenefitRestorationPolicySnapshotV1,
-    val pickupRequired: Boolean = true,
 )
 
 data class StoreAcceptanceWarningRequestedV1(
