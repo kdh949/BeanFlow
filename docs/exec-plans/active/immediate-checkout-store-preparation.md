@@ -91,6 +91,9 @@ PostgreSQL/Storybook/E2E와 legacy 회귀 검증을 구현한다.
   유지한다. 승인 사실을 이미 얻은 경우 모두 rollback 뒤 Tx D에서 현재 Order/Payment 승자를 다시 잠그고,
   승자가 아니면 `PAYMENT_COMMITMENT_FAILED`와 late void/refund recovery를 저장한다. Tx D 자체가 DB 장애로
   실패하면 성공으로 위장하지 않고 503과 기존 approval lookup claim을 남겨 재조정한다.
+- `LEGACY_RESERVED` approval lookup도 DB 경합 뒤 Tx D가 현재 Order를 다시 잠근다. 이미 EXPIRED/CANCELLED/
+  REJECTED인 경우에만 실제 승인 사실을 late void/refund recovery로 저장하고, 아직 PENDING_PAYMENT이면 임의
+  취소하지 않은 채 `DEPENDENCY_UNAVAILABLE`로 재시도를 남긴다.
 
 ## Alternatives Considered
 
@@ -219,6 +222,7 @@ test method pattern으로 실행한 targeted Gradle command다. `PARTIAL`은 구
 | T54 | `ModularityTests`, `SupportArchitectureTest`, `AuthenticationArchUnitTest` | M3/M5 | PASSED |
 | T55 | `StoreOrderLifecycleIntegrationTest` 완료/부분환불/정산 snapshot 회귀 | M3 | PARTIAL — IMMEDIATE 전체 완료 E2E는 M5 |
 | T56 | `OneTimeCheckoutIntegrationTest#concurrent startup overdue scans expire one immediate draft exactly once` | EDGE | PASSED |
+| T57 | `PaymentConfirmationIntegrationTest#legacy approval recovery waits...`, `#approval lookup racing...` | EDGE | PASSED |
 
 ## Validation Commands
 
@@ -292,6 +296,8 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
   원자 확정, 0원 BENEFIT_ONLY, Tx D late void/refund recovery와 approval lookup 재조정 구현.
 - [x] 2026-09-16 M3 unpaid store-close expiry, paid acceptance deadline/조건부 경고/기동 scan,
   `STORE_CLOSED`, source-aware `PICKUP NOT_REQUIRED`, 1~120분 단회 수락과 nullable query/support 계약 구현.
+- [x] 2026-09-16 Stacked PR CI artifact에서 legacy approval lookup과 만료의 DB 경합이 즉시주문 전용 Tx D로
+  잘못 진입하는 호환성 결함을 확인하고, 종료 주문 late-approval 수렴과 진행 주문 fail-closed 재시도를 구현.
 - [ ] M4 query/API/UI/Storybook 전환과 검증.
 - [ ] M5 전체 검증, stacked PR 생성과 release gate 기록.
 
@@ -308,6 +314,9 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
   `tools.jackson` ObjectMapper로 checkout input을 String JSON으로 저장/복원해 Tx A 재계산을 제거했다.
 - PostgreSQL은 read-only transaction의 `SELECT ... FOR SHARE`를 거부했다. callback preflight를 짧은 쓰기 가능
   transaction으로 두고 shared lock 해제 후에만 Provider를 호출하도록 경계를 검증했다.
+- 분할 CI에서 legacy approval lookup과 만료가 동시에 Order를 잠글 때 첫 승인 반영 transaction이 rollback되고,
+  관측한 PG 승인이 즉시주문 전용 Tx D의 mode guard에 막혀 UNKNOWN에 남는 경합이 드러났다. Tx D는 legacy
+  종료 상태만 late recovery로 수렴시키고 PENDING_PAYMENT는 변경하지 않는 회귀 계약(T57)을 추가했다.
 
 ## Decision Log
 
@@ -332,6 +341,9 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
   publication recovery와 architecture 14개 test class, `BUILD SUCCESSFUL in 3m 29s`.
 - 최신 HEAD 핵심 회귀: `spotlessCheck`와 결제, V90 migration, lifecycle, cancellation, Modulith/ArchUnit
   7개 test class, `BUILD SUCCESSFUL in 1m 57s`.
+- Stacked PR CI 보정: M1 migration 2개 class Passed (`BUILD SUCCESSFUL in 1m 18s`), frozen event/board/slotless
+  보상 4개 case Passed (`BUILD SUCCESSFUL in 1m 21s`), legacy approval Tx D의 진행/종료 경계와 만료 경합
+  2개 case 및 `spotlessCheck` Passed (`BUILD SUCCESSFUL in 29s`).
 - EDGE: 마감 전 PG 차단/승인 replay, 수동 OFF, coupon·point 병렬 승인 경합과 loser void, 실제 PointLot
   issuer 정산, 부분 혜택·snapshot 실패 rollback, 준비시간 API/멱등성, 조기마감 경고, slotless 고객·상담 취소,
   동시 startup overdue scan을 개별 실행해 Passed. T19의 첫 실행은 존재하지 않는 checkout JSON Lot 상세를
