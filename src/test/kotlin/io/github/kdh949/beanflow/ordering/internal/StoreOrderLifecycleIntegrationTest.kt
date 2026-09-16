@@ -809,18 +809,23 @@ internal class StoreOrderLifecycleIntegrationTest
                             }
                         }
                     awaitStoreLockWait()
-                    val currentDay = Instant.now().atZone(ZoneId.of("Asia/Seoul")).dayOfWeek.value
-                    writer.prepareStatement(
-                        """
-                        UPDATE merchant_store_operating_hours
-                           SET closed = true, opens_at = NULL, closes_at = NULL
-                         WHERE store_id = ? AND day_of_week = ?
-                        """.trimIndent(),
-                    ).use { statement ->
-                        statement.setObject(1, fixture.storeId)
-                        statement.setInt(2, currentDay)
-                        assertThat(statement.executeUpdate()).isOne()
-                    }
+                    val currentDay =
+                        Instant
+                            .now()
+                            .atZone(ZoneId.of("Asia/Seoul"))
+                            .dayOfWeek.value
+                    writer
+                        .prepareStatement(
+                            """
+                            UPDATE merchant_store_operating_hours
+                               SET closed = true, opens_at = NULL, closes_at = NULL
+                             WHERE store_id = ? AND day_of_week = ?
+                            """.trimIndent(),
+                        ).use { statement ->
+                            statement.setObject(1, fixture.storeId)
+                            statement.setInt(2, currentDay)
+                            assertThat(statement.executeUpdate()).isOne()
+                        }
                     writer.commit()
 
                     assertThatThrownBy { acceptance.get(5, TimeUnit.SECONDS).getOrThrow() }

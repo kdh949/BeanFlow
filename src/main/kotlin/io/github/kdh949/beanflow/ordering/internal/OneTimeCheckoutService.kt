@@ -240,7 +240,7 @@ internal class OneTimePaymentPreparationTransaction(
                         StoreOrderAvailabilityReason.STORE_HOURS_NOT_CONFIGURED -> FailureCode.STORE_HOURS_NOT_CONFIGURED
                         StoreOrderAvailabilityReason.STORE_CLOSED -> FailureCode.STORE_CLOSED
                         StoreOrderAvailabilityReason.STORE_NOT_ACCEPTING_ORDERS -> FailureCode.STORE_NOT_ACCEPTING_ORDERS
-                }
+                    }
                 throw DomainFailure(code, "Store is not available for immediate payment confirmation")
             }
             deadline =

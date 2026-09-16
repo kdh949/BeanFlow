@@ -161,9 +161,7 @@ internal class OneTimePaymentService(
     }
 
     @Transactional
-    override fun replayClaimedConfirmation(
-        command: ClaimOneTimePaymentConfirmationCommand,
-    ): OneTimePaymentConfirmationClaim? {
+    override fun replayClaimedConfirmation(command: ClaimOneTimePaymentConfirmationCommand): OneTimePaymentConfirmationClaim? {
         val (payment, attempt) = lockConfirmation(command)
         if (attempt.callbackPayloadHash == null) return null
         requireMatchingClaim(attempt, command)
@@ -210,9 +208,7 @@ internal class OneTimePaymentService(
         )
     }
 
-    private fun lockConfirmation(
-        command: ClaimOneTimePaymentConfirmationCommand,
-    ): Pair<PaymentEntity, OneTimePaymentAttemptEntity> {
+    private fun lockConfirmation(command: ClaimOneTimePaymentConfirmationCommand): Pair<PaymentEntity, OneTimePaymentAttemptEntity> {
         val payment =
             payments.findLockedById(command.paymentId)
                 ?: conflict(FailureCode.RESOURCE_NOT_FOUND, "Payment was not found")
