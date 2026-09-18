@@ -95,6 +95,31 @@ internal class SupportVerificationIntegrationTest
         }
 
         @Test
+        fun `retired writes ignore absent malformed and invalid input but still require authentication`() {
+            val id = UUID.randomUUID()
+            val paths =
+                listOf(
+                    "/api/v1/support/cases/$id/verification-sessions",
+                    "/api/v1/support/verification-sessions/$id/challenges",
+                    "/api/v1/support/verification-challenges/$id/verifications",
+                )
+            paths.forEach { path ->
+                listOf("", "{", "{}", """{"proof":"","requestedLevel":"INVALID"}""").forEach { body ->
+                    mockMvc
+                        .perform(post(path).with(operatorJwt(actorId)).contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andExpect(status().isGone)
+                        .andExpect(header().string("Cache-Control", "no-store"))
+                        .andExpect(jsonPath("$.code").value("SUPPORT_VERIFICATION_RETIRED"))
+                }
+                mockMvc
+                    .perform(post(path).contentType(MediaType.APPLICATION_JSON).content("{"))
+                    .andExpect(status().isUnauthorized)
+            }
+            assertThat(context.getBeansOfType(VerificationChallengeOperations::class.java)).isEmpty()
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM support_verification_session", Long::class.java)).isZero()
+        }
+
+        @Test
         fun `historical verified session remains readable only by authorized actor`() {
             val binding = insertBinding(actorId)
             val id = createSession(binding, "BASIC", "legacy-history")

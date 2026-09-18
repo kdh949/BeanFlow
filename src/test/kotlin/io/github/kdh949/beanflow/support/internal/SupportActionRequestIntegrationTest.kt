@@ -309,56 +309,50 @@ internal class SupportActionRequestIntegrationTest
         }
 
         @Test
-        fun `revoked executor requires explicit atomic case and action reassignment`() {
+        fun `direct request cannot transfer its executor or case through reassignment`() {
             val requestId = requestId(createRequest("create-action-reassign").andReturn().response.contentAsString)
-            jdbcTemplate.update(
-                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
-                    "WHERE actor_id = ? AND permission = 'SUPPORT_ACTION_EXECUTE'",
-                requesterId,
-            )
-
-            getRequest(requestId, managerId)
-                .andExpect(status().isOk)
-                .andExpect(jsonPath("$.state").value("REASSIGNMENT_REQUIRED"))
-                .andExpect(jsonPath("$.requestVersion").value(1))
-
             grant(managerId, "SUPPORT_CASE_ASSIGN")
             grantReplacementPermissions(replacementId)
-            reassignRequest(requestId, managerId, replacementId, "reassign-action-001")
+            repeat(2) {
+                reassignRequest(requestId, managerId, replacementId, "reassign-action-001", expectedRequestVersion = 0)
+                    .andExpect(status().isConflict)
+                    .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
+            }
+            getRequest(requestId, managerId)
                 .andExpect(status().isOk)
-                .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.state").value("READY_FOR_EXECUTION"))
-                .andExpect(jsonPath("$.executorActorId").value(replacementId.toString()))
-                .andExpect(jsonPath("$.requestVersion").value(2))
-            reassignRequest(requestId, managerId, replacementId, "reassign-action-001")
+                .andExpect(jsonPath("$.executorActorId").value(requesterId.toString()))
+                .andExpect(jsonPath("$.requestVersion").value(0))
+            mockMvc
+                .perform(get("/api/v1/support/action-requests/$requestId/workflow").with(jwt().jwt { it.subject(managerId.toString()) }))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$.executorActorId").value(replacementId.toString()))
-
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("REASSIGN"))))
             assertThat(
                 jdbcTemplate.queryForObject("SELECT current_assignee_id FROM support_case WHERE id = ?", UUID::class.java, caseId),
-            ).isEqualTo(replacementId)
-            assertThat(
-                jdbcTemplate.queryForObject("SELECT version FROM support_case WHERE id = ?", Long::class.java, caseId),
-            ).isEqualTo(1)
+            ).isEqualTo(requesterId)
             assertThat(
                 jdbcTemplate.queryForObject(
                     "SELECT count(*) FROM support_action_reassignment WHERE request_id = ?",
                     Int::class.java,
                     requestId,
                 ),
-            ).isOne()
+            ).isZero()
             assertThat(
                 jdbcTemplate.queryForObject(
                     "SELECT count(*) FROM support_case_assignment_history WHERE support_case_id = ?",
                     Int::class.java,
                     caseId,
                 ),
-            ).isEqualTo(2)
+            ).isOne()
         }
 
         @Test
-        fun `reassignment audit failure rolls back case and direct request`() {
+        fun `historical reassignment audit failure still rolls back case and legacy request`() {
             val requestId = requestId(createRequest("create-action-reassign-guard").andReturn().response.contentAsString)
+            jdbcTemplate.update(
+                "UPDATE support_action_revision SET authorization_basis = 'LEGACY', verification_session_id = ?, subject_link_id = NULL WHERE request_id = ?",
+                sessionId,
+                requestId,
+            )
             grant(managerId, "SUPPORT_CASE_ASSIGN")
             grantReplacementPermissions(managerId)
 

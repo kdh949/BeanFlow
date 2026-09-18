@@ -547,7 +547,8 @@ internal class SupportProfileChangeTransactionService(
             stale()
         }
         val request = actionRequests.findLockedById(requireNotNull(entity.actionRequestId)) ?: notFound("SupportActionRequest")
-        if (request.executorActorId != command.actorId || request.currentRevisionNumber != command.revisionNumber ||
+        if (entity.requesterActorId != command.actorId || request.requesterActorId != command.actorId ||
+            request.executorActorId != command.actorId || request.currentRevisionNumber != command.revisionNumber ||
             request.version != command.expectedActionRequestVersion || request.state != SupportActionRequestState.READY_FOR_EXECUTION
         ) {
             stale()
@@ -881,7 +882,8 @@ internal class SupportProfileChangeTransactionService(
         val revision = actionRevisions.findByRequestIdAndRevisionNumber(request.id, request.currentRevisionNumber) ?: dependency()
         requireDirectAuthorization(entity.authorizationBasis)
         requireDirectAuthorization(revision.authorizationBasis)
-        if (request.executorActorId != actorId || request.state != SupportActionRequestState.READY_FOR_EXECUTION ||
+        if (entity.requesterActorId != actorId || request.requesterActorId != actorId ||
+            request.executorActorId != actorId || request.state != SupportActionRequestState.READY_FOR_EXECUTION ||
             revision.actionPayloadDigest != entity.payloadDigest || revision.targetVersion != ownerVersion ||
             revision.subjectLinkId != link.id || entity.subjectLinkId != link.id ||
             revision.policyVersion != PROFILE_CHANGE_POLICY_VERSION || !clock.instant().isBefore(revision.expiresAt)

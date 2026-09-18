@@ -570,6 +570,7 @@ internal class PostAcceptanceResolutionTransactionService(
         if (!clock.instant().isBefore(revision.expiresAt) && request.state != SupportActionRequestState.EXECUTED) expired()
         if (request.state == SupportActionRequestState.READY_FOR_EXECUTION) {
             requireDirectAuthorization(revision.authorizationBasis)
+            requireRequestAndCase(request, supportCase, command.actorId, request.currentRevisionNumber, request.version)
             if (revision.policyVersion != SupportActionPolicy.POLICY_VERSION) stale()
             requireResolutionSubject(request, revision, order)
             val now = clock.instant()
@@ -795,6 +796,7 @@ internal class PostAcceptanceResolutionTransactionService(
         ) {
             stale()
         }
+        if (request.requesterActorId != actorId) stale()
         if (request.executorActorId != actorId ||
             request.state != SupportActionRequestState.READY_FOR_EXECUTION
         ) {

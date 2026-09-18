@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -95,7 +96,7 @@ internal class PostAcceptanceResolutionIntegrationTest
         }
 
         @Test
-        fun `planned resolution follows reassignment after executor permission revocation`() {
+        fun `planned direct resolution cannot transfer to a different executor`() {
             val fixture = seed(PostAcceptanceState.PREPARING, PostAcceptanceResolutionOutcome.NO_MONETARY_RESOLUTION, cashRefundKrw = 0)
             val resolutionId = create(fixture, "plan-before-reassignment").andReturn().resolutionId()
             val nextActor = UUID.randomUUID()
@@ -135,8 +136,8 @@ internal class PostAcceptanceResolutionIntegrationTest
                         .content(
                             """{"revisionNumber":1,"expectedRequestVersion":1,"expectedCaseVersion":0,"assigneeId":"$nextActor","reason":"실행 권한 회수 후 인계"}""",
                         ),
-                ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.executorActorId").value(nextActor.toString()))
+                ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
             assertThat(value("SELECT command_actor_id::text FROM support_post_acceptance_resolution WHERE id = ?", resolutionId))
                 .isEqualTo(EXECUTOR_ID.toString())
             mockMvc
@@ -146,11 +147,9 @@ internal class PostAcceptanceResolutionIntegrationTest
                         .header("Idempotency-Key", "execute-reassigned-plan")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"expectedResolutionVersion":1,"expectedRequestVersion":2,"expectedOrderVersion":$ORDER_VERSION}"""),
-                ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.resolutionId").value(resolutionId.toString()))
-                .andExpect(jsonPath("$.state").value("RESOLVED"))
+                ).andExpect(status().isForbidden)
             assertThat(value("SELECT executor_actor_id::text FROM support_post_acceptance_resolution WHERE id = ?", resolutionId))
-                .isEqualTo(nextActor.toString())
+                .isEqualTo(EXECUTOR_ID.toString())
         }
 
         @Test
@@ -213,6 +212,33 @@ internal class PostAcceptanceResolutionIntegrationTest
                 .andExpect(jsonPath("$.request.state").value("REASSIGNMENT_REQUIRED"))
                 .andExpect(jsonPath("$.allowedActions").isEmpty)
             create(fixture, "request-only-cannot-execute").andExpect(status().isForbidden)
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = ["SUPPORT_ACTION_REQUEST", "SUPPORT_RESOLUTION_REQUEST"])
+        fun `planned resolution rechecks request permissions before starting owner work`(permission: String) {
+            val fixture = seed(PostAcceptanceState.PREPARING, PostAcceptanceResolutionOutcome.FULL_REFUND)
+            val id = create(fixture, "permission-revocation-plan").andExpect(status().isCreated).andReturn().resolutionId()
+            jdbc.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
+                    "WHERE actor_id = ? AND permission = ?",
+                EXECUTOR_ID,
+                permission,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+            execute(fixture, id, "permission-revocation-execute")
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
+            assertThat(value("SELECT state FROM support_action_request WHERE id = ?", fixture.requestId)).isEqualTo("READY_FOR_EXECUTION")
+            assertThat(value("SELECT state FROM support_post_acceptance_resolution WHERE id = ?", id)).isEqualTo("PLANNED")
+            assertThat(gateway.rejectionRefundCalls.get()).isZero()
+            assertThat(count("payment_refund")).isZero()
+            assertThat(count("notification_delivery")).isZero()
         }
 
         @Test

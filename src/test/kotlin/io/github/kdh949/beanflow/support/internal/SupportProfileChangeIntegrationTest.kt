@@ -499,9 +499,8 @@ internal class SupportProfileChangeIntegrationTest
         }
 
         @Test
-        fun `inactive original executor requires explicit case and profile reassignment`() {
+        fun `inactive original executor cannot transfer a direct profile request`() {
             val created = profiles.submit(primaryPhoneCommand("phone-reassign-create"))
-            val direct = actionRequests.get(requesterId, requireNotNull(created.actionRequestId))
             jdbcTemplate.update(
                 "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
                     "WHERE actor_id = ? AND permission = 'SUPPORT_ACTION_EXECUTE'",
@@ -518,7 +517,7 @@ internal class SupportProfileChangeIntegrationTest
                 "SUPPORT_PROFILE_R3_REQUEST",
             ).forEach { grant(replacementId, it) }
 
-            val reassigned =
+            assertThatThrownBy {
                 actionRequests.reassign(
                     ReassignSupportActionRequestCommand(
                         managerId,
@@ -531,17 +530,14 @@ internal class SupportProfileChangeIntegrationTest
                         "phone-reassign-command",
                     ),
                 )
-            assertThat(reassigned.executorActorId).isEqualTo(replacementId)
-            assertThat(reassigned.state).isEqualTo(SupportActionRequestState.READY_FOR_EXECUTION)
-            assertThat(profiles.get(replacementId, created.profileChangeId).executorActorId).isEqualTo(replacementId)
+            }.isInstanceOfSatisfying(DomainFailure::class.java) { failure ->
+                assertThat(failure.code).isEqualTo(FailureCode.SUPPORT_ACTION_REQUEST_STALE)
+            }
+            assertThat(actionRequests.get(managerId, requireNotNull(created.actionRequestId)).executorActorId).isEqualTo(requesterId)
             assertThat(
-                jdbcTemplate.queryForObject(
-                    "SELECT current_assignee_id FROM support_case WHERE id = ?",
-                    UUID::class.java,
-                    caseId,
-                ),
-            ).isEqualTo(replacementId)
-            assertThat(reassigned.requestVersion).isGreaterThan(direct.requestVersion)
+                jdbcTemplate.queryForObject("SELECT current_assignee_id FROM support_case WHERE id = ?", UUID::class.java, caseId),
+            ).isEqualTo(requesterId)
+            assertThat(count("identity_customer_profile_change_history")).isZero()
         }
 
         @Test

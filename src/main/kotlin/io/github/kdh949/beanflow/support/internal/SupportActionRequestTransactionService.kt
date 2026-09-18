@@ -639,6 +639,9 @@ internal class SupportActionRequestTransactionService(
         ) {
             stale()
         }
+        if (currentRevision(entity).authorizationBasis == SupportAuthorizationBasis.SUPPORT_DIRECT) {
+            throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_STALE, "직접 처리 요청은 실행자를 바꿀 수 없습니다. 상담 재배정 후 새 요청을 작성하세요.")
+        }
         if (normalized.assigneeId == entity.supportApproverActorId || normalized.assigneeId == entity.operationsApproverActorId) {
             throw DomainFailure(
                 FailureCode.SUPPORT_APPROVER_MUST_DIFFER,

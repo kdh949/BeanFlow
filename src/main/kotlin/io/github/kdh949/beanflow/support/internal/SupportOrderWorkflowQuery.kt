@@ -145,11 +145,9 @@ internal class SupportOrderWorkflowQuery(
             ) {
                 actions += SupportOrderWorkflowAction.DECIDE_SUPPORT_MANAGER
             }
-            if (request.state in EXECUTOR_STATES && has(OperatorPermission.SUPPORT_CASE_ASSIGN)) {
-                actions += SupportOrderWorkflowAction.REASSIGN
-            }
             if (fresh && request.state == SupportActionRequestState.READY_FOR_EXECUTION &&
-                actorId == request.executorActorId && actorId == supportCase.currentAssigneeId &&
+                actorId == request.requesterActorId && actorId == request.executorActorId && actorId == supportCase.currentAssigneeId &&
+                has(OperatorPermission.SUPPORT_ACTION_REQUEST) && has(request.action.capabilityPermission()) &&
                 has(OperatorPermission.SUPPORT_ACTION_EXECUTE) && has(request.action.executionCapabilityPermission()) &&
                 (request.action == SupportActionType.POST_ACCEPTANCE_RESOLUTION || has(OperatorPermission.SUPPORT_ORDER_READ))
             ) {

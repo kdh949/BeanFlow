@@ -515,6 +515,7 @@ internal class SupportOrderChangeExecutionTransactionService(
             stale()
         }
         if (request.executorActorId != command.actorId) denied("Only the assigned Support actor can execute the action")
+        if (request.requesterActorId != command.actorId) stale()
         if (request.state != SupportActionRequestState.READY_FOR_EXECUTION) conflict("Support action request is not ready")
         if (!permissions.hasActive(request.requesterActorId, OperatorPermission.SUPPORT_ACTION_REQUEST) ||
             !permissions.hasActive(request.requesterActorId, request.action.capabilityPermission())

@@ -3457,7 +3457,8 @@ export interface paths {
         put?: never;
         /**
          * (고객센터) 주문 변경 요청 담당자 변경
-         * @description 고객센터가 실행 준비된 주문 변경 요청과 상담 건의 담당자를 함께 변경하는 API입니다.
+         * @description 과거 요청의 담당자 변경 기록을 처리하는 API입니다. SUPPORT_DIRECT 요청의 실행자 변경은 409로 거부합니다.
+         *     직접 처리 업무는 상담 담당자를 재배정한 후 새 담당자가 새 요청을 작성해야 합니다.
          *     현재 요청 내용 버전, 요청 버전, 상담 건 버전이 모두 일치해야 합니다. 새 담당자는 상담 건 수정, 작업 실행, 해당 기능 권한을 모두 보유해야 하며 이 요청의 승인자여서는 안 됩니다.
          *
          *     주요 오류:
@@ -4724,8 +4725,8 @@ export interface paths {
         put?: never;
         /**
          * (운영팀) 고객센터 요청 승인·반려
-         * @description 요청 작성자와 다른 운영팀 담당자가 고객센터의 중요 변경 요청을 승인하거나 반려하는 API입니다.
-         *     운영팀 결정과 고객센터 요청 상태는 함께 저장됩니다. 고객센터 상태 반영이나 감사 기록 저장에 실패하면 어느 쪽도 승인된 것으로 남기지 않습니다.
+         * @description ADR-136 이후 이전 정책의 미실행 요청에는 새 결정을 적용하지 않고 409와 재작성 안내를 반환합니다.
+         *     과거 완료 결정의 동일 멱등키 응답은 유지합니다. 이전 요청의 종료 상태와 감사·멱등 기록은 함께 저장하며 감사 실패 시 모두 rollback합니다.
          *
          *     주요 오류:
          *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
@@ -4754,7 +4755,7 @@ export interface paths {
         /**
          * 종료된 고객센터 본인확인 쓰기 API
          * @deprecated
-         * @description ADR-136에 따라 종료되었습니다. 새 본인확인을 생성하거나 Provider를 호출하지 않고 SUPPORT_VERIFICATION_RETIRED와 410을 반환합니다. 과거 세션 조회는 유지합니다.
+         * @description ADR-136에 따라 종료되었습니다. 새 본인확인을 생성하거나 Provider를 호출하지 않고 SUPPORT_VERIFICATION_RETIRED와 410을 반환합니다. 과거 세션 조회는 유지합니다. 본문과 멱등키는 요구하거나 검증하지 않습니다.
          */
         post: operations["createSupportVerificationSession"];
         delete?: never;
@@ -4797,7 +4798,7 @@ export interface paths {
         /**
          * 종료된 고객센터 본인확인 쓰기 API
          * @deprecated
-         * @description ADR-136에 따라 종료되었습니다. 새 본인확인을 생성하거나 Provider를 호출하지 않고 SUPPORT_VERIFICATION_RETIRED와 410을 반환합니다. 과거 세션 조회는 유지합니다.
+         * @description ADR-136에 따라 종료되었습니다. 새 본인확인을 생성하거나 Provider를 호출하지 않고 SUPPORT_VERIFICATION_RETIRED와 410을 반환합니다. 과거 세션 조회는 유지합니다. 본문과 멱등키는 요구하거나 검증하지 않습니다.
          */
         post: operations["issueSupportVerificationChallenge"];
         delete?: never;
@@ -4818,7 +4819,7 @@ export interface paths {
         /**
          * 종료된 고객센터 본인확인 쓰기 API
          * @deprecated
-         * @description ADR-136에 따라 종료되었습니다. 새 본인확인을 생성하거나 Provider를 호출하지 않고 SUPPORT_VERIFICATION_RETIRED와 410을 반환합니다. 과거 세션 조회는 유지합니다.
+         * @description ADR-136에 따라 종료되었습니다. 새 본인확인을 생성하거나 Provider를 호출하지 않고 SUPPORT_VERIFICATION_RETIRED와 410을 반환합니다. 과거 세션 조회는 유지합니다. 본문과 멱등키는 요구하거나 검증하지 않습니다.
          */
         post: operations["verifySupportVerificationChallenge"];
         delete?: never;
@@ -6437,7 +6438,7 @@ export interface components {
             version: number;
         };
         /**
-         * @description 현재 별도 검토자의 운영 조사와 결정 가능 여부입니다.
+         * @description 과거 운영 조사 조회입니다. ADR-136 이후 신규 승인 결정은 종료되었습니다.
          * @example {
          *       "investigation": {
          *         "investigationId": "83000000-0000-4000-8000-000000000001",
@@ -6451,12 +6452,12 @@ export interface components {
          *         "decidedAt": null,
          *         "version": 0
          *       },
-         *       "canDecide": true
+         *       "canDecide": false
          *     }
          */
         OperationsSupportInvestigationWorkflowResource: {
             investigation: components["schemas"]["OperationsSupportInvestigationSnapshot"];
-            /** @description 현재 권한·상태·시간 및 요청자·승인자·실행자 분리를 만족하는지입니다. 결정 시 재검증합니다. */
+            /** @description 승인 결정 종료로 항상 false입니다. 과거 이력 조회와 완료 응답 복구는 유지합니다. */
             canDecide: boolean;
         };
         /**
@@ -13086,28 +13087,11 @@ export interface components {
             version: number;
         };
         /** @enum {string} */
+        VerificationSubjectType: "CUSTOMER" | "STORE" | "DELIVERY";
+        /** @enum {string} */
         VerificationPurpose: "CONTACT_CONFIRMATION" | "CASE_RESOLUTION" | "SAFETY_RESPONSE" | "FRAUD_INVESTIGATION" | "PRIVACY_INCIDENT";
         /** @enum {string} */
         VerificationActionScope: "PERSONAL_DATA_REVEAL" | "SUPPORT_ACTION";
-        /**
-         * @description 담당 Case의 활성 subject link에 대해 새 본인확인 세션을 시작하기 위한 요청입니다.
-         * @example {
-         *       "subjectLinkId": "9d8c7b6a-5f4e-4d3c-8b2a-1e0f9d8c7b6a",
-         *       "requestedLevel": "ENHANCED",
-         *       "purpose": "CONTACT_CONFIRMATION",
-         *       "actionScope": "PERSONAL_DATA_REVEAL"
-         *     }
-         */
-        CreateVerificationSessionRequest: {
-            subjectLinkId: components["schemas"]["Identifier"];
-            /** @enum {string} */
-            requestedLevel: "BASIC" | "ENHANCED";
-            purpose: components["schemas"]["VerificationPurpose"];
-            /** @default PERSONAL_DATA_REVEAL */
-            actionScope: components["schemas"]["VerificationActionScope"];
-        };
-        /** @enum {string} */
-        VerificationSubjectType: "CUSTOMER" | "STORE" | "DELIVERY";
         /** @enum {string} */
         VerificationState: "PENDING" | "VERIFIED" | "LOCKED" | "EXPIRED" | "REVOKED";
         /** @enum {string} */
@@ -13183,20 +13167,6 @@ export interface components {
             /** Format: int64 */
             version: number;
             challenges: components["schemas"]["VerificationChallengeResource"][];
-        };
-        /**
-         * @description 등록된 채널로 opaque challenge 발급을 요청합니다.
-         * @example {
-         *       "channel": "REGISTERED_PHONE"
-         *     }
-         */
-        IssueVerificationChallengeRequest: {
-            channel: components["schemas"]["VerificationChannel"];
-        };
-        /** @description challenge에 대한 1회성 proof를 제출해 검증을 요청합니다. proof는 저장되지 않는 write-only 값입니다. */
-        VerifyVerificationChallengeRequest: {
-            /** @description Transient one-time answer or proof; never persisted, logged, audited, or returned. */
-            proof: string;
         };
         /** @enum {string} */
         SupportPersonalDataField: "CUSTOMER_DISPLAY_NAME" | "CUSTOMER_PRIMARY_PHONE" | "CUSTOMER_PRIMARY_EMAIL" | "STORE_LEGAL_DISPLAY_NAME" | "STORE_SUPPORT_PHONE" | "STORE_SUPPORT_EMAIL" | "COURIER_DISPLAY_NAME" | "COURIER_PROVIDER_REFERENCE" | "COURIER_RELAY_PHONE" | "COURIER_RELAY_EMAIL";
@@ -20911,23 +20881,13 @@ export interface operations {
     createSupportVerificationSession: {
         parameters: {
             query?: never;
-            header: {
-                /**
-                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
-                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
-                 */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
+            header?: never;
             path: {
                 caseId: components["parameters"]["SupportCaseId"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateVerificationSessionRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
@@ -20973,23 +20933,13 @@ export interface operations {
     issueSupportVerificationChallenge: {
         parameters: {
             query?: never;
-            header: {
-                /**
-                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
-                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
-                 */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
+            header?: never;
             path: {
                 sessionId: components["parameters"]["VerificationSessionId"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IssueVerificationChallengeRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
@@ -21008,23 +20958,13 @@ export interface operations {
     verifySupportVerificationChallenge: {
         parameters: {
             query?: never;
-            header: {
-                /**
-                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
-                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
-                 */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
+            header?: never;
             path: {
                 challengeId: components["parameters"]["VerificationChallengeId"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VerifyVerificationChallengeRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

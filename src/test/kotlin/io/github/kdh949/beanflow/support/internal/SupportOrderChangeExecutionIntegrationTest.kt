@@ -583,6 +583,98 @@ internal class SupportOrderChangeExecutionIntegrationTest
         }
 
         @Test
+        fun `revoked request permission hides execution and rejects before owner mutation`() {
+            jdbcTemplate.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_ACTION_REQUEST'",
+                supportActorId,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/$requestId/workflow").with(jwt().jwt { it.subject(supportActorId.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("EXECUTE"))))
+            executeCancellation("execute-request-revoked")
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
+            assertThat(value("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PENDING_PAYMENT")
+            assertThat(count("support_order_change_execution")).isZero()
+        }
+
+        @Test
+        fun `case handoff requires a new request from its new assigned actor`() {
+            val replacement = UUID.randomUUID()
+            jdbcTemplate.update(
+                "INSERT INTO operations_operator_permission_grant(actor_id, permission, state, granted_at, version, audit_source_reference) SELECT ?, permission, 'ACTIVE', now(), 1, 'replacement-' || permission FROM operations_operator_permission_grant WHERE actor_id = ?",
+                replacement,
+                supportActorId,
+            )
+            listOf(supportActorId, replacement).forEach { actor ->
+                jdbcTemplate.update(
+                    "INSERT INTO operations_operator_permission_grant(actor_id, permission, state, granted_at, version, audit_source_reference) VALUES (?, 'SUPPORT_CASE_WRITE', 'ACTIVE', now(), 1, ?)",
+                    actor,
+                    "handoff-write-$actor",
+                )
+            }
+            jdbcTemplate.update(
+                "INSERT INTO operations_operator_permission_grant(actor_id, permission, state, granted_at, version, audit_source_reference) VALUES (?, 'SUPPORT_CASE_ASSIGN', 'ACTIVE', now(), 1, 'handoff-assign')",
+                supportActorId,
+            )
+            mockMvc
+                .perform(
+                    post("/api/v1/support/cases/$caseId/assignments")
+                        .with(jwt().jwt { it.subject(supportActorId.toString()) })
+                        .header("Idempotency-Key", "handoff-case-001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"expectedVersion":0,"assigneeId":"$replacement","reason":"담당자 교체"}"""),
+                ).andExpect(status().isOk)
+            executeCancellation("old-actor-after-handoff").andExpect(status().isForbidden)
+            // Even an already transferred direct row cannot be executed by another requester.
+            jdbcTemplate.update("UPDATE support_action_request SET executor_actor_id = ? WHERE id = ?", replacement, requestId)
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/$requestId/workflow").with(jwt().jwt { it.subject(replacement.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("EXECUTE"))))
+            executeCancellation("new-actor-old-request", actorId = replacement)
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
+            val link =
+                jdbcTemplate.queryForObject(
+                    "SELECT subject_link_id FROM support_action_revision WHERE request_id = ?",
+                    UUID::class.java,
+                    requestId,
+                )
+            val created =
+                mockMvc
+                    .perform(
+                        post("/api/v1/support/cases/$caseId/action-requests")
+                            .with(jwt().jwt { it.subject(replacement.toString()) })
+                            .header("Idempotency-Key", "new-actor-request")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(
+                                """
+                                {"action":"ORDER_CANCELLATION","orderId":"$orderId","expectedTargetVersion":$orderVersion,
+                                 "subjectLinkId":"$link","actionPayloadDigest":"${cancellationDigest()}",
+                                 "reason":"새 담당자 요청","evidenceDigest":"${"a".repeat(64)}"}
+                                """.trimIndent(),
+                            ),
+                    ).andExpect(status().isCreated)
+                    .andReturn()
+                    .response.contentAsString
+            requestId =
+                UUID.fromString(
+                    tools.jackson.databind.json.JsonMapper
+                        .builder()
+                        .build()
+                        .readTree(created)
+                        .get("requestId")
+                        .asText(),
+                )
+            executeCancellation("new-actor-new-request", actorId = replacement).andExpect(status().isOk)
+            assertThat(count("support_order_change_execution")).isOne()
+        }
+
+        @Test
         fun `revoked execute permission rejects before owner mutation`() {
             jdbcTemplate.update(
                 "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
@@ -876,9 +968,10 @@ internal class SupportOrderChangeExecutionIntegrationTest
         private fun executeCancellation(
             key: String,
             reasonCode: CustomerCancellationReasonCode = CustomerCancellationReasonCode.CHANGED_MIND,
+            actorId: UUID = supportActorId,
         ) = mockMvc.perform(
             post("/api/v1/support/action-requests/$requestId/executions")
-                .with(jwt().jwt { it.subject(supportActorId.toString()) })
+                .with(jwt().jwt { it.subject(actorId.toString()) })
                 .header("Idempotency-Key", key)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
