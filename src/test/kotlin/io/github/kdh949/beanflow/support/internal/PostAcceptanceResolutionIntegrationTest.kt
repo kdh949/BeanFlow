@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -95,7 +96,7 @@ internal class PostAcceptanceResolutionIntegrationTest
         }
 
         @Test
-        fun `planned resolution follows reassignment after executor permission revocation`() {
+        fun `planned direct resolution cannot transfer to a different executor`() {
             val fixture = seed(PostAcceptanceState.PREPARING, PostAcceptanceResolutionOutcome.NO_MONETARY_RESOLUTION, cashRefundKrw = 0)
             val resolutionId = create(fixture, "plan-before-reassignment").andReturn().resolutionId()
             val nextActor = UUID.randomUUID()
@@ -135,8 +136,8 @@ internal class PostAcceptanceResolutionIntegrationTest
                         .content(
                             """{"revisionNumber":1,"expectedRequestVersion":1,"expectedCaseVersion":0,"assigneeId":"$nextActor","reason":"실행 권한 회수 후 인계"}""",
                         ),
-                ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.executorActorId").value(nextActor.toString()))
+                ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
             assertThat(value("SELECT command_actor_id::text FROM support_post_acceptance_resolution WHERE id = ?", resolutionId))
                 .isEqualTo(EXECUTOR_ID.toString())
             mockMvc
@@ -146,11 +147,9 @@ internal class PostAcceptanceResolutionIntegrationTest
                         .header("Idempotency-Key", "execute-reassigned-plan")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"expectedResolutionVersion":1,"expectedRequestVersion":2,"expectedOrderVersion":$ORDER_VERSION}"""),
-                ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.resolutionId").value(resolutionId.toString()))
-                .andExpect(jsonPath("$.state").value("RESOLVED"))
+                ).andExpect(status().isForbidden)
             assertThat(value("SELECT executor_actor_id::text FROM support_post_acceptance_resolution WHERE id = ?", resolutionId))
-                .isEqualTo(nextActor.toString())
+                .isEqualTo(EXECUTOR_ID.toString())
         }
 
         @Test
@@ -161,7 +160,7 @@ internal class PostAcceptanceResolutionIntegrationTest
                     get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
                         .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
                 ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.allowedActions[0]").value("EXECUTE"))
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.hasItem("EXECUTE")))
                 .andExpect(jsonPath("$.resolutionId").isEmpty)
                 .andExpect(jsonPath("$.order.version").value(ORDER_VERSION))
                 .andExpect(jsonPath("$.order.customerId").doesNotExist())
@@ -174,7 +173,7 @@ internal class PostAcceptanceResolutionIntegrationTest
                 .andExpect(jsonPath("$.resolutionId").value(resolutionId.toString()))
             execute(fixture, resolutionId, "workflow-consumed-resolution").andExpect(status().isOk)
             jdbc.update(
-                "UPDATE support_action_revision SET expires_at = created_at + interval '1 microsecond' WHERE request_id = ?",
+                "UPDATE support_action_revision SET created_at = now() - interval '16 minutes', expires_at = now() - interval '1 minute' WHERE request_id = ?",
                 fixture.requestId,
             )
             mockMvc
@@ -201,7 +200,7 @@ internal class PostAcceptanceResolutionIntegrationTest
         fun `resolution request permission cannot replace execution permission`() {
             val fixture = seed(PostAcceptanceState.PREPARING, PostAcceptanceResolutionOutcome.NO_MONETARY_RESOLUTION, cashRefundKrw = 0)
             jdbc.update(
-                "UPDATE operations_operator_permission_grant SET permission = 'SUPPORT_RESOLUTION_REQUEST' " +
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
                     "WHERE actor_id = ? AND permission = 'SUPPORT_RESOLUTION_EXECUTE'",
                 EXECUTOR_ID,
             )
@@ -213,6 +212,46 @@ internal class PostAcceptanceResolutionIntegrationTest
                 .andExpect(jsonPath("$.request.state").value("REASSIGNMENT_REQUIRED"))
                 .andExpect(jsonPath("$.allowedActions").isEmpty)
             create(fixture, "request-only-cannot-execute").andExpect(status().isForbidden)
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = ["SUPPORT_ACTION_REQUEST", "SUPPORT_RESOLUTION_REQUEST"])
+        fun `planned resolution rechecks request permissions before starting owner work`(permission: String) {
+            val fixture = seed(PostAcceptanceState.PREPARING, PostAcceptanceResolutionOutcome.FULL_REFUND)
+            val id = create(fixture, "permission-revocation-plan").andExpect(status().isCreated).andReturn().resolutionId()
+            jdbc.update(
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
+                    "WHERE actor_id = ? AND permission = ?",
+                EXECUTOR_ID,
+                permission,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/${fixture.requestId}/workflow")
+                        .with(jwt().jwt { it.subject(EXECUTOR_ID.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+            execute(fixture, id, "permission-revocation-execute")
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
+            assertThat(value("SELECT state FROM support_action_request WHERE id = ?", fixture.requestId)).isEqualTo("READY_FOR_EXECUTION")
+            assertThat(value("SELECT state FROM support_post_acceptance_resolution WHERE id = ?", id)).isEqualTo("PLANNED")
+            assertThat(gateway.rejectionRefundCalls.get()).isZero()
+            assertThat(count("payment_refund")).isZero()
+            assertThat(count("notification_delivery")).isZero()
+        }
+
+        @Test
+        fun `planned resolution cannot execute after its original subject link is removed`() {
+            val fixture = seed(PostAcceptanceState.PREPARING, PostAcceptanceResolutionOutcome.NO_MONETARY_RESOLUTION, cashRefundKrw = 0)
+            val id = create(fixture, "subject-link-plan").andExpect(status().isCreated).andReturn().resolutionId()
+            jdbc.update(
+                "UPDATE support_case_subject_link SET unlinked_at = now(), unlinked_by_actor_id = ?, unlink_reason = 'TEST_UNLINK', unlink_case_version = 1 WHERE id = (SELECT subject_link_id FROM support_action_revision WHERE request_id = ?)",
+                EXECUTOR_ID,
+                fixture.requestId,
+            )
+            execute(fixture, id, "subject-link-execute").andExpect(status().isConflict)
+            assertThat(value("SELECT state FROM support_action_request WHERE id = ?", fixture.requestId)).isEqualTo("READY_FOR_EXECUTION")
         }
 
         @ParameterizedTest
@@ -308,8 +347,8 @@ internal class PostAcceptanceResolutionIntegrationTest
         }
 
         @Test
-        fun `audit failure after owner success rolls support claim back and reconciliation consumes owner replay`() {
-            val fixture = seed(PostAcceptanceState.COMPLETED, PostAcceptanceResolutionOutcome.FULL_REFUND)
+        fun `legacy financial recovery consumes owner replay after an audit failure`() {
+            val fixture = seed(PostAcceptanceState.COMPLETED, PostAcceptanceResolutionOutcome.FULL_REFUND, keepLegacyVerification = true)
             gateway.enqueueRejectionRefund(GatewayRefundResult.Succeeded("provider-resolution-refund"))
             val resolutionId = create(fixture, "create-audit-recovery").andReturn().resolutionId()
             installStepAuditFault()
@@ -332,6 +371,16 @@ internal class PostAcceptanceResolutionIntegrationTest
                 resolutionId,
             )
 
+            jdbc.update(
+                "UPDATE support_post_acceptance_resolution SET authorization_basis = 'LEGACY', requester_actor_id = ? WHERE id = ?",
+                UUID.randomUUID(),
+                resolutionId,
+            )
+            jdbc.update(
+                "UPDATE support_action_revision SET authorization_basis = 'LEGACY', verification_session_id = (SELECT id FROM support_verification_session WHERE support_case_id = (SELECT support_case_id FROM support_action_request WHERE id = ?)), policy_version = 'support-action-policy/2026-08-12/v1' WHERE request_id = ?",
+                fixture.requestId,
+                fixture.requestId,
+            )
             execute(fixture, resolutionId, "execute-audit-recovery")
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.state").value("RESOLVED"))
@@ -447,6 +496,7 @@ internal class PostAcceptanceResolutionIntegrationTest
             outcome: PostAcceptanceResolutionOutcome,
             responsibility: PostAcceptanceResolutionResponsibility = PostAcceptanceResolutionResponsibility.PLATFORM,
             cashRefundKrw: Long = 7_000,
+            keepLegacyVerification: Boolean = false,
         ): Fixture {
             val now = Instant.now().minusSeconds(60)
             val orderId = UUID.randomUUID()
@@ -477,7 +527,17 @@ internal class PostAcceptanceResolutionIntegrationTest
                     DIGEST,
                     "digest-only",
                 )
-            insertApprovedRequest(caseId, requestId, sessionId, orderId, cashRefundKrw, payloads.actionDigest(draft), now, expiresAt)
+            insertDirectRequest(
+                caseId,
+                requestId,
+                sessionId,
+                orderId,
+                cashRefundKrw,
+                payloads.actionDigest(draft),
+                now,
+                expiresAt,
+                keepLegacyVerification,
+            )
             return Fixture(orderId, requestId, outcome, responsibility, cashRefundKrw)
         }
 
@@ -656,7 +716,7 @@ internal class PostAcceptanceResolutionIntegrationTest
             )
         }
 
-        private fun insertApprovedRequest(
+        private fun insertDirectRequest(
             caseId: UUID,
             requestId: UUID,
             sessionId: UUID,
@@ -665,6 +725,7 @@ internal class PostAcceptanceResolutionIntegrationTest
             actionDigest: String,
             now: Instant,
             expiresAt: Instant,
+            keepLegacyVerification: Boolean,
         ) {
             val revisionId = UUID.randomUUID()
             jdbc.update(
@@ -674,14 +735,13 @@ internal class PostAcceptanceResolutionIntegrationTest
                     current_revision_number, approval_route, state, support_approver_actor_id,
                     created_at, updated_at, version
                 ) VALUES (?, ?, 'POST_ACCEPTANCE_RESOLUTION', 'ORDER', ?, ?, ?, 1,
-                          'SUPPORT_MANAGER', 'READY_FOR_EXECUTION', ?, ?, ?, 0)
+                          'NONE', 'READY_FOR_EXECUTION', NULL, ?, ?, 0)
                 """.trimIndent(),
                 requestId,
                 caseId,
                 orderId,
                 REQUESTER_ID,
                 EXECUTOR_ID,
-                APPROVER_ID,
                 Timestamp.from(now.plusSeconds(2)),
                 Timestamp.from(now.plusSeconds(3)),
             )
@@ -689,45 +749,37 @@ internal class PostAcceptanceResolutionIntegrationTest
                 """
                 INSERT INTO support_action_revision (
                     id, request_id, revision_number, action, target_type, target_id, action_payload_digest,
-                    verification_session_id, policy_version, target_version, amount_krw, reason, evidence_digest,
-                    expires_at, created_by_actor_id, created_at
+                    subject_link_id, policy_version, target_version, amount_krw, reason, evidence_digest,
+                    expires_at, created_by_actor_id, created_at, authorization_basis
                 ) VALUES (?, ?, 1, 'POST_ACCEPTANCE_RESOLUTION', 'ORDER', ?, ?, ?, ?, ?, ?,
-                          'POST_ACCEPTANCE_RESOLUTION', ?, ?, ?, ?)
+                          'POST_ACCEPTANCE_RESOLUTION', ?, ?, ?, ?, 'SUPPORT_DIRECT')
                 """.trimIndent(),
                 revisionId,
                 requestId,
                 orderId,
                 actionDigest,
-                sessionId,
+                jdbc.queryForObject("SELECT subject_link_id FROM support_verification_session WHERE id = ?", UUID::class.java, sessionId),
                 SupportActionPolicy.POLICY_VERSION,
                 ORDER_VERSION,
                 amountKrw,
                 DIGEST,
-                Timestamp.from(expiresAt),
+                Timestamp.from(now.plusSeconds(902)),
                 REQUESTER_ID,
                 Timestamp.from(now.plusSeconds(2)),
             )
-            jdbc.update(
-                """
-                INSERT INTO support_action_approval_step (
-                    id, request_id, revision_id, revision_number, step_type, state,
-                    decided_by_actor_id, decision_reason, decided_at, created_at
-                ) VALUES (?, ?, ?, 1, 'SUPPORT_MANAGER', 'APPROVED', ?,
-                          'POST_ACCEPTANCE_RESOLUTION', ?, ?)
-                """.trimIndent(),
-                UUID.randomUUID(),
-                requestId,
-                revisionId,
-                APPROVER_ID,
-                Timestamp.from(now.plusSeconds(3)),
-                Timestamp.from(now.plusSeconds(3)),
-            )
+            if (!keepLegacyVerification) jdbc.update("DELETE FROM support_verification_session WHERE id = ?", sessionId)
         }
 
         private fun grantPermissions() {
             mapOf(
-                REQUESTER_ID to listOf("SUPPORT_ACTION_REQUEST", "SUPPORT_RESOLUTION_REQUEST"),
-                EXECUTOR_ID to listOf("SUPPORT_CASE_READ", "SUPPORT_ACTION_EXECUTE", "SUPPORT_RESOLUTION_EXECUTE"),
+                EXECUTOR_ID to
+                    listOf(
+                        "SUPPORT_ACTION_REQUEST",
+                        "SUPPORT_RESOLUTION_REQUEST",
+                        "SUPPORT_CASE_READ",
+                        "SUPPORT_ACTION_EXECUTE",
+                        "SUPPORT_RESOLUTION_EXECUTE",
+                    ),
             ).forEach { (actorId, permissions) ->
                 permissions.forEach { permission ->
                     jdbc.update(
@@ -857,7 +909,7 @@ internal class PostAcceptanceResolutionIntegrationTest
         private companion object {
             val REQUESTER_ID: UUID = UUID.fromString("81000000-0000-0000-0000-000000000001")
             val APPROVER_ID: UUID = UUID.fromString("81000000-0000-0000-0000-000000000002")
-            val EXECUTOR_ID: UUID = UUID.fromString("81000000-0000-0000-0000-000000000003")
+            val EXECUTOR_ID: UUID = UUID.fromString("81000000-0000-0000-0000-000000000001")
             const val ORDER_VERSION = 4L
             const val DIGEST = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         }

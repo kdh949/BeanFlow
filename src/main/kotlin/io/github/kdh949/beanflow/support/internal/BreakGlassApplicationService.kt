@@ -19,6 +19,7 @@ import io.github.kdh949.beanflow.support.internal.domain.BreakGlassRequest
 import io.github.kdh949.beanflow.support.internal.domain.BreakGlassReviewDecision
 import io.github.kdh949.beanflow.support.internal.domain.BreakGlassState
 import io.github.kdh949.beanflow.support.internal.domain.DataAccessBinding
+import io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis
 import io.github.kdh949.beanflow.support.internal.domain.SupportCaseState
 import io.github.kdh949.beanflow.support.internal.domain.SupportPersonalDataField
 import io.github.kdh949.beanflow.support.internal.domain.VerificationPurpose
@@ -88,6 +89,7 @@ internal data class BreakGlassResource(
     val requestedAt: Instant,
     val expiresAt: Instant?,
     val version: Long,
+    val authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
 )
 
 internal enum class BreakGlassWorkflowAction { DECIDE, REVEAL, REVIEW }
@@ -243,12 +245,11 @@ internal class BreakGlassTransactions(
         val assigned = requester && active && bound && supportCase.currentAssigneeId == actorId
         val withinExpiry = entity.expiresAt?.let { clock.instant().isBefore(it) } == true
         val allowed = mutableListOf<BreakGlassWorkflowAction>()
-        if (active && bound && supportCase.currentAssigneeId == entity.requesterId && approver &&
-            entity.state == BreakGlassState.APPROVAL_PENDING
+        if (entity.authorizationBasis == SupportAuthorizationBasis.SUPPORT_DIRECT && assigned && withinExpiry &&
+            entity.state == BreakGlassState.ACTIVE
         ) {
-            allowed += BreakGlassWorkflowAction.DECIDE
+            allowed += BreakGlassWorkflowAction.REVEAL
         }
-        if (assigned && withinExpiry && entity.state == BreakGlassState.ACTIVE) allowed += BreakGlassWorkflowAction.REVEAL
         if (reviewer && entity.state == BreakGlassState.REVIEW_PENDING) allowed += BreakGlassWorkflowAction.REVIEW
         val review =
             if (entity.state == BreakGlassState.REVIEWED) {
@@ -294,8 +295,14 @@ internal class BreakGlassTransactions(
                         command.purpose,
                         command.reasonCode,
                         clock.instant(),
+                        SupportAuthorizationBasis.SUPPORT_DIRECT,
                     )
-                val entity = aggregate.toEntity()
+                aggregate.activateDirect(aggregate.requestedAt)
+                val entity =
+                    aggregate.toEntity().also {
+                        it.authorizationBasis = SupportAuthorizationBasis.SUPPORT_DIRECT
+                        it.directAuthorizedAt = aggregate.requestedAt
+                    }
                 requests.saveAndFlush(entity)
                 notification(entity.id, "REQUESTED", entity.requestedAt)
                 audits.appendAll(
@@ -321,6 +328,7 @@ internal class BreakGlassTransactions(
                 200,
             ) {
                 val entity = requests.findLockedById(command.requestId) ?: notFound()
+                requireDirectAuthorization(entity.authorizationBasis)
                 if (entity.supportCaseId != caseId) conflict("Break-glass request binding is stale")
                 if (entity.version != command.expectedVersion) conflict("Break-glass request version is stale")
                 activeAssignedCase(caseId, entity.requesterId)
@@ -371,6 +379,7 @@ internal class BreakGlassTransactions(
                 )
             }
             val entity = requests.findLockedById(command.requestId) ?: notFound()
+            requireDirectAuthorization(entity.authorizationBasis)
             if (entity.supportCaseId != caseId) conflict("Break-glass request binding is stale")
             if (entity.requesterId !=
                 command.actorId
@@ -431,6 +440,7 @@ internal class BreakGlassTransactions(
                                 "accessPath" to "BREAK_GLASS",
                                 "fieldCount" to "1",
                                 "postReview" to "REQUIRED",
+                                "authorizationBasis" to entity.authorizationBasis.name,
                             ),
                         correlationId = command.correlationId,
                         sourceReference = "support-break-glass-reveal:$attemptId",
@@ -719,6 +729,7 @@ private fun BreakGlassRequestEntity.toAggregate(): BreakGlassRequest =
         approverId,
         revealedAt,
         reviewerId,
+        authorizationBasis,
     )
 
 private fun BreakGlassRequestEntity.apply(
@@ -731,7 +742,7 @@ private fun BreakGlassRequestEntity.apply(
     approverId = aggregate.approverId
     revealedAt = aggregate.revealedAt
     reviewerId = aggregate.reviewerId
-    if (state == BreakGlassState.ACTIVE && approvedAt == null) approvedAt = now
+    if (authorizationBasis == SupportAuthorizationBasis.LEGACY && state == BreakGlassState.ACTIVE && approvedAt == null) approvedAt = now
     if (state == BreakGlassState.REVIEWED && reviewedAt == null) reviewedAt = now
     if (state == BreakGlassState.REVOKED && revokedAt == null) revokedAt = now
     if (previousState != state) version += 1
@@ -751,6 +762,7 @@ private fun BreakGlassRequestEntity.toResource(): BreakGlassResource =
         requestedAt,
         expiresAt,
         version,
+        authorizationBasis,
     )
 
 private fun BreakGlassRequestEntity.audit(
@@ -768,7 +780,14 @@ private fun BreakGlassRequestEntity.audit(
         targetId = id,
         occurredAt = occurredAt,
         reason = reasonCode.name,
-        afterSummary = mapOf("event" to action, "state" to state.name, "fieldCount" to "1", "postReview" to "REQUIRED"),
+        afterSummary =
+            mapOf(
+                "event" to action,
+                "state" to state.name,
+                "fieldCount" to "1",
+                "postReview" to "REQUIRED",
+                "authorizationBasis" to authorizationBasis.name,
+            ),
         correlationId = correlationId,
         sourceReference = "support-break-glass:$id:$action:$version",
     )

@@ -7,6 +7,7 @@ import io.github.kdh949.beanflow.support.internal.domain.SupportActionRevision
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionType
 import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalStepState
 import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalStepType
+import io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -134,8 +135,8 @@ internal class SupportActionRevisionEntity(
     val targetId: UUID,
     @Column(name = "action_payload_digest", nullable = false, length = 64)
     val actionPayloadDigest: String,
-    @Column(name = "verification_session_id", nullable = false)
-    val verificationSessionId: UUID,
+    @Column(name = "verification_session_id")
+    val verificationSessionId: UUID?,
     @Column(name = "policy_version", nullable = false, length = 160)
     val policyVersion: String,
     @Column(name = "target_version", nullable = false)
@@ -152,6 +153,11 @@ internal class SupportActionRevisionEntity(
     val createdByActorId: UUID,
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant,
+    @Column(name = "subject_link_id")
+    val subjectLinkId: UUID? = null,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "authorization_basis", nullable = false, length = 24)
+    val authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
 ) {
     fun toDomain(): SupportActionRevision =
         SupportActionRevision(
@@ -169,6 +175,8 @@ internal class SupportActionRevisionEntity(
             expiresAt,
             createdByActorId,
             createdAt,
+            subjectLinkId,
+            authorizationBasis,
         )
 }
 

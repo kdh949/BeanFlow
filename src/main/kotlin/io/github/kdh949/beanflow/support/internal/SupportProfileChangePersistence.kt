@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.shared.api.ProfileNotificationChannel
 import io.github.kdh949.beanflow.shared.api.ProfileNotificationTargetKind
 import io.github.kdh949.beanflow.support.internal.domain.ProfileChangePurpose
 import io.github.kdh949.beanflow.support.internal.domain.ProfileRiskClass
+import io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis
 import io.github.kdh949.beanflow.support.internal.domain.SupportProfileChange
 import io.github.kdh949.beanflow.support.internal.domain.SupportProfileChangeState
 import io.github.kdh949.beanflow.support.internal.domain.SupportProfileNotificationState
@@ -39,7 +40,7 @@ internal class SupportProfileChangeEntity(
     @Enumerated(EnumType.STRING) @Column(name = "risk_class", nullable = false) val riskClass: ProfileRiskClass,
     @Column(name = "requester_actor_id", nullable = false) val requesterActorId: UUID,
     @Column(name = "executor_actor_id", nullable = false) var executorActorId: UUID,
-    @Column(name = "verification_session_id", nullable = false) var verificationSessionId: UUID,
+    @Column(name = "verification_session_id") var verificationSessionId: UUID?,
     @Column(name = "expected_profile_version", nullable = false) var expectedProfileVersion: Long,
     @Column(name = "current_profile_version") var currentProfileVersion: Long?,
     @Column(name = "payload_digest", nullable = false, length = 64) var payloadDigest: String,
@@ -54,6 +55,11 @@ internal class SupportProfileChangeEntity(
     @Column(name = "created_at", nullable = false) val createdAt: Instant,
     @Column(name = "updated_at", nullable = false) var updatedAt: Instant,
     @Column(nullable = false) var version: Long,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "authorization_basis", nullable = false, length = 24)
+    var authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
+    @Column(name = "subject_link_id")
+    var subjectLinkId: UUID? = null,
 ) {
     fun toAggregate(): SupportProfileChange =
         SupportProfileChange.restore(

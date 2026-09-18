@@ -41,6 +41,7 @@ internal class BreakGlassRequest private constructor(
     initialApproverId: UUID?,
     initialRevealedAt: Instant?,
     initialReviewerId: UUID?,
+    val authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
 ) {
     var state: BreakGlassState = initialState
         private set
@@ -58,6 +59,14 @@ internal class BreakGlassRequest private constructor(
         require(purpose in EMERGENCY_PURPOSES) { "Break-glass purpose is invalid" }
         require(reasonCode.matches(purpose)) { "Break-glass reason and purpose do not match" }
         validateState()
+    }
+
+    fun activateDirect(occurredAt: Instant) {
+        check(authorizationBasis == SupportAuthorizationBasis.SUPPORT_DIRECT)
+        check(state == BreakGlassState.APPROVAL_PENDING)
+        require(occurredAt >= requestedAt)
+        expiresAt = occurredAt.plus(ACTIVE_TTL)
+        state = BreakGlassState.ACTIVE
     }
 
     fun approve(
@@ -134,15 +143,27 @@ internal class BreakGlassRequest private constructor(
             BreakGlassState.ACTIVE,
             BreakGlassState.EXPIRED,
             -> {
-                require(expiresAt != null && approverId != null && revealedAt == null && reviewerId == null)
+                require(
+                    expiresAt != null && (approverId != null || authorizationBasis == SupportAuthorizationBasis.SUPPORT_DIRECT) &&
+                        revealedAt == null &&
+                        reviewerId == null,
+                )
             }
 
             BreakGlassState.REVIEW_PENDING -> {
-                require(expiresAt != null && approverId != null && revealedAt != null && reviewerId == null)
+                require(
+                    expiresAt != null && (approverId != null || authorizationBasis == SupportAuthorizationBasis.SUPPORT_DIRECT) &&
+                        revealedAt != null &&
+                        reviewerId == null,
+                )
             }
 
             BreakGlassState.REVIEWED -> {
-                require(expiresAt != null && approverId != null && revealedAt != null && reviewerId != null)
+                require(
+                    expiresAt != null && (approverId != null || authorizationBasis == SupportAuthorizationBasis.SUPPORT_DIRECT) &&
+                        revealedAt != null &&
+                        reviewerId != null,
+                )
             }
 
             BreakGlassState.DENIED -> {
@@ -171,6 +192,7 @@ internal class BreakGlassRequest private constructor(
             purpose: VerificationPurpose,
             reasonCode: BreakGlassReasonCode,
             requestedAt: Instant,
+            authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
         ): BreakGlassRequest =
             BreakGlassRequest(
                 id,
@@ -188,6 +210,7 @@ internal class BreakGlassRequest private constructor(
                 null,
                 null,
                 null,
+                authorizationBasis,
             )
 
         fun restore(
@@ -206,6 +229,7 @@ internal class BreakGlassRequest private constructor(
             approverId: UUID?,
             revealedAt: Instant?,
             reviewerId: UUID?,
+            authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
         ): BreakGlassRequest =
             BreakGlassRequest(
                 id,
@@ -223,6 +247,7 @@ internal class BreakGlassRequest private constructor(
                 approverId,
                 revealedAt,
                 reviewerId,
+                authorizationBasis,
             )
     }
 }

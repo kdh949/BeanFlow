@@ -25,6 +25,7 @@ import io.github.kdh949.beanflow.support.internal.domain.SupportActionRequest
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionRequestState
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionRevision
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionType
+import io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis
 import io.github.kdh949.beanflow.support.internal.domain.SupportCaseState
 import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationBand
 import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationBenefitType
@@ -71,7 +72,7 @@ internal data class EvaluateSupportCompensationCommand(
     val costEvidenceDigest: String?,
     val platformShareBps: Int,
     val storeShareBps: Int,
-    val verificationSessionId: UUID,
+    val subjectLinkId: UUID,
 )
 
 internal data class CreateSupportCompensationCommand(
@@ -88,7 +89,7 @@ internal data class CreateSupportCompensationCommand(
     val costEvidenceDigest: String?,
     val platformShareBps: Int,
     val storeShareBps: Int,
-    val verificationSessionId: UUID,
+    val subjectLinkId: UUID,
     val evidenceDigest: String,
     val idempotencyKey: String,
 ) {
@@ -107,7 +108,7 @@ internal data class CreateSupportCompensationCommand(
             costEvidenceDigest,
             platformShareBps,
             storeShareBps,
-            verificationSessionId,
+            subjectLinkId,
         )
 }
 
@@ -162,6 +163,7 @@ internal data class SupportCompensationResource(
     val version: Long,
     val createdAt: Instant,
     val updatedAt: Instant,
+    val authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
 )
 
 @Component
@@ -185,7 +187,7 @@ internal class SupportCompensationPayloadCanonicalizer(
                     field("costEvidenceDigest", "sha256", command.costEvidenceDigest),
                     field("platformShareBps", "int32", command.platformShareBps),
                     field("storeShareBps", "int32", command.storeShareBps),
-                    field("verificationSessionId", "uuid", command.verificationSessionId),
+                    field("subjectLinkId", "uuid", command.subjectLinkId),
                 ),
             ),
         )
@@ -317,13 +319,13 @@ internal class SupportCompensationTransactionService(
                     action = SupportActionType.GOODWILL_COMPENSATION,
                     targetId = compensationId,
                     actionPayloadDigest = payloads.actionDigest(command.evaluation()),
-                    verificationSessionId = command.verificationSessionId,
+                    verificationSessionId = null,
                     policyVersion = evaluated.version.id.toString(),
                     targetVersion = 0,
                     amountKrw = command.amountKrw,
                     reason = "GOODWILL_${evaluated.result.band.name}",
                     evidenceDigest = command.evidenceDigest,
-                    expiresAt = evaluated.session.expiresAt,
+                    expiresAt = createdAt.plus(SUPPORT_DIRECT_REQUEST_TTL),
                     createdByActorId = command.actorId,
                     createdAt = createdAt,
                 )
@@ -347,7 +349,7 @@ internal class SupportCompensationTransactionService(
             SupportCompensationRequest.open(
                 id = compensationId,
                 supportCaseId = command.caseId,
-                customerId = evaluated.session.subjectId,
+                customerId = evaluated.subjectLink.subjectId,
                 incidentId = command.incidentId,
                 orderId = command.orderId,
                 storeId = order?.storeId,
@@ -359,7 +361,7 @@ internal class SupportCompensationTransactionService(
                 policyVersionId = evaluated.version.id,
                 band = evaluated.result.band,
                 route = route,
-                verificationSessionId = command.verificationSessionId,
+                verificationSessionId = null,
                 targetVersion = order?.version ?: 0,
                 costSnapshot = command.evaluation().costSnapshot(),
                 payloadDigest = payloads.actionDigest(command.evaluation()),
@@ -367,7 +369,14 @@ internal class SupportCompensationTransactionService(
                 actionRequestId = actionRequestId,
                 createdAt = createdAt,
             )
-        val entity = requests.saveAndFlush(aggregate.toEntity(createdAt))
+        val entity =
+            requests.saveAndFlush(
+                aggregate.toEntity(createdAt).also {
+                    it.subjectLinkId = command.subjectLinkId
+                    it.authorizationBasis = SupportAuthorizationBasis.SUPPORT_DIRECT
+                    it.executionExpiresAt = createdAt.plus(SUPPORT_DIRECT_REQUEST_TTL)
+                },
+            )
         if (route == SupportActionApprovalRoute.OPERATIONS) {
             investigations.open(
                 OpenOperationsSupportInvestigationCommand(
@@ -424,7 +433,9 @@ internal class SupportCompensationTransactionService(
         val actionRevision = actionEntity?.let(::currentRevision)
         val effectiveExecutorActorId = actionEntity?.executorActorId ?: entity.executorActorId
         if (command.actorId != effectiveExecutorActorId) denied()
+        requireDirectAuthorization(entity.authorizationBasis)
         val executedAt = now()
+        if (entity.executionExpiresAt == null || !executedAt.isBefore(entity.executionExpiresAt)) stale()
         val evaluationCommand = entity.evaluationCommand(entity.requesterActorId)
         val evaluated =
             evaluateCurrent(
@@ -629,9 +640,10 @@ internal class SupportCompensationTransactionService(
         val entity = requests.findLockedById(compensationRequestId) ?: notFound()
         val action = exactActionRequest(entity)
         val supportCase = requireActiveObjectScope(entity)
-        val session = sessions.findLockedById(entity.verificationSessionId) ?: verificationRequired()
+        val expiresAt =
+            entity.executionExpiresAt ?: entity.verificationSessionId?.let { sessions.findLockedById(it)?.expiresAt } ?: entity.createdAt
         val effectiveExecutor = action?.executorActorId ?: entity.executorActorId
-        val current = now().isBefore(session.expiresAt) && session.state == VerificationState.VERIFIED
+        val current = entity.authorizationBasis == SupportAuthorizationBasis.SUPPORT_DIRECT && now().isBefore(expiresAt)
         val separate = actorId != entity.requesterActorId && actorId != effectiveExecutor && actorId != action?.supportApproverActorId
         val managerReview =
             current && action?.state == SupportActionRequestState.AWAITING_SUPPORT_MANAGER && separate &&
@@ -688,7 +700,7 @@ internal class SupportCompensationTransactionService(
                 )
             },
             currentVersion,
-            session.expiresAt,
+            expiresAt,
             allowed,
         )
     }
@@ -704,22 +716,16 @@ internal class SupportCompensationTransactionService(
         permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_COMPENSATION_REQUEST)
         val supportCase = cases.findLockedById(command.caseId) ?: notFound("SupportCase")
         if (supportCase.currentAssigneeId != caseActorId || supportCase.state !in ACTIVE_CASE_STATES) denied()
-        val session = sessions.findLockedById(command.verificationSessionId) ?: verificationRequired()
-        if (session.actorId != command.actorId || session.supportCaseId != command.caseId ||
-            session.subjectType != VerificationSubjectType.CUSTOMER || session.state != VerificationState.VERIFIED ||
-            session.actionScope != VerificationActionScope.SUPPORT_ACTION || session.purpose != VerificationPurpose.CASE_RESOLUTION ||
-            !evaluatedAt.isBefore(session.expiresAt)
-        ) {
-            verificationRequired()
-        }
-        val customerLink = subjectLinks.findByIdAndSupportCaseId(session.subjectLinkId, command.caseId)
+        val customerLink = subjectLinks.findByIdAndSupportCaseId(command.subjectLinkId, command.caseId)
         if (customerLink == null || customerLink.unlinkedAt != null || customerLink.subjectType != SupportSubjectType.CUSTOMER ||
-            customerLink.subjectId != session.subjectId
+            customerLink.relationship !in setOf(SupportSubjectRelationship.REQUESTER, SupportSubjectRelationship.AFFECTED_CUSTOMER)
         ) {
             denied()
         }
         if (command.orderId != null) {
-            if (order == null || order.orderId != command.orderId || order.customerId != session.subjectId || order.currency != "KRW") {
+            if (order == null || order.orderId != command.orderId || order.customerId != customerLink.subjectId ||
+                order.currency != "KRW"
+            ) {
                 denied()
             }
             val linked =
@@ -733,7 +739,7 @@ internal class SupportCompensationTransactionService(
         } else if (order != null || command.expectedTargetVersion != 0L) {
             invalid("Orderless compensation target version must be zero")
         }
-        incidents.requireBinding(command.incidentId, session.subjectId, command.orderId)
+        incidents.requireBinding(command.incidentId, customerLink.subjectId, command.orderId)
         if (command.benefitType == SupportCompensationBenefitType.COUPON) {
             val templateId = command.couponTemplateId ?: invalid("Coupon template is required")
             val template = coupons.findTemplate(templateId) ?: notFound("CouponTemplate")
@@ -748,7 +754,7 @@ internal class SupportCompensationTransactionService(
         val priorCustomerAmount =
             consumptions.sumInWindow(
                 SupportCompensationLimitScope.CUSTOMER,
-                session.subjectId,
+                customerLink.subjectId,
                 evaluatedAt.minus(customerRule.window),
             )
         val result =
@@ -761,7 +767,7 @@ internal class SupportCompensationTransactionService(
                     order?.storeId,
                     priorCustomerAmount,
                     command.responsibility,
-                    session.requestedLevel,
+                    VerificationLevel.UNVERIFIED,
                     terminals.findByIncidentId(command.incidentId) != null,
                     command.expectedTargetVersion == (order?.version ?: 0L),
                 ),
@@ -769,7 +775,7 @@ internal class SupportCompensationTransactionService(
                 evaluatedAt,
             )
         command.costSnapshot()
-        return EvaluatedCompensation(version, result, session)
+        return EvaluatedCompensation(version, result, customerLink)
     }
 
     private fun currentPolicyVersion(): SupportCompensationPolicyVersion {
@@ -1000,11 +1006,9 @@ internal class SupportCompensationTransactionService(
     private fun requireActiveObjectScope(entity: SupportCompensationRequestEntity): SupportCaseEntity {
         val supportCase = cases.findLockedById(entity.supportCaseId) ?: notFound("SupportCase")
         if (supportCase.state !in ACTIVE_CASE_STATES) denied()
-        val session = sessions.findLockedById(entity.verificationSessionId) ?: verificationRequired()
-        val customerLink = subjectLinks.findByIdAndSupportCaseId(session.subjectLinkId, entity.supportCaseId)
-        if (session.supportCaseId != entity.supportCaseId || session.subjectType != VerificationSubjectType.CUSTOMER ||
-            session.subjectId != entity.customerId ||
-            customerLink == null || customerLink.unlinkedAt != null || customerLink.subjectType != SupportSubjectType.CUSTOMER ||
+        val linkId = entity.subjectLinkId ?: entity.verificationSessionId?.let { sessions.findLockedById(it)?.subjectLinkId } ?: denied()
+        val customerLink = subjectLinks.findByIdAndSupportCaseId(linkId, entity.supportCaseId)
+        if (customerLink == null || customerLink.unlinkedAt != null || customerLink.subjectType != SupportSubjectType.CUSTOMER ||
             customerLink.subjectId != entity.customerId
         ) {
             denied()
@@ -1171,7 +1175,7 @@ internal class SupportCompensationTransactionService(
             costEvidenceDigest,
             platformShareBps,
             storeShareBps,
-            verificationSessionId,
+            requireNotNull(subjectLinkId),
         )
 
     private fun CreateSupportCompensationCommand.normalized() =
@@ -1236,6 +1240,7 @@ internal class SupportCompensationTransactionService(
                 entity.version,
                 entity.createdAt,
                 entity.updatedAt,
+                entity.authorizationBasis,
             )
         }
 
@@ -1297,7 +1302,7 @@ internal class SupportCompensationTransactionService(
 private data class EvaluatedCompensation(
     val version: SupportCompensationPolicyVersion,
     val result: SupportCompensationPolicyResult,
-    val session: VerificationSessionEntity,
+    val subjectLink: SupportCaseSubjectLinkEntity,
 )
 
 private data class OwnerBenefit(

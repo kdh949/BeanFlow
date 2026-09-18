@@ -9,7 +9,6 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { caseCategoryLabels, casePriorityLabels } from "./supportCaseLabels";
 import { SupportCompensationWorkspace } from "./SupportCompensationWorkspace";
-import { SupportVerificationPanel } from "./SupportVerificationPanel";
 import { SupportDataAccessWorkspace } from "./SupportDataAccessWorkspace";
 import { SupportTimelinePanel } from "./SupportTimelinePanel";
 import type { components } from "../../api/schema";
@@ -22,7 +21,6 @@ import { shortDateTime } from "../../lib/format";
 type SearchResult = components["schemas"]["SupportSubjectSearchResult"];
 type Candidate = components["schemas"]["SupportSubjectSearchCandidate"];
 type SupportCase = components["schemas"]["SupportCase"];
-type VerificationSession = components["schemas"]["VerificationSessionResource"];
 type Timeline = components["schemas"]["SupportTimelinePage"];
 
 /**
@@ -60,13 +58,11 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
   const creatingCase = caseCommand.busy;
   const [dataBusy, setDataBusy] = useState(false);
   const [compensationBusy, setCompensationBusy] = useState(false);
-  const [verificationBusy, setVerificationBusy] = useState(false);
-  const workLocked = dataBusy || compensationBusy || verificationBusy || caseCommand.busy || caseCommand.pending;
+  const workLocked = dataBusy || compensationBusy || caseCommand.busy || caseCommand.pending;
 
-  const [verification, setVerification] = useState<VerificationSession | null>(null);
   const [securityGeneration, setSecurityGeneration] = useState(0);
   const terminal = supportCase?.state === "RESOLVED" || supportCase?.state === "CLOSED";
-  function clearSensitiveState() { setVerification(null); setSecurityGeneration(value => value + 1); }
+  function clearSensitiveState() { setSecurityGeneration(value => value + 1); }
 
   async function searchSubjects() {
     if (workLocked || searching) return;
@@ -90,7 +86,7 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
   }
 
   async function openCase(caseId: string) {
-    if (dataBusy || compensationBusy || verificationBusy) return;
+    if (dataBusy || compensationBusy) return;
     const normalized = caseId.trim();
     if (!normalized) return;
     const generation = ++caseGeneration.current;
@@ -98,7 +94,6 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
     setCaseError(null);
     setSupportCase(null);
     setTimeline(null);
-    setVerification(null);
     clearSensitiveState();
     try {
       const [caseResponse, timelineResponse] = await Promise.all([
@@ -216,15 +211,15 @@ function SupportWorkspace({ initialCaseId }: { initialCaseId: string }) {
           <fieldset className="catalog-fieldset management-workspace" disabled={caseCommand.busy || caseCommand.pending}><legend>현재 상담 처리</legend>
           <div className="support-control-grid">
             <div className="management-workspace">
-              <SupportVerificationPanel key={`${supportCase.caseId}:${securityGeneration}`} caseId={supportCase.caseId} links={supportCase.subjectLinks} disabled={terminal} locked={dataBusy || compensationBusy || caseCommand.busy || caseCommand.pending} onBusyChange={setVerificationBusy} onChange={setVerification} />
-              {!terminal ? <SupportDataAccessWorkspace key={`${supportCase.caseId}:${securityGeneration}`} session={verification} onBusyChange={setDataBusy} /> : null}
+
+              {!terminal ? <SupportDataAccessWorkspace key={`${supportCase.caseId}:${securityGeneration}`} supportCase={supportCase} onBusyChange={setDataBusy} /> : null}
             </div>
 
             <SupportTimelinePanel timeline={timeline} />
             {timeline?.nextCursor ? <ButtonLink variant="secondary" to={`/support/follow-up?caseId=${encodeURIComponent(supportCase.caseId)}`}>이력 더 보기</ButtonLink> : null}
           </div>
 
-          <SupportCompensationWorkspace key={`${supportCase.caseId}:${securityGeneration}`} supportCase={supportCase} verification={verification} onBusyChange={setCompensationBusy} />
+          <SupportCompensationWorkspace key={`${supportCase.caseId}:${securityGeneration}`} supportCase={supportCase} onBusyChange={setCompensationBusy} />
           </fieldset>
         </>
       ) : null}

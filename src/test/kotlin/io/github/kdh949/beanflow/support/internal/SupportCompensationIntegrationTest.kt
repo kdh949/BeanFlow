@@ -88,7 +88,7 @@ internal class SupportCompensationIntegrationTest
         private val replacementId = UUID.fromString("75000000-0000-0000-0000-000000000004")
         private lateinit var fixture: OrderCreationFixture
         private lateinit var caseId: UUID
-        private lateinit var sessionId: UUID
+        private lateinit var subjectLinkId: UUID
         private lateinit var orderId: UUID
         private var orderVersion: Long = 0
 
@@ -107,6 +107,9 @@ internal class SupportCompensationIntegrationTest
                     jdbcTemplate.queryForObject("SELECT version FROM ordering_order WHERE id = ?", Long::class.java, orderId),
                 )
             seedSupportScope()
+            jdbcTemplate.update(
+                "UPDATE support_compensation_policy_head SET current_version_id = '90000000-0000-0000-0000-000000000002' WHERE name = 'GOODWILL'",
+            )
             listOf("SUPPORT_CASE_READ", "SUPPORT_COMPENSATION_REQUEST", "SUPPORT_COMPENSATION_EXECUTE").forEach {
                 grant(requesterId, it)
             }
@@ -115,76 +118,63 @@ internal class SupportCompensationIntegrationTest
         }
 
         @Test
-        fun `work directory discovers compensation for its separate pending approver without issuing a benefit`() {
+        fun `direct compensation belongs to its requester and creates no approval task`() {
             val created = compensations.create(command(UUID.randomUUID(), 3_001, "directory-compensation"))
             mockMvc
                 .perform(
                     get("/api/v1/support/work-items")
-                        .with(jwt().jwt { it.subject(managerId.toString()) })
+                        .with(jwt().jwt { it.subject(requesterId.toString()) })
                         .param("kind", "COMPENSATION")
                         .param("caseId", caseId.toString()),
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.items[0].requestId").value(created.compensationRequestId.toString()))
-                .andExpect(jsonPath("$.items[0].payloadDigest").doesNotExist())
-                .andExpect(jsonPath("$.items[0].verificationSessionId").doesNotExist())
-            assertThat(
-                jdbcTemplate.queryForObject(
-                    "SELECT terminal_benefit_id FROM support_compensation_request WHERE id = ?",
-                    UUID::class.java,
-                    created.compensationRequestId,
-                ),
-            ).isNull()
             mockMvc
                 .perform(
                     get("/api/v1/support/approval-tasks")
                         .with(jwt().jwt { it.subject(managerId.toString()) })
                         .param("kind", "COMPENSATION"),
                 ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.items[0].requestId").value(created.compensationRequestId.toString()))
-                .andExpect(jsonPath("$.items[0].reviewAction").value("DECIDE"))
-            mockMvc
-                .perform(
-                    get("/api/v1/support/approval-tasks/COMPENSATION/${created.compensationRequestId}/history")
-                        .with(jwt().jwt { it.subject(managerId.toString()) }),
-                ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.items").isEmpty())
+            assertThat(created.actionRequestId).isNull()
+            assertThat(count("support_compensation_terminal_benefit", "request_id", created.compensationRequestId)).isZero()
         }
 
         @Test
-        fun `workflow exposes exact non personal terms to pending separate approver without expanding legacy reads`() {
+        fun `expired direct compensation can be recreated without verification and issues only once`() {
+            val incident = UUID.randomUUID()
+            val expired = compensations.create(command(incident, 100, "compensation-expiry-create"))
+            jdbcTemplate.update(
+                "UPDATE support_compensation_request SET created_at = now() - interval '16 minutes', execution_expires_at = now() - interval '1 minute' WHERE id = ?",
+                expired.compensationRequestId,
+            )
+            assertThatThrownBy { execute(expired, "compensation-expiry-execute") }
+                .isInstanceOfSatisfying(
+                    DomainFailure::class.java,
+                ) { assertThat(it.code).isEqualTo(FailureCode.SUPPORT_ACTION_REQUEST_STALE) }
+            assertThat(count("support_compensation_terminal_benefit", "incident_id", incident)).isZero()
+            val recreated = compensations.create(command(incident, 100, "compensation-expiry-recreate"))
+            execute(recreated, "compensation-expiry-reexecute")
+            assertThat(count("support_compensation_terminal_benefit", "incident_id", incident)).isOne()
+        }
+
+        @Test
+        fun `workflow exposes direct execution only while current executor permission remains active`() {
             val created = compensations.create(command(UUID.randomUUID(), 3_001, "workflow-medium-create"))
-            val path = "/api/v1/support/compensations/${created.compensationRequestId}"
+            val path = "/api/v1/support/compensations/${created.compensationRequestId}/workflow"
+            mockMvc.perform(get(path).with(jwt().jwt { it.subject(managerId.toString()) })).andExpect(status().isForbidden)
             mockMvc
-                .perform(get(path).with(jwt().jwt { it.subject(managerId.toString()) }))
-                .andExpect(status().isForbidden)
-            mockMvc
-                .perform(get("$path/workflow").with(jwt().jwt { it.subject(managerId.toString()) }))
+                .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
                 .andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.terms.responsibility").value("PLATFORM"))
-                .andExpect(jsonPath("$.terms.platformShareBps").value(10000))
-                .andExpect(jsonPath("$.terms.targetVersion").value(orderVersion))
-                .andExpect(jsonPath("$.allowedActions[0]").value("DECIDE_SUPPORT_MANAGER"))
-                .andExpect(jsonPath("$.request.customerId").doesNotExist())
-                .andExpect(jsonPath("$.terms.verificationSessionId").doesNotExist())
-                .andExpect(jsonPath("$.terms.rawPayload").doesNotExist())
-            grant(requesterId, "SUPPORT_COMPENSATION_APPROVE")
-            mockMvc
-                .perform(get("$path/workflow").with(jwt().jwt { it.subject(requesterId.toString()) }))
-                .andExpect(status().isOk)
-                .andExpect(jsonPath("$.allowedActions").isEmpty)
-            approveManager(requireNotNull(created.actionRequestId), managerId, "workflow-medium-approve")
-            mockMvc
-                .perform(get("$path/workflow").with(jwt().jwt { it.subject(requesterId.toString()) }))
-                .andExpect(status().isOk)
                 .andExpect(jsonPath("$.allowedActions[0]").value("EXECUTE"))
+                .andExpect(jsonPath("$.request.authorizationBasis").value("SUPPORT_DIRECT"))
+                .andExpect(jsonPath("$.terms.subjectLinkId").doesNotExist())
             jdbcTemplate.update(
-                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
-                    "WHERE actor_id = ? AND permission = 'SUPPORT_COMPENSATION_EXECUTE'",
+                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_COMPENSATION_EXECUTE'",
                 requesterId,
             )
             mockMvc
-                .perform(get("$path/workflow").with(jwt().jwt { it.subject(requesterId.toString()) }))
+                .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.allowedActions").isEmpty)
             assertThat(count("support_compensation_terminal_benefit", "request_id", created.compensationRequestId)).isZero()
@@ -291,7 +281,6 @@ internal class SupportCompensationIntegrationTest
             val evaluation = compensations.evaluate(command.evaluation())
             assertThat(evaluation.executable).withFailMessage(evaluation.toString()).isTrue()
             val created = compensations.create(command)
-            approveOperations(created)
 
             val issued =
                 compensations.execute(
@@ -321,47 +310,22 @@ internal class SupportCompensationIntegrationTest
         }
 
         @Test
-        fun `medium request rejects self approval and consumes exact manager approval once`() {
+        fun `medium request executes by requester without verification or approval and replays once`() {
             val created = compensations.create(command(UUID.randomUUID(), 3_001, "medium-create-001"))
-            assertThat(created.actionRequestId).isNotNull()
-            assertThat(created.state).isEqualTo(SupportCompensationRequestState.AWAITING_APPROVAL)
-
-            grant(requesterId, "SUPPORT_COMPENSATION_APPROVE")
-            assertThatThrownBy {
-                approveManager(requireNotNull(created.actionRequestId), requesterId, "medium-self-approve")
-            }.isInstanceOf(DomainFailure::class.java)
-                .extracting("code")
-                .isEqualTo(FailureCode.SUPPORT_APPROVER_MUST_DIFFER)
-
-            val approved = approveManager(requireNotNull(created.actionRequestId), managerId, "medium-manager-approve")
-            assertThat(approved).isInstanceOf(SupportActionCommandOutcome.Succeeded::class.java)
-            val issued =
-                compensations.execute(
-                    ExecuteSupportCompensationCommand(
-                        requesterId,
-                        created.compensationRequestId,
-                        created.version,
-                        orderVersion,
-                        created.payloadDigest,
-                        "medium-execute-001",
-                    ),
-                )
+            assertThat(created.actionRequestId).isNull()
+            assertThat(created.state).isEqualTo(SupportCompensationRequestState.READY_FOR_EXECUTION)
+            val issued = execute(created, "medium-execute-001")
             assertThat(issued.state).isEqualTo(SupportCompensationRequestState.NOTIFICATION_ACCEPTED)
-            assertThat(
-                jdbcTemplate.queryForObject(
-                    "SELECT terminal_compensation_id FROM support_action_request WHERE id = ?",
-                    UUID::class.java,
-                    created.actionRequestId,
-                ),
-            ).isEqualTo(created.compensationRequestId)
+            assertThat(execute(created, "medium-execute-001")).isEqualTo(issued)
+            assertThat(count("support_compensation_terminal_benefit", "request_id", created.compensationRequestId)).isOne()
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM support_verification_session", Int::class.java)).isZero()
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM support_action_approval_step", Int::class.java)).isZero()
         }
 
         @Test
-        fun `two approved high requests race under customer rolling lock and only one issues`() {
+        fun `two direct high requests race under customer rolling lock and only one issues`() {
             val first = compensations.create(command(UUID.randomUUID(), 30_000, "high-create-001"))
             val second = compensations.create(command(UUID.randomUUID(), 30_000, "high-create-002"))
-            approveOperations(first)
-            approveOperations(second)
 
             val executor = Executors.newFixedThreadPool(2)
             try {
@@ -482,17 +446,7 @@ internal class SupportCompensationIntegrationTest
                     ),
                 )
             assertThat(created.band.name).isEqualTo("HIGH")
-            val operationsActor =
-                jwt()
-                    .jwt { it.subject(operationsId.toString()) }
-                    .authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))
-            mockMvc
-                .perform(get("/api/v1/operations/support-action-requests/${created.actionRequestId}/review").with(operationsActor))
-                .andExpect(status().isOk)
-                .andExpect(jsonPath("$.compensation.benefitType").value("COUPON"))
-                .andExpect(jsonPath("$.compensation.terms.responsibility").value("SHARED"))
-                .andExpect(jsonPath("$.compensation.couponTemplate.templateId").value(GOODWILL_COUPON_TEMPLATE_ID.toString()))
-                .andExpect(jsonPath("$.compensation.verificationSessionId").doesNotExist())
+            assertThat(created.actionRequestId).isNull()
             mockMvc
                 .perform(
                     get("/api/v1/support/compensations/${created.compensationRequestId}/workflow").with(
@@ -505,7 +459,6 @@ internal class SupportCompensationIntegrationTest
                 .andExpect(jsonPath("$.couponTemplate.amountKrw").value(created.amountKrw))
                 .andExpect(jsonPath("$.couponTemplate.validityDays").value(30))
                 .andExpect(jsonPath("$.couponTemplate.minimumEligibleSubtotalKrw").isNumber)
-            approveOperations(created)
 
             val issued = execute(created, "shared-coupon-execute-001")
             assertThat(issued.state).isEqualTo(SupportCompensationRequestState.NOTIFICATION_ACCEPTED)
@@ -567,10 +520,10 @@ internal class SupportCompensationIntegrationTest
             assertThat(compensations.get(requesterId, created.compensationRequestId).compensationRequestId)
                 .isEqualTo(created.compensationRequestId)
 
-            val medium = compensations.create(command(UUID.randomUUID(), 3_001, "visibility-medium-create"))
-            approveManager(requireNotNull(medium.actionRequestId), managerId, "visibility-medium-approve")
-            assertThat(compensations.get(managerId, medium.compensationRequestId).compensationRequestId)
-                .isEqualTo(medium.compensationRequestId)
+            assertThatThrownBy { compensations.get(managerId, created.compensationRequestId) }
+                .isInstanceOf(DomainFailure::class.java)
+                .extracting("code")
+                .isEqualTo(FailureCode.ACCESS_DENIED)
         }
 
         @Test
@@ -590,61 +543,34 @@ internal class SupportCompensationIntegrationTest
         }
 
         @Test
-        fun `explicit action reassignment lets the new executor use requester bound verification`() {
-            val created = compensations.create(command(UUID.randomUUID(), 3_001, "action-reassign-create"))
-            val approved =
-                approveManager(requireNotNull(created.actionRequestId), managerId, "action-reassign-approve")
-                    as SupportActionCommandOutcome.Succeeded
+        fun `newly assigned operator creates and executes a separate direct request`() {
+            val old = compensations.create(command(UUID.randomUUID(), 3_001, "handoff-old-request"))
             prepareReplacementExecutor()
-            grant(managerId, "SUPPORT_CASE_ASSIGN")
-            val reassigned =
-                actionRequests.reassign(
-                    ReassignSupportActionRequestCommand(
-                        managerId,
-                        approved.resource.requestId,
-                        approved.resource.revisionNumber,
-                        approved.resource.requestVersion,
-                        caseVersion(),
-                        replacementId,
-                        "HANDOFF_TO_CURRENT_EXECUTOR",
-                        "action-reassign-command",
-                    ),
-                )
-
-            assertThat(reassigned.executorActorId).isEqualTo(replacementId)
-            val issued = executeAs(created, replacementId, "action-reassign-execute")
-            assertThat(issued.state).isEqualTo(SupportCompensationRequestState.NOTIFICATION_ACCEPTED)
+            grant(replacementId, "SUPPORT_COMPENSATION_REQUEST")
+            jdbcTemplate.update(
+                "UPDATE support_case SET current_assignee_id = ?, version = version + 1 WHERE id = ?",
+                replacementId,
+                caseId,
+            )
+            assertThatThrownBy { execute(old, "handoff-old-execute") }.isInstanceOf(DomainFailure::class.java)
+            val created = compensations.create(command(UUID.randomUUID(), 3_001, "handoff-new-request").copy(actorId = replacementId))
+            assertThat(
+                executeAs(created, replacementId, "handoff-new-execute").state,
+            ).isEqualTo(SupportCompensationRequestState.NOTIFICATION_ACCEPTED)
         }
 
         @Test
-        fun `reassigned actor hard cap locks checks and consumes the same actor scope`() {
+        fun `direct actor hard cap locks checks and consumes the same actor scope`() {
             val prior = compensations.create(command(UUID.randomUUID(), 100, "actor-cap-prior-create"))
             val created = compensations.create(command(UUID.randomUUID(), 30_000, "actor-cap-create"))
-            approveOperations(created)
-            prepareReplacementExecutor()
-            grant(managerId, "SUPPORT_CASE_ASSIGN")
-            val action = actionRequests.get(requesterId, requireNotNull(created.actionRequestId))
-            actionRequests.reassign(
-                ReassignSupportActionRequestCommand(
-                    managerId,
-                    action.requestId,
-                    action.revisionNumber,
-                    action.requestVersion,
-                    caseVersion(),
-                    replacementId,
-                    "HANDOFF_FOR_LIMIT_CHECK",
-                    "actor-cap-reassign",
-                ),
-            )
             jdbcTemplate.update(
                 "INSERT INTO support_compensation_limit_consumption (id, request_id, policy_version_id, scope, scope_id, amount_krw, issued_at) VALUES (?, ?, ?, 'ACTOR', ?, 90000, now())",
                 UUID.randomUUID(),
                 prior.compensationRequestId,
                 prior.policyVersionId,
-                replacementId,
+                requesterId,
             )
-
-            assertThatThrownBy { executeAs(created, replacementId, "actor-cap-execute") }
+            assertThatThrownBy { execute(created, "actor-cap-execute") }
                 .isInstanceOf(DomainFailure::class.java)
                 .extracting("code")
                 .isEqualTo(FailureCode.SUPPORT_ACTION_POLICY_DENIED)
@@ -753,7 +679,7 @@ internal class SupportCompensationIntegrationTest
         }
 
         @Test
-        fun `incident directory retains legacy identities and binds cursor to verification and order`() {
+        fun `incident directory retains legacy identities and binds cursor to active subject and order`() {
             val legacy = UUID.randomUUID()
             compensations.create(command(legacy, 100, "incident-legacy-request"))
             val registered =
@@ -788,7 +714,10 @@ internal class SupportCompensationIntegrationTest
                 .andExpect(jsonPath("$.items[0].occurredAt").isEmpty)
             incidentList(order = null).andExpect(status().isOk).andExpect(jsonPath("$.items").isEmpty)
             incidentList(order = UUID.randomUUID()).andExpect(status().isForbidden)
-            jdbcTemplate.update("UPDATE support_verification_session SET state = 'EXPIRED' WHERE id = ?", sessionId)
+            jdbcTemplate.update(
+                "UPDATE support_case_subject_link SET unlinked_at = now(), unlinked_by_actor_id = linked_by_actor_id, unlink_case_version = 1, unlink_reason = 'INCORRECT_LINK' WHERE id = ?",
+                subjectLinkId,
+            )
             incidentList().andExpect(status().isForbidden)
         }
 
@@ -836,7 +765,7 @@ internal class SupportCompensationIntegrationTest
         private fun incidentPayload(
             occurredAt: String,
             order: UUID? = orderId,
-        ) = """{"verificationSessionId":"$sessionId","orderId":${order?.let { "\"$it\"" } ?: "null"},"occurredAt":"$occurredAt"}"""
+        ) = """{"subjectLinkId":"$subjectLinkId","orderId":${order?.let { "\"$it\"" } ?: "null"},"occurredAt":"$occurredAt"}"""
 
         private fun registerIncident(
             body: String,
@@ -860,7 +789,7 @@ internal class SupportCompensationIntegrationTest
                     jwt().jwt {
                         it.subject(requesterId.toString())
                     },
-                ).param("verificationSessionId", sessionId.toString())
+                ).param("subjectLinkId", subjectLinkId.toString())
                 .param("limit", limit.toString())
                 .also { builder ->
                     order?.let { builder.param("orderId", it.toString()) }
@@ -912,7 +841,7 @@ internal class SupportCompensationIntegrationTest
             """
             {"incidentId":"$incidentId","orderId":"$orderId","expectedTargetVersion":$orderVersion,
              "benefitType":"POINT","amountKrw":$amount,"responsibility":"PLATFORM",
-             "platformShareBps":10000,"storeShareBps":0,"verificationSessionId":"$sessionId"
+             "platformShareBps":10000,"storeShareBps":0,"subjectLinkId":"$subjectLinkId"
              ${if (includeEvidence) ",\"evidenceDigest\":\"$EVIDENCE_DIGEST\"" else ""}}
             """.trimIndent()
 
@@ -934,7 +863,7 @@ internal class SupportCompensationIntegrationTest
             null,
             10_000,
             0,
-            sessionId,
+            subjectLinkId,
             EVIDENCE_DIGEST,
             key,
         )
@@ -956,7 +885,7 @@ internal class SupportCompensationIntegrationTest
             null,
             10_000,
             0,
-            sessionId,
+            subjectLinkId,
             EVIDENCE_DIGEST,
             key,
         )
@@ -974,11 +903,11 @@ internal class SupportCompensationIntegrationTest
             3_000,
             GOODWILL_COUPON_TEMPLATE_ID,
             SupportCompensationResponsibility.SHARED,
-            SupportCompensationEvidenceBasis.OPERATIONS_FINDING,
+            SupportCompensationEvidenceBasis.SUPPORT_DECISION,
             COST_EVIDENCE_DIGEST,
             3_333,
             6_667,
-            sessionId,
+            subjectLinkId,
             EVIDENCE_DIGEST,
             key,
         )
@@ -1056,8 +985,8 @@ internal class SupportCompensationIntegrationTest
         private fun seedSupportScope() {
             val openedAt = Instant.now().minusSeconds(30)
             caseId = UUID.randomUUID()
-            val customerLinkId = UUID.randomUUID()
-            sessionId = UUID.randomUUID()
+            subjectLinkId = UUID.randomUUID()
+            val customerLinkId = subjectLinkId
             jdbcTemplate.update(
                 """
                 INSERT INTO support_case (
@@ -1102,23 +1031,6 @@ internal class SupportCompensationIntegrationTest
                 orderId,
                 requesterId,
                 Timestamp.from(openedAt),
-            )
-            jdbcTemplate.update(
-                """
-                INSERT INTO support_verification_session (
-                    id, support_case_id, subject_link_id, subject_type, subject_id, actor_id, purpose, action_scope,
-                    requested_level, state, invalid_attempts, started_at, expires_at, verified_at, version
-                ) VALUES (?, ?, ?, 'CUSTOMER', ?, ?, 'CASE_RESOLUTION', 'SUPPORT_ACTION',
-                          'ENHANCED', 'VERIFIED', 0, ?, ?, ?, 1)
-                """.trimIndent(),
-                sessionId,
-                caseId,
-                customerLinkId,
-                fixture.customerId,
-                requesterId,
-                Timestamp.from(openedAt),
-                Timestamp.from(openedAt.plusSeconds(900)),
-                Timestamp.from(openedAt.plusSeconds(1)),
             )
         }
 
@@ -1170,8 +1082,8 @@ internal class SupportCompensationIntegrationTest
                 """
                 INSERT INTO support_compensation_policy_version (
                     id, code, effective_at, low_amount_maximum_krw, high_amount_maximum_krw,
-                    supported_amount_maximum_krw, low_order_ratio_maximum_bps, created_at
-                ) VALUES (?, ?, ?, 3000, 10000, 30000, 5000, ?)
+                    supported_amount_maximum_krw, low_order_ratio_maximum_bps, created_at, authorization_basis
+                ) VALUES (?, ?, ?, 3000, 10000, 30000, 5000, ?, 'SUPPORT_DIRECT')
                 """.trimIndent(),
                 policyVersionId,
                 "GOODWILL_TEST_${policyVersionId.toString().replace("-", "").uppercase()}",

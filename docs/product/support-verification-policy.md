@@ -1,5 +1,11 @@
 # Support Verification Policy
 
+> 2026-09-18: 신규 업무의 본인확인·매장 동의·타인 승인 조건은
+> [SP-23](business-policy-decisions.md#sp-23-담당-상담원의-직접-처리-2026-09-18)과
+> [ADR-136](../adr/ADR-136-support-direct-processing.md)이 대체한다.
+> 아래 기존 정책은 과거 기록 해석에 적용하며 금융·한도·감사·마스킹·복구 불변식은 유지한다.
+
+
 > **Status:** Verification levels, binding and separate BREAK_GLASS path are Accepted in ADR-082. S40 initial
 > challenge, attempt, expiry, Grant and break-glass values are Accepted in SP-18 and ADR-106.
 

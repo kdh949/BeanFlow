@@ -1,6 +1,6 @@
 # ADR-087: R0-R4 field risk와 목적별 profile change
 
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR-136](ADR-136-support-direct-processing.md)
 - **Date:** 2026-08-10
 
 ## Context
@@ -94,3 +94,8 @@ Class/action별 request/approval/outcome와 post-change notification failure.
 ## Related Decisions
 
 ADR-027, ADR-069, ADR-084.
+
+## 직접 처리 정책 전환 (2026-09-18)
+
+신규 업무의 본인확인·타인 승인 조건은 [ADR-136](ADR-136-support-direct-processing.md)으로 대체한다.
+기존 기록의 의미와 이 문서의 금융·감사·마스킹·복구 불변식은 유지한다.

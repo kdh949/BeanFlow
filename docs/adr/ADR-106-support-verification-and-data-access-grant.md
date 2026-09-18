@@ -1,6 +1,6 @@
 # ADR-106: opaque challenge verification과 audit-gated DataAccessGrant reveal
 
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR-136](ADR-136-support-direct-processing.md)
 - **Date:** 2026-08-11
 
 ## Context
@@ -119,3 +119,8 @@ multi-region challenge/reveal 요구가 확정될 때.
 ## Related Decisions
 
 ADR-009, ADR-022, ADR-069, ADR-081, ADR-082, ADR-083, ADR-084, ADR-089.
+
+## 직접 처리 정책 전환 (2026-09-18)
+
+신규 업무의 본인확인·타인 승인 조건은 [ADR-136](ADR-136-support-direct-processing.md)으로 대체한다.
+기존 기록의 의미와 이 문서의 금융·감사·마스킹·복구 불변식은 유지한다.

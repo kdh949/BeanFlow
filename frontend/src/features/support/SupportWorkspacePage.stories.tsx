@@ -110,7 +110,7 @@ export const ActiveCaseTimeline: Story = {
   },
 };
 
-export const VerificationEntry: Story = { parameters: { routing: { surface: "support", path: "/support", initialEntry: `/support?caseId=${caseId}` }, msw: { handlers: caseHandlers } }, play: async ({ canvas }) => { await openCase(canvas); await expect(canvas.getByLabelText("본인확인 대상")).toBeVisible(); await expect(canvas.getByLabelText("인증 사용 업무")).toBeVisible(); await expect(canvas.getByRole("button", { name: "기존 열람 승인 요청 찾기" })).toBeVisible(); } };
+export const DirectDataAccessEntry: Story = { parameters: { routing: { surface: "support", path: "/support", initialEntry: `/support?caseId=${caseId}` }, msw: { handlers: caseHandlers } }, play: async ({ canvas }) => { await openCase(canvas); await expect(canvas.getByLabelText("열람 대상")).toBeVisible(); await expect(canvas.queryByLabelText("인증 사용 업무")).not.toBeInTheDocument(); await expect(canvas.getByRole("button", { name: "기존 열람 승인 요청 찾기" })).toBeVisible(); } };
 
 export const TerminalCase: Story = {
   parameters: { routing: { surface: "support", path: "/support", initialEntry: `/support?caseId=${caseId}` },
@@ -121,7 +121,7 @@ export const TerminalCase: Story = {
   },
   play: async ({ canvas }) => {
     await openCase(canvas);
-    await expect(canvas.getByText(/종료된 상담 건에서는/)).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: "정보 보기" })).not.toBeInTheDocument();
     await expect(canvas.queryByRole("button", { name: "본인확인 시작" })).not.toBeInTheDocument();
   },
 };
@@ -171,15 +171,15 @@ export const PendingDataAccessKeepsCase: Story = {
     const grantId = "a6000000-0000-4000-8000-000000000001";
     msw.use(
       http.get("/api/v1/support/work-items", () => HttpResponse.json({ items: [{ requestId: grantId, caseId, kind: "DATA_ACCESS", caseCategory: "ACCOUNT_RECOVERY", caseOpenedAt: activeCase.openedAt, purpose: "CONTACT_CONFIRMATION", state: "APPROVAL_PENDING", createdAt: "2026-08-23T09:05:00Z", expiresAt: null }], nextCursor: null })),
-      http.get("/api/v1/support/data-access-grants/:grantId", () => HttpResponse.json({ grant: { grantId, caseId, subjectLinkId: linkId, subjectType: "CUSTOMER", subjectId: customerId, purpose: "CONTACT_CONFIRMATION", fields: ["CUSTOMER_PRIMARY_PHONE"], risk: "SENSITIVE", state: "APPROVAL_PENDING", maxReveals: 1, reservedReveals: 0, requestedAt: "2026-08-23T09:05:00Z", expiresAt: null, version: 1 }, viewerRole: "APPROVER" })),
-      http.post("/api/v1/support/data-access-grants/:grantId/approvals", () => HttpResponse.error()),
+      http.get("/api/v1/support/data-access-grants/:grantId", () => HttpResponse.json({ grant: { grantId, caseId, subjectLinkId: linkId, subjectType: "CUSTOMER", subjectId: customerId, purpose: "CONTACT_CONFIRMATION", fields: ["CUSTOMER_PRIMARY_PHONE"], risk: "SENSITIVE", authorizationBasis: "SUPPORT_DIRECT", state: "ACTIVE", maxReveals: 1, reservedReveals: 0, requestedAt: "2026-08-23T09:05:00Z", expiresAt: "2099-01-01T00:00:00Z", version: 1 }, viewerRole: "REQUESTER" })),
+      http.post("/api/v1/support/data-access-grants/:grantId/reveals", () => HttpResponse.error()),
     );
     await openCase(canvas);
     await userEvent.click(canvas.getByRole("button", { name: "기존 열람 승인 요청 찾기" }));
     await userEvent.click(await canvas.findByRole("button", { name: "이 요청 열기" }));
-    await userEvent.click(await canvas.findByRole("button", { name: "열람 승인" }));
-    await canvas.findByRole("button", { name: "같은 열람 판정 확인" });
-    await expect(canvas.getByLabelText("본인확인 대상")).toBeDisabled();
+    await userEvent.click(await canvas.findByRole("button", { name: "선택한 정보 한시 열람" }));
+    await canvas.findByText("원문 열람 응답을 확인하지 못했습니다");
+    await expect(canvas.getByLabelText("열람 대상")).toBeDisabled();
     await expect(canvas.getByLabelText("전화번호 또는 이메일")).toBeDisabled();
     await expect(canvas.getByRole("button", { name: "기존 열람 승인 요청 찾기" })).toBeDisabled();
   },

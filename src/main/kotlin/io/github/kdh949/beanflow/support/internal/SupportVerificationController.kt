@@ -1,6 +1,5 @@
 package io.github.kdh949.beanflow.support.internal
 
-import io.github.kdh949.beanflow.identity.api.SensitiveVerificationProof
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -9,7 +8,6 @@ import io.github.kdh949.beanflow.support.internal.domain.VerificationActionScope
 import io.github.kdh949.beanflow.support.internal.domain.VerificationChannel
 import io.github.kdh949.beanflow.support.internal.domain.VerificationLevel
 import io.github.kdh949.beanflow.support.internal.domain.VerificationPurpose
-import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
@@ -21,11 +19,9 @@ import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
-import java.util.Arrays
 import java.util.UUID
 
 internal data class CreateVerificationSessionRequest(
@@ -62,24 +58,7 @@ internal class SupportVerificationController(
     fun create(
         actor: OperatorActor,
         @PathVariable caseId: UUID,
-        @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
-        @Valid @RequestBody request: CreateVerificationSessionRequest,
-    ): ResponseEntity<VerificationSessionResource> =
-        noStore(
-            HttpStatus.CREATED,
-            service.create(
-                CreateVerificationSessionCommand(
-                    actor.actorId(),
-                    caseId,
-                    request.subjectLinkId ?: invalid(),
-                    request.requestedLevel?.takeUnless { it == VerificationLevel.UNVERIFIED } ?: invalid(),
-                    request.purpose ?: invalid(),
-                    request.actionScope ?: VerificationActionScope.PERSONAL_DATA_REVEAL,
-                    idempotencyKey,
-                    correlationIds.currentOrCreate(),
-                ),
-            ),
-        )
+    ): ResponseEntity<VerificationSessionResource> = retired()
 
     @GetMapping("/verification-sessions/{sessionId}")
     @PreAuthorize("isAuthenticated()")
@@ -93,48 +72,14 @@ internal class SupportVerificationController(
     fun issue(
         actor: OperatorActor,
         @PathVariable sessionId: UUID,
-        @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
-        @Valid @RequestBody request: IssueVerificationChallengeRequest,
-    ): ResponseEntity<VerificationChallengeResource> =
-        noStore(
-            HttpStatus.CREATED,
-            service.issue(
-                IssueVerificationChallengeRequestCommand(
-                    actor.actorId(),
-                    sessionId,
-                    request.channel ?: invalid(),
-                    idempotencyKey,
-                    correlationIds.currentOrCreate(),
-                ),
-            ),
-        )
+    ): ResponseEntity<VerificationChallengeResource> = retired()
 
     @PostMapping("/verification-challenges/{challengeId}/verifications")
     @PreAuthorize("isAuthenticated()")
     fun verify(
         actor: OperatorActor,
         @PathVariable challengeId: UUID,
-        @RequestHeader("Idempotency-Key") @Size(min = 8, max = 128) idempotencyKey: String,
-        @Valid @RequestBody request: VerifyVerificationChallengeRequest,
-    ): ResponseEntity<VerificationResultResource> {
-        val transientChars = request.proof.toCharArray()
-        return try {
-            noStore(
-                HttpStatus.OK,
-                service.verify(
-                    VerifySupportChallengeCommand(
-                        actor.actorId(),
-                        challengeId,
-                        SensitiveVerificationProof.copyOf(transientChars),
-                        idempotencyKey,
-                        correlationIds.currentOrCreate(),
-                    ),
-                ),
-            )
-        } finally {
-            Arrays.fill(transientChars, '\u0000')
-        }
-    }
+    ): ResponseEntity<VerificationResultResource> = retired()
 
     @PostMapping("/verification-sessions/{sessionId}/revocations")
     @PreAuthorize("isAuthenticated()")
@@ -153,6 +98,12 @@ internal class SupportVerificationController(
                     correlationIds.currentOrCreate(),
                 ),
             ),
+        )
+
+    private fun retired(): Nothing =
+        throw DomainFailure(
+            FailureCode.SUPPORT_VERIFICATION_RETIRED,
+            "고객센터 본인확인 절차가 종료되었습니다. 활성 상담의 대상 연결로 처리하세요.",
         )
 
     private fun OperatorActor.actorId(): UUID =

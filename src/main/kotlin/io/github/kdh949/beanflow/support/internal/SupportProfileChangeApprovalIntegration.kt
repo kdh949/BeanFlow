@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.util.UUID
 
-internal const val PROFILE_CHANGE_POLICY_VERSION = "support-profile-change-policy/2026-08-13/v1"
+internal const val PROFILE_CHANGE_POLICY_VERSION = "support-profile-change-policy/2026-09-18/v2"
 
 internal data class OpenProfileChangeApprovalCommand(
     val requestId: UUID,
@@ -22,13 +22,14 @@ internal data class OpenProfileChangeApprovalCommand(
     val profileChangeId: UUID,
     val caseId: UUID,
     val actorId: UUID,
-    val verificationSessionId: UUID,
+    val verificationSessionId: UUID?,
     val expectedProfileVersion: Long,
     val payloadDigest: String,
     val reason: String,
     val evidenceDigest: String,
     val expiresAt: Instant,
     val occurredAt: Instant,
+    val subjectLinkId: UUID? = null,
 )
 
 internal data class ReviseProfileChangeApprovalCommand(
@@ -36,13 +37,14 @@ internal data class ReviseProfileChangeApprovalCommand(
     val actionRequestId: UUID,
     val actorId: UUID,
     val expectedRequestVersion: Long,
-    val verificationSessionId: UUID,
+    val verificationSessionId: UUID?,
     val expectedProfileVersion: Long,
     val payloadDigest: String,
     val reason: String,
     val evidenceDigest: String,
     val expiresAt: Instant,
     val occurredAt: Instant,
+    val subjectLinkId: UUID? = null,
 )
 
 internal data class ProfileChangeExecutionApprovalCommand(

@@ -26,7 +26,7 @@ internal data class EvaluateSupportActionRequest(
     @field:NotNull @field:PositiveOrZero
     val expectedTargetVersion: Long?,
     @field:NotNull
-    val verificationSessionId: UUID?,
+    val subjectLinkId: UUID?,
 ) : StrictSupportRequest
 
 @Validated
@@ -53,7 +53,7 @@ internal class SupportActionEvaluationController(
                         action = request.action ?: invalid(),
                         orderId = request.orderId ?: invalid(),
                         expectedTargetVersion = request.expectedTargetVersion ?: invalid(),
-                        verificationSessionId = request.verificationSessionId ?: invalid(),
+                        subjectLinkId = request.subjectLinkId ?: invalid(),
                     ),
                 ),
             )

@@ -26,6 +26,7 @@ import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalChange
 import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalDecision
 import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalStepState
 import io.github.kdh949.beanflow.support.internal.domain.SupportApprovalStepType
+import io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis
 import io.github.kdh949.beanflow.support.internal.domain.SupportCase
 import io.github.kdh949.beanflow.support.internal.domain.SupportCaseState
 import io.github.kdh949.beanflow.support.internal.domain.VerificationActionScope
@@ -48,7 +49,7 @@ internal data class CreateSupportActionRequestCommand(
     val action: SupportActionType,
     val orderId: UUID,
     val expectedTargetVersion: Long,
-    val verificationSessionId: UUID,
+    val subjectLinkId: UUID,
     val actionPayloadDigest: String,
     val amountKrw: Long?,
     val reason: String,
@@ -62,7 +63,7 @@ internal data class ReviseSupportActionRequestCommand(
     val expectedRevisionNumber: Int,
     val expectedRequestVersion: Long,
     val expectedTargetVersion: Long,
-    val verificationSessionId: UUID,
+    val subjectLinkId: UUID,
     val actionPayloadDigest: String,
     val amountKrw: Long?,
     val reason: String,
@@ -109,7 +110,7 @@ internal data class SupportActionRequestResource(
     val state: SupportActionRequestState,
     val approvalRoute: SupportActionApprovalRoute,
     val actionPayloadDigest: String,
-    val verificationSessionId: UUID,
+    val verificationSessionId: UUID?,
     val policyVersion: String,
     val targetVersion: Long,
     val amountKrw: Long?,
@@ -121,6 +122,8 @@ internal data class SupportActionRequestResource(
     val terminalResolutionId: UUID?,
     val terminalCompensationId: UUID? = null,
     val terminalProfileChangeId: UUID? = null,
+    val authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
+    val subjectLinkId: UUID? = null,
 )
 
 internal sealed interface SupportActionCommandOutcome {
@@ -154,7 +157,7 @@ internal class SupportActionRequestTransactionService(
     private val cases: SupportCaseJpaRepository,
     private val caseAssignments: SupportCaseAssignmentHistoryJpaRepository,
     private val subjectLinks: SupportCaseSubjectLinkJpaRepository,
-    private val sessions: VerificationSessionJpaRepository,
+    private val directAuthorization: SupportDirectAuthorization,
     private val compensationRequests: SupportCompensationRequestJpaRepository,
     private val ordering: OrderingSupportTimelineOperations,
     private val profileVersions: SupportProfileChangeTargetVersionOperations,
@@ -186,6 +189,8 @@ internal class SupportActionRequestTransactionService(
                 command.expiresAt,
                 command.actorId,
                 command.occurredAt,
+                requireNotNull(command.subjectLinkId),
+                SupportAuthorizationBasis.SUPPORT_DIRECT,
             )
         val aggregate =
             SupportActionRequest.open(
@@ -193,7 +198,7 @@ internal class SupportActionRequestTransactionService(
                 command.caseId,
                 command.actorId,
                 command.actorId,
-                SupportActionApprovalRoute.SUPPORT_MANAGER_THEN_OPERATIONS,
+                SupportActionApprovalRoute.NONE,
                 revision,
             )
         val entity = aggregate.toEntity(command.occurredAt)
@@ -229,6 +234,8 @@ internal class SupportActionRequestTransactionService(
                 command.expiresAt,
                 command.actorId,
                 command.occurredAt,
+                requireNotNull(command.subjectLinkId),
+                SupportAuthorizationBasis.SUPPORT_DIRECT,
             )
         val change =
             try {
@@ -350,9 +357,8 @@ internal class SupportActionRequestTransactionService(
         replay(normalized.actorId, CREATE, normalized.idempotencyKey, payloadHash)?.let { return it.resourceOrThrow() }
         val supportCase = cases.findLockedById(normalized.caseId) ?: notFound("SupportCase")
         requireRequesterScope(supportCase, normalized.actorId, normalized.orderId)
-        val session = requireActionSession(normalized.verificationSessionId, normalized.actorId, normalized.caseId)
+        val link = directAuthorization.requireSubject(normalized.actorId, normalized.caseId, normalized.subjectLinkId)
         val now = clock.instant()
-        if (!now.isBefore(session.expiresAt)) expired("VerificationSession")
         if (!now.isBefore(evaluation.expiresAt) || evaluation.policyVersion != SupportActionPolicy.POLICY_VERSION ||
             evaluation.targetVersion != normalized.expectedTargetVersion
         ) {
@@ -367,15 +373,17 @@ internal class SupportActionRequestTransactionService(
                 action = normalized.action,
                 targetId = normalized.orderId,
                 actionPayloadDigest = normalized.actionPayloadDigest,
-                verificationSessionId = normalized.verificationSessionId,
+                verificationSessionId = null,
                 policyVersion = evaluation.policyVersion,
                 targetVersion = evaluation.targetVersion,
                 amountKrw = normalized.amountKrw,
                 reason = normalized.reason,
                 evidenceDigest = normalized.evidenceDigest,
-                expiresAt = session.expiresAt,
+                expiresAt = now.plus(SUPPORT_DIRECT_REQUEST_TTL),
                 createdByActorId = normalized.actorId,
                 createdAt = now,
+                subjectLinkId = link.id,
+                authorizationBasis = SupportAuthorizationBasis.SUPPORT_DIRECT,
             )
         val aggregate =
             SupportActionRequest.open(
@@ -463,9 +471,9 @@ internal class SupportActionRequestTransactionService(
         permissions.requireActive(normalized.actorId, entity.action.capabilityPermission())
         val supportCase = cases.findLockedById(entity.supportCaseId) ?: notFound("SupportCase")
         requireRequesterScope(supportCase, normalized.actorId, entity.targetId)
-        val session = requireActionSession(normalized.verificationSessionId, normalized.actorId, entity.supportCaseId)
+        val link = directAuthorization.requireSubject(normalized.actorId, entity.supportCaseId, normalized.subjectLinkId)
+        requireDirectAuthorization(currentRevision(entity).authorizationBasis)
         val now = clock.instant()
-        if (!now.isBefore(session.expiresAt)) expired("VerificationSession")
         if (!now.isBefore(evaluation.expiresAt) || evaluation.policyVersion != SupportActionPolicy.POLICY_VERSION ||
             evaluation.targetVersion != normalized.expectedTargetVersion || evaluation.toApprovalRoute() != entity.approvalRoute
         ) {
@@ -480,15 +488,17 @@ internal class SupportActionRequestTransactionService(
                 entity.action,
                 entity.targetId,
                 normalized.actionPayloadDigest,
-                normalized.verificationSessionId,
+                null,
                 evaluation.policyVersion,
                 evaluation.targetVersion,
                 normalized.amountKrw,
                 normalized.reason,
                 normalized.evidenceDigest,
-                session.expiresAt,
+                now.plus(SUPPORT_DIRECT_REQUEST_TTL),
                 normalized.actorId,
                 now,
+                link.id,
+                SupportAuthorizationBasis.SUPPORT_DIRECT,
             )
         val change = aggregate.revise(next, normalized.actorId, now)
         change.staleStepTypes.forEach { type ->
@@ -628,6 +638,9 @@ internal class SupportActionRequestTransactionService(
             entity.version != normalized.expectedRequestVersion
         ) {
             stale()
+        }
+        if (currentRevision(entity).authorizationBasis == SupportAuthorizationBasis.SUPPORT_DIRECT) {
+            throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_STALE, "직접 처리 요청은 실행자를 바꿀 수 없습니다. 상담 재배정 후 새 요청을 작성하세요.")
         }
         if (normalized.assigneeId == entity.supportApproverActorId || normalized.assigneeId == entity.operationsApproverActorId) {
             throw DomainFailure(
@@ -798,12 +811,9 @@ internal class SupportActionRequestTransactionService(
                 "Support action request approval has expired",
             )
         }
-        val session = sessions.findLockedById(revision.verificationSessionId)
+        val link = revision.subjectLinkId?.let { subjectLinks.findByIdAndSupportCaseId(it, entity.supportCaseId) }
         val validSession =
-            session != null && session.actorId == entity.requesterActorId && session.supportCaseId == entity.supportCaseId &&
-                session.state == VerificationState.VERIFIED && session.actionScope == VerificationActionScope.SUPPORT_ACTION &&
-                session.purpose == VerificationPurpose.CASE_RESOLUTION && now.isBefore(session.expiresAt) &&
-                session.expiresAt == revision.expiresAt
+            revision.authorizationBasis == SupportAuthorizationBasis.SUPPORT_DIRECT && link?.unlinkedAt == null && link != null
         val validRequester =
             when (entity.action) {
                 SupportActionType.GOODWILL_COMPENSATION -> {
@@ -910,24 +920,6 @@ internal class SupportActionRequestTransactionService(
         )
     }
 
-    private fun requireActionSession(
-        sessionId: UUID,
-        actorId: UUID,
-        caseId: UUID,
-    ): VerificationSessionEntity {
-        val session = sessions.findLockedById(sessionId) ?: notFound("VerificationSession")
-        if (session.actorId != actorId || session.supportCaseId != caseId || session.state != VerificationState.VERIFIED ||
-            session.actionScope != VerificationActionScope.SUPPORT_ACTION || session.purpose != VerificationPurpose.CASE_RESOLUTION
-        ) {
-            throw DomainFailure(FailureCode.VERIFICATION_REQUIRED, "Current action-bound verification is required")
-        }
-        val subjectLink = subjectLinks.findByIdAndSupportCaseId(session.subjectLinkId, caseId)
-        if (subjectLink == null || subjectLink.unlinkedAt != null || subjectLink.subjectId != session.subjectId) {
-            denied()
-        }
-        return session
-    }
-
     private fun requireRequesterScope(
         supportCase: SupportCaseEntity,
         actorId: UUID,
@@ -977,6 +969,8 @@ internal class SupportActionRequestTransactionService(
         entity.terminalResolutionId,
         entity.terminalCompensationId,
         entity.terminalProfileChangeId,
+        revision.authorizationBasis,
+        revision.subjectLinkId,
     )
 
     private fun replay(
@@ -1061,7 +1055,7 @@ internal class SupportActionRequestTransactionService(
         targetType = "SUPPORT_ACTION_REQUEST",
         targetId = entity.id,
         occurredAt = now,
-        reason = "SUPPORT_ACTION_APPROVAL",
+        reason = "SUPPORT_ACTION_PROCESSING",
         beforeSummary = before?.let { mapOf("state" to it.name) } ?: emptyMap(),
         afterSummary =
             mapOf(
@@ -1158,6 +1152,8 @@ internal class SupportActionRequestTransactionService(
             expiresAt,
             createdByActorId,
             createdAt,
+            subjectLinkId,
+            authorizationBasis,
         )
 
     private fun SupportActionType.targetType(): SupportActionTargetType =
@@ -1223,7 +1219,7 @@ internal class SupportActionRequestTransactionService(
                     field("action", "enum", action),
                     field("orderId", "uuid", orderId),
                     field("expectedTargetVersion", "int64", expectedTargetVersion),
-                    field("verificationSessionId", "uuid", verificationSessionId),
+                    field("subjectLinkId", "uuid", subjectLinkId),
                     field("actionPayloadDigest", "sha256", actionPayloadDigest),
                     field("amountKrw", "int64", amountKrw),
                     field("reason", "string", reason),
@@ -1242,7 +1238,7 @@ internal class SupportActionRequestTransactionService(
                     field("expectedRevisionNumber", "int32", expectedRevisionNumber),
                     field("expectedRequestVersion", "int64", expectedRequestVersion),
                     field("expectedTargetVersion", "int64", expectedTargetVersion),
-                    field("verificationSessionId", "uuid", verificationSessionId),
+                    field("subjectLinkId", "uuid", subjectLinkId),
                     field("actionPayloadDigest", "sha256", actionPayloadDigest),
                     field("amountKrw", "int64", amountKrw),
                     field("reason", "string", reason),

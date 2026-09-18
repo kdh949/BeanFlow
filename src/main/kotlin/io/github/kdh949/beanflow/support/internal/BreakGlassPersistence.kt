@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.support.internal
 
 import io.github.kdh949.beanflow.support.internal.domain.BreakGlassReasonCode
 import io.github.kdh949.beanflow.support.internal.domain.BreakGlassState
+import io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis
 import io.github.kdh949.beanflow.support.internal.domain.SupportPersonalDataField
 import io.github.kdh949.beanflow.support.internal.domain.VerificationPurpose
 import io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType
@@ -65,6 +66,11 @@ internal class BreakGlassRequestEntity(
     var revokedAt: Instant?,
     @Column(nullable = false)
     var version: Long,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "authorization_basis", nullable = false, length = 24)
+    var authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
+    @Column(name = "direct_authorized_at")
+    var directAuthorizedAt: Instant? = null,
 )
 
 @Entity
