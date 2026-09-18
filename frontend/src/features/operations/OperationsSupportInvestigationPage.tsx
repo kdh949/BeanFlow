@@ -76,7 +76,7 @@ function Investigation({ id, onBusyChange }: { id: string; onBusyChange: (busy: 
 }
 function CompensationReview({ value, checked, onChecked, disabled }: { value: Compensation; checked: boolean; onChecked: (value: boolean) => void; disabled: boolean }) {
   return <div className="management-workspace"><h3>고객 보상 조건</h3><p>{value.benefitType === "POINT" ? "포인트" : "쿠폰"} {won.format(value.amountKrw)}</p><p>비용 책임 · {{ PLATFORM: "플랫폼", STORE: "매장", SHARED: "분담", UNDETERMINED: "미확정" }[value.terms.responsibility]} · 플랫폼 {value.terms.platformShareBps / 100}% · 매장 {value.terms.storeShareBps / 100}%</p>
-    {value.terms.evidenceBasis ? <p>비용 근거 · {{ STORE_CONSENT: "매장 동의", OPERATIONS_FINDING: "운영 조사 결과", CONTRACTUAL_RULE: "계약 규칙" }[value.terms.evidenceBasis]}</p> : null}
+    {value.terms.evidenceBasis ? <p>비용 근거 · {{ SUPPORT_DECISION: "상담원 결정", STORE_CONSENT: "매장 동의", OPERATIONS_FINDING: "운영 조사 결과", CONTRACTUAL_RULE: "계약 규칙" }[value.terms.evidenceBasis]}</p> : null}
     {value.couponTemplate ? <p>쿠폰 사용 기한 {value.couponTemplate.validityDays}일 · 최소 사용 금액 {won.format(value.couponTemplate.minimumEligibleSubtotalKrw)}</p> : null}
     <dl className="detail-list"><dt>사고 ID</dt><dd className="support-case-reference">{value.incidentId}</dd><dt>관련 주문</dt><dd className="support-case-reference">{value.orderId ?? "관련 주문 없음"}</dd>{value.terms.costEvidenceDigest ? <><dt>비용 근거 해시</dt><dd className="support-case-reference">{value.terms.costEvidenceDigest}</dd></> : null}</dl><Checkbox label="보상 혜택과 비용 조건을 확인했습니다" checked={checked} onCheckedChange={onChecked} disabled={disabled} /></div>;
 }

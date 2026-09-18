@@ -366,7 +366,7 @@ internal class CustomerCancellationCommandIntegrationTest
         }
 
         @Test
-        fun `accepted support cancellation requires store authorization and exposes refund recovery`() {
+        fun `accepted support cancellation needs no store consent and exposes refund recovery`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
             val orderId = createOrder(fixture, "support-accepted-create")
@@ -380,17 +380,7 @@ internal class CustomerCancellationCommandIntegrationTest
                 StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null, 10),
             )
             val currentVersion = number("SELECT version FROM ordering_order WHERE id = ?", orderId)
-            val unauthorized = supportCancellationCommand(orderId, currentVersion)
-
-            val failure = runCatching { supportOrderCancellations.cancel(unauthorized) }.exceptionOrNull()
-            assertThat(failure).isInstanceOfSatisfying(io.github.kdh949.beanflow.shared.api.DomainFailure::class.java) {
-                assertThat(it.code).isEqualTo(io.github.kdh949.beanflow.shared.api.FailureCode.ACCESS_DENIED)
-            }
-
-            val report =
-                supportOrderCancellations.cancel(
-                    unauthorized.copy(acceptedStoreAuthorizationId = UUID.randomUUID()),
-                )
+            val report = supportOrderCancellations.cancel(supportCancellationCommand(orderId, currentVersion))
 
             assertThat(report.result).isEqualTo(SupportOrderChangeOwnerResult.APPLIED)
             assertThat(report.previousState).isEqualTo("ACCEPTED")

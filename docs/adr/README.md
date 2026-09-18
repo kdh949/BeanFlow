@@ -135,3 +135,5 @@
 | [ADR-133](ADR-133-immediate-checkout-and-store-preparation.md) | Accepted | 장바구니 즉시 결제와 수락 시 준비시간 |
 | [ADR-134](ADR-134-post-approval-benefit-use-and-recovery.md) | Accepted | 승인 후 혜택 원자 사용과 미성립 승인 복구 |
 | [ADR-135](ADR-135-store-hours-payment-gate-and-cutoff.md) | Accepted | Store 영업시간 결제 gate와 단조 cutoff |
+
+- [ADR-136: 담당 상담원의 직접 처리](ADR-136-support-direct-processing.md)

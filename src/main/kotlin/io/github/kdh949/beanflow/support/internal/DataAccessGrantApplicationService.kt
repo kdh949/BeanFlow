@@ -21,6 +21,7 @@ import io.github.kdh949.beanflow.support.internal.domain.DataAccessGrant
 import io.github.kdh949.beanflow.support.internal.domain.DataAccessGrantState
 import io.github.kdh949.beanflow.support.internal.domain.DataAccessReasonCode
 import io.github.kdh949.beanflow.support.internal.domain.DataAccessRisk
+import io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis
 import io.github.kdh949.beanflow.support.internal.domain.SupportCaseState
 import io.github.kdh949.beanflow.support.internal.domain.SupportPersonalDataField
 import io.github.kdh949.beanflow.support.internal.domain.VerificationActionScope
@@ -41,7 +42,7 @@ import java.util.UUID
 internal data class RequestDataAccessGrantCommand(
     val actorId: UUID,
     val caseId: UUID,
-    val verificationSessionId: UUID,
+    val subjectLinkId: UUID,
     val purpose: VerificationPurpose,
     val fields: Set<SupportPersonalDataField>,
     val reasonCode: DataAccessReasonCode,
@@ -87,6 +88,7 @@ internal data class DataAccessGrantResource(
     val requestedAt: Instant,
     val expiresAt: Instant?,
     val version: Long,
+    val authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
 )
 
 internal enum class DataAccessGrantViewerRole { REQUESTER, APPROVER }
@@ -198,8 +200,6 @@ internal class DataAccessGrantApplicationService(
 internal class DataAccessGrantTransactions(
     private val cases: SupportCaseJpaRepository,
     private val subjectLinks: SupportCaseSubjectLinkJpaRepository,
-    private val sessions: VerificationSessionJpaRepository,
-    private val challenges: VerificationChallengeJpaRepository,
     private val grants: DataAccessGrantJpaRepository,
     private val grantFields: DataAccessGrantFieldJpaRepository,
     private val decisions: DataAccessGrantDecisionJpaRepository,
@@ -269,7 +269,7 @@ internal class DataAccessGrantTransactions(
                 REQUEST_GRANT,
                 command.idempotencyKey,
                 hash(
-                    "${command.caseId}|${command.verificationSessionId}|${command.purpose}|${command.fields.sortedBy {
+                    "${command.caseId}|${command.subjectLinkId}|${command.purpose}|${command.fields.sortedBy {
                         it.name
                     }}|${command.reasonCode}",
                 ),
@@ -277,33 +277,15 @@ internal class DataAccessGrantTransactions(
                 201,
             ) {
                 val supportCase = activeAssignedCase(command.caseId, command.actorId)
-                val session = sessions.findLockedById(command.verificationSessionId) ?: verificationRequired()
-                val link = activeLink(supportCase.id, session.subjectLinkId)
-                if (session.actorId != command.actorId || session.purpose != command.purpose ||
-                    session.supportCaseId != supportCase.id || session.subjectId != link.subjectId ||
-                    session.actionScope != VerificationActionScope.PERSONAL_DATA_REVEAL
-                ) {
-                    verificationRequired()
-                }
-                val sessionAggregate = session.toVerificationAggregate(verifiedChannels(session.id))
+                val link = activeLink(supportCase.id, command.subjectLinkId)
                 val now = clock.instant()
-                val required =
-                    if (command.fields.any {
-                            it.risk == DataAccessRisk.SENSITIVE
-                        }
-                    ) {
-                        VerificationLevel.ENHANCED
-                    } else {
-                        VerificationLevel.BASIC
-                    }
-                if (!sessionAggregate.satisfies(required, now)) verificationRequired()
                 val aggregate =
                     DataAccessGrant.request(
                         identifiers.next(),
                         supportCase.id,
                         link.id,
-                        session.subjectType,
-                        session.subjectId,
+                        link.verificationSubjectType(),
+                        link.subjectId,
                         command.actorId,
                         command.purpose,
                         command.fields,
@@ -318,8 +300,12 @@ internal class DataAccessGrantTransactions(
                         OperatorPermission.SUPPORT_PII_REVEAL_SENSITIVE
                     },
                 )
-                aggregate.qualify(sessionAggregate.achievedLevel, now)
-                val entity = aggregate.toEntity(session.id)
+                aggregate.activateDirect(now)
+                val entity =
+                    aggregate.toEntity(null).also {
+                        it.authorizationBasis = SupportAuthorizationBasis.SUPPORT_DIRECT
+                        it.directAuthorizedAt = now
+                    }
                 grants.saveAndFlush(entity)
                 grantFields.saveAllAndFlush(aggregate.fields.map { DataAccessGrantFieldEntity(entity.id, it) })
                 audits.appendAll(
@@ -347,6 +333,7 @@ internal class DataAccessGrantTransactions(
                 200,
             ) {
                 val entity = grants.findLockedById(command.grantId) ?: notFound()
+                requireDirectAuthorization(entity.authorizationBasis)
                 if (entity.supportCaseId != caseId) conflict("DataAccessGrant binding is stale")
                 if (entity.version != command.expectedVersion) conflict("DataAccessGrant version is stale")
                 val fields = fields(entity.id)
@@ -393,6 +380,7 @@ internal class DataAccessGrantTransactions(
                 )
             }
             val entity = grants.findLockedById(command.grantId) ?: notFound()
+            requireDirectAuthorization(entity.authorizationBasis)
             if (entity.supportCaseId != caseId) conflict("DataAccessGrant binding is stale")
             if (entity.requesterId !=
                 command.actorId
@@ -524,9 +512,6 @@ internal class DataAccessGrantTransactions(
     private fun fields(grantId: UUID): Set<SupportPersonalDataField> =
         grantFields.findByGrantIdOrderByFieldAsc(grantId).mapTo(linkedSetOf(), DataAccessGrantFieldEntity::field)
 
-    private fun verifiedChannels(sessionId: UUID): Set<VerificationChannel> =
-        challenges.findDistinctChannelsBySessionIdAndState(sessionId, ChallengeState.VERIFIED)
-
     private fun activeCase(caseId: UUID): SupportCaseEntity {
         val supportCase = cases.findLockedById(caseId) ?: notFound()
         if (supportCase.state !in ACTIVE_CASE_STATES) conflict("Terminal SupportCase rejects DataAccessGrant")
@@ -649,9 +634,6 @@ internal class DataAccessGrantTransactions(
             }
         }
 
-    private fun verificationRequired(): Nothing =
-        throw DomainFailure(FailureCode.VERIFICATION_REQUIRED, "Matching verification is required")
-
     private fun notFound(): Nothing = throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "DataAccessGrant resource was not found")
 
     private fun conflict(message: String): Nothing = throw DomainFailure(FailureCode.ORDER_STATE_CONFLICT, message)
@@ -669,25 +651,7 @@ internal class DataAccessGrantTransactions(
     }
 }
 
-private fun VerificationSessionEntity.toVerificationAggregate(channels: Set<VerificationChannel>): VerificationSession =
-    VerificationSession.restore(
-        id,
-        supportCaseId,
-        subjectLinkId,
-        subjectType,
-        subjectId,
-        actorId,
-        purpose,
-        actionScope,
-        requestedLevel,
-        startedAt,
-        expiresAt,
-        state,
-        invalidAttempts.toInt(),
-        channels,
-    )
-
-private fun DataAccessGrant.toEntity(sessionId: UUID): DataAccessGrantEntity =
+private fun DataAccessGrant.toEntity(sessionId: UUID?): DataAccessGrantEntity =
     DataAccessGrantEntity(
         id,
         caseId,
@@ -759,6 +723,7 @@ private fun DataAccessGrantEntity.toResource(fields: Set<SupportPersonalDataFiel
         requestedAt,
         expiresAt,
         version,
+        authorizationBasis,
     )
 
 private fun DataAccessGrantEntity.securityAudit(
@@ -776,7 +741,14 @@ private fun DataAccessGrantEntity.securityAudit(
         targetId = id,
         occurredAt = occurredAt,
         reason = reasonCode.name,
-        afterSummary = mapOf("event" to action, "state" to state.name, "risk" to risk.name, "fieldCount" to "BOUNDED"),
+        afterSummary =
+            mapOf(
+                "event" to action,
+                "state" to state.name,
+                "risk" to risk.name,
+                "fieldCount" to "BOUNDED",
+                "authorizationBasis" to authorizationBasis.name,
+            ),
         correlationId = correlationId,
         sourceReference = "support-data-access-grant:$id:$action:$version",
     )

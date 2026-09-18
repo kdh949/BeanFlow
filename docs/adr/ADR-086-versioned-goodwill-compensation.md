@@ -1,6 +1,6 @@
 # ADR-086: versioned risk compensation과 goodwill source 분리
 
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR-136](ADR-136-support-direct-processing.md)
 - **Date:** 2026-08-10
 
 ## Context
@@ -101,3 +101,8 @@ SUPPORT_CASE_READ/COMPENSATION_REQUEST, 유효한 고객 본인확인과 고객�
 등록은 actor+idempotency key로 직렬화하며 같은 payload는 같은 사고를 재생하고 다른 payload는 409다.
 사고/명령 identity/PII-free Audit는 한 transaction에서 commit한다. 등록은 지급이 아니며 보상 명령의
 별도 승인, 현재 버전, 사고별 lifetime terminal unique와 rolling 한도를 그대로 적용한다.
+
+## 직접 처리 정책 전환 (2026-09-18)
+
+신규 업무의 본인확인·타인 승인 조건은 [ADR-136](ADR-136-support-direct-processing.md)으로 대체한다.
+기존 기록의 의미와 이 문서의 금융·감사·마스킹·복구 불변식은 유지한다.

@@ -82,7 +82,7 @@ internal class SupportProfilePayloadDigestTest {
         val evidence = "e".repeat(64)
         val request =
             StoreSettlementAccountRequest(
-                ProfileChangeBindingRequest(SUBJECT, 1, SESSION, "private reason", evidence),
+                ProfileChangeBindingRequest(SUBJECT, 1, "private reason", evidence),
                 raw,
             )
 

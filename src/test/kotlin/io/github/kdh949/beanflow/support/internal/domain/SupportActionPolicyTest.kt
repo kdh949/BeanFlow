@@ -9,40 +9,31 @@ class SupportActionPolicyTest {
     private val policy = SupportActionPolicy()
 
     @Test
-    fun `pending and paid cancellation or reschedule allow basic action verification`() {
+    fun `pending and paid cancellation or reschedule allow without action verification`() {
         listOf(SupportActionOrderState.PENDING_PAYMENT, SupportActionOrderState.PAID).forEach { state ->
             listOf(SupportActionType.ORDER_CANCELLATION, SupportActionType.PICKUP_RESCHEDULE).forEach { action ->
                 val result = policy.evaluate(eligibleInput(action = action, state = state), evaluatedAt)
 
                 assertThat(result.decision).isEqualTo(SupportActionDecision.ALLOWED)
                 assertThat(result.reasonCodes).containsExactly(SupportActionReasonCode.POLICY_ALLOWED)
-                assertThat(result.requiredVerificationLevel).isEqualTo(VerificationLevel.BASIC)
+                assertThat(result.requiredVerificationLevel).isEqualTo(VerificationLevel.UNVERIFIED)
                 assertThat(result.expiresAt).isEqualTo(evaluatedAt.plusSeconds(120))
             }
         }
     }
 
     @Test
-    fun `accepted cancellation and reschedule require enhanced verification and approval`() {
+    fun `accepted cancellation and reschedule require no verification or approval`() {
         listOf(SupportActionType.ORDER_CANCELLATION, SupportActionType.PICKUP_RESCHEDULE).forEach { action ->
-            val insufficient =
-                policy.evaluate(
-                    eligibleInput(action = action, state = SupportActionOrderState.ACCEPTED)
-                        .copy(verificationLevel = VerificationLevel.BASIC),
-                    evaluatedAt,
-                )
-            assertThat(insufficient.decision).isEqualTo(SupportActionDecision.DENIED)
-            assertThat(insufficient.reasonCodes).contains(SupportActionReasonCode.INSUFFICIENT_VERIFICATION)
-
             val result =
                 policy.evaluate(
-                    eligibleInput(action = action, state = SupportActionOrderState.ACCEPTED)
-                        .copy(verificationLevel = VerificationLevel.ENHANCED),
+                    eligibleInput(action, SupportActionOrderState.ACCEPTED)
+                        .copy(verificationLevel = VerificationLevel.UNVERIFIED),
                     evaluatedAt,
                 )
-            assertThat(result.decision).isEqualTo(SupportActionDecision.APPROVAL_REQUIRED)
-            assertThat(result.reasonCodes).containsExactly(SupportActionReasonCode.POLICY_APPROVAL_REQUIRED)
-            assertThat(result.approvalRequirements).containsExactly(SupportActionApprovalRequirement.SUPPORT_MANAGER)
+            assertThat(result.decision).isEqualTo(SupportActionDecision.ALLOWED)
+            assertThat(result.approvalRequirements).isEmpty()
+            assertThat(result.requiredVerificationLevel).isEqualTo(VerificationLevel.UNVERIFIED)
         }
     }
 
@@ -59,7 +50,7 @@ class SupportActionPolicyTest {
                         .copy(verificationLevel = VerificationLevel.ENHANCED),
                     evaluatedAt,
                 )
-            assertThat(result.decision).isEqualTo(SupportActionDecision.APPROVAL_REQUIRED)
+            assertThat(result.decision).isEqualTo(SupportActionDecision.ALLOWED)
         }
 
         val denied =
@@ -81,10 +72,6 @@ class SupportActionPolicyTest {
                 base.copy(relationshipMatches = false) to SupportActionReasonCode.TARGET_RELATIONSHIP_MISMATCH,
                 base.copy(hasGenericPermission = false) to SupportActionReasonCode.MISSING_PERMISSION,
                 base.copy(hasCapabilityPermission = false) to SupportActionReasonCode.MISSING_PERMISSION,
-                base.copy(verificationScope = VerificationActionScope.PERSONAL_DATA_REVEAL) to
-                    SupportActionReasonCode.VERIFICATION_SCOPE_MISMATCH,
-                base.copy(verificationPurpose = VerificationPurpose.CONTACT_CONFIRMATION) to
-                    SupportActionReasonCode.VERIFICATION_PURPOSE_MISMATCH,
             )
 
         deniedInputs.forEach { (input, reason) ->

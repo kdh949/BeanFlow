@@ -88,7 +88,7 @@ internal class DataAccessGrantIntegrationTest
         @Test
         fun `work directory pages authorized grant metadata without decrypting and binds cursor to actor and case`() {
             val binding = seedVerifiedBinding(requesterId, "ENHANCED")
-            requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "directory-sensitive", "APPROVAL_PENDING")
+            requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "directory-sensitive", "ACTIVE")
             requestGrant(binding, "CUSTOMER_DISPLAY_NAME", "directory-basic", "ACTIVE")
             val path = "/api/v1/support/work-items"
             val first =
@@ -151,13 +151,13 @@ internal class DataAccessGrantIntegrationTest
         @Test
         fun `inspection restricts requester and approver without decrypting or consuming budget`() {
             val binding = seedVerifiedBinding(requesterId, "ENHANCED")
-            val grantId = requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "grant-inspect-sensitive", "APPROVAL_PENDING")
+            val grantId = requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "grant-inspect-sensitive", "ACTIVE")
             mockMvc
                 .perform(httpGet("/api/v1/support/data-access-grants/$grantId").with(operatorJwt(requesterId)))
                 .andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.viewerRole").value("REQUESTER"))
-                .andExpect(jsonPath("$.grant.state").value("APPROVAL_PENDING"))
+                .andExpect(jsonPath("$.grant.state").value("ACTIVE"))
                 .andExpect(jsonPath("$.grant.reservedReveals").value(0))
                 .andExpect(jsonPath("$.values").doesNotExist())
             mockMvc
@@ -181,8 +181,9 @@ internal class DataAccessGrantIntegrationTest
             val binding = seedVerifiedBinding(requesterId, "BASIC")
             val grantId = requestGrant(binding, "CUSTOMER_DISPLAY_NAME", "grant-inspect-expired", "ACTIVE")
             jdbcTemplate.update(
-                "UPDATE support_data_access_grant SET expires_at = ? WHERE id = ?",
-                Timestamp.from(Instant.now().minusSeconds(1)),
+                "UPDATE support_data_access_grant SET direct_authorized_at = ?::timestamptz - interval '10 minutes', expires_at = ? WHERE id = ?",
+                Timestamp.from(Instant.parse("2020-01-01T00:00:00Z")),
+                Timestamp.from(Instant.parse("2020-01-01T00:00:00Z")),
                 grantId,
             )
             mockMvc
@@ -287,26 +288,25 @@ internal class DataAccessGrantIntegrationTest
         }
 
         @Test
-        fun `action scoped verification cannot authorize a personal data grant`() {
+        fun `grant uses active case link without any verification session`() {
             val binding = seedVerifiedBinding(requesterId, "BASIC")
-            jdbcTemplate.update(
-                "UPDATE support_verification_session SET action_scope = 'SUPPORT_ACTION' WHERE id = ?",
-                binding.sessionId,
-            )
-
-            mockMvc
-                .perform(
-                    post("/api/v1/support/cases/${binding.caseId}/data-access-grants")
-                        .with(operatorJwt(requesterId))
-                        .header("Idempotency-Key", "grant-action-scope-denied")
-                        .json(
-                            """
-                            {"verificationSessionId":"${binding.sessionId}","purpose":"CASE_RESOLUTION",
-                             "fields":["CUSTOMER_DISPLAY_NAME"],"reasonCode":"CASE_HANDLING"}
-                            """.trimIndent(),
-                        ),
-                ).andExpect(status().isForbidden)
-                .andExpect(jsonPath("$.code").value("VERIFICATION_REQUIRED"))
+            jdbcTemplate.update("DELETE FROM support_verification_challenge WHERE session_id = ?", binding.sessionId)
+            jdbcTemplate.update("DELETE FROM support_verification_session WHERE id = ?", binding.sessionId)
+            val id = requestGrant(binding, "CUSTOMER_DISPLAY_NAME", "grant-no-session", "ACTIVE")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT authorization_basis FROM support_data_access_grant WHERE id = ?",
+                    String::class.java,
+                    id,
+                ),
+            ).isEqualTo("SUPPORT_DIRECT")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT verification_session_id FROM support_data_access_grant WHERE id = ?",
+                    UUID::class.java,
+                    id,
+                ),
+            ).isNull()
         }
 
         @Test
@@ -369,29 +369,12 @@ internal class DataAccessGrantIntegrationTest
         }
 
         @Test
-        fun `sensitive grant requires enhanced verification and a distinct approver`() {
+        fun `sensitive grant activates directly and preserves single reveal budget`() {
             val binding = seedVerifiedBinding(requesterId, "ENHANCED")
-            val grantId = requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "grant-request-sensitive-0001", "APPROVAL_PENDING")
-            grant(requesterId, "SUPPORT_PII_REVEAL_APPROVE")
-
-            mockMvc
-                .perform(
-                    post("/api/v1/support/data-access-grants/$grantId/approvals")
-                        .with(operatorJwt(requesterId))
-                        .header("Idempotency-Key", "grant-self-approve-0001")
-                        .json("""{"decision":"APPROVE","expectedVersion":0,"reasonCode":"CASE_HANDLING"}"""),
-                ).andExpect(status().isForbidden)
-            grant(approverId, "SUPPORT_PII_REVEAL_APPROVE")
-            mockMvc
-                .perform(
-                    post("/api/v1/support/data-access-grants/$grantId/approvals")
-                        .with(operatorJwt(approverId))
-                        .header("Idempotency-Key", "grant-approve-0001")
-                        .json("""{"decision":"APPROVE","expectedVersion":0,"reasonCode":"CASE_HANDLING"}"""),
-                ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.state").value("ACTIVE"))
-                .andExpect(jsonPath("$.maxReveals").value(1))
-
+            val grantId = requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "grant-request-sensitive-0001", "ACTIVE")
+            assertThat(
+                jdbcTemplate.queryForObject("SELECT approver_id FROM support_data_access_grant WHERE id = ?", UUID::class.java, grantId),
+            ).isNull()
             mockMvc
                 .perform(
                     post("/api/v1/support/data-access-grants/$grantId/reveals")
@@ -438,90 +421,21 @@ internal class DataAccessGrantIntegrationTest
         }
 
         @Test
-        fun `approval inbox isolates actors and filters while history shows committed decisions only`() {
+        fun `direct grants do not create approval tasks or fabricated decision history`() {
             val binding = seedVerifiedBinding(requesterId, "ENHANCED")
-            val first = requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "inbox-grant-first", "APPROVAL_PENDING")
-            val secondBinding = seedVerifiedBinding(requesterId, "ENHANCED")
-            requestGrant(secondBinding, "CUSTOMER_PRIMARY_EMAIL", "inbox-grant-second", "APPROVAL_PENDING")
+            val first = requestGrant(binding, "CUSTOMER_PRIMARY_EMAIL", "inbox-grant-first", "ACTIVE")
             val path = "/api/v1/support/approval-tasks"
             mockMvc.perform(httpGet(path).with(operatorJwt(requesterId))).andExpect(status().isForbidden)
             grant(approverId, "SUPPORT_PII_REVEAL_APPROVE")
-            val page =
-                mockMvc
-                    .perform(httpGet(path).with(operatorJwt(approverId)).param("kind", "DATA_ACCESS").param("limit", "1"))
-                    .andExpect(status().isOk)
-                    .andExpect(header().string("Cache-Control", "no-store"))
-                    .andExpect(jsonPath("$.items.length()").value(1))
-                    .andReturn()
-                    .response.contentAsString
-            val cursor =
-                JsonMapper
-                    .builder()
-                    .build()
-                    .readTree(page)["nextCursor"]
-                    .asText()
-            mockMvc
-                .perform(
-                    httpGet(path)
-                        .with(operatorJwt(approverId))
-                        .param("kind", "DATA_ACCESS")
-                        .param("limit", "1")
-                        .param("cursor", cursor),
-                ).andExpect(
-                    status().isOk,
-                ).andExpect(jsonPath("$.items.length()").value(1))
-                .andExpect(jsonPath("$.nextCursor").doesNotExist())
-            mockMvc
-                .perform(
-                    httpGet(path)
-                        .with(operatorJwt(approverId))
-                        .param("kind", "DATA_ACCESS")
-                        .param("view", "VISIBLE")
-                        .param("cursor", cursor),
-                ).andExpect(status().isBadRequest)
-            grant(requesterId, "SUPPORT_PII_REVEAL_APPROVE")
-            mockMvc
-                .perform(
-                    httpGet(path).with(operatorJwt(requesterId)).param("kind", "DATA_ACCESS").param("cursor", cursor),
-                ).andExpect(status().isBadRequest)
-            mockMvc
-                .perform(httpGet(path).with(operatorJwt(requesterId)).param("kind", "DATA_ACCESS"))
-                .andExpect(status().isOk)
-                .andExpect(jsonPath("$.items").isEmpty())
-            mockMvc.perform(httpGet(path).with(operatorJwt(approverId)).param("kind", "COMPENSATION")).andExpect(status().isForbidden)
-            mockMvc
-                .perform(
-                    post(
-                        "/api/v1/support/data-access-grants/$first/approvals",
-                    ).with(
-                        operatorJwt(approverId),
-                    ).header(
-                        "Idempotency-Key",
-                        "inbox-grant-approve",
-                    ).json("""{"decision":"APPROVE","expectedVersion":0,"reasonCode":"CASE_HANDLING"}"""),
-                ).andExpect(status().isOk)
-            val historyPath = "$path/DATA_ACCESS/$first/history"
-            val history =
-                mockMvc
-                    .perform(httpGet(historyPath).with(operatorJwt(approverId)))
-                    .andExpect(status().isOk)
-                    .andExpect(header().string("Cache-Control", "no-store"))
-                    .andExpect(jsonPath("$.items.length()").value(1))
-                    .andExpect(jsonPath("$.items[0].state").value("APPROVED"))
-                    .andExpect(jsonPath("$.items[0].actorDisplay.state").value("MISSING_PROFILE"))
-                    .andReturn()
-                    .response.contentAsString
-            assertThat(history).doesNotContain("reasonCode", "actorId", "fields", "verificationSessionId")
             mockMvc
                 .perform(httpGet(path).with(operatorJwt(approverId)).param("kind", "DATA_ACCESS"))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.items").isEmpty())
             mockMvc
-                .perform(httpGet(path).with(operatorJwt(approverId)).param("kind", "DATA_ACCESS").param("view", "VISIBLE"))
+                .perform(httpGet("$path/DATA_ACCESS/$first/history").with(operatorJwt(approverId)))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$.items.length()").value(2))
-            jdbcTemplate.update("DELETE FROM operations_operator_permission_grant WHERE actor_id = ?", approverId)
-            mockMvc.perform(httpGet(historyPath).with(operatorJwt(approverId))).andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.items").isEmpty())
             assertThat(decryptCalls).hasValue(0)
             assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM support_reveal_attempt", Long::class.java)).isZero()
         }
@@ -540,7 +454,7 @@ internal class DataAccessGrantIntegrationTest
                             .header("Idempotency-Key", key)
                             .json(
                                 """
-                                {"verificationSessionId":"${binding.sessionId}","purpose":"CASE_RESOLUTION",
+                                {"subjectLinkId":"${binding.linkId}","purpose":"CASE_RESOLUTION",
                                  "fields":["$field"],"reasonCode":"CASE_HANDLING"}
                                 """.trimIndent(),
                             ),

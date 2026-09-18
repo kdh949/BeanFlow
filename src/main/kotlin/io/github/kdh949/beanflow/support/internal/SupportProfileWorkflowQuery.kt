@@ -47,7 +47,7 @@ internal data class SupportProfileWorkflowResource(
     val approval: SupportActionRequestResource?,
     val caseVersion: Long,
     val currentProfileVersion: Long,
-    val verificationExpiresAt: Instant,
+    val executionExpiresAt: Instant,
     val allowedActions: List<SupportProfileWorkflowAction>,
 )
 
@@ -58,7 +58,6 @@ internal class SupportProfileWorkflowQuery(
     private val owners: SupportProfileChangeOwnerHandler,
     private val cases: SupportCaseJpaRepository,
     private val links: SupportCaseSubjectLinkJpaRepository,
-    private val sessions: VerificationSessionJpaRepository,
     private val permissions: OperatorPermissionAuthorization,
     private val clock: Clock,
 ) {
@@ -73,7 +72,7 @@ internal class SupportProfileWorkflowQuery(
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_CASE_WRITE)
         permissions.requireActive(actorId, purpose.requestPermission())
         val descriptor = purpose.descriptor()
-        if (descriptor.requiresDualApproval) permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_REQUEST)
+        if (descriptor.requiresExecutionRequest) permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_REQUEST)
         val supportCase = cases.findById(caseId).orElse(null) ?: missing()
         if (supportCase.currentAssigneeId != actorId || supportCase.state !in ACTIVE_CASE_STATES) denied()
         val link = links.findByIdAndSupportCaseId(subjectLinkId, caseId) ?: missing()
@@ -86,7 +85,7 @@ internal class SupportProfileWorkflowQuery(
             subjectType,
             purpose,
             descriptor.risk,
-            if (descriptor.risk == ProfileRiskClass.R1) VerificationLevel.BASIC else VerificationLevel.ENHANCED,
+            VerificationLevel.UNVERIFIED,
             owners.currentVersion(purpose, link.subjectId),
         )
     }
@@ -115,18 +114,27 @@ internal class SupportProfileWorkflowQuery(
             throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_STALE, "Profile approval binding is stale")
         }
         val supportCase = cases.findById(profile.caseId).orElse(null) ?: missing()
-        val session = sessions.findById(profile.verificationSessionId).orElse(null) ?: missing()
+        val expiresAt = request?.expiresAt ?: profile.createdAt.plus(SUPPORT_DIRECT_REQUEST_TTL)
         val linked =
             links.findBySupportCaseIdAndUnlinkedAtIsNullOrderByLinkedAtAsc(profile.caseId).any {
                 it.subjectId == profile.subjectId && it.subjectType ==
                     profile.purpose
                         .descriptor()
                         .owner
-                        .caseSubjectType() &&
-                    it.id == session.subjectLinkId
+                        .caseSubjectType()
             }
         val active = supportCase.state in ACTIVE_CASE_STATES && linked
-        val current = active && session.state == VerificationState.VERIFIED && clock.instant().isBefore(session.expiresAt)
+        val boundLink = request?.subjectLinkId?.let { links.findByIdAndSupportCaseId(it, profile.caseId) }
+        val bindingCurrent =
+            request?.authorizationBasis == io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis.SUPPORT_DIRECT &&
+                boundLink != null && boundLink.unlinkedAt == null && boundLink.subjectId == profile.subjectId &&
+                boundLink.subjectType ==
+                profile.purpose
+                    .descriptor()
+                    .owner
+                    .caseSubjectType()
+        val current =
+            active && bindingCurrent && request?.policyVersion == PROFILE_CHANGE_POLICY_VERSION && clock.instant().isBefore(expiresAt)
         val ownerVersion = owners.currentVersion(profile.purpose, profile.subjectId)
         val allowed = mutableListOf<SupportProfileWorkflowAction>()
 
@@ -136,7 +144,10 @@ internal class SupportProfileWorkflowQuery(
             allowed += SupportProfileWorkflowAction.RETRY_NOTIFICATION
         }
         if (request != null && profile.state != SupportProfileChangeState.EXECUTED) {
-            if (assigned && actorId == profile.requesterActorId && request.state in REVISION_STATES &&
+            if (request.authorizationBasis == io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis.SUPPORT_DIRECT &&
+                assigned &&
+                actorId == profile.requesterActorId &&
+                request.state in REVISION_STATES &&
                 has(OperatorPermission.SUPPORT_PROFILE_R3_REQUEST) && has(OperatorPermission.SUPPORT_ACTION_REQUEST)
             ) {
                 allowed += SupportProfileWorkflowAction.REVISE
@@ -160,7 +171,7 @@ internal class SupportProfileWorkflowQuery(
                 allowed += SupportProfileWorkflowAction.EXECUTE
             }
         }
-        return SupportProfileWorkflowResource(profile, request, supportCase.version, ownerVersion, session.expiresAt, allowed)
+        return SupportProfileWorkflowResource(profile, request, supportCase.version, ownerVersion, expiresAt, allowed)
     }
 
     private fun ProfileChangePurpose.requestPermission(): OperatorPermission =
@@ -196,6 +207,9 @@ internal class SupportProfileWorkflowQuery(
                 SupportActionRequestState.AWAITING_SUPPORT_MANAGER,
                 SupportActionRequestState.AWAITING_OPERATIONS,
                 SupportActionRequestState.REVISION_REQUIRED,
+                SupportActionRequestState.READY_FOR_EXECUTION,
+                SupportActionRequestState.STALE,
+                SupportActionRequestState.EXPIRED,
             )
         val EXECUTOR_STATES = setOf(SupportActionRequestState.READY_FOR_EXECUTION, SupportActionRequestState.REASSIGNMENT_REQUIRED)
     }

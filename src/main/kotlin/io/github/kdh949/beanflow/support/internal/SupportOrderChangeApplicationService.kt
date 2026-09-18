@@ -401,10 +401,7 @@ internal class SupportOrderChangeExecutionTransactionService(
     private val revisions: SupportActionRevisionJpaRepository,
     private val cases: SupportCaseJpaRepository,
     private val subjectLinks: SupportCaseSubjectLinkJpaRepository,
-    private val sessions: VerificationSessionJpaRepository,
     private val executions: SupportOrderChangeExecutionJpaRepository,
-    private val authorizations: SupportOrderChangeAuthorizationJpaRepository,
-    private val authorizationUses: SupportOrderChangeAuthorizationUseJpaRepository,
     private val ordering: OrderingSupportTimelineOperations,
     private val cancellation: OrderingSupportOrderCancellationOperations,
     private val reschedule: OrderingSupportPickupRescheduleOperations,
@@ -428,18 +425,20 @@ internal class SupportOrderChangeExecutionTransactionService(
         }
         val request = requests.findLockedById(command.requestId) ?: notFound("SupportActionRequest")
         executions.findByRequestId(command.requestId)?.let { conflict("Support action request already has a terminal execution") }
-        requireRequestBinding(request, command)
         val supportCase = cases.findLockedById(request.supportCaseId) ?: notFound("SupportCase")
         requireCaseScope(supportCase, request, command.actorId)
         val revision =
             revisions.findByRequestIdAndRevisionNumber(request.id, request.currentRevisionNumber)
                 ?: dependency("Action revision is missing")
+        if (request.executorActorId != command.actorId) denied("Only the assigned Support actor can execute the action")
+        requireDirectAuthorization(revision.authorizationBasis)
+        requireRequestBinding(request, command)
         val now = now()
         requireRevisionBinding(request, revision, command, now)
         val order = ordering.findOrderSnapshots(setOf(request.targetId)).singleOrNull() ?: notFound("Order")
         val executionId = identifiers.next()
-        val authorization = requireAuthorizationIfAccepted(request, revision, order, command, executionId, now)
-        val report = executeOwner(request, command, executionId, authorization?.id)
+        requireOrderSubject(request, revision, order)
+        val report = executeOwner(request, command, executionId)
         if (report.result == SupportOrderChangeOwnerResult.ALREADY_APPLIED) {
             dependency("Owner order change history exists without Support execution")
         }
@@ -493,26 +492,13 @@ internal class SupportOrderChangeExecutionTransactionService(
                 report.previousPickupSlotId,
                 report.currentPickupSlotId,
                 report.paymentRecoveryState,
-                if (outcome == SupportOrderChangeExecutionOutcome.EXECUTED) authorization?.id else null,
+                null,
                 outcome,
                 EXECUTION_REASON,
                 now,
                 now.plus(EXECUTION_RETENTION),
             )
         executions.saveAndFlush(execution)
-        if (outcome == SupportOrderChangeExecutionOutcome.EXECUTED && authorization != null) {
-            authorizationUses.saveAndFlush(
-                SupportOrderChangeAuthorizationUseEntity(
-                    executionId,
-                    authorization.id,
-                    request.id,
-                    revision.revisionNumber,
-                    revision.actionPayloadDigest,
-                    revision.targetVersion,
-                    now,
-                ),
-            )
-        }
         request.apply(aggregate, now)
         requests.saveAndFlush(request)
         audits.appendAll(listOf(executionAudit(execution, request)))
@@ -562,6 +548,7 @@ internal class SupportOrderChangeExecutionTransactionService(
         command: ExecuteSupportOrderChangeCommand,
         now: Instant,
     ) {
+        requireDirectAuthorization(revision.authorizationBasis)
         if (!now.isBefore(revision.expiresAt)) expired("Support action request")
         if (revision.policyVersion != SupportActionPolicy.POLICY_VERSION ||
             revision.targetVersion != command.expectedTargetVersion ||
@@ -569,94 +556,40 @@ internal class SupportOrderChangeExecutionTransactionService(
         ) {
             stale()
         }
-        val session = sessions.findLockedById(revision.verificationSessionId) ?: stale()
-        if (session.actorId != request.requesterActorId || session.supportCaseId != request.supportCaseId ||
-            session.state != VerificationState.VERIFIED || session.actionScope != VerificationActionScope.SUPPORT_ACTION ||
-            session.purpose != VerificationPurpose.CASE_RESOLUTION || session.expiresAt != revision.expiresAt ||
-            !now.isBefore(session.expiresAt)
-        ) {
-            stale()
-        }
-        val link = subjectLinks.findByIdAndSupportCaseId(session.subjectLinkId, request.supportCaseId)
-        if (link == null || link.unlinkedAt != null || link.subjectId != session.subjectId) stale()
+        val link = subjectLinks.findByIdAndSupportCaseId(requireNotNull(revision.subjectLinkId), request.supportCaseId)
+        if (link == null || link.unlinkedAt != null) stale()
     }
 
-    private fun requireAuthorizationIfAccepted(
+    private fun requireOrderSubject(
         request: SupportActionRequestEntity,
         revision: SupportActionRevisionEntity,
         order: io.github.kdh949.beanflow.ordering.api.SupportOrderSnapshot,
-        command: ExecuteSupportOrderChangeCommand,
-        executionId: UUID,
-        now: Instant,
-    ): SupportOrderChangeAuthorizationEntity? {
+    ) {
         if (order.state !in POST_ACCEPTANCE_RESOLUTION_STATES && order.version != revision.targetVersion) stale()
-        if (order.state in POST_ACCEPTANCE_RESOLUTION_STATES) return null
-        if (order.state != SupportOrderState.ACCEPTED) {
-            if (command.authorizationId != null) scopeMismatch("Store authorization is only valid for accepted orders")
-            return null
-        }
-        val authorizationId = command.authorizationId ?: authorizationRequired()
-        val entity = authorizations.findLockedById(authorizationId) ?: notFound("SupportOrderChangeAuthorization")
-        val priorUses = authorizationUses.findByAuthorizationIdOrderByUsedAtAsc(entity.id)
-        if (entity.storeId != order.storeId || entity.action != request.action || entity.revokedAt != null) {
-            scopeMismatch("Store authorization scope does not match this action")
-        }
-        if (!now.isBefore(entity.expiresAt)) authorizationExpired()
-        if (entity.authorizedByActorId in
-            setOfNotNull(
-                request.requesterActorId,
-                request.executorActorId,
-                request.supportApproverActorId,
-                request.operationsApproverActorId,
-            )
-        ) {
-            scopeMismatch("Store authorizer must differ from Support request actors")
-        }
-        if (entity.type == SupportOrderChangeAuthorizationType.CONFIRMATION &&
-            (
-                entity.requestId != request.id || entity.revisionNumber != revision.revisionNumber ||
-                    entity.actionPayloadDigest != revision.actionPayloadDigest || entity.targetVersion != revision.targetVersion
-            )
-        ) {
-            scopeMismatch("Store confirmation binding does not match the approved revision")
-        }
-        if (entity.type == SupportOrderChangeAuthorizationType.DELEGATION &&
-            entity.policyVersion != SupportOrderChangeAuthorization.INITIAL_POLICY_VERSION
-        ) {
-            scopeMismatch("Store delegation policy version is not active")
-        }
-        if (priorUses.size >= entity.maxSuccessfulUses) authorizationExhausted()
-        val domain = entity.toDomain(priorUses)
-        val consumption =
-            try {
-                domain.consume(
-                    ConsumeSupportOrderChangeAuthorizationCommand(
-                        executionId,
-                        order.storeId,
-                        request.action,
-                        request.id,
-                        revision.revisionNumber,
-                        revision.actionPayloadDigest,
-                        revision.targetVersion,
-                    ),
-                    now,
-                )
-            } catch (_: IllegalArgumentException) {
-                scopeMismatch("Store authorization binding does not match this action")
-            } catch (_: IllegalStateException) {
-                authorizationExhausted()
+        val link = subjectLinks.findByIdAndSupportCaseId(requireNotNull(revision.subjectLinkId), request.supportCaseId) ?: stale()
+        val matches =
+            when (link.subjectType) {
+                SupportSubjectType.CUSTOMER -> {
+                    link.subjectId == order.customerId &&
+                        link.relationship in setOf(SupportSubjectRelationship.REQUESTER, SupportSubjectRelationship.AFFECTED_CUSTOMER)
+                }
+
+                SupportSubjectType.STORE -> {
+                    link.subjectId == order.storeId &&
+                        link.relationship in setOf(SupportSubjectRelationship.REQUESTER, SupportSubjectRelationship.AFFECTED_STORE)
+                }
+
+                else -> {
+                    false
+                }
             }
-        if (consumption != SupportOrderChangeAuthorizationConsumption.APPLIED) {
-            dependency("New Support execution unexpectedly replayed authorization use")
-        }
-        return entity
+        if (!matches) denied("Order owner does not match the case subject")
     }
 
     private fun executeOwner(
         request: SupportActionRequestEntity,
         command: ExecuteSupportOrderChangeCommand,
         executionId: UUID,
-        authorizationId: UUID?,
     ): SupportOrderChangeOwnerReport {
         val sourceReference = "support-order-change:$executionId"
         return when (request.action) {
@@ -670,7 +603,7 @@ internal class SupportOrderChangeExecutionTransactionService(
                         command.expectedTargetVersion,
                         command.cancellationReasonCode ?: invalid("Cancellation reason code is required"),
                         null,
-                        authorizationId,
+                        null,
                         sourceReference,
                     ),
                 )
@@ -685,7 +618,7 @@ internal class SupportOrderChangeExecutionTransactionService(
                         request.targetId,
                         command.expectedTargetVersion,
                         command.newPickupSlotId ?: invalid("New pickup slot is required"),
-                        authorizationId,
+                        null,
                         sourceReference,
                     ),
                 )

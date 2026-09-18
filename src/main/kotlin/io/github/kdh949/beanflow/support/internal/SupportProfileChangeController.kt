@@ -33,7 +33,6 @@ internal abstract class SensitiveProfileChangeRequest : StrictSupportRequest {
 internal data class ProfileChangeBindingRequest(
     @field:NotNull val subjectId: UUID?,
     @field:PositiveOrZero val expectedProfileVersion: Long,
-    @field:NotNull val verificationSessionId: UUID?,
     @field:NotBlank @field:Size(max = 500) val reason: String?,
     @field:NotBlank @field:Pattern(regexp = "^[0-9a-f]{64}$") val evidenceDigest: String?,
 ) : SensitiveProfileChangeRequest()
@@ -42,7 +41,6 @@ internal data class ProfileChangeRevisionBindingRequest(
     @field:PositiveOrZero val expectedProfileChangeVersion: Long,
     @field:PositiveOrZero val expectedActionRequestVersion: Long,
     @field:PositiveOrZero val expectedProfileVersion: Long,
-    @field:NotNull val verificationSessionId: UUID?,
     @field:NotBlank @field:Size(max = 500) val reason: String?,
     @field:NotBlank @field:Pattern(regexp = "^[0-9a-f]{64}$") val evidenceDigest: String?,
 ) : SensitiveProfileChangeRequest()
@@ -810,7 +808,7 @@ private fun ProfileChangeBindingRequest.submit(
     caseId,
     subjectId!!,
     expectedProfileVersion,
-    verificationSessionId!!,
+    null,
     reason!!,
     evidenceDigest!!,
     key,
@@ -828,7 +826,7 @@ private fun ProfileChangeRevisionBindingRequest.revise(
     expectedProfileChangeVersion,
     expectedActionRequestVersion,
     expectedProfileVersion,
-    verificationSessionId!!,
+    null,
     reason!!,
     evidenceDigest!!,
     key,

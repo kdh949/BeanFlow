@@ -270,9 +270,6 @@ internal class CustomerCancellationTransaction(
         if (order.version != command.expectedOrderVersion) {
             throw DomainFailure(FailureCode.SUPPORT_ACTION_REQUEST_STALE, "Order version changed before execution")
         }
-        if (order.state == OrderState.ACCEPTED && command.acceptedStoreAuthorizationId == null) {
-            throw DomainFailure(FailureCode.ACCESS_DENIED, "Accepted order cancellation requires store authorization")
-        }
         val previousState = order.state.name
         val previousPickupSlotId = order.pickupSlotId
         val now = clock.instant().truncatedTo(ChronoUnit.MICROS)

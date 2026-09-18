@@ -413,7 +413,10 @@ internal class SupportOrderChangeExecutionIntegrationTest
                 SupportActionPolicy.POLICY_VERSION,
                 revisionId,
             )
-            jdbcTemplate.update("UPDATE support_action_revision SET expires_at = now() - interval '1 second' WHERE id = ?", revisionId)
+            jdbcTemplate.update(
+                "UPDATE support_action_revision SET created_at = now() - interval '15 minutes 1 second', expires_at = now() - interval '1 second' WHERE id = ?",
+                revisionId,
+            )
             mockMvc.perform(get(path).with(actor)).andExpect(status().isConflict)
         }
 
@@ -454,7 +457,7 @@ internal class SupportOrderChangeExecutionIntegrationTest
                 .perform(get("/api/v1/stores/${UUID.randomUUID()}/support-order-change-requests").with(actor).param("cursor", cursor))
                 .andExpect(status().isForbidden)
             jdbcTemplate.update(
-                "UPDATE support_action_revision SET expires_at = now() - interval '1 second' WHERE request_id IN (?, ?)",
+                "UPDATE support_action_revision SET created_at = now() - interval '15 minutes 1 second', expires_at = now() - interval '1 second' WHERE request_id IN (?, ?)",
                 firstId,
                 requestId,
             )
@@ -501,6 +504,44 @@ internal class SupportOrderChangeExecutionIntegrationTest
                 supportActorId,
             )
             mockMvc.perform(get(path).with(actor)).andExpect(status().isForbidden)
+        }
+
+        @Test
+        fun `legacy unexecuted request is readable but requires recreation`() {
+            jdbcTemplate.update(
+                "UPDATE support_action_revision SET authorization_basis = 'LEGACY', verification_session_id = ?, policy_version = 'support-action-policy/2026-08-12/v1' WHERE id = ?",
+                sessionId,
+                revisionId,
+            )
+            jdbcTemplate.update(
+                "UPDATE support_action_request SET state = 'AWAITING_SUPPORT_MANAGER', approval_route = 'SUPPORT_MANAGER' WHERE id = ?",
+                requestId,
+            )
+            mockMvc
+                .perform(
+                    get("/api/v1/support/action-requests/$requestId/workflow").with(jwt().jwt { it.subject(supportActorId.toString()) }),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.request.authorizationBasis").value("LEGACY"))
+                .andExpect(jsonPath("$.allowedActions").isEmpty)
+            executeCancellation("legacy-unexecuted-request")
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
+            assertThat(value("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PENDING_PAYMENT")
+            assertThat(count("support_order_change_execution")).isZero()
+        }
+
+        @Test
+        fun `completed legacy execution remains replayable without another owner write`() {
+            val completed = executeCancellation("legacy-completed-replay").andExpect(status().isOk).andReturn()
+            jdbcTemplate.update(
+                "UPDATE support_action_revision SET authorization_basis = 'LEGACY', verification_session_id = ?, policy_version = 'support-action-policy/2026-08-12/v1' WHERE id = ?",
+                sessionId,
+                revisionId,
+            )
+            executeCancellation("legacy-completed-replay")
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.executionId").value(executionId(completed).toString()))
+            assertThat(count("support_order_change_execution")).isOne()
         }
 
         @Test
@@ -575,41 +616,27 @@ internal class SupportOrderChangeExecutionIntegrationTest
         }
 
         @Test
-        fun `accepted reschedule requires exact store confirmation and consumes it once`() {
+        fun `accepted reschedule needs neither verification nor store consent and replays once`() {
             val newSlotId = UUID.randomUUID()
             makeAccepted(newSlotId)
             resetRequest(SupportActionType.PICKUP_RESCHEDULE, pickupDigest(newSlotId))
-            insertStoreMembership()
-
-            executeReschedule("execute-without-confirmation", newSlotId, null)
-                .andExpect(status().isForbidden)
-                .andExpect(jsonPath("$.code").value("SUPPORT_ORDER_CHANGE_AUTHORIZATION_REQUIRED"))
-
-            val authorization =
-                createConfirmation("confirmation-001")
-                    .andExpect(status().isCreated)
-                    .andExpect(header().string("Cache-Control", "no-store"))
-                    .andExpect(jsonPath("$.authorizationType").value("CONFIRMATION"))
-                    .andExpect(jsonPath("$.maxSuccessfulUses").value(1))
-                    .andExpect(jsonPath("$.successfulUses").value(0))
-                    .andReturn()
-            val authorizationId = authorizationId(authorization)
+            jdbcTemplate.update("DELETE FROM support_verification_session WHERE id = ?", sessionId)
 
             val first =
-                executeReschedule("execute-accepted-reschedule", newSlotId, authorizationId)
+                executeReschedule("execute-accepted-reschedule", newSlotId, null)
                     .andExpect(status().isOk)
                     .andExpect(header().string("Cache-Control", "no-store"))
                     .andExpect(jsonPath("$.outcome").value("EXECUTED"))
                     .andExpect(jsonPath("$.previousTargetState").value("ACCEPTED"))
                     .andExpect(jsonPath("$.currentPickupSlotId").value(newSlotId.toString()))
-                    .andExpect(jsonPath("$.authorizationId").value(authorizationId.toString()))
+                    .andExpect(jsonPath("$.authorizationId").isEmpty)
                     .andReturn()
 
-            executeReschedule("execute-accepted-reschedule", newSlotId, authorizationId)
+            executeReschedule("execute-accepted-reschedule", newSlotId, null)
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.executionId").value(executionId(first).toString()))
 
-            assertThat(count("support_order_change_authorization_use")).isOne()
+            assertThat(count("support_order_change_authorization_use")).isZero()
             assertThat(
                 jdbcTemplate.queryForObject(
                     "SELECT state FROM notification_delivery WHERE order_id = ? AND template = 'SUPPORT_PICKUP_RESCHEDULED'",
@@ -758,6 +785,7 @@ internal class SupportOrderChangeExecutionIntegrationTest
             requestId = UUID.randomUUID()
             revisionId = UUID.randomUUID()
             val now = Instant.now().minusSeconds(5)
+            expiresAt = now.plusSeconds(900)
             jdbcTemplate.update(
                 """
                 INSERT INTO support_action_request (
@@ -778,16 +806,20 @@ internal class SupportOrderChangeExecutionIntegrationTest
                 """
                 INSERT INTO support_action_revision (
                     id, request_id, revision_number, action, target_type, target_id, action_payload_digest,
-                    verification_session_id, policy_version, target_version, reason, evidence_digest,
-                    expires_at, created_by_actor_id, created_at
-                ) VALUES (?, ?, 1, ?, 'ORDER', ?, ?, ?, ?, ?, 'ORDER_CHANGE', ?, ?, ?, ?)
+                    subject_link_id, policy_version, target_version, reason, evidence_digest,
+                    expires_at, created_by_actor_id, created_at, authorization_basis
+                ) VALUES (?, ?, 1, ?, 'ORDER', ?, ?, ?, ?, ?, 'ORDER_CHANGE', ?, ?, ?, ?, 'SUPPORT_DIRECT')
                 """.trimIndent(),
                 revisionId,
                 requestId,
                 action.name,
                 orderId,
                 digest,
-                sessionId,
+                jdbcTemplate.queryForObject(
+                    "SELECT subject_link_id FROM support_verification_session WHERE id = ?",
+                    UUID::class.java,
+                    sessionId,
+                ),
                 SupportActionPolicy.POLICY_VERSION,
                 orderVersion,
                 EVIDENCE_DIGEST,

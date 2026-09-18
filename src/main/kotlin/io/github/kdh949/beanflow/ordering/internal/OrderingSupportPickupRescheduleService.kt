@@ -44,7 +44,6 @@ internal class OrderingSupportPickupRescheduleService(
         }
         if (order.state in POST_ACCEPTANCE_RESOLUTION_STATES) return resolutionRequired(order)
         if (order.version != command.expectedOrderVersion) stale()
-        if (order.state == OrderState.ACCEPTED && command.acceptedStoreAuthorizationId == null) denied()
 
         val previousState = order.state.name
         val previousSlotId = requireNotNull(order.pickupSlotId)

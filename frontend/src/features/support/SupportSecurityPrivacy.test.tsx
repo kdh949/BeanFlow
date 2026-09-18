@@ -13,7 +13,7 @@ const linkId = "a3000000-0000-4000-8000-000000000001";
 const sessionId = "a4000000-0000-4000-8000-000000000001";
 const rawPhone = "010-1234-5678";
 function response(data: unknown, status = 200) { return { data, response: new Response(null, { status }) } as never; }
-function grant() { return { grantId, caseId, subjectLinkId: linkId, subjectType: "CUSTOMER", subjectId: caseId, purpose: "CONTACT_CONFIRMATION", fields: ["CUSTOMER_PRIMARY_PHONE"], risk: "SENSITIVE", state: "ACTIVE", maxReveals: 1, reservedReveals: 0, requestedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 300_000).toISOString(), version: 2 }; }
+function grant() { return { authorizationBasis: "SUPPORT_DIRECT", grantId, caseId, subjectLinkId: linkId, subjectType: "CUSTOMER", subjectId: caseId, purpose: "CONTACT_CONFIRMATION", fields: ["CUSTOMER_PRIMARY_PHONE"], risk: "SENSITIVE", state: "ACTIVE", maxReveals: 1, reservedReveals: 0, requestedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 300_000).toISOString(), version: 2 }; }
 const revealed = () => response({ revealAttemptId: grantId, grantId, caseId, subjectId: caseId, values: { CUSTOMER_PRIMARY_PHONE: rawPhone }, revealedAt: new Date().toISOString() });
 beforeEach(() => { localStorage.clear(); sessionStorage.clear(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
@@ -65,20 +65,14 @@ describe("support sensitive state lifetime", () => {
     expect(screen.queryByText(rawPhone)).not.toBeInTheDocument();
     expect(screen.getByText("열람 기한이 지났습니다")).toBeVisible();
   });
-  it("clears proof after sending and uses the server session rather than synthesizing enhanced verification", async () => {
-    let session: components["schemas"]["VerificationSessionResource"] = { sessionId, caseId, subjectLinkId: linkId, subjectType: "CUSTOMER", subjectId: caseId, purpose: "CONTACT_CONFIRMATION", actionScope: "PERSONAL_DATA_REVEAL", requestedLevel: "ENHANCED", achievedLevel: "UNVERIFIED", state: "PENDING", invalidAttempts: 0, startedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 900_000).toISOString(), version: 1, challenges: [{ challengeId: grantId, sessionId, channel: "REGISTERED_PHONE", state: "ISSUED", requestedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 300_000).toISOString() }] };
-    vi.spyOn(operationsApi, "GET").mockImplementation((async (path: string) => response(path === "/support/work-items" ? { items: [{ requestId: sessionId, kind: "VERIFICATION", caseId, caseCategory: "ACCOUNT_RECOVERY", caseOpenedAt: session.startedAt, purpose: session.purpose, state: session.state, createdAt: session.startedAt, expiresAt: session.expiresAt }], nextCursor: null } : session)) as never);
-    let sentProof = "";
-    vi.spyOn(operationsApi, "POST").mockImplementation((async (_path: string, options: { body: { proof: string } }) => { sentProof = options.body.proof; session = { ...session, challenges: session.challenges.map(c => ({ ...c, state: "VERIFIED" })) }; return response({ challenge: session.challenges[0], sessionState: "PENDING", achievedLevel: "UNVERIFIED", invalidAttempts: 0, lockedUntil: null }); }) as never);
+  it("historical verification never enables new proof entry or authenticates support work", async () => {
+    const post = vi.spyOn(operationsApi, "POST");
     const onChange = vi.fn();
-    render(<SupportVerificationPanel caseId={caseId} links={[{ linkId, subjectType: "CUSTOMER", subjectId: caseId, relationship: "REQUESTER", linkedAt: session.startedAt }]} disabled={false} onChange={onChange} />);
-    await userEvent.click(screen.getByRole("button", { name: "기존 본인확인 요청 찾기" }));
-    await userEvent.click(await screen.findByRole("button", { name: "이 요청 열기" }));
-    await userEvent.type(await screen.findByLabelText("일회성 인증 코드"), "123456");
-    await userEvent.click(screen.getByRole("button", { name: "인증 코드 확인" }));
-    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ state: "PENDING", achievedLevel: "UNVERIFIED", challenges: [expect.objectContaining({ state: "VERIFIED" })] })));
-    expect(sentProof).toBe("123456");
+    render(<SupportVerificationPanel caseId={caseId} links={[]} disabled={false} onChange={onChange} />);
+    expect(screen.getByText("본인확인 절차가 종료되었습니다")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "본인확인 시작" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("일회성 인증 코드")).not.toBeInTheDocument();
-    expect(JSON.stringify(localStorage) + JSON.stringify(sessionStorage)).not.toContain("123456");
+    expect(post).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenLastCalledWith(null);
   });
 });

@@ -67,7 +67,7 @@ internal enum class ProfileChangePurpose {
 internal data class ProfileChangeDescriptor(
     val owner: ProfileOwnerType,
     val risk: ProfileRiskClass,
-    val requiresDualApproval: Boolean,
+    val requiresExecutionRequest: Boolean,
 )
 
 internal fun ProfileChangePurpose.descriptor(): ProfileChangeDescriptor =

@@ -124,7 +124,11 @@ internal class SupportOrderWorkflowQuery(
         val request = transactions.get(actorId, requestId)
         val supportCase = cases.findLockedById(request.caseId) ?: missing()
         val actions = mutableListOf<SupportOrderWorkflowAction>()
-        val current = clock.instant().isBefore(request.expiresAt) && supportCase.state in ACTIVE_CASE_STATES
+        val current =
+            request.authorizationBasis == io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis.SUPPORT_DIRECT &&
+                request.policyVersion == SupportActionPolicy.POLICY_VERSION &&
+                supportCase.state in ACTIVE_CASE_STATES
+        val fresh = current && clock.instant().isBefore(request.expiresAt)
         val direct = request.action in ORDER_ACTIONS
 
         fun has(permission: OperatorPermission) = permissions.hasActive(actorId, permission)
@@ -144,11 +148,10 @@ internal class SupportOrderWorkflowQuery(
             if (request.state in EXECUTOR_STATES && has(OperatorPermission.SUPPORT_CASE_ASSIGN)) {
                 actions += SupportOrderWorkflowAction.REASSIGN
             }
-            if (request.state == SupportActionRequestState.READY_FOR_EXECUTION &&
+            if (fresh && request.state == SupportActionRequestState.READY_FOR_EXECUTION &&
                 actorId == request.executorActorId && actorId == supportCase.currentAssigneeId &&
                 has(OperatorPermission.SUPPORT_ACTION_EXECUTE) && has(request.action.executionCapabilityPermission()) &&
-                (request.action == SupportActionType.POST_ACCEPTANCE_RESOLUTION || has(OperatorPermission.SUPPORT_ORDER_READ)) &&
-                (request.action != SupportActionType.POST_ACCEPTANCE_RESOLUTION || actorId != request.requesterActorId)
+                (request.action == SupportActionType.POST_ACCEPTANCE_RESOLUTION || has(OperatorPermission.SUPPORT_ORDER_READ))
             ) {
                 actions += SupportOrderWorkflowAction.EXECUTE
             }
@@ -229,6 +232,9 @@ internal class SupportOrderWorkflowQuery(
                 SupportActionRequestState.AWAITING_SUPPORT_MANAGER,
                 SupportActionRequestState.AWAITING_OPERATIONS,
                 SupportActionRequestState.REVISION_REQUIRED,
+                SupportActionRequestState.READY_FOR_EXECUTION,
+                SupportActionRequestState.STALE,
+                SupportActionRequestState.EXPIRED,
             )
         val EXECUTOR_STATES = setOf(SupportActionRequestState.READY_FOR_EXECUTION, SupportActionRequestState.REASSIGNMENT_REQUIRED)
     }

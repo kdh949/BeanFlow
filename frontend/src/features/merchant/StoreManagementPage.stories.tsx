@@ -14,7 +14,7 @@ export const MenuAndPricing: Story = { play: async ({ canvas }) => { await expec
 export const HoursAndStorefront: Story = { args: { initialWorkspace: "hours" }, play: async ({ canvas }) => { await expect(await canvas.findByRole("heading", { name: "고객 공개 정보와 주간 영업시간" })).toBeVisible(); await expect(await canvas.findByRole("checkbox", { name: /주간 영업시간 설정/ })).not.toBeChecked(); } };
 export const KeyboardWorkspaceChange: Story = { play: async ({ canvas }) => { canvas.getByRole("tab", { name: "영업시간과 이미지" }).focus(); await userEvent.keyboard("{Enter}"); await expect(await canvas.findByRole("heading", { name: "고객 공개 정보와 주간 영업시간" })).toBeVisible(); } };
 
-export const SupportOrderConsent: Story = { args: { initialWorkspace: "support" }, play: async ({ canvas }) => { await expect(await canvas.findByText("현재 조회 구간에 동의할 주문 변경이 없습니다")).toBeVisible(); } };
+export const RetiredSupportConsentEntry: Story = { args: { initialWorkspace: "support" }, play: async ({ canvas }) => { await expect(canvas.getByText("현재 메뉴 카탈로그")).toBeVisible(); await expect(canvas.queryByRole("tab", { name: "고객센터 주문 변경" })).not.toBeInTheDocument(); } };
 export const HoursDraftLocksNavigation: Story = { args: { initialWorkspace: "hours" }, play: async ({ canvas }) => {
   await userEvent.type(await canvas.findByLabelText("고객에게 표시할 주소"), " 추가");
   await expect(canvas.getByRole("tab", { name: "메뉴와 가격" })).toBeDisabled();

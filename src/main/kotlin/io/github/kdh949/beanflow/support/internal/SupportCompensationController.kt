@@ -50,7 +50,7 @@ internal data class EvaluateSupportCompensationRequest(
     @field:Min(0) @field:Max(10_000)
     val storeShareBps: Int,
     @field:NotNull
-    val verificationSessionId: UUID?,
+    val subjectLinkId: UUID?,
 ) : StrictSupportRequest
 
 internal data class CreateSupportCompensationRequest(
@@ -74,7 +74,7 @@ internal data class CreateSupportCompensationRequest(
     @field:Min(0) @field:Max(10_000)
     val storeShareBps: Int,
     @field:NotNull
-    val verificationSessionId: UUID?,
+    val subjectLinkId: UUID?,
     @field:NotBlank @field:Pattern(regexp = "^[0-9a-f]{64}$")
     val evidenceDigest: String?,
 ) : StrictSupportRequest
@@ -120,7 +120,7 @@ internal class SupportCompensationController(
                         request.costEvidenceDigest,
                         request.platformShareBps,
                         request.storeShareBps,
-                        request.verificationSessionId ?: invalidCompensationRequest(),
+                        request.subjectLinkId ?: invalidCompensationRequest(),
                     ),
                 ),
             )
@@ -152,7 +152,7 @@ internal class SupportCompensationController(
                         request.costEvidenceDigest,
                         request.platformShareBps,
                         request.storeShareBps,
-                        request.verificationSessionId ?: invalidCompensationRequest(),
+                        request.subjectLinkId ?: invalidCompensationRequest(),
                         request.evidenceDigest ?: invalidCompensationRequest(),
                         idempotencyKey,
                     ),
