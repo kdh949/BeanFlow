@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { customerApi } from "../../api/customerClient";
 import { couponSelection } from "./couponSelection";
 import { CouponWalletPage } from "./CouponWalletPage";
+import { couponReturnTarget } from "./couponNavigation";
 import { FavoriteStoreButton, FavoriteStoresPage } from "./FavoriteStoresPage";
 import { RefreshCartPage } from "../../presentation/beanflow-refresh";
 import { cart } from "../ordering/cart";
@@ -50,6 +51,12 @@ afterEach(() => {
 });
 
 describe("customer coupon selection", () => {
+  it("restores only an internal customer return path", () => {
+    expect(couponReturnTarget("/app/cart", "store-1", "시청점")).toEqual({ to: "/app/cart", label: "장바구니" });
+    expect(couponReturnTarget("https://example.com/orders", "store-1", "시청점")).toEqual({ to: "/app/stores/store-1", label: "시청점" });
+    expect(couponReturnTarget("http://[", "store-1", "시청점")).toEqual({ to: "/app/stores/store-1", label: "시청점" });
+  });
+
   it("keeps one store-scoped coupon in memory and clears it explicitly", () => {
     couponSelection.select({ storeId: "store-1", couponIssuanceId: "coupon-1", label: "1,000원 할인" });
 
@@ -73,10 +80,11 @@ describe("customer coupon selection", () => {
       throw new Error(`unexpected GET ${path}`);
     });
 
-    renderRoute("/app/coupons?storeId=store-1", <CouponWalletPage />);
+    renderRoute("/app/coupons?storeId=store-1&returnTo=%2Fapp%2Fcart", <CouponWalletPage />);
     const user = userEvent.setup();
 
     expect(await screen.findByRole("heading", { name: "시청점 쿠폰" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "장바구니" })).toHaveAttribute("href", "/app/cart");
     expect(screen.getByRole("button", { name: /이 매장에서는 사용할 수 없음/ })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /₩1,000 할인 쿠폰 선택/ }));
 
@@ -84,7 +92,7 @@ describe("customer coupon selection", () => {
     expect(screen.getByRole("button", { name: /₩1,000 할인 선택됨/ })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("sends the selected store coupon with order creation and clears it after success", async () => {
+  it("sends the selected store coupon and keeps it until the server confirms PAID", async () => {
     cart.add(
       { storeId: "store-1", storeName: "시청점" },
       { menuId: "menu-1", optionIds: [], quantity: 1, display: { menuName: "오트 라떼", optionNames: [], unitPriceKrw: 6_000 } },
@@ -92,7 +100,6 @@ describe("customer coupon selection", () => {
     couponSelection.select({ storeId: "store-1", couponIssuanceId: "coupon-1", label: "₩1,000 할인" });
     vi.spyOn(customerApi, "GET").mockImplementation(async (path: string) => {
       if (path === "/stores/{storeId}") return ok(customerStore) as never;
-      if (path === "/stores/{storeId}/pickup-slots") return ok({ items: [{ pickupSlotId: "slot-1", startsAt: "2026-09-01T01:00:00Z", endsAt: "2026-09-01T01:10:00Z", remainingCapacity: 2 }] }) as never;
       throw new Error(`unexpected GET ${path}`);
     });
     const post = vi.spyOn(customerApi, "POST").mockImplementation(async (path: string) => {
@@ -100,13 +107,12 @@ describe("customer coupon selection", () => {
         quotedAt: "2026-09-01T00:55:00Z",
         quoteFingerprint: "a".repeat(64),
         store: { storeId: "store-1", name: "시청점" },
-        pickupWindow: { startsAt: "2026-09-01T01:00:00Z", endsAt: "2026-09-01T01:10:00Z" },
         lines: [{ menuId: "menu-1", menuName: "오트 라떼", quantity: 1, optionNames: [], lineTotalKrw: 6_000 }],
         pricing: { subtotalKrw: 6_000, couponDiscountKrw: 1_000, pointsAppliedKrw: 0, payableKrw: 5_000, currency: "KRW" },
         guarantee: "NONE",
       }) as never;
       if (path === "/orders") return ok({
-        order: { orderId: "order-1", publicReference: "BF-TEST-0001", payableKrw: 5_000 },
+        order: { orderId: "order-1", publicReference: "BF-TEST-0001", payableKrw: 5_000, state: "PENDING_PAYMENT" },
       }) as never;
       throw new Error(`unexpected POST ${path}`);
     });
@@ -120,7 +126,6 @@ describe("customer coupon selection", () => {
       </MemoryRouter>,
     );
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("radio", { name: /2잔 가능/ }));
     await user.click(await screen.findByRole("button", { name: /5,000.*주문하기/ }));
 
     expect(post.mock.calls[0]?.[0]).toBe("/me/order-quotes");
@@ -134,7 +139,7 @@ describe("customer coupon selection", () => {
       }),
     })));
     expect(await screen.findByText("결제 이동 완료")).toBeInTheDocument();
-    expect(couponSelection.forStore("store-1")).toBeNull();
+    expect(couponSelection.forStore("store-1")?.couponIssuanceId).toBe("coupon-1");
   });
 });
 

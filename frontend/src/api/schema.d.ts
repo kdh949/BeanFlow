@@ -578,9 +578,9 @@ export interface paths {
          *     그것을 내림한 정수 미터 표시값을 반환합니다. 요청값이 범위를 벗어나면 400을 반환합니다.
          *
          *     이 endpoint는 픽업 주문을 받고 있는 매장만 반환합니다. pickupAvailable은 거기서
-         *     reservable slot inside the seven-day window(7일 창 안의 예약 가능한 슬롯)가 있는
-         *     매장으로 더 좁히며, same meaning as on GET /stores/search(GET /stores/search와 동일한
-         *     의미)입니다. 특정 시점의 사영이며 슬롯을 예약하지 않습니다. 이 필터는 공간 질의 뒤에
+         *     현재 Asia/Seoul 영업시간이 OPEN인 매장으로 더 좁히며, GET /stores/search와 같은
+         *     의미입니다. legacy pickup slot 존재 여부는 보지 않으며 quote와 주문 확정에서 정책을
+         *     다시 검증합니다. 이 필터는 공간 질의 뒤에
          *     적용되므로 한 page가 limit보다 짧아도 nextCursor가 함께 나올 수 있고, 그 cursor는
          *     마지막 반환 row가 아니라 last examined candidate(마지막으로 검사한 candidate)에
          *     앵커됩니다.
@@ -614,8 +614,9 @@ export interface paths {
          *     returns 400. Coordinates are request-only and never persisted or written to logs.
          *     openOnly retains its transport spelling but means that the Store is currently accepting
          *     orders with pickup enabled (`orderingAvailable=true`);
-         *     pickupAvailable additionally requires a reservable slot and is a point-in-time
-         *     projection that does not reserve one. Both default to unset, and a closed store
+         *     pickupAvailable additionally requires the current Asia/Seoul same-day operating status to
+         *     be OPEN. It does not require a legacy pickup slot and is only a point-in-time hint; quote
+         *     and order commitment revalidate the policy. Both filters default to unset, and a closed store
          *     is then still returned with its status in the flags. The relevance score itself
          *     is not part of the response.
          */
@@ -801,7 +802,7 @@ export interface paths {
         put?: never;
         /**
          * 현재 owner 상태로 비예약 주문 견적 계산
-         * @description 메뉴·옵션·픽업 슬롯·쿠폰·포인트와 주문 정책을 현재 상태로 검증하고
+         * @description 메뉴·옵션·쿠폰·포인트와 매장 영업·주문 정책을 현재 상태로 검증하고
          *     서버 권위 금액 및 opaque quoteFingerprint를 반환합니다. 이 계산은 Order,
          *     reservation, Payment, idempotency record, Audit, event를 만들지 않으며 Provider를
          *     호출하지 않습니다. quotedAt은 정보 필드이고 fingerprint 입력이 아닙니다.
@@ -859,13 +860,13 @@ export interface paths {
          * 종료된 주문을 원본으로 새 주문 생성(재주문)
          * @description 소유 고객은 COMPLETED, CANCELLED, REJECTED, EXPIRED 상태의 원본(source)
          *     주문으로만 재주문할 수 있습니다. 서버는 메뉴 ID, 정규화된 옵션 ID, 수량만
-         *     복사한 뒤 현재 시점의 Merchant 가격과 판매 상태를 다시 검증하고, 기존과 동일한
-         *     원자적 예약(reservation) 흐름을 사용합니다. 과거의 혜택, 결제, 픽업 슬롯,
+         *     복사한 뒤 현재 시점의 Merchant 가격과 판매 상태를 다시 검증하고, 신규 주문과 동일한
+         *     비예약 즉시 결제 흐름을 사용합니다. 과거의 혜택, 결제, 픽업 슬롯,
          *     정산 스냅샷은 절대 복사하지 않습니다. 원본 항목 중 하나라도 더 이상 이용할
          *     수 없으면 요청 전체가 실패하며, 부분 주문은 생성되지 않습니다.
          *
          *     멱등성(idempotency) 범위는 actor ID, REORDER_ORDER_V1, Idempotency-Key로
-         *     결정됩니다. 정규 payload는 sourceOrderId, pickupSlotId, couponIssuanceId
+         *     결정됩니다. 정규 payload는 sourceOrderId, couponIssuanceId
          *     (null 포함), pointsToUseKrw로 구성됩니다. 동일 key/동일 payload로 종료
          *     상태를 재요청하면 최초 응답의 상태 코드와 본문을 그대로 재생합니다. 원본이나
          *     요청 내용이 다르면 최초 주문 응답을 노출하지 않고 IDEMPOTENCY_KEY_REUSED를
@@ -3632,7 +3633,8 @@ export interface paths {
         put?: never;
         /**
          * (고객센터) 주문 변경 요청 담당자 변경
-         * @description 고객센터가 실행 준비된 주문 변경 요청과 상담 건의 담당자를 함께 변경하는 API입니다.
+         * @description 과거 요청의 담당자 변경 기록을 처리하는 API입니다. SUPPORT_DIRECT 요청의 실행자 변경은 409로 거부합니다.
+         *     직접 처리 업무는 상담 담당자를 재배정한 후 새 담당자가 새 요청을 작성해야 합니다.
          *     현재 요청 내용 버전, 요청 버전, 상담 건 버전이 모두 일치해야 합니다. 새 담당자는 상담 건 수정, 작업 실행, 해당 기능 권한을 모두 보유해야 하며 이 요청의 승인자여서는 안 됩니다.
          *
          *     주요 오류:
@@ -3660,7 +3662,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 승인된 취소 또는 픽업 재조정 리비전을 정확히 실행
+         * 등록한 취소 또는 픽업 재조정 요청을 정확히 실행
          * @description 표준 action payload digest를 다시 계산하고, 배정된 실행자, 활성 Case와 관계, 검증,
          *     영속 권한, 불변 정책, 정확한 리비전/요청/대상 버전, 최신 오너 상태를 모두 재검증합니다.
          *     ACCEPTED 상태의 주문은 일치하는 활성 매장 확인 또는 위임이 있어야 합니다.
@@ -3772,7 +3774,7 @@ export interface paths {
         put?: never;
         /**
          * (고객센터) 매장 수락 후 주문 문제 해결 실행
-         * @description 고객센터가 승인된 매장 수락 후 해결안의 다음 처리 단계를 실행하는 API입니다.
+         * @description 고객센터 담당자가 등록한 매장 수락 후 해결안의 다음 처리 단계를 실행하는 API입니다.
          *     실행 담당자, 권한, 상담 건과 주문 관계, 요청·주문 버전, 현재 결제·포인트·쿠폰·정산 상태를 다시 확인합니다. 환불, 포인트·쿠폰 복원, 정산 조정, 고객 알림 중 아직 필요한 단계 하나만 실행합니다. 담당 시스템의 실제 처리 결과와 고객센터 감사 기록·상태 저장이 모두 끝난 뒤에만 성공으로 표시합니다. 외부 결제사 결과가 불명확하면 `UNKNOWN` 또는 `RECONCILING`으로 남기고 상태만 다시 조회하며, 같은 환불 요청을 자동으로 다시 보내지 않습니다.
          *
          *     주요 오류:
@@ -3915,7 +3917,7 @@ export interface paths {
         put?: never;
         /**
          * (고객센터) 고객 불편 보상 지급
-         * @description 고객센터가 승인된 포인트 또는 쿠폰 고객 불편 보상을 한 번만 지급하는 API입니다.
+         * @description 고객센터 담당자가 등록한 포인트 또는 쿠폰 고객 불편 보상을 한 번만 지급하는 API입니다.
          *     실행 담당자, 권한, 활성 상담 건과 주문, 요청·대상 버전, 현재 정책과 승인·조사 결과를 다시 확인합니다. 동시 요청이 최근 기간 한도를 중복 사용하지 못하도록 관련 고객·주문·사고·담당자·매장 정보를 정해진 순서로 잠급니다. 혜택 지급, 한도·승인 사용, 감사 기록과 중복 처리 방지 기록은 한 트랜잭션에서 함께 저장하며, 감사 기록 저장에 실패하면 혜택 지급도 취소합니다. 고객 알림은 혜택 저장 후 별도로 요청하고 알림 실패 상태를 그대로 남깁니다.
          *
          *     주요 오류:
@@ -4638,7 +4640,7 @@ export interface paths {
         put?: never;
         /**
          * (고객센터) 고객 휴대전화 변경 실행
-         * @description 고객센터가 승인된 고객 주 휴대전화 변경을 실제 고객 프로필에 반영하는 API입니다.
+         * @description 고객센터 담당자가 등록한 고객 주 휴대전화 변경을 실제 고객 프로필에 반영하는 API입니다.
          *     승인받은 전화번호와 현재 처리 건·승인 요청·고객 프로필 버전이 모두 일치해야 합니다. 새 전화번호 원문은 요청으로만 받고 조회 응답에는 가린 값만 표시합니다.
          *
          *     주요 오류:
@@ -4667,7 +4669,7 @@ export interface paths {
         put?: never;
         /**
          * (고객센터) 고객 계정 재설정 실행
-         * @description 고객센터가 승인된 고객 계정 재설정 절차를 실행하는 API입니다.
+         * @description 고객센터 담당자가 등록한 고객 계정 재설정 절차를 실행하는 API입니다.
          *     비밀번호, OTP, 인증 토큰 같은 비밀값을 입력받지 않습니다. 승인받은 요청 내용과 현재 처리 건·고객 프로필 버전이 일치할 때 계정 재설정 절차를 시작합니다.
          *
          *     주요 오류:
@@ -4696,7 +4698,7 @@ export interface paths {
         put?: never;
         /**
          * (고객센터) 매장 대표자 변경 실행
-         * @description 고객센터가 승인된 매장 대표자 변경을 실제 매장 프로필에 반영하는 API입니다.
+         * @description 고객센터 담당자가 등록한 매장 대표자 변경을 실제 매장 프로필에 반영하는 API입니다.
          *     승인받은 대표자 이름과 현재 처리 건·승인 요청·매장 프로필 버전이 모두 일치해야 합니다. 대표자 이름 원문은 요청으로만 받고 조회 응답에는 가린 값만 표시합니다.
          *
          *     주요 오류:
@@ -4725,7 +4727,7 @@ export interface paths {
         put?: never;
         /**
          * (고객센터) 매장 정산 식별값 변경 실행
-         * @description 고객센터가 승인된 매장 정산 식별값 변경을 실제 매장 프로필에 반영하는 API입니다.
+         * @description 고객센터 담당자가 등록한 매장 정산 식별값 변경을 실제 매장 프로필에 반영하는 API입니다.
          *     `accountReference`는 정산 시스템에서 지급 계정을 찾는 식별값이며 실제 계좌번호가 아닙니다. 승인받은 요청 내용과 현재 처리 건·매장 프로필 버전이 모두 일치해야 합니다.
          *
          *     주요 오류:
@@ -4754,7 +4756,7 @@ export interface paths {
         put?: never;
         /**
          * (고객센터) 매장 계정 접근 재설정 실행
-         * @description 고객센터가 승인된 매장 계정 접근 재설정 절차를 실행하는 API입니다.
+         * @description 고객센터 담당자가 등록한 매장 계정 접근 재설정 절차를 실행하는 API입니다.
          *     비밀번호, 인증키, OTP 같은 비밀값을 입력받지 않습니다. 승인받은 요청 내용과 현재 처리 건·매장 프로필 버전이 일치할 때 매장 계정의 재설정 또는 재등록 절차를 시작합니다.
          *
          *     주요 오류:
@@ -4783,7 +4785,7 @@ export interface paths {
         put?: never;
         /**
          * (고객센터) 외부 배달원 연동 식별값 변경 실행
-         * @description 고객센터가 승인된 외부 배달원 연동 식별값 변경을 실제 외부 배달원 프로필에 반영하는 API입니다.
+         * @description 고객센터 담당자가 등록한 외부 배달원 연동 식별값 변경을 실제 외부 배달원 프로필에 반영하는 API입니다.
          *     승인받은 `providerReference`와 현재 처리 건·승인 요청·프로필 버전이 모두 일치해야 합니다. 이 값은 요청으로만 받고 조회 응답에는 가린 값만 표시합니다.
          *
          *     주요 오류:
@@ -4812,7 +4814,7 @@ export interface paths {
         put?: never;
         /**
          * (고객센터) 외부 배달원 정산 식별값 변경 실행
-         * @description 고객센터가 승인된 외부 배달원 정산 식별값 변경을 실제 외부 배달원 프로필에 반영하는 API입니다.
+         * @description 고객센터 담당자가 등록한 외부 배달원 정산 식별값 변경을 실제 외부 배달원 프로필에 반영하는 API입니다.
          *     승인받은 `payoutReference`와 현재 처리 건·승인 요청·프로필 버전이 모두 일치해야 합니다. 실제 계좌번호는 받지 않으며 이 값은 조회 응답에 원문으로 노출하지 않습니다.
          *
          *     주요 오류:
@@ -4841,7 +4843,7 @@ export interface paths {
         put?: never;
         /**
          * (고객센터) 외부 배달원 연동 재설정 실행
-         * @description 고객센터가 승인된 외부 배달원 연동 재설정 절차를 실행하는 API입니다.
+         * @description 고객센터 담당자가 등록한 외부 배달원 연동 재설정 절차를 실행하는 API입니다.
          *     외부 연동 비밀번호나 토큰 같은 비밀값을 입력받지 않습니다. 승인받은 요청 내용과 현재 처리 건·외부 배달원 프로필 버전이 일치할 때 재등록 절차를 시작합니다.
          *
          *     주요 오류:
@@ -4899,8 +4901,8 @@ export interface paths {
         put?: never;
         /**
          * (운영팀) 고객센터 요청 승인·반려
-         * @description 요청 작성자와 다른 운영팀 담당자가 고객센터의 중요 변경 요청을 승인하거나 반려하는 API입니다.
-         *     운영팀 결정과 고객센터 요청 상태는 함께 저장됩니다. 고객센터 상태 반영이나 감사 기록 저장에 실패하면 어느 쪽도 승인된 것으로 남기지 않습니다.
+         * @description ADR-136 이후 이전 정책의 미실행 요청에는 새 결정을 적용하지 않고 409와 재작성 안내를 반환합니다.
+         *     과거 완료 결정의 동일 멱등키 응답은 유지합니다. 이전 요청의 종료 상태와 감사·멱등 기록은 함께 저장하며 감사 실패 시 모두 rollback합니다.
          *
          *     주요 오류:
          *     - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
@@ -4927,14 +4929,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 목적 결합 단계적 본인확인 세션 시작
-         * @description 담당 Case, 활성 subject link 하나, 인증된 운영자, purpose와 닫힌 action scope에 묶인
-         *     15분짜리 BASIC 또는 ENHANCED 본인확인 세션을 시작합니다. scope를 생략하면
-         *     PERSONAL_DATA_REVEAL로 간주되며, SUPPORT_ACTION은 CASE_RESOLUTION purpose에서만
-         *     허용됩니다. OTP, raw link, 답변, proof는 저장하지 않습니다.
-         *     현재 할당된 담당자가 아니거나 subject link가 비활성이면 403, Case나 subject link를
-         *     찾을 수 없으면 404, 같은 Case+Subject에 대해 lockout 기간(30분) 내 재요청이면 409를
-         *     반환합니다.
+         * 종료된 고객센터 본인확인 쓰기 API
+         * @deprecated
+         * @description ADR-136에 따라 종료되었습니다. 새 본인확인을 생성하거나 Provider를 호출하지 않고 SUPPORT_VERIFICATION_RETIRED와 410을 반환합니다. 과거 세션 조회는 유지합니다. 본문과 멱등키는 요구하거나 검증하지 않습니다.
          */
         post: operations["createSupportVerificationSession"];
         delete?: never;
@@ -4975,11 +4972,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 등록된 채널로 opaque challenge 발급
-         * @description challenge intent를 저장한 뒤 DB transaction 밖에서 설정된 Identity provider를 호출하고,
-         *     확정 결과 또는 UNKNOWN 결과를 기록합니다. secret이나 raw link는 응답에 절대 포함하지
-         *     않습니다. 세션이 만료·잠김 상태이면 409, provider 호출이 실패하거나 지연되면 503을
-         *     반환할 수 있습니다.
+         * 종료된 고객센터 본인확인 쓰기 API
+         * @deprecated
+         * @description ADR-136에 따라 종료되었습니다. 새 본인확인을 생성하거나 Provider를 호출하지 않고 SUPPORT_VERIFICATION_RETIRED와 410을 반환합니다. 과거 세션 조회는 유지합니다. 본문과 멱등키는 요구하거나 검증하지 않습니다.
          */
         post: operations["issueSupportVerificationChallenge"];
         delete?: never;
@@ -4998,12 +4993,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * opaque challenge proof 한 건 검증
-         * @description proof는 일시적인 write-only 입력이며 저장하지 않습니다. 잘못된 proof는 Case+Subject
-         *     단위 시도 횟수를 소진시키며, 5번째 실패 시 30분 lockout이 걸립니다. 동시 요청이나
-         *     재검증 요청이 provider를 두 번 호출하지 않도록 idempotent하게 처리합니다.
-         *     challenge가 이미 terminal 상태이거나 세션이 잠겼으면 409, 시도 횟수를 초과하면
-         *     429를 반환합니다.
+         * 종료된 고객센터 본인확인 쓰기 API
+         * @deprecated
+         * @description ADR-136에 따라 종료되었습니다. 새 본인확인을 생성하거나 Provider를 호출하지 않고 SUPPORT_VERIFICATION_RETIRED와 410을 반환합니다. 과거 세션 조회는 유지합니다. 본문과 멱등키는 요구하거나 검증하지 않습니다.
          */
         post: operations["verifySupportVerificationChallenge"];
         delete?: never;
@@ -6600,7 +6592,7 @@ export interface components {
          *       "approval": null,
          *       "caseVersion": 2,
          *       "currentProfileVersion": 1,
-         *       "verificationExpiresAt": "2026-09-11T09:15:00Z",
+         *       "executionExpiresAt": "2026-09-11T09:15:00Z",
          *       "allowedActions": []
          *     }
          */
@@ -6617,7 +6609,7 @@ export interface components {
              * @description 현재 소유 모듈의 프로필 버전입니다.
              */
             currentProfileVersion: number;
-            verificationExpiresAt: components["schemas"]["DateTime"];
+            executionExpiresAt: components["schemas"]["DateTime"];
             /** @description 현재 가능한 업무입니다. */
             allowedActions: components["schemas"]["SupportProfileWorkflowAction"][];
         };
@@ -6666,7 +6658,7 @@ export interface components {
             version: number;
         };
         /**
-         * @description 현재 별도 검토자의 운영 조사와 결정 가능 여부입니다.
+         * @description 과거 운영 조사 조회입니다. ADR-136 이후 신규 승인 결정은 종료되었습니다.
          * @example {
          *       "investigation": {
          *         "investigationId": "83000000-0000-4000-8000-000000000001",
@@ -6680,12 +6672,12 @@ export interface components {
          *         "decidedAt": null,
          *         "version": 0
          *       },
-         *       "canDecide": true
+         *       "canDecide": false
          *     }
          */
         OperationsSupportInvestigationWorkflowResource: {
             investigation: components["schemas"]["OperationsSupportInvestigationSnapshot"];
-            /** @description 현재 권한·상태·시간 및 요청자·승인자·실행자 분리를 만족하는지입니다. 결정 시 재검증합니다. */
+            /** @description 승인 결정 종료로 항상 false입니다. 과거 이력 조회와 완료 응답 복구는 유지합니다. */
             canDecide: boolean;
         };
         /**
@@ -6796,7 +6788,7 @@ export interface components {
          *         "executorActorId": "75000000-0000-4000-8000-000000000001"
          *       },
          *       "currentTargetVersion": 4,
-         *       "verificationExpiresAt": "2026-09-11T09:15:00Z",
+         *       "executionExpiresAt": "2026-09-11T09:15:00Z",
          *       "allowedActions": [
          *         "DECIDE_SUPPORT_MANAGER"
          *       ],
@@ -6812,7 +6804,7 @@ export interface components {
              * @description 현재 주문 버전입니다. 주문 없는 요청은 0이며 조회 불가능한 주문은 null입니다.
              */
             currentTargetVersion: number | null;
-            verificationExpiresAt: components["schemas"]["DateTime"];
+            executionExpiresAt: components["schemas"]["DateTime"];
             /** @description 현재 계정에서 가능한 명령입니다. */
             allowedActions: components["schemas"]["SupportCompensationWorkflowAction"][];
             /** @description 쿠폰 보상에 고정된 할인·유효기간·최소 사용 금액입니다. 포인트 보상은 null입니다. */
@@ -7252,7 +7244,7 @@ export interface components {
             nextCursor: string | null;
         };
         RegisterSupportCompensationIncidentRequest: {
-            verificationSessionId: components["schemas"]["Identifier"];
+            subjectLinkId: components["schemas"]["Identifier"];
             /** Format: uuid */
             orderId: string | null;
             /** Format: date-time */
@@ -7531,7 +7523,9 @@ export interface components {
             name: string;
             /** @description acceptingOrders와 pickupEnabled가 모두 true인 주문 가능성입니다. 영업시간 상태가 아닙니다. */
             orderingAvailable: boolean;
+            /** @description 주문받기와 pickup이 활성화되고 현재 Asia/Seoul 영업시간이 OPEN인지 나타냅니다. */
             pickupAvailable: boolean;
+            /** @description Legacy compatibility field. Immediate-order discovery omits it and never invents an ETA. */
             nextPickupWindow?: components["schemas"]["NextPickupWindow"];
             customerDisplay: components["schemas"]["CustomerStoreDisplay"];
             distanceMeters?: number;
@@ -7590,7 +7584,7 @@ export interface components {
          *       "orderingAvailable": true,
          *       "pickupAvailable": true,
          *       "customerDisplay": {
-         *         "operatingStatus": "UNSPECIFIED"
+         *         "operatingStatus": "OPEN"
          *       }
          *     }
          */
@@ -7604,6 +7598,7 @@ export interface components {
             distanceMeters: number;
             orderingAvailable: boolean;
             pickupAvailable: boolean;
+            /** @description Legacy compatibility field. Immediate-order discovery omits it and never invents an ETA. */
             nextPickupWindow?: components["schemas"]["NextPickupWindow"];
             customerDisplay: components["schemas"]["CustomerStoreDisplay"];
             image?: components["schemas"]["StorefrontImage"];
@@ -7629,7 +7624,7 @@ export interface components {
          *           "orderingAvailable": true,
          *           "pickupAvailable": true,
          *           "customerDisplay": {
-         *             "operatingStatus": "UNSPECIFIED"
+         *             "operatingStatus": "OPEN"
          *           }
          *         }
          *       ],
@@ -7657,7 +7652,9 @@ export interface components {
             distanceMeters?: number;
             /** @description 현재 Store가 주문 수락과 pickup을 모두 활성화했는지 나타냅니다. 영업시간 상태가 아닙니다. */
             orderingAvailable: boolean;
+            /** @description 주문받기와 pickup이 활성화되고 현재 Asia/Seoul 영업시간이 OPEN인지 나타냅니다. */
             pickupAvailable: boolean;
+            /** @description Legacy compatibility field. Immediate-order discovery omits it and never invents an ETA. */
             nextPickupWindow?: components["schemas"]["NextPickupWindow"];
             customerDisplay: components["schemas"]["CustomerStoreDisplay"];
             /** @description Menus of this store that the query matched, most relevant first. Empty when none matched. */
@@ -7765,7 +7762,6 @@ export interface components {
         MoneyKrw: number;
         OrderQuoteRequest: {
             storeId: components["schemas"]["Identifier"];
-            pickupSlotId: components["schemas"]["Identifier"];
             lines: components["schemas"]["CreateOrderLineRequest"][];
             couponIssuanceId?: components["schemas"]["Identifier"];
             pointsToUseKrw: components["schemas"]["MoneyKrw"];
@@ -7773,10 +7769,6 @@ export interface components {
         OrderQuoteStore: {
             storeId: components["schemas"]["Identifier"];
             name: string;
-        };
-        OrderQuotePickupWindow: {
-            startsAt: components["schemas"]["DateTime"];
-            endsAt: components["schemas"]["DateTime"];
         };
         OrderQuoteLine: {
             menuId: components["schemas"]["Identifier"];
@@ -7795,10 +7787,9 @@ export interface components {
         };
         OrderQuote: {
             quotedAt: components["schemas"]["DateTime"];
-            /** @description order-quote-fingerprint/v3으로 생성한 opaque 거래 조건 사전조건입니다. 공유 슬롯의 사용량 및 기술적 version은 비교하지 않으며 최종 주문의 잠금 아래에서 현재 가용성을 별도로 검증합니다. 가격·구성·혜택·픽업 시간/정원 변경은 재확인이 필요합니다. */
+            /** @description order-quote-fingerprint/v7으로 생성한 opaque 거래 조건 사전조건입니다. 가격·구성·혜택·Store 영업/주문 정책 변경은 최종 주문의 잠금 아래에서 재검증합니다. */
             quoteFingerprint: string;
             store: components["schemas"]["OrderQuoteStore"];
-            pickupWindow: components["schemas"]["OrderQuotePickupWindow"];
             lines: components["schemas"]["OrderQuoteLine"][];
             pricing: components["schemas"]["OrderQuotePricing"];
             /** @enum {string} */
@@ -7806,11 +7797,10 @@ export interface components {
         };
         /**
          * @description 신규 주문 생성 요청입니다. 서버 소유 장바구니가 없으므로 주문 항목 전체를 한
-         *     번에 보냅니다. 메뉴 가격, 픽업 슬롯, 쿠폰, 포인트를 이 요청 하나의
-         *     트랜잭션에서 모두 재검증·예약합니다.
+         *     번에 보냅니다. 신규 IMMEDIATE 주문은 픽업 슬롯과 혜택을 예약하지 않으며,
+         *     메뉴·금액·거래조건 snapshot만 고정합니다.
          * @example {
          *       "storeId": "9f1c2a3b-4d5e-6f70-8192-a3b4c5d6e7f8",
-         *       "pickupSlotId": "1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
          *       "lines": [
          *         {
          *           "menuId": "c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f",
@@ -7827,7 +7817,6 @@ export interface components {
          */
         CreateOrderRequest: {
             storeId: components["schemas"]["Identifier"];
-            pickupSlotId: components["schemas"]["Identifier"];
             /** @description 주문할 메뉴 목록. 최소 1개 이상이어야 합니다. */
             lines: components["schemas"]["CreateOrderLineRequest"][];
             couponIssuanceId?: components["schemas"]["Identifier"];
@@ -7921,11 +7910,11 @@ export interface components {
             lastUpdatedAt?: components["schemas"]["DateTime"];
         } & (unknown & unknown & unknown & unknown & unknown & unknown);
         /**
-         * @description 주문이 취소된 직접 원인입니다. `CUSTOMER_REQUEST`는 고객 요청, `SUPPORT_REQUEST`는 고객센터 처리, `PAYMENT_DECLINED`는 결제 승인 거절을 뜻합니다.
+         * @description 주문이 취소된 직접 원인입니다. `PAYMENT_COMMITMENT_FAILED`는 PG 승인 뒤 로컬 혜택·정산 확정이 성립하지 않아 결제 복구 중인 경우입니다.
          * @example CUSTOMER_REQUEST
          * @enum {string}
          */
-        CancellationCause: "CUSTOMER_REQUEST" | "PAYMENT_DECLINED" | "SUPPORT_REQUEST";
+        CancellationCause: "CUSTOMER_REQUEST" | "PAYMENT_DECLINED" | "PAYMENT_COMMITMENT_FAILED" | "SUPPORT_REQUEST";
         /**
          * @description 고객이 선택한 주문 취소 사유입니다. 시스템이 기록하는 취소 원인과 별도로 사용됩니다.
          * @example CHANGED_MIND
@@ -7986,13 +7975,13 @@ export interface components {
              */
             pickupBusinessDate: string;
             storeName: string;
-            /** @description 고객이 선택한 픽업 가능 구간의 시작 시각입니다. */
-            pickupWindowStart: components["schemas"]["DateTime"];
-            /** @description 고객이 선택한 픽업 가능 구간의 종료 시각입니다. */
-            pickupWindowEnd: components["schemas"]["DateTime"];
+            /** @description LEGACY_RESERVED 주문의 픽업 구간 시작입니다. IMMEDIATE에는 없습니다. */
+            pickupWindowStart?: components["schemas"]["DateTime"];
+            /** @description LEGACY_RESERVED 주문의 픽업 구간 종료입니다. IMMEDIATE에는 없습니다. */
+            pickupWindowEnd?: components["schemas"]["DateTime"];
             /** @description 주문의 현재 상태입니다. */
             state: components["schemas"]["OrderState"];
-            /** @description 결제 대기 예약이 만료되는 시각입니다. */
+            /** @description LEGACY_RESERVED 결제 대기 예약의 만료 시각이며 IMMEDIATE 주문에는 없습니다. */
             reservationExpiresAt?: components["schemas"]["DateTime"];
             /** @description 주문에 포함된 주문 항목 목록입니다. */
             lines: components["schemas"]["OrderLine"][];
@@ -8018,6 +8007,10 @@ export interface components {
             acceptanceDeadlineAt?: components["schemas"]["DateTime"];
             /** @description 매장이 주문을 수락한 시각입니다. */
             acceptedAt?: components["schemas"]["DateTime"];
+            /** @description 최초 수락에서 한 번 정한 준비시간입니다. */
+            preparationMinutes?: number;
+            /** @description acceptedAt 기준으로 계산해 고정한 예상 준비시각입니다. 자동 상태 전이 기준이 아닙니다. */
+            estimatedReadyAt?: components["schemas"]["DateTime"];
             /** @description 매장이 주문을 거절한 시각입니다. */
             rejectedAt?: components["schemas"]["DateTime"];
             /** @description 주문 제조가 시작된 시각입니다. */
@@ -8039,12 +8032,12 @@ export interface components {
             /** @description 리소스가 마지막으로 변경된 시각입니다. */
             updatedAt: components["schemas"]["DateTime"];
         };
-        /** @description 결제 대기 상태(`PENDING_PAYMENT`)로 생성된 주문입니다. 예약이 만료되기 전에 결제를 완료해야 합니다. */
+        /** @description 결제 대기 상태(`PENDING_PAYMENT`)로 생성된 주문입니다. IMMEDIATE는 영업 마감 cutoff, legacy는 예약 lease를 따릅니다. */
         PendingPaymentOrder: components["schemas"]["Order"] & {
             /** @constant */
             state?: "PENDING_PAYMENT";
-            /** @description 이 시각까지 결제를 완료하지 않으면 예약과 주문이 만료됩니다. */
-            reservationExpiresAt: components["schemas"]["DateTime"];
+            /** @description LEGACY_RESERVED에서만 존재하는 예약 만료 시각입니다. */
+            reservationExpiresAt?: components["schemas"]["DateTime"];
             /**
              * Format: int64
              * @description 결제해야 할 남은 금액(원). 1원 이상입니다.
@@ -8119,15 +8112,13 @@ export interface components {
         };
         /**
          * @description 재주문(reorder) 요청입니다. 메뉴 구성은 원본 주문에서 그대로 복사되므로 여기서는
-         *     새 픽업 슬롯과 쿠폰/포인트 사용 여부만 지정합니다.
+         *     쿠폰/포인트 사용 여부만 지정합니다. 신규 재주문은 슬롯 없이 즉시 결제로 진행합니다.
          * @example {
-         *       "pickupSlotId": "3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f",
          *       "couponIssuanceId": null,
          *       "pointsToUseKrw": 0
          *     }
          */
         ReorderOrderRequest: {
-            pickupSlotId: components["schemas"]["Identifier"];
             couponIssuanceId?: components["schemas"]["Identifier"];
             pointsToUseKrw: components["schemas"]["MoneyKrw"];
         };
@@ -8205,10 +8196,7 @@ export interface components {
          *         "pickupNumber": "A-12",
          *         "pickupBusinessDate": "2026-08-15",
          *         "storeName": "성수 1호점",
-         *         "pickupWindowStart": "2026-08-15T10:00:00+09:00",
-         *         "pickupWindowEnd": "2026-08-15T10:15:00+09:00",
          *         "state": "PENDING_PAYMENT",
-         *         "reservationExpiresAt": "2026-08-15T09:45:00+09:00",
          *         "lines": [
          *           {
          *             "orderLineId": "9b7a4e2a-8b8e-1a2b-3c4d-5e6f7a8b9c0d",
@@ -8256,8 +8244,6 @@ export interface components {
          *         "pickupNumber": "A-12",
          *         "pickupBusinessDate": "2026-08-15",
          *         "storeName": "성수 1호점",
-         *         "pickupWindowStart": "2026-08-15T10:00:00+09:00",
-         *         "pickupWindowEnd": "2026-08-15T10:15:00+09:00",
          *         "state": "PAID",
          *         "lines": [
          *           {
@@ -8390,8 +8376,8 @@ export interface components {
             storeName: string;
             status: components["schemas"]["OrderState"];
             orderedAt: components["schemas"]["DateTime"];
-            pickupWindowStart: components["schemas"]["DateTime"];
-            pickupWindowEnd: components["schemas"]["DateTime"];
+            pickupWindowStart?: components["schemas"]["DateTime"];
+            pickupWindowEnd?: components["schemas"]["DateTime"];
             /** @description Coupon discount and point use after the final amount payable by the customer. */
             totalAmountKrw: components["schemas"]["MoneyKrw"];
             currency: components["schemas"]["Currency"];
@@ -8484,6 +8470,10 @@ export interface components {
             preparingAt?: components["schemas"]["DateTime"];
             readyAt?: components["schemas"]["DateTime"];
             completedAt?: components["schemas"]["DateTime"];
+            /** @description 최초 매장 수락에서 한 번 정해진 준비시간입니다. */
+            preparationMinutes?: number;
+            /** @description 최초 acceptedAt과 preparationMinutes로 계산해 저장한 예상 준비시각입니다. 자동 상태 전이 기준이 아닙니다. */
+            estimatedReadyAt?: components["schemas"]["DateTime"];
         };
         CustomerOrderLine: {
             lineSequence: number;
@@ -8514,19 +8504,22 @@ export interface components {
         };
         CustomerOrderDetail: {
             orderReference: string;
-            /**
-             * @description Server-supplied opaque store identifier. It exists so the customer can
-             *     read that store's current pickup slots when reordering; no customer
-             *     screen accepts it as input.
-             */
+            /** @description Server-supplied opaque store identifier used to bind a reorder to its original Store. */
             storeId: components["schemas"]["Identifier"];
             pickupNumber: string;
             storeName: string;
             status: components["schemas"]["OrderState"];
             reservationExpiresAt?: components["schemas"]["DateTime"];
+            /**
+             * @description 신규 즉시 주문과 과거 슬롯 예약 주문을 구분합니다.
+             * @enum {string}
+             */
+            checkoutMode: "IMMEDIATE" | "LEGACY_RESERVED";
+            /** @description 현재 결제 시도의 서버 소유 종료 경계입니다. IMMEDIATE는 영업 마감 cutoff, legacy는 예약 lease입니다. */
+            paymentDeadlineAt?: components["schemas"]["DateTime"];
             orderedAt: components["schemas"]["DateTime"];
-            pickupWindowStart: components["schemas"]["DateTime"];
-            pickupWindowEnd: components["schemas"]["DateTime"];
+            pickupWindowStart?: components["schemas"]["DateTime"];
+            pickupWindowEnd?: components["schemas"]["DateTime"];
             pricing: components["schemas"]["CustomerOrderPricing"];
             lifecycle?: components["schemas"]["OrderLifecycle"];
             lines: components["schemas"]["CustomerOrderLine"][];
@@ -8988,6 +8981,8 @@ export interface components {
             acceptedAt?: components["schemas"]["DateTime"];
             preparingAt?: components["schemas"]["DateTime"];
             readyAt?: components["schemas"]["DateTime"];
+            /** @description 최초 수락 때 고정한 예상 준비시각이며 READY 자동 전이 기준이 아닙니다. */
+            estimatedReadyAt?: components["schemas"]["DateTime"];
         };
         /**
          * @description 주문 거절이나 고객 취소 뒤 환불·쿠폰·포인트 복구가 어디까지 진행됐는지 스토어에 보여 주는 요약입니다. 내부 오류와 재시도 횟수는 포함하지 않습니다.
@@ -9060,10 +9055,10 @@ export interface components {
             lane?: "PENDING_ACCEPTANCE" | "ACCEPTED" | "PREPARING" | "READY";
             /** @description 현재 주문 상태입니다. */
             status: components["schemas"]["OrderState"];
-            /** @description 고객이 선택한 픽업 가능 구간의 시작 시각입니다. */
-            pickupWindowStart: components["schemas"]["DateTime"];
-            /** @description 고객이 선택한 픽업 가능 구간의 종료 시각입니다. */
-            pickupWindowEnd: components["schemas"]["DateTime"];
+            /** @description LEGACY_RESERVED 주문에서 고객이 선택한 픽업 구간 시작입니다. IMMEDIATE 주문에는 없습니다. */
+            pickupWindowStart?: components["schemas"]["DateTime"];
+            /** @description LEGACY_RESERVED 주문에서 고객이 선택한 픽업 구간 종료입니다. IMMEDIATE 주문에는 없습니다. */
+            pickupWindowEnd?: components["schemas"]["DateTime"];
             /** @description 메뉴와 수량을 매장 화면용으로 축약한 한 줄 요약입니다. */
             itemSummary: string;
             /** @description 매장이 주문을 수락해야 하는 마감 시각입니다. */
@@ -9129,6 +9124,8 @@ export interface components {
             expectedStatus: "PAID" | "ACCEPTED" | "PREPARING" | "READY";
             /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason?: string;
+            /** @description ACCEPT에서만 필수인 준비시간입니다. 같은 수락 요청 재시도에서 변경할 수 없습니다. */
+            preparationMinutes?: number;
         };
         MerchantRefundSelection: {
             lineSequence: number;
@@ -10932,10 +10929,16 @@ export interface components {
             version: number;
             /** Format: date-time */
             orderedAt: string;
-            /** Format: date-time */
-            pickupWindowStart: string;
-            /** Format: date-time */
-            pickupWindowEnd: string;
+            /**
+             * Format: date-time
+             * @description LEGACY_RESERVED 주문의 픽업 구간 시작이며 IMMEDIATE 주문에는 없습니다.
+             */
+            pickupWindowStart?: string | null;
+            /**
+             * Format: date-time
+             * @description LEGACY_RESERVED 주문의 픽업 구간 종료이며 IMMEDIATE 주문에는 없습니다.
+             */
+            pickupWindowEnd?: string | null;
             /** Format: int64 */
             subtotalKrw: number;
             /** Format: int64 */
@@ -11385,7 +11388,7 @@ export interface components {
          *       "action": "ORDER_CANCELLATION",
          *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
          *       "expectedTargetVersion": 7,
-         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a"
+         *       "subjectLinkId": "d55c076e-be1e-5e1b-8328-730750a4173a"
          *     }
          */
         EvaluateSupportActionRequest: {
@@ -11399,7 +11402,7 @@ export interface components {
              */
             expectedTargetVersion: number;
             /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
-            verificationSessionId: components["schemas"]["Identifier"];
+            subjectLinkId: components["schemas"]["Identifier"];
         };
         /**
          * @description 현재 상태에서 주문 변경 작업을 바로 실행할 수 있는지 나타냅니다.
@@ -11493,7 +11496,7 @@ export interface components {
          *       "action": "ORDER_CANCELLATION",
          *       "orderId": "74131bb9-688f-5370-8042-21015b3cd43a",
          *       "expectedTargetVersion": 7,
-         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *       "subjectLinkId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *       "actionPayloadDigest": "b4e2d0c8a6f4b2d1e9c7a5f3d1b0e8c6a4f2d0b8e6c4a2f1d9b7e5c3a1f0d8b6",
          *       "amountKrw": 9000,
          *       "reason": "고객 본인 확인 후 취소 승인을 요청함",
@@ -11511,7 +11514,7 @@ export interface components {
              */
             expectedTargetVersion: number;
             /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
-            verificationSessionId: components["schemas"]["Identifier"];
+            subjectLinkId: components["schemas"]["Identifier"];
             /** @description 승인 대상 요청 내용이 바뀌지 않았는지 확인하는 SHA-256 해시값입니다. */
             actionPayloadDigest: string;
             /**
@@ -11608,6 +11611,13 @@ export interface components {
          *     }
          */
         SupportActionRequestResource: {
+            /**
+             * @description Stored authorization basis; absent only in pre-transition idempotent responses.
+             * @enum {string}
+             */
+            authorizationBasis?: "LEGACY" | "SUPPORT_DIRECT";
+            /** Format: uuid */
+            subjectLinkId?: string | null;
             /** @description 해당 요청 자원을 가리키는 UUID 식별자입니다. */
             requestId: components["schemas"]["Identifier"];
             /** @description 해당 케이스 자원을 가리키는 UUID 식별자입니다. */
@@ -11628,8 +11638,11 @@ export interface components {
             approvalRoute: components["schemas"]["SupportActionApprovalRoute"];
             /** @description 승인 대상 요청 내용이 바뀌지 않았는지 확인하는 SHA-256 해시값입니다. */
             actionPayloadDigest: string;
-            /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
-            verificationSessionId: components["schemas"]["Identifier"];
+            /**
+             * Format: uuid
+             * @description 과거 정책의 실제 본인확인 참조입니다. 신규 직접 처리에는 식별자를 반환하지 않습니다.
+             */
+            verificationSessionId?: string | null;
             /** @description 요청 생성·평가에 사용한 생성 후 바뀌지 않는 정책 버전입니다. */
             policyVersion: string;
             /**
@@ -11683,7 +11696,7 @@ export interface components {
          *       "expectedRevisionNumber": 1,
          *       "expectedRequestVersion": 3,
          *       "expectedTargetVersion": 7,
-         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *       "subjectLinkId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *       "actionPayloadDigest": "b4e2d0c8a6f4b2d1e9c7a5f3d1b0e8c6a4f2d0b8e6c4a2f1d9b7e5c3a1f0d8b6",
          *       "amountKrw": 9000,
          *       "reason": "추가 본인 확인 결과를 반영해 요청을 다시 제출함",
@@ -11704,7 +11717,7 @@ export interface components {
              */
             expectedTargetVersion: number;
             /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
-            verificationSessionId: components["schemas"]["Identifier"];
+            subjectLinkId: components["schemas"]["Identifier"];
             /** @description 승인 대상 요청 내용이 바뀌지 않았는지 확인하는 SHA-256 해시값입니다. */
             actionPayloadDigest: string;
             /**
@@ -12265,7 +12278,7 @@ export interface components {
          * @example STORE_CONSENT
          * @enum {string}
          */
-        SupportCompensationEvidenceBasis: "STORE_CONSENT" | "OPERATIONS_FINDING" | "CONTRACTUAL_RULE";
+        SupportCompensationEvidenceBasis: "SUPPORT_DECISION" | "STORE_CONSENT" | "OPERATIONS_FINDING" | "CONTRACTUAL_RULE";
         /**
          * @description 현재 정책으로 포인트 또는 쿠폰 보상이 가능한지 미리 확인하는 요청입니다. 보상 종류와 금액, 비용 부담 비율, 본인 확인 정보를 보내며 실제 혜택은 발급하지 않습니다.
          * @example {
@@ -12280,7 +12293,7 @@ export interface components {
          *       "costEvidenceDigest": "d6a4f2e0c8b6a4f3d1e9c7b5a3f1d0e8c6b4a2f0d9e7c5b3a1f8d6c4b2a0e9c7",
          *       "platformShareBps": 5000,
          *       "storeShareBps": 5000,
-         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a"
+         *       "subjectLinkId": "d55c076e-be1e-5e1b-8328-730750a4173a"
          *     }
          */
         EvaluateSupportCompensationRequest: {
@@ -12319,7 +12332,7 @@ export interface components {
             /** @description 매장이 부담하는 비율입니다. `10000`은 100%를 뜻합니다. */
             storeShareBps: number;
             /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
-            verificationSessionId: components["schemas"]["Identifier"];
+            subjectLinkId: components["schemas"]["Identifier"];
         };
         /**
          * @description 보상 금액과 비율에 따라 나눈 정책 구간입니다.
@@ -12407,7 +12420,7 @@ export interface components {
          *       "costEvidenceDigest": "d6a4f2e0c8b6a4f3d1e9c7b5a3f1d0e8c6b4a2f0d9e7c5b3a1f8d6c4b2a0e9c7",
          *       "platformShareBps": 5000,
          *       "storeShareBps": 5000,
-         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
+         *       "subjectLinkId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *       "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *     }
          */
@@ -12447,7 +12460,7 @@ export interface components {
             /** @description 매장이 부담하는 비율입니다. `10000`은 100%를 뜻합니다. */
             storeShareBps: number;
             /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
-            verificationSessionId: components["schemas"]["Identifier"];
+            subjectLinkId: components["schemas"]["Identifier"];
             /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
             evidenceDigest: string;
         };
@@ -12485,6 +12498,11 @@ export interface components {
          *     }
          */
         SupportCompensationResource: {
+            /**
+             * @description Stored authorization basis; absent only in pre-transition idempotent responses.
+             * @enum {string}
+             */
+            authorizationBasis?: "LEGACY" | "SUPPORT_DIRECT";
             /** @description 이 고객 보상 요청을 가리키는 UUID 식별자입니다. */
             compensationRequestId: components["schemas"]["Identifier"];
             /** @description 해당 고객센터 케이스 자원을 가리키는 UUID 식별자입니다. */
@@ -12593,7 +12611,6 @@ export interface components {
          * @example {
          *       "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *       "expectedProfileVersion": 4,
-         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *       "reason": "고객이 제출한 정보와 현재 프로필의 오타를 정정함",
          *       "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *     }
@@ -12606,8 +12623,6 @@ export interface components {
              * @description 프로필을 확인했을 때의 버전입니다. 현재 버전이 다르면 변경하지 않습니다.
              */
             expectedProfileVersion: number;
-            /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
-            verificationSessionId: components["schemas"]["Identifier"];
             /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
             /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
@@ -12619,7 +12634,6 @@ export interface components {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "고객 화면 표시 이름의 오타 정정",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -12627,7 +12641,7 @@ export interface components {
          *     }
          */
         CustomerDisplayNameProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             displayName: string;
         };
@@ -12645,6 +12659,11 @@ export interface components {
         };
         /** @description Raw before/after values, verification proof, evidence and secrets are deliberately excluded. */
         SupportProfileChangeResource: {
+            /**
+             * @description Stored authorization basis; absent only in pre-transition idempotent responses.
+             * @enum {string}
+             */
+            authorizationBasis?: "LEGACY" | "SUPPORT_DIRECT";
             profileChangeId: components["schemas"]["Identifier"];
             caseId: components["schemas"]["Identifier"];
             /** @enum {string} */
@@ -12656,7 +12675,8 @@ export interface components {
             riskClass: "R1" | "R2" | "R3" | "R4";
             requesterActorId: components["schemas"]["Identifier"];
             executorActorId: components["schemas"]["Identifier"];
-            verificationSessionId: components["schemas"]["Identifier"];
+            /** Format: uuid */
+            verificationSessionId: string | null;
             /** Format: int64 */
             expectedProfileVersion: number;
             /** Format: int64 */
@@ -12683,12 +12703,11 @@ export interface components {
             notifications: components["schemas"]["SupportProfileChangeNotificationResource"][];
         };
         /**
-         * @description 고객의 본인 확인용 실명에 있는 단순 오타를 정정하는 요청입니다. 강화 본인 확인과 전문 담당자 권한을 검사한 뒤 바로 반영하며 새 실명은 응답에 원문으로 노출하지 않습니다.
+         * @description 고객의 본인 확인용 실명에 있는 단순 오타를 정정하는 요청입니다. 강화 전문 담당자 권한을 검사한 뒤 바로 반영하며 새 실명은 응답에 원문으로 노출하지 않습니다.
          * @example {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "본인 확인용 실명 표기의 단순 오타 정정",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -12696,18 +12715,17 @@ export interface components {
          *     }
          */
         CustomerLegalNameProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             /** @description 정정할 고객 실명입니다. 요청에서만 받고 응답이나 로그에 원문으로 남기지 않습니다. */
             legalName: string;
         };
         /**
-         * @description 고객 전화번호 변경 요청입니다. 새 번호만으로는 계정 소유를 확인할 수 없으므로 기존 등록 채널을 이용한 강화 본인 확인과 관리자·운영팀 승인이 필요합니다.
+         * @description 고객 전화번호 변경 요청입니다. 새 번호만으로는 계정 소유를 확인할 수 없으므로 기존 등록 채널을 이용한 강화 관리자·운영팀 승인이 필요합니다.
          * @example {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "기존 등록 채널로 본인 확인 후 휴대전화 번호 변경 요청",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -12715,7 +12733,7 @@ export interface components {
          *     }
          */
         CustomerPrimaryPhoneProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             /** @description 변경할 고객 휴대전화 번호입니다. 요청에서만 받고 응답이나 로그에 원문으로 남기지 않습니다. */
             primaryPhone: string;
@@ -12726,14 +12744,13 @@ export interface components {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "고객이 로그인 정보를 잊어 계정 재설정 요청",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       }
          *     }
          */
         CustomerCredentialResetProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
         };
         /**
@@ -12742,7 +12759,6 @@ export interface components {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "고객에게 공개되는 매장 정보의 오타와 안내 문구 정정",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -12753,7 +12769,7 @@ export interface components {
          *     }
          */
         StorePublicProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             displayName?: string | null;
             publicPhone?: string | null;
@@ -12766,7 +12782,6 @@ export interface components {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "매장 내부 운영 연락처 변경 요청",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -12775,19 +12790,18 @@ export interface components {
          *     }
          */
         StoreOperationsContactProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             phone?: string | null;
             /** Format: email */
             email?: string | null;
         };
         /**
-         * @description 매장 대표자 변경 요청입니다. 강화 본인 확인과 고객센터 관리자·운영팀 승인을 거친 뒤 별도 실행 API에서 반영합니다.
+         * @description 매장 대표자 변경 요청입니다. 강화 고객센터 관리자·운영팀 승인을 거친 뒤 별도 실행 API에서 반영합니다.
          * @example {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "사업자 정보 변경에 따른 매장 대표자 변경 요청",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -12795,7 +12809,7 @@ export interface components {
          *     }
          */
         StoreRepresentativeProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             /** @description 변경할 매장 대표자 이름입니다. 요청에서만 받고 응답에는 원문으로 다시 노출하지 않습니다. */
             representativeName: string;
@@ -12806,7 +12820,6 @@ export interface components {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "정산 시스템에서 새 매장 정산 식별값이 발급되어 변경 요청",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -12814,7 +12827,7 @@ export interface components {
          *     }
          */
         StoreSettlementAccountProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             /** @description 정산 시스템이 실제 계좌 정보를 가리키기 위해 발급한 식별값입니다. 계좌번호 자체를 보내지 않습니다. */
             accountReference: string;
@@ -12825,14 +12838,13 @@ export interface components {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "매장 계정 접근 정보를 사용할 수 없어 재설정 요청",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       }
          *     }
          */
         StoreAccessReregistrationProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
         };
         /**
@@ -12841,7 +12853,6 @@ export interface components {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "외부 배달원 화면 표시 이름의 오타 정정",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -12849,7 +12860,7 @@ export interface components {
          *     }
          */
         CourierDisplayNameProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             displayName: string;
         };
@@ -12859,7 +12870,6 @@ export interface components {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "외부 배달원 중계 연락처가 변경되어 정정 요청",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -12868,7 +12878,7 @@ export interface components {
          *     }
          */
         CourierRelayContactProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             phone?: string | null;
             /** Format: email */
@@ -12880,7 +12890,6 @@ export interface components {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "외부 배달 서비스의 배달원 연동 식별값 변경 요청",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -12888,7 +12897,7 @@ export interface components {
          *     }
          */
         CourierProviderIdentityProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             /** @description 외부 배달 서비스가 배달원을 구분하기 위해 발급한 연동 식별값입니다. 주민등록번호나 신분증 정보가 아닙니다. */
             providerReference: string;
@@ -12899,7 +12908,6 @@ export interface components {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "외부 배달 서비스에서 새 정산 식별값이 발급되어 변경 요청",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -12907,7 +12915,7 @@ export interface components {
          *     }
          */
         CourierPayoutReferenceProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
             /** @description 외부 배달 서비스가 정산 대상을 구분하기 위해 발급한 식별값입니다. 실제 계좌번호가 아닙니다. */
             payoutReference: string;
@@ -12918,14 +12926,13 @@ export interface components {
          *       "binding": {
          *         "subjectId": "4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd",
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "외부 배달 서비스 계정 연동이 해제되어 재설정 요청",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       }
          *     }
          */
         CourierProviderReregistrationProfileChangeRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeBinding"];
         };
         /**
@@ -12934,8 +12941,7 @@ export interface components {
          *       "expectedProfileChangeVersion": 1,
          *       "expectedActionRequestVersion": 2,
          *       "expectedProfileVersion": 4,
-         *       "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
-         *       "reason": "추가 본인 확인과 새 근거를 반영해 승인안을 수정함",
+         *       "reason": "추가 새 근거를 반영해 승인안을 수정함",
          *       "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *     }
          */
@@ -12955,21 +12961,18 @@ export interface components {
              * @description 프로필을 확인했을 때의 버전입니다. 현재 버전이 다르면 승인안을 수정하지 않습니다.
              */
             expectedProfileVersion: number;
-            /** @description 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다. */
-            verificationSessionId: components["schemas"]["Identifier"];
             /** @description 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다. */
             reason: string;
             /** @description 증거 원문 대신 저장하는 소문자 64자리 SHA-256 해시값입니다. 증거 원문과 개인정보는 이 필드에 넣지 않습니다. */
             evidenceDigest: string;
         };
         /**
-         * @description 고객 전화번호 변경 승인안을 새 버전으로 다시 제출하는 요청입니다. 새 번호와 현재 요청·프로필 버전, 본인 확인, 증거 해시를 포함합니다.
+         * @description 고객 전화번호 변경 승인안을 새 버전으로 다시 제출하는 요청입니다. 새 번호와 현재 요청·프로필 버전, 증거 해시를 포함합니다.
          * @example {
          *       "binding": {
          *         "expectedProfileChangeVersion": 1,
          *         "expectedActionRequestVersion": 2,
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "기존 등록 채널의 추가 확인 결과를 반영해 휴대전화 변경 요청 수정",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -12977,7 +12980,7 @@ export interface components {
          *     }
          */
         CustomerPrimaryPhoneProfileChangeRevisionRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeRevisionBinding"];
             /** @description 변경할 고객 휴대전화 번호입니다. 요청에서만 받고 응답이나 로그에 원문으로 남기지 않습니다. */
             primaryPhone: string;
@@ -12989,14 +12992,13 @@ export interface components {
          *         "expectedProfileChangeVersion": 1,
          *         "expectedActionRequestVersion": 2,
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
-         *         "reason": "추가 본인 확인과 새 증빙을 반영해 계정 재설정 요청 수정",
+         *         "reason": "추가 새 증빙을 반영해 계정 재설정 요청 수정",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       }
          *     }
          */
         EmptyProfileChangeRevisionRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeRevisionBinding"];
         };
         /**
@@ -13006,7 +13008,6 @@ export interface components {
          *         "expectedProfileChangeVersion": 1,
          *         "expectedActionRequestVersion": 2,
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "추가 증빙을 반영해 매장 대표자 변경 요청 수정",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -13014,7 +13015,7 @@ export interface components {
          *     }
          */
         StoreRepresentativeProfileChangeRevisionRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeRevisionBinding"];
             /** @description 변경할 매장 대표자 이름입니다. 요청에서만 받고 응답에는 원문으로 다시 노출하지 않습니다. */
             representativeName: string;
@@ -13026,7 +13027,6 @@ export interface components {
          *         "expectedProfileChangeVersion": 1,
          *         "expectedActionRequestVersion": 2,
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
          *         "reason": "추가 증빙을 반영해 매장 정산 식별값 변경 요청 수정",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
@@ -13034,7 +13034,7 @@ export interface components {
          *     }
          */
         StoreSettlementAccountProfileChangeRevisionRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeRevisionBinding"];
             /** @description 정산 시스템이 실제 계좌 정보를 가리키기 위해 발급한 식별값입니다. 계좌번호 자체를 보내지 않습니다. */
             accountReference: string;
@@ -13046,35 +13046,33 @@ export interface components {
          *         "expectedProfileChangeVersion": 1,
          *         "expectedActionRequestVersion": 2,
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
-         *         "reason": "추가 본인 확인과 새 증빙을 반영해 연동 식별값 변경 요청 수정",
+         *         "reason": "추가 새 증빙을 반영해 연동 식별값 변경 요청 수정",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
          *       "providerReference": "sample:provider:courier-002"
          *     }
          */
         CourierProviderIdentityProfileChangeRevisionRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeRevisionBinding"];
             /** @description 외부 배달 서비스가 배달원을 구분하기 위해 발급한 연동 식별값입니다. 주민등록번호나 신분증 정보가 아닙니다. */
             providerReference: string;
         };
         /**
-         * @description 배달원 정산 식별값 변경 승인안을 새 버전으로 다시 제출하는 요청입니다. 새 식별값과 현재 요청·프로필 버전, 본인 확인, 증거 해시를 포함합니다.
+         * @description 배달원 정산 식별값 변경 승인안을 새 버전으로 다시 제출하는 요청입니다. 새 식별값과 현재 요청·프로필 버전, 증거 해시를 포함합니다.
          * @example {
          *       "binding": {
          *         "expectedProfileChangeVersion": 1,
          *         "expectedActionRequestVersion": 2,
          *         "expectedProfileVersion": 4,
-         *         "verificationSessionId": "d55c076e-be1e-5e1b-8328-730750a4173a",
-         *         "reason": "추가 본인 확인과 새 증빙을 반영해 정산 식별값 변경 요청 수정",
+         *         "reason": "추가 새 증빙을 반영해 정산 식별값 변경 요청 수정",
          *         "evidenceDigest": "a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3"
          *       },
          *       "payoutReference": "sample:payout:ref-002"
          *     }
          */
         CourierPayoutReferenceProfileChangeRevisionRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeRevisionBinding"];
             /** @description 외부 배달 서비스가 정산 대상을 구분하기 위해 발급한 식별값입니다. 실제 계좌번호가 아닙니다. */
             payoutReference: string;
@@ -13108,7 +13106,7 @@ export interface components {
             expectedProfileVersion: number;
         };
         /**
-         * @description 승인된 고객 전화번호 변경을 실행하는 요청입니다. 승인안과 현재 프로필 버전, 기존 등록 채널을 통한 본인 확인을 다시 검사합니다.
+         * @description 승인된 고객 전화번호 변경을 실행하는 요청입니다. 승인안과 현재 프로필 버전, 활성 상담 대상 연결을 다시 검사합니다.
          * @example {
          *       "binding": {
          *         "revisionNumber": 2,
@@ -13120,7 +13118,7 @@ export interface components {
          *     }
          */
         CustomerPrimaryPhoneProfileChangeExecutionRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeExecutionBinding"];
             /** @description 변경할 고객 휴대전화 번호입니다. 요청에서만 받고 응답이나 로그에 원문으로 남기지 않습니다. */
             primaryPhone: string;
@@ -13137,7 +13135,7 @@ export interface components {
          *     }
          */
         EmptyProfileChangeExecutionRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeExecutionBinding"];
         };
         /**
@@ -13153,7 +13151,7 @@ export interface components {
          *     }
          */
         StoreRepresentativeProfileChangeExecutionRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeExecutionBinding"];
             /** @description 변경할 매장 대표자 이름입니다. 요청에서만 받고 응답에는 원문으로 다시 노출하지 않습니다. */
             representativeName: string;
@@ -13171,7 +13169,7 @@ export interface components {
          *     }
          */
         StoreSettlementAccountProfileChangeExecutionRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeExecutionBinding"];
             /** @description 정산 시스템이 실제 계좌 정보를 가리키기 위해 발급한 식별값입니다. 계좌번호 자체를 보내지 않습니다. */
             accountReference: string;
@@ -13189,7 +13187,7 @@ export interface components {
          *     }
          */
         CourierProviderIdentityProfileChangeExecutionRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeExecutionBinding"];
             /** @description 외부 배달 서비스가 배달원을 구분하기 위해 발급한 연동 식별값입니다. 주민등록번호나 신분증 정보가 아닙니다. */
             providerReference: string;
@@ -13207,7 +13205,7 @@ export interface components {
          *     }
          */
         CourierPayoutReferenceProfileChangeExecutionRequest: {
-            /** @description 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
+            /** @description 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다. */
             binding: components["schemas"]["ProfileChangeExecutionBinding"];
             /** @description 외부 배달 서비스가 정산 대상을 구분하기 위해 발급한 식별값입니다. 실제 계좌번호가 아닙니다. */
             payoutReference: string;
@@ -13309,28 +13307,11 @@ export interface components {
             version: number;
         };
         /** @enum {string} */
+        VerificationSubjectType: "CUSTOMER" | "STORE" | "DELIVERY";
+        /** @enum {string} */
         VerificationPurpose: "CONTACT_CONFIRMATION" | "CASE_RESOLUTION" | "SAFETY_RESPONSE" | "FRAUD_INVESTIGATION" | "PRIVACY_INCIDENT";
         /** @enum {string} */
         VerificationActionScope: "PERSONAL_DATA_REVEAL" | "SUPPORT_ACTION";
-        /**
-         * @description 담당 Case의 활성 subject link에 대해 새 본인확인 세션을 시작하기 위한 요청입니다.
-         * @example {
-         *       "subjectLinkId": "9d8c7b6a-5f4e-4d3c-8b2a-1e0f9d8c7b6a",
-         *       "requestedLevel": "ENHANCED",
-         *       "purpose": "CONTACT_CONFIRMATION",
-         *       "actionScope": "PERSONAL_DATA_REVEAL"
-         *     }
-         */
-        CreateVerificationSessionRequest: {
-            subjectLinkId: components["schemas"]["Identifier"];
-            /** @enum {string} */
-            requestedLevel: "BASIC" | "ENHANCED";
-            purpose: components["schemas"]["VerificationPurpose"];
-            /** @default PERSONAL_DATA_REVEAL */
-            actionScope: components["schemas"]["VerificationActionScope"];
-        };
-        /** @enum {string} */
-        VerificationSubjectType: "CUSTOMER" | "STORE" | "DELIVERY";
         /** @enum {string} */
         VerificationState: "PENDING" | "VERIFIED" | "LOCKED" | "EXPIRED" | "REVOKED";
         /** @enum {string} */
@@ -13407,53 +13388,14 @@ export interface components {
             version: number;
             challenges: components["schemas"]["VerificationChallengeResource"][];
         };
-        /**
-         * @description 등록된 채널로 opaque challenge 발급을 요청합니다.
-         * @example {
-         *       "channel": "REGISTERED_PHONE"
-         *     }
-         */
-        IssueVerificationChallengeRequest: {
-            channel: components["schemas"]["VerificationChannel"];
-        };
-        /** @description challenge에 대한 1회성 proof를 제출해 검증을 요청합니다. proof는 저장되지 않는 write-only 값입니다. */
-        VerifyVerificationChallengeRequest: {
-            /** @description Transient one-time answer or proof; never persisted, logged, audited, or returned. */
-            proof: string;
-        };
-        /**
-         * @description 하나의 challenge 검증 결과와 세션의 최신 상태를 담은 응답입니다. proof나 provider reference는 포함하지 않습니다.
-         * @example {
-         *       "challenge": {
-         *         "challengeId": "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2190",
-         *         "sessionId": "1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d",
-         *         "channel": "REGISTERED_PHONE",
-         *         "state": "VERIFIED",
-         *         "requestedAt": "2026-08-15T09:12:00Z",
-         *         "expiresAt": "2026-08-15T09:17:00Z"
-         *       },
-         *       "sessionState": "VERIFIED",
-         *       "achievedLevel": "BASIC",
-         *       "invalidAttempts": 0,
-         *       "lockedUntil": null
-         *     }
-         */
-        VerificationResultResource: {
-            challenge: components["schemas"]["VerificationChallengeResource"];
-            sessionState: components["schemas"]["VerificationState"];
-            achievedLevel: components["schemas"]["VerificationLevel"];
-            invalidAttempts: number;
-            /** Format: date-time */
-            lockedUntil: string | null;
-        };
         /** @enum {string} */
         SupportPersonalDataField: "CUSTOMER_DISPLAY_NAME" | "CUSTOMER_PRIMARY_PHONE" | "CUSTOMER_PRIMARY_EMAIL" | "STORE_LEGAL_DISPLAY_NAME" | "STORE_SUPPORT_PHONE" | "STORE_SUPPORT_EMAIL" | "COURIER_DISPLAY_NAME" | "COURIER_PROVIDER_REFERENCE" | "COURIER_RELAY_PHONE" | "COURIER_RELAY_EMAIL";
         /** @enum {string} */
         DataAccessReasonCode: "CASE_HANDLING" | "CONTACT_CONFIRMATION" | "FRAUD_INVESTIGATION" | "SAFETY_RESPONSE" | "PRIVACY_INCIDENT";
         /**
-         * @description 검증된 본인확인 세션을 근거로 특정 필드에 대한 개인정보 열람 승인(Grant)을 요청합니다.
+         * @description 현재 담당 상담의 활성 대상 연결을 근거로 특정 필드에 대한 개인정보 열람권(Grant)을 즉시 생성합니다.
          * @example {
-         *       "verificationSessionId": "1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d",
+         *       "subjectLinkId": "1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d",
          *       "purpose": "CONTACT_CONFIRMATION",
          *       "fields": [
          *         "CUSTOMER_PRIMARY_PHONE"
@@ -13462,7 +13404,7 @@ export interface components {
          *     }
          */
         RequestDataAccessGrantRequest: {
-            verificationSessionId: components["schemas"]["Identifier"];
+            subjectLinkId: components["schemas"]["Identifier"];
             purpose: components["schemas"]["VerificationPurpose"];
             fields: components["schemas"]["SupportPersonalDataField"][];
             reasonCode: components["schemas"]["DataAccessReasonCode"];
@@ -13493,6 +13435,11 @@ export interface components {
          *     }
          */
         DataAccessGrantResource: {
+            /**
+             * @description Stored authorization basis; absent only in pre-transition idempotent responses.
+             * @enum {string}
+             */
+            authorizationBasis?: "LEGACY" | "SUPPORT_DIRECT";
             grantId: components["schemas"]["Identifier"];
             caseId: components["schemas"]["Identifier"];
             subjectLinkId: components["schemas"]["Identifier"];
@@ -13615,6 +13562,11 @@ export interface components {
          *     }
          */
         BreakGlassResource: {
+            /**
+             * @description 과거 정책 또는 상담원 직접 처리 근거
+             * @enum {string}
+             */
+            authorizationBasis?: "LEGACY" | "SUPPORT_DIRECT";
             requestId: components["schemas"]["Identifier"];
             caseId: components["schemas"]["Identifier"];
             subjectLinkId: components["schemas"]["Identifier"];
@@ -15064,7 +15016,7 @@ export interface operations {
                  * @example 1500
                  */
                 radiusMeters: components["parameters"]["RadiusMeters"];
-                /** @description true로 지정하면 7일 창 안에 예약 가능한 슬롯이 남아 있는 매장만 반환합니다. 픽업 설정만으로는 충족되지 않습니다. */
+                /** @description true로 지정하면 주문받기와 pickup이 활성화되고 현재 영업시간이 OPEN인 매장만 반환합니다. legacy pickup slot은 필요하지 않습니다. */
                 pickupAvailable?: boolean;
                 /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
@@ -15570,8 +15522,8 @@ export interface operations {
         };
         responses: {
             /**
-             * @description 새 Order, 필요한 모든 예약(reservation)과 불변 스냅샷, 가격 비교
-             *     결과, 최초 멱등 응답이 모두 커밋됐습니다.
+             * @description 새 Order, 불변 입력 스냅샷, 가격 비교 결과와 최초 멱등 응답이 모두
+             *     커밋됐습니다. 신규 즉시 주문은 픽업 슬롯과 혜택을 예약하지 않습니다.
              */
             201: {
                 headers: {
@@ -21453,41 +21405,26 @@ export interface operations {
     createSupportVerificationSession: {
         parameters: {
             query?: never;
-            header: {
-                /**
-                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
-                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
-                 */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
+            header?: never;
             path: {
                 caseId: components["parameters"]["SupportCaseId"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateVerificationSessionRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Verification session started or the original response replayed */
-            201: {
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Support verification retired; use the active case subject link. */
+            410: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VerificationSessionResource"];
+                    "application/json": components["schemas"]["Error"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getSupportVerificationSession: {
@@ -21520,80 +21457,51 @@ export interface operations {
     issueSupportVerificationChallenge: {
         parameters: {
             query?: never;
-            header: {
-                /**
-                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
-                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
-                 */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
+            header?: never;
             path: {
                 sessionId: components["parameters"]["VerificationSessionId"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IssueVerificationChallengeRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Opaque challenge metadata; never contains a secret or raw link */
-            201: {
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Support verification retired; use the active case subject link. */
+            410: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VerificationChallengeResource"];
+                    "application/json": components["schemas"]["Error"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            503: components["responses"]["DependencyUnavailable"];
         };
     };
     verifySupportVerificationChallenge: {
         parameters: {
             query?: never;
-            header: {
-                /**
-                 * @description 같은 요청이 중복 처리되는 것을 막는 식별값입니다. 같은 사용자와 같은 API에서 같은 키와 같은 내용을 다시 보내면 최초 결과를 반환하고, 같은 키로 다른 내용을 보내면 409를 반환합니다.
-                 * @example 2b6e3e2a-3c8e-4a5c-9c0a-8f1e2d3c4b5a
-                 */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-            };
+            header?: never;
             path: {
                 challengeId: components["parameters"]["VerificationChallengeId"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VerifyVerificationChallengeRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Verification outcome without proof or provider reference */
-            200: {
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Support verification retired; use the active case subject link. */
+            410: {
                 headers: {
                     "Cache-Control": components["headers"]["NoStore"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VerificationResultResource"];
+                    "application/json": components["schemas"]["Error"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["DependencyUnavailable"];
         };
     };
     revokeSupportVerificationSession: {
@@ -23792,7 +23700,7 @@ export interface operations {
             query: {
                 /** @description 재검토 링크에서 받은 기존 사고만 확인 */
                 incidentId?: components["schemas"]["Identifier"];
-                verificationSessionId: components["schemas"]["Identifier"];
+                subjectLinkId: components["schemas"]["Identifier"];
                 orderId?: components["schemas"]["Identifier"];
                 cursor?: string;
                 limit?: number;

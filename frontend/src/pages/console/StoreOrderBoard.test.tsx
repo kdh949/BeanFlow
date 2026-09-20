@@ -207,7 +207,7 @@ describe("store order board", () => {
         path: { storeId: yeouido.storeId, orderReference: paidOrder.orderReference },
         header: { "Idempotency-Key": expect.any(String), "X-BEANFLOW-CSRF": "merchant-csrf-token" },
       },
-      body: { action: "ACCEPT", expectedStatus: "PAID", reason: undefined },
+      body: { action: "ACCEPT", expectedStatus: "PAID", reason: undefined, preparationMinutes: 10 },
     });
     expect(await screen.findByText("주문 접수")).toBeInTheDocument();
     const calls = get.mock.calls as unknown as Array<[string, unknown?]>;

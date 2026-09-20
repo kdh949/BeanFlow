@@ -58,6 +58,7 @@ internal class SupportActionRequestIntegrationTest
         private lateinit var fixture: OrderCreationFixture
         private lateinit var caseId: UUID
         private lateinit var sessionId: UUID
+        private lateinit var subjectLinkId: UUID
         private lateinit var orderId: UUID
         private var orderVersion: Long = 2
 
@@ -105,7 +106,7 @@ internal class SupportActionRequestIntegrationTest
         }
 
         @Test
-        fun `workflow exposes only current separated actor commands and hides them after permission revoke`() {
+        fun `workflow exposes current direct actor commands and hides them after permission revoke`() {
             val id = requestId(createRequest("workflow-create-001").andReturn().response.contentAsString)
             val path = "/api/v1/support/action-requests/$id/workflow"
             mockMvc
@@ -113,14 +114,12 @@ internal class SupportActionRequestIntegrationTest
                 .andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.allowedActions[0]").value("REVISE"))
-                .andExpect(jsonPath("$.allowedActions.length()").value(1))
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.hasItem("EXECUTE")))
                 .andExpect(jsonPath("$.caseVersion").value(0))
             mockMvc
                 .perform(get(path).with(jwt().jwt { it.subject(managerId.toString()) }))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$.allowedActions[0]").value("DECIDE_SUPPORT_MANAGER"))
-                .andExpect(jsonPath("$.allowedActions.length()").value(1))
-            decideManager(id, managerId, "workflow-approve-001").andExpect(status().isOk)
+                .andExpect(jsonPath("$.allowedActions").isEmpty())
             mockMvc
                 .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
                 .andExpect(status().isOk)
@@ -145,37 +144,49 @@ internal class SupportActionRequestIntegrationTest
         }
 
         @Test
-        fun `create exact replay and separated manager approval produce ready lineage`() {
+        fun `create and replay produce direct ready lineage without verification or approval`() {
+            jdbcTemplate.update("DELETE FROM support_verification_session WHERE id = ?", sessionId)
             val first =
                 createRequest("create-action-001")
                     .andExpect(status().isCreated)
                     .andExpect(header().string("Cache-Control", "no-store"))
-                    .andExpect(jsonPath("$.state").value("AWAITING_SUPPORT_MANAGER"))
-                    .andExpect(jsonPath("$.approvalRoute").value("SUPPORT_MANAGER"))
-                    .andExpect(jsonPath("$.revisionNumber").value(1))
-                    .andExpect(jsonPath("$.requestVersion").value(0))
-                    .andExpect(jsonPath("$.reason").doesNotExist())
+                    .andExpect(jsonPath("$.state").value("READY_FOR_EXECUTION"))
+                    .andExpect(jsonPath("$.approvalRoute").value("NONE"))
+                    .andExpect(jsonPath("$.approvalSteps").isEmpty())
+                    .andExpect(jsonPath("$.authorizationBasis").value("SUPPORT_DIRECT"))
+                    .andExpect(jsonPath("$.verificationSessionId").doesNotExist())
                     .andReturn()
-            val requestId = requestId(first.response.contentAsString)
-
-            createRequest("create-action-001")
-                .andExpect(status().isCreated)
-                .andExpect(jsonPath("$.requestId").value(requestId.toString()))
+            val id = requestId(first.response.contentAsString)
+            createRequest("create-action-001").andExpect(status().isCreated).andExpect(jsonPath("$.requestId").value(id.toString()))
             createRequest("create-action-001", payloadDigest = DIGEST_2)
                 .andExpect(status().isConflict)
                 .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"))
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT expires_at = created_at + interval '15 minutes' FROM support_action_revision WHERE request_id = ?",
+                    Boolean::class.java,
+                    id,
+                ),
+            ).isTrue()
+        }
 
-            decideManager(requestId, managerId, "manager-approve-001")
-                .andExpect(status().isOk)
-                .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.state").value("READY_FOR_EXECUTION"))
-                .andExpect(jsonPath("$.requestVersion").value(1))
-                .andExpect(jsonPath("$.approvalSteps[0].stepType").value("SUPPORT_MANAGER"))
-                .andExpect(jsonPath("$.approvalSteps[0].state").value("APPROVED"))
-                .andExpect(jsonPath("$.approvalSteps[0].decidedByActorId").value(managerId.toString()))
-            decideManager(requestId, managerId, "manager-approve-001")
-                .andExpect(status().isOk)
-                .andExpect(jsonPath("$.requestId").value(requestId.toString()))
+        @Test
+        fun `legacy idempotency snapshot without new authorization fields remains readable`() {
+            val created = createRequest("legacy-snapshot-key").andExpect(status().isCreated).andReturn()
+            val id = requestId(created.response.contentAsString)
+            jdbcTemplate.update(
+                "UPDATE support_action_command_idempotency SET response_body = ((response_body::jsonb - 'authorizationBasis' - 'subjectLinkId') || jsonb_build_object('verificationSessionId', ?::text))::text WHERE request_id = ?",
+                sessionId.toString(),
+                id,
+            )
+            createRequest("legacy-snapshot-key")
+                .andExpect(status().isCreated)
+                .andExpect(jsonPath("$.requestId").value(id.toString()))
+                .andExpect(jsonPath("$.authorizationBasis").value("LEGACY"))
+                .andExpect(jsonPath("$.verificationSessionId").value(sessionId.toString()))
+            assertThat(
+                jdbcTemplate.queryForObject("SELECT count(*) FROM support_action_request WHERE id = ?", Long::class.java, id),
+            ).isOne()
         }
 
         @Test
@@ -191,7 +202,7 @@ internal class SupportActionRequestIntegrationTest
                 .andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.revisionNumber").value(2))
-                .andExpect(jsonPath("$.state").value("AWAITING_SUPPORT_MANAGER"))
+                .andExpect(jsonPath("$.state").value("READY_FOR_EXECUTION"))
                 .andExpect(jsonPath("$.approvalSteps").isEmpty)
             reviseRequest(requestId, "revise-action-001")
                 .andExpect(status().isOk)
@@ -202,69 +213,55 @@ internal class SupportActionRequestIntegrationTest
         }
 
         @Test
-        fun `requester permission revoke and exact expiry become visible terminal failures`() {
-            val revokedRequest = requestId(createRequest("create-action-revoke").andReturn().response.contentAsString)
+        fun `expired direct request can be revised without renewing verification`() {
+            val id = requestId(createRequest("create-action-expiry").andReturn().response.contentAsString)
             jdbcTemplate.update(
-                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_ORDER_CANCEL'",
-                requesterId,
+                "UPDATE support_action_revision SET created_at = now() - interval '16 minutes', expires_at = now() - interval '1 minute' WHERE request_id = ?",
+                id,
             )
-
-            decideManager(revokedRequest, managerId, "approve-after-revoke")
-                .andExpect(status().isConflict)
-                .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
-            getRequest(revokedRequest, managerId)
+            mockMvc
+                .perform(get("/api/v1/support/action-requests/$id/workflow").with(jwt().jwt { it.subject(requesterId.toString()) }))
                 .andExpect(status().isOk)
-                .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.state").value("STALE"))
-
-            grant(requesterId, "SUPPORT_ORDER_CANCEL")
-            val expiredRequest = requestId(createRequest("create-action-expiry").andReturn().response.contentAsString)
-            jdbcTemplate.update(
-                """
-                UPDATE support_action_revision
-                   SET created_at = now() - interval '2 minutes', expires_at = now() - interval '1 minute'
-                 WHERE request_id = ?
-                """.trimIndent(),
-                expiredRequest,
-            )
-            decideManager(expiredRequest, managerId, "approve-at-expiry")
-                .andExpect(status().isConflict)
-                .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_EXPIRED"))
-            getRequest(expiredRequest, managerId)
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("EXECUTE"))))
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.hasItem("REVISE")))
+            reviseRequest(id, "renew-expired-direct")
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$.state").value("EXPIRED"))
+                .andExpect(jsonPath("$.state").value("READY_FOR_EXECUTION"))
+                .andExpect(jsonPath("$.revisionNumber").value(2))
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT expires_at > now() AND expires_at = created_at + interval '15 minutes' FROM support_action_revision WHERE request_id = ? AND revision_number = 2",
+                    Boolean::class.java,
+                    id,
+                ),
+            ).isTrue()
         }
 
         @Test
-        fun `concurrent approval allows exactly one terminal decision`() {
-            val requestId = requestId(createRequest("create-action-concurrent").andReturn().response.contentAsString)
+        fun `concurrent revisions consume one current request version`() {
+            val id = requestId(createRequest("create-action-concurrent").andReturn().response.contentAsString)
             val executor = Executors.newFixedThreadPool(2)
             try {
                 val statuses =
                     executor
                         .invokeAll(
                             listOf(
-                                Callable { decideManager(requestId, managerId, "concurrent-manager-1").andReturn().response.status },
-                                Callable { decideManager(requestId, otherManagerId, "concurrent-manager-2").andReturn().response.status },
+                                Callable { reviseRequest(id, "concurrent-revision-1").andReturn().response.status },
+                                Callable { reviseRequest(id, "concurrent-revision-2").andReturn().response.status },
                             ),
                         ).map { it.get() }
                         .sorted()
-
                 assertThat(statuses).containsExactly(200, 409)
                 assertThat(
-                    jdbcTemplate.queryForObject(
-                        "SELECT count(*) FROM support_action_approval_step WHERE request_id = ? AND step_type = 'SUPPORT_MANAGER'",
-                        Int::class.java,
-                        requestId,
-                    ),
-                ).isOne()
+                    jdbcTemplate.queryForObject("SELECT count(*) FROM support_action_revision WHERE request_id = ?", Int::class.java, id),
+                ).isEqualTo(2)
             } finally {
                 executor.shutdownNow()
             }
         }
 
         @Test
-        fun `audit persistence failure rolls back approval and idempotency`() {
+        fun `audit persistence failure rolls back revision and idempotency`() {
             val requestId = requestId(createRequest("create-action-audit-failure").andReturn().response.contentAsString)
             jdbcTemplate.update(
                 """
@@ -273,7 +270,7 @@ internal class SupportActionRequestIntegrationTest
                     before_summary, after_summary, correlation_id, source_reference, retention_expires_at,
                     retention_class, retention_policy_version_id, retention_provenance
                 )
-                SELECT ?, ?, 'PLATFORM_OPERATOR', audit_category, 'SUPPORT_ACTION_SUPPORT_MANAGER_DECIDED',
+                SELECT ?, ?, 'PLATFORM_OPERATOR', audit_category, 'SUPPORT_ACTION_REVISION_CREATED',
                        target_type, target_id, occurred_at, reason, before_summary, after_summary, correlation_id,
                        ?, retention_expires_at, retention_class, retention_policy_version_id, retention_provenance
                   FROM operations_audit_record
@@ -281,11 +278,11 @@ internal class SupportActionRequestIntegrationTest
                 """.trimIndent(),
                 UUID.randomUUID(),
                 managerId.toString(),
-                "support-action:$requestId:SUPPORT_ACTION_SUPPORT_MANAGER_DECIDED:1",
+                "support-action:$requestId:SUPPORT_ACTION_REVISION_CREATED:1",
                 requestId,
             )
 
-            decideManager(requestId, managerId, "manager-audit-failure")
+            reviseRequest(requestId, "manager-audit-failure")
                 .andExpect(status().isServiceUnavailable)
                 .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
 
@@ -295,7 +292,7 @@ internal class SupportActionRequestIntegrationTest
                     String::class.java,
                     requestId,
                 ),
-            ).isEqualTo("AWAITING_SUPPORT_MANAGER")
+            ).isEqualTo("READY_FOR_EXECUTION")
             assertThat(
                 jdbcTemplate.queryForObject(
                     "SELECT count(*) FROM support_action_approval_step WHERE request_id = ?",
@@ -312,78 +309,52 @@ internal class SupportActionRequestIntegrationTest
         }
 
         @Test
-        fun `revoked executor requires explicit atomic case and action reassignment`() {
+        fun `direct request cannot transfer its executor or case through reassignment`() {
             val requestId = requestId(createRequest("create-action-reassign").andReturn().response.contentAsString)
-            decideManager(requestId, managerId, "approve-action-reassign").andExpect(status().isOk)
-            jdbcTemplate.update(
-                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
-                    "WHERE actor_id = ? AND permission = 'SUPPORT_ACTION_EXECUTE'",
-                requesterId,
-            )
-
-            getRequest(requestId, managerId)
-                .andExpect(status().isOk)
-                .andExpect(jsonPath("$.state").value("REASSIGNMENT_REQUIRED"))
-                .andExpect(jsonPath("$.requestVersion").value(2))
-
             grant(managerId, "SUPPORT_CASE_ASSIGN")
             grantReplacementPermissions(replacementId)
-            reassignRequest(requestId, managerId, replacementId, "reassign-action-001")
+            repeat(2) {
+                reassignRequest(requestId, managerId, replacementId, "reassign-action-001", expectedRequestVersion = 0)
+                    .andExpect(status().isConflict)
+                    .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
+            }
+            getRequest(requestId, managerId)
                 .andExpect(status().isOk)
-                .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.state").value("READY_FOR_EXECUTION"))
-                .andExpect(jsonPath("$.executorActorId").value(replacementId.toString()))
-                .andExpect(jsonPath("$.requestVersion").value(3))
-            reassignRequest(requestId, managerId, replacementId, "reassign-action-001")
+                .andExpect(jsonPath("$.executorActorId").value(requesterId.toString()))
+                .andExpect(jsonPath("$.requestVersion").value(0))
+            mockMvc
+                .perform(get("/api/v1/support/action-requests/$requestId/workflow").with(jwt().jwt { it.subject(managerId.toString()) }))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$.executorActorId").value(replacementId.toString()))
-
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("REASSIGN"))))
             assertThat(
                 jdbcTemplate.queryForObject("SELECT current_assignee_id FROM support_case WHERE id = ?", UUID::class.java, caseId),
-            ).isEqualTo(replacementId)
-            assertThat(
-                jdbcTemplate.queryForObject("SELECT version FROM support_case WHERE id = ?", Long::class.java, caseId),
-            ).isEqualTo(1)
+            ).isEqualTo(requesterId)
             assertThat(
                 jdbcTemplate.queryForObject(
                     "SELECT count(*) FROM support_action_reassignment WHERE request_id = ?",
                     Int::class.java,
                     requestId,
                 ),
-            ).isOne()
+            ).isZero()
             assertThat(
                 jdbcTemplate.queryForObject(
                     "SELECT count(*) FROM support_case_assignment_history WHERE support_case_id = ?",
                     Int::class.java,
                     caseId,
                 ),
-            ).isEqualTo(2)
+            ).isOne()
         }
 
         @Test
-        fun `approver cannot become executor and reassignment audit failure rolls back both aggregates`() {
+        fun `historical reassignment audit failure still rolls back case and legacy request`() {
             val requestId = requestId(createRequest("create-action-reassign-guard").andReturn().response.contentAsString)
-            decideManager(requestId, managerId, "approve-action-reassign-guard").andExpect(status().isOk)
+            jdbcTemplate.update(
+                "UPDATE support_action_revision SET authorization_basis = 'LEGACY', verification_session_id = ?, subject_link_id = NULL WHERE request_id = ?",
+                sessionId,
+                requestId,
+            )
             grant(managerId, "SUPPORT_CASE_ASSIGN")
             grantReplacementPermissions(managerId)
-
-            reassignRequest(
-                requestId,
-                managerId,
-                requesterId,
-                "reassign-same-executor",
-                expectedRequestVersion = 1,
-            ).andExpect(status().isConflict)
-                .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STATE_CONFLICT"))
-
-            reassignRequest(
-                requestId,
-                managerId,
-                managerId,
-                "reassign-approver-denied",
-                expectedRequestVersion = 1,
-            ).andExpect(status().isConflict)
-                .andExpect(jsonPath("$.code").value("SUPPORT_APPROVER_MUST_DIFFER"))
 
             jdbcTemplate.update(
                 "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
@@ -407,7 +378,7 @@ internal class SupportActionRequestIntegrationTest
                 """.trimIndent(),
                 UUID.randomUUID(),
                 managerId.toString(),
-                "support-action:$requestId:SUPPORT_ACTION_REQUEST_REASSIGNED:3",
+                "support-action:$requestId:SUPPORT_ACTION_REQUEST_REASSIGNED:2",
                 requestId,
             )
 
@@ -448,7 +419,7 @@ internal class SupportActionRequestIntegrationTest
                 .content(
                     """
                     {"action":"ORDER_CANCELLATION","orderId":"$orderId","expectedTargetVersion":$orderVersion,
-                     "verificationSessionId":"$sessionId","actionPayloadDigest":"$payloadDigest",
+                     "subjectLinkId":"$subjectLinkId","actionPayloadDigest":"$payloadDigest",
                      "reason":"Customer requested cancellation","evidenceDigest":"$EVIDENCE_DIGEST"}
                     """.trimIndent(),
                 ),
@@ -465,7 +436,7 @@ internal class SupportActionRequestIntegrationTest
                 .content(
                     """
                     {"expectedRevisionNumber":1,"expectedRequestVersion":0,"expectedTargetVersion":$orderVersion,
-                     "verificationSessionId":"$sessionId","actionPayloadDigest":"$DIGEST_2",
+                     "subjectLinkId":"$subjectLinkId","actionPayloadDigest":"$DIGEST_2",
                      "reason":"Customer reconfirmed cancellation","evidenceDigest":"$EVIDENCE_DIGEST"}
                     """.trimIndent(),
                 ),
@@ -503,7 +474,7 @@ internal class SupportActionRequestIntegrationTest
             actorId: UUID,
             assigneeId: UUID,
             key: String,
-            expectedRequestVersion: Long = 2,
+            expectedRequestVersion: Long = 1,
         ) = mockMvc.perform(
             post("/api/v1/support/action-requests/$requestId/reassignments")
                 .with(jwt().jwt { it.subject(actorId.toString()) })
@@ -540,6 +511,7 @@ internal class SupportActionRequestIntegrationTest
             val now = Instant.now().minusSeconds(30)
             caseId = UUID.randomUUID()
             val customerLinkId = UUID.randomUUID()
+            subjectLinkId = customerLinkId
             sessionId = UUID.randomUUID()
             jdbcTemplate.update(
                 """

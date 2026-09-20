@@ -572,7 +572,7 @@ internal class StoreOrderBoardIntegrationTest
             val actorId = UUID.randomUUID()
             insertMembership(actorId, fixture.storeId, "ACTIVE")
             val actor = StoreTransitionActor(actorId, setOf(StoreActorRole.STAFF))
-            val request = StoreOrderActionRequest(StoreOrderAction.ACCEPT, StoreOrderExpectedStatus.PAID, null)
+            val request = StoreOrderActionRequest(StoreOrderAction.ACCEPT, StoreOrderExpectedStatus.PAID, null, 10)
             val barrier = CyclicBarrier(2)
             val executor = Executors.newFixedThreadPool(2)
             val results =
@@ -748,7 +748,8 @@ internal class StoreOrderBoardIntegrationTest
                     {
                       "action": "$action",
                       "expectedStatus": "$expectedStatus",
-                      "reason": ${reason?.let { "\"$it\"" } ?: "null"}
+                      "reason": ${reason?.let { "\"$it\"" } ?: "null"},
+                      "preparationMinutes": ${if (action == "ACCEPT") "10" else "null"}
                     }
                     """.trimIndent(),
                 ),

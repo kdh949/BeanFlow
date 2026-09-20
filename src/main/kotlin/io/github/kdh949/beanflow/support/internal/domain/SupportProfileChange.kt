@@ -26,7 +26,7 @@ internal class SupportProfileChange private constructor(
     val purpose: ProfileChangePurpose,
     val requesterActorId: UUID,
     var executorActorId: UUID,
-    var verificationSessionId: UUID,
+    var verificationSessionId: UUID?,
     var expectedProfileVersion: Long,
     var payloadDigest: String,
     val actionRequestId: UUID?,
@@ -62,9 +62,15 @@ internal class SupportProfileChange private constructor(
         updatedAt = occurredAt
     }
 
+    fun readyForDirectExecution() {
+        check(actionRequestId != null && state != SupportProfileChangeState.EXECUTED)
+        check(verificationSessionId == null)
+        state = SupportProfileChangeState.READY_FOR_EXECUTION
+    }
+
     fun reviseBinding(
         actorId: UUID,
-        sessionId: UUID,
+        sessionId: UUID?,
         expectedVersion: Long,
         digest: String,
         occurredAt: Instant,
@@ -135,7 +141,7 @@ internal class SupportProfileChange private constructor(
     }
 
     private fun validate() {
-        require((descriptor.requiresDualApproval) == (actionRequestId != null)) { "Profile approval binding is invalid" }
+        require((descriptor.requiresExecutionRequest) == (actionRequestId != null)) { "Profile approval binding is invalid" }
         if (state == SupportProfileChangeState.EXECUTED) {
             require(ownerChangeId != null && currentProfileVersion != null && maskedBefore != null && maskedAfter != null) {
                 "Executed profile change must bind its owner result"
@@ -160,7 +166,7 @@ internal class SupportProfileChange private constructor(
             subjectId: UUID,
             purpose: ProfileChangePurpose,
             actorId: UUID,
-            sessionId: UUID,
+            sessionId: UUID?,
             expectedVersion: Long,
             payloadDigest: String,
             actionRequestId: UUID,
@@ -195,7 +201,7 @@ internal class SupportProfileChange private constructor(
             subjectId: UUID,
             purpose: ProfileChangePurpose,
             actorId: UUID,
-            sessionId: UUID,
+            sessionId: UUID?,
             expectedVersion: Long,
             payloadDigest: String,
             result: OwnerProfileChangeResult,
@@ -236,7 +242,7 @@ internal class SupportProfileChange private constructor(
             purpose: ProfileChangePurpose,
             requesterActorId: UUID,
             executorActorId: UUID,
-            sessionId: UUID,
+            sessionId: UUID?,
             expectedVersion: Long,
             payloadDigest: String,
             actionRequestId: UUID?,

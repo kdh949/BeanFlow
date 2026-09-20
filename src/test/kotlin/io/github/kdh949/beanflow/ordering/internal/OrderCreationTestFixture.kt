@@ -7,6 +7,7 @@ import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import org.springframework.jdbc.core.JdbcTemplate
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.LocalTime
 import java.util.UUID
 
 internal data class OrderCreationFixture(
@@ -147,6 +148,8 @@ internal object OrderCreationDatabaseFixture {
         jdbcTemplate: JdbcTemplate,
         customerId: UUID,
         amountKrw: Long,
+        issuerType: String = "PLATFORM",
+        issuerReference: String = "platform:test-fixture",
     ): Pair<UUID, UUID> {
         val accountId = UUID.randomUUID()
         val lotId = UUID.randomUUID()
@@ -167,12 +170,14 @@ internal object OrderCreationDatabaseFixture {
                 id, point_account_id, available_amount_krw, reserved_amount_krw, expires_at,
                 issuer_type, issuer_reference
             )
-            VALUES (?, ?, ?, 0, ?, 'PLATFORM', 'platform:test-fixture')
+            VALUES (?, ?, ?, 0, ?, ?, ?)
             """.trimIndent(),
             lotId,
             accountId,
             amountKrw,
             Timestamp.from(Instant.parse("2035-01-01T00:00:00Z")),
+            issuerType,
+            issuerReference,
         )
         return accountId to lotId
     }
@@ -286,6 +291,36 @@ internal object OrderCreationDatabaseFixture {
         )
     }
 
+    fun insertOperatingHours(
+        jdbcTemplate: JdbcTemplate,
+        storeId: UUID,
+        opensAt: LocalTime = LocalTime.of(9, 0),
+        closesAt: LocalTime = LocalTime.of(18, 0),
+    ) {
+        jdbcTemplate.update(
+            """
+            INSERT INTO merchant_store_customer_display_profile
+                (store_id, address_line, directions_hint, version, created_at, updated_at)
+            VALUES (?, NULL, NULL, 0, TIMESTAMPTZ '2020-01-01 00:00:00Z', TIMESTAMPTZ '2020-01-01 00:00:00Z')
+            ON CONFLICT (store_id) DO NOTHING
+            """.trimIndent(),
+            storeId,
+        )
+        (1..7).forEach { dayOfWeek ->
+            jdbcTemplate.update(
+                """
+                INSERT INTO merchant_store_operating_hours
+                    (store_id, day_of_week, closed, opens_at, closes_at)
+                VALUES (?, ?, false, ?, ?)
+                """.trimIndent(),
+                storeId,
+                dayOfWeek,
+                java.sql.Time.valueOf(opensAt),
+                java.sql.Time.valueOf(closesAt),
+            )
+        }
+    }
+
     private fun ensureGlobalPointAccrualPolicy(jdbcTemplate: JdbcTemplate) {
         jdbcTemplate.update(
             """
@@ -329,15 +364,18 @@ internal object OrderCreationDatabaseFixture {
         storeId: UUID,
         grossPaidKrw: Long,
         createdAt: Instant,
+        insertStore: Boolean = true,
     ) {
         val termsVersionId = UUID.randomUUID()
-        jdbcTemplate.update(
-            """
-            INSERT INTO merchant_store (id, accepting_orders, pickup_enabled)
-            VALUES (?, true, true)
-            """.trimIndent(),
-            storeId,
-        )
+        if (insertStore) {
+            jdbcTemplate.update(
+                """
+                INSERT INTO merchant_store (id, accepting_orders, pickup_enabled)
+                VALUES (?, true, true)
+                """.trimIndent(),
+                storeId,
+            )
+        }
         jdbcTemplate.update(
             """
             INSERT INTO merchant_store_settlement_terms (

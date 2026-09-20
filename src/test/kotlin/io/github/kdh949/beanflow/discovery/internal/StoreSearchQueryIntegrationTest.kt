@@ -161,15 +161,11 @@ internal class StoreSearchQueryIntegrationTest {
     }
 
     @Test
-    fun `pickupAvailable is the owner state and a reservable slot together`() {
-        val reservable = fixture.indexStore(name = "스타벅스 1호점")
-        val slotless = fixture.indexStore(name = "스타벅스 2호점")
-        val fullyBooked = fixture.indexStore(name = "스타벅스 3호점")
+    fun `pickupAvailable is owner state and current operating hours without a slot`() {
+        val slotlessOpen = fixture.indexStore(name = "스타벅스 1호점")
+        val hoursClosed = fixture.indexStore(name = "스타벅스 2호점", currentlyOpen = false)
+        val hoursMissing = fixture.indexStore(name = "스타벅스 3호점", operatingHoursConfigured = false)
         val pickupDisabled = fixture.indexStore(name = "스타벅스 4호점", pickupEnabled = false)
-        fixture.indexPickupSlot(reservable, clock.instant())
-        fixture.indexPickupSlot(fullyBooked, clock.instant(), capacity = 2, reserved = 1, confirmed = 1)
-        // 슬롯은 있지만 매장이 픽업을 끈 경우다. 슬롯만으로 true가 되면 안 된다.
-        fixture.indexPickupSlot(pickupDisabled, clock.instant())
 
         val flags =
             search
@@ -178,19 +174,17 @@ internal class StoreSearchQueryIntegrationTest {
                 .associate { it.storeId to it.pickupAvailable }
 
         assertThat(flags)
-            .containsEntry(reservable, true)
-            .containsEntry(slotless, false)
-            .containsEntry(fullyBooked, false)
+            .containsEntry(slotlessOpen, true)
+            .containsEntry(hoursClosed, false)
+            .containsEntry(hoursMissing, false)
             .containsEntry(pickupDisabled, false)
     }
 
     @Test
     fun `the pickupAvailable filter is independent of openOnly`() {
         val both = fixture.indexStore(name = "스타벅스 1호점")
-        val openWithoutSlot = fixture.indexStore(name = "스타벅스 2호점")
-        val closedWithSlot = fixture.indexStore(name = "스타벅스 3호점", acceptingOrders = false)
-        fixture.indexPickupSlot(both, clock.instant())
-        fixture.indexPickupSlot(closedWithSlot, clock.instant())
+        val ownerOpenHoursClosed = fixture.indexStore(name = "스타벅스 2호점", currentlyOpen = false)
+        val ownerClosedHoursOpen = fixture.indexStore(name = "스타벅스 3호점", acceptingOrders = false)
 
         fun storeIds(vararg overrides: Pair<String, String>): List<UUID> {
             val map = overrides.toMap()
@@ -206,9 +200,9 @@ internal class StoreSearchQueryIntegrationTest {
         }
 
         // 둘 다 미지정이 기본이고 그때 닫힌 매장도 포함한다(ADR-103 A6).
-        assertThat(storeIds()).containsExactlyInAnyOrder(both, openWithoutSlot, closedWithSlot)
-        assertThat(storeIds("openOnly" to "true")).containsExactlyInAnyOrder(both, openWithoutSlot)
-        // 닫힌 매장은 예약 가능한 슬롯이 남아 있어도 픽업 가용이 아니다.
+        assertThat(storeIds()).containsExactlyInAnyOrder(both, ownerOpenHoursClosed, ownerClosedHoursOpen)
+        assertThat(storeIds("openOnly" to "true")).containsExactlyInAnyOrder(both, ownerOpenHoursClosed)
+        // 영업시간이 닫힌 매장과 주문받기 OFF 매장은 즉시 주문 가용이 아니다.
         assertThat(storeIds("pickupAvailable" to "true")).containsExactly(both)
         assertThat(storeIds("pickupAvailable" to "true", "openOnly" to "true")).containsExactly(both)
     }
@@ -225,9 +219,10 @@ internal class StoreSearchQueryIntegrationTest {
                 .search(command(limit = "50"))
                 .items
                 .map(StoreSearchItemView::storeId)
+        stores.forEach { fixture.replaceOperatingHours(it, currentlyOpen = false) }
         // 정렬 순서상 첫 매장과 마지막 매장만 가용하다. 가운데 넷은 page를 짧게 만든다.
-        fixture.indexPickupSlot(expected.first(), clock.instant())
-        fixture.indexPickupSlot(expected.last(), clock.instant())
+        fixture.replaceOperatingHours(expected.first(), currentlyOpen = true)
+        fixture.replaceOperatingHours(expected.last(), currentlyOpen = true)
         assertThat(stores).containsExactlyInAnyOrderElementsOf(expected)
 
         val walked = mutableListOf<UUID>()
@@ -254,8 +249,9 @@ internal class StoreSearchQueryIntegrationTest {
                 .items
                 .map(StoreSearchItemView::storeId)
         assertThat(ordered).hasSameSizeAs(stores)
+        stores.forEach { fixture.replaceOperatingHours(it, currentlyOpen = false) }
         // 가용 매장은 마지막 하나뿐이라 첫 두 쪽은 완전히 빈다.
-        fixture.indexPickupSlot(ordered.last(), clock.instant())
+        fixture.replaceOperatingHours(ordered.last(), currentlyOpen = true)
 
         val first = search.search(command(limit = "2", pickupAvailable = "true"))
         assertThat(first.items).isEmpty()
@@ -434,7 +430,8 @@ internal class StoreSearchQueryIntegrationTest {
         val stores = (0 until 4).map { position -> fixture.indexStore(name = "스타벅스 ${position}호점") }
         val ordered = search.search(command(limit = "50")).items.map(StoreSearchItemView::storeId)
         assertThat(ordered).hasSameSizeAs(stores)
-        fixture.indexPickupSlot(ordered.last(), clock.instant())
+        stores.forEach { fixture.replaceOperatingHours(it, currentlyOpen = false) }
+        fixture.replaceOperatingHours(ordered.last(), currentlyOpen = true)
         val before = emptySearchCount()
 
         val page = search.search(command(limit = "2", pickupAvailable = "true"))

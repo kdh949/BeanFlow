@@ -42,6 +42,8 @@ internal class OrderCreationResponseFactory(
                     acceptanceWarningRequestedAt = null,
                     acceptanceDeadlineAt = order.acceptanceDeadlineAt,
                     acceptedAt = null,
+                    preparationMinutes = null,
+                    estimatedReadyAt = null,
                     rejectedAt = null,
                     preparingAt = null,
                     readyAt = null,

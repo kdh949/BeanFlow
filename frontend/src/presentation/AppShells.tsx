@@ -4,13 +4,14 @@ import {
   Bell, Headset, Home, ReceiptText, Search, ShieldCheck, ShoppingBag, Store, UserRound,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Link, NavLink, Outlet } from "react-router";
+import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { ApiRequestError, unwrap } from "../api/client";
 import { customerApi } from "../api/customerClient";
 import { operationsAuth, useOperationsAuth } from "../auth/session";
 import { BrandLockup, ButtonLink } from "../design-system";
 import { merchantSession, requestMerchantStores, useMerchantSession } from "../features/auth/merchant/merchantSession";
 import { CUSTOMER_NOTIFICATION_SUMMARY_CHANGED } from "../features/notification/notificationSummary";
+import { cartItemCount, useCart } from "../features/ordering/cart";
 import { ConsoleFrame, type ConsoleAccess, type ConsoleKind } from "./ConsoleFrame";
 import "./beanflow-refresh/refresh.css";
 
@@ -58,7 +59,7 @@ export function CustomerShell() {
             <NotificationAction />
           </div>
         </header>
-        <main className="bfr-customer-content"><DemoJourneyFrame surface="customer"><Outlet /></DemoJourneyFrame></main>
+        <main className="bfr-customer-content"><DemoJourneyFrame surface="customer"><Outlet /><CustomerCartAction /></DemoJourneyFrame></main>
         <nav className="bfr-customer-tabs" aria-label="고객 메뉴">
           <NavLink to="/app" end><Home size={20} /><span>홈</span></NavLink>
           <NavLink to="/app/stores"><Search size={20} /><span>매장</span></NavLink>
@@ -68,6 +69,19 @@ export function CustomerShell() {
       </div>
     </div>
   );
+}
+
+/** Keeps a populated cart reachable throughout the customer home and store browsing surfaces. */
+export function CustomerCartAction() {
+  const location = useLocation();
+  const state = useCart();
+  const count = cartItemCount(state);
+  const shoppingSurface = location.pathname === "/app"
+    || location.pathname === "/app/"
+    || location.pathname === "/app/stores"
+    || location.pathname.startsWith("/app/stores/");
+  if (!shoppingSurface || count === 0) return null;
+  return <div className="bfr-floating-cart"><ButtonLink variant="brand" size="xl" block to="/app/cart"><ShoppingBag size={18} aria-hidden="true" />장바구니 {count}개 보기</ButtonLink></div>;
 }
 
 /** Shared session adapter for all console routes. */

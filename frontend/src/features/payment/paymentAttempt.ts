@@ -1,8 +1,42 @@
 import type { components } from "../../api/schema";
 
-export type PaymentAttempt = Omit<components["schemas"]["OneTimePaymentAttempt"], "orderId"> & { orderId?: string; orderReference?: string };
+export type CheckoutCartContext = {
+  cartRevision?: string;
+  cartStoreId: string;
+  couponIssuanceId?: string;
+};
+
+export type PaymentAttempt = Omit<components["schemas"]["OneTimePaymentAttempt"], "orderId"> & {
+  orderId?: string;
+  orderReference?: string;
+  checkoutCart?: CheckoutCartContext;
+};
 
 const KEY_PREFIX = "beanflow.payment-attempt.";
+const CHECKOUT_CART_PREFIX = "beanflow.customer.checkout-cart.";
+
+export const checkoutCartStorage = {
+  save(orderReference: string, context: CheckoutCartContext) {
+    sessionStorage.setItem(`${CHECKOUT_CART_PREFIX}${orderReference}`, JSON.stringify(context));
+  },
+  get(orderReference: string): CheckoutCartContext | null {
+    const value = sessionStorage.getItem(`${CHECKOUT_CART_PREFIX}${orderReference}`);
+    if (!value) return null;
+    try {
+      const context = JSON.parse(value) as Partial<CheckoutCartContext>;
+      return (context.cartRevision === undefined || typeof context.cartRevision === "string")
+        && (context.couponIssuanceId === undefined || typeof context.couponIssuanceId === "string")
+        && typeof context.cartStoreId === "string"
+        ? context as CheckoutCartContext
+        : null;
+    } catch {
+      return null;
+    }
+  },
+  remove(orderReference: string) {
+    sessionStorage.removeItem(`${CHECKOUT_CART_PREFIX}${orderReference}`);
+  },
+};
 
 /**
  * The attempt the browser opened the payment window with. It exists only to
@@ -10,8 +44,12 @@ const KEY_PREFIX = "beanflow.payment-attempt.";
  * the source of the amount that gets approved.
  */
 export const attemptStorage = {
-  save(attempt: PaymentAttempt) {
-    sessionStorage.setItem(`${KEY_PREFIX}${attempt.paymentId}`, JSON.stringify(attempt));
+  save(attempt: PaymentAttempt, checkoutCart?: CheckoutCartContext) {
+    const previous = this.get(attempt.paymentId);
+    sessionStorage.setItem(`${KEY_PREFIX}${attempt.paymentId}`, JSON.stringify({
+      ...attempt,
+      checkoutCart: checkoutCart ?? previous?.checkoutCart,
+    }));
   },
   get(paymentId: string): PaymentAttempt | null {
     const value = sessionStorage.getItem(`${KEY_PREFIX}${paymentId}`);
@@ -21,6 +59,9 @@ export const attemptStorage = {
     } catch {
       return null;
     }
+  },
+  remove(paymentId: string) {
+    sessionStorage.removeItem(`${KEY_PREFIX}${paymentId}`);
   },
 };
 

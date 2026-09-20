@@ -18,6 +18,7 @@ import io.micrometer.core.instrument.Timer
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataAccessException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.TransactionException
 import java.time.Clock
 import java.util.UUID
 
@@ -25,6 +26,7 @@ import java.util.UUID
 internal class PaymentConfirmationService(
     private val preparationTransaction: PaymentPreparationTransaction,
     private val resultTransaction: PaymentResultTransaction,
+    private val commitmentRecovery: PaymentCommitmentRecoveryTransaction,
     private val paymentOperations: ExternalPaymentOperations,
     private val responseFactory: PaymentConfirmationResponseFactory,
     private val orderReferenceProjection: PaymentOrderReferenceProjection,
@@ -118,16 +120,47 @@ internal class PaymentConfirmationService(
                         is ProviderPaymentResult.Unknown -> "unknown"
                     }
                 meterRegistry.counter("beanflow.payment.approval.attempts", "outcome", outcome).increment()
+                val appliedAt = clock.instant()
                 try {
                     phaseTelemetry.observe(PerformanceOperation.PAYMENT_CONFIRM, PerformanceStage.RESULT_APPLY) {
-                        resultTransaction.apply(customerId, orderId, preparation.paymentId, result, clock.instant())
+                        resultTransaction.apply(customerId, orderId, preparation.paymentId, result, appliedAt)
                     }
+                } catch (failure: ImmediatePaymentCommitmentFailure) {
+                    recoverApproved(customerId, orderId, preparation.paymentId, result, failure.failureCode.name, appliedAt)
                 } catch (failure: DataAccessException) {
-                    throw DomainFailure(
-                        FailureCode.DEPENDENCY_UNAVAILABLE,
-                        "Payment result could not be committed and will be reconciled",
-                    )
+                    recoverApproved(customerId, orderId, preparation.paymentId, result, FailureCode.DEPENDENCY_UNAVAILABLE.name, appliedAt)
+                } catch (failure: TransactionException) {
+                    recoverApproved(customerId, orderId, preparation.paymentId, result, FailureCode.DEPENDENCY_UNAVAILABLE.name, appliedAt)
                 }
             }
         }
+
+    private fun recoverApproved(
+        customerId: UUID,
+        orderId: UUID,
+        paymentId: UUID,
+        result: ProviderPaymentResult,
+        failureCode: String,
+        now: java.time.Instant,
+    ): StoredHttpResponse {
+        val approved =
+            result as? ProviderPaymentResult.Approved
+                ?: throw DomainFailure(
+                    FailureCode.DEPENDENCY_UNAVAILABLE,
+                    "Payment result could not be committed and will be reconciled",
+                )
+        return try {
+            commitmentRecovery.recoverApproved(customerId, orderId, paymentId, approved, failureCode, now)
+        } catch (failure: DataAccessException) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Approved payment recovery could not be committed and will be retried by reconciliation",
+            )
+        } catch (failure: TransactionException) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Approved payment recovery could not be committed and will be retried by reconciliation",
+            )
+        }
+    }
 }

@@ -28,7 +28,7 @@ import java.util.UUID
 
 internal data class RequestDataAccessGrantRequest(
     @field:NotNull
-    val verificationSessionId: UUID?,
+    val subjectLinkId: UUID?,
     @field:NotNull
     val purpose: VerificationPurpose?,
     @field:NotEmpty @field:Size(max = 4)
@@ -79,7 +79,7 @@ internal class DataAccessGrantController(
                 RequestDataAccessGrantCommand(
                     actor.actorId(),
                     caseId,
-                    request.verificationSessionId ?: invalid(),
+                    request.subjectLinkId ?: invalid(),
                     request.purpose ?: invalid(),
                     request.fields,
                     request.reasonCode ?: invalid(),

@@ -178,6 +178,98 @@ internal class SupportActionRequestMigrationTest : IsolatedPostgresSupport() {
         }.isInstanceOf(DataIntegrityViolationException::class.java)
     }
 
+    @Test
+    fun `V91 preserves actual legacy approvals and publishes a separate direct policy`() {
+        flyway(cleanDisabled = false).clean()
+        Flyway
+            .configure()
+            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+            .locations("classpath:db/migration")
+            .target("90")
+            .load()
+            .migrate()
+        val binding = insertBinding()
+        val request = UUID.randomUUID()
+        insertRequest(binding, request, MANAGER, null, REQUESTER)
+        val revision = insertRevision(binding, request, 1)
+        insertApprovalStep(UUID.randomUUID(), request, revision, 1)
+        flyway().migrate()
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT authorization_basis FROM support_action_revision WHERE id = ?",
+                String::class.java,
+                revision,
+            ),
+        ).isEqualTo("LEGACY")
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT verification_session_id FROM support_action_revision WHERE id = ?",
+                UUID::class.java,
+                revision,
+            ),
+        ).isEqualTo(binding.sessionId)
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT decided_by_actor_id FROM support_action_approval_step WHERE revision_id = ?",
+                UUID::class.java,
+                revision,
+            ),
+        ).isEqualTo(MANAGER)
+        assertThat(
+            jdbcTemplate.queryForObject("SELECT state FROM support_action_request WHERE id = ?", String::class.java, request),
+        ).isEqualTo("AWAITING_SUPPORT_MANAGER")
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT authorization_basis FROM support_compensation_policy_version WHERE id = '90000000-0000-0000-0000-000000000001'",
+                String::class.java,
+            ),
+        ).isEqualTo("LEGACY")
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT v.authorization_basis FROM support_compensation_policy_head h JOIN support_compensation_policy_version v ON v.id = h.current_version_id WHERE h.name = 'GOODWILL'",
+                String::class.java,
+            ),
+        ).isEqualTo("SUPPORT_DIRECT")
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM support_compensation_limit_rule WHERE policy_version_id = '90000000-0000-0000-0000-000000000002'",
+                Long::class.java,
+            ),
+        ).isEqualTo(5)
+    }
+
+    @Test
+    fun `V91 enforces a real direct subject binding and independent fifteen minute expiry`() {
+        val binding = insertBinding()
+        val request = UUID.randomUUID()
+        insertRequest(binding, request, null, null, REQUESTER)
+        val revision = insertRevision(binding, request, 1)
+        jdbcTemplate.update(
+            "UPDATE support_action_revision SET authorization_basis = 'SUPPORT_DIRECT', subject_link_id = (SELECT subject_link_id FROM support_verification_session WHERE id = ?), verification_session_id = NULL WHERE id = ?",
+            binding.sessionId,
+            revision,
+        )
+        assertThatThrownBy {
+            jdbcTemplate.update("UPDATE support_action_revision SET subject_link_id = NULL WHERE id = ?", revision)
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            jdbcTemplate.update("UPDATE support_action_revision SET expires_at = created_at + interval '16 minutes' WHERE id = ?", revision)
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            jdbcTemplate.update("UPDATE support_action_revision SET verification_session_id = ? WHERE id = ?", binding.sessionId, revision)
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThatThrownBy {
+            jdbcTemplate.update("UPDATE support_action_revision SET authorization_basis = 'LEGACY' WHERE id = ?", revision)
+        }.isInstanceOf(DataIntegrityViolationException::class.java)
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM support_action_approval_step WHERE revision_id = ?",
+                Long::class.java,
+                revision,
+            ),
+        ).isZero()
+    }
+
     private fun insertBinding(): Binding {
         val caseId = UUID.randomUUID()
         val linkId = UUID.randomUUID()

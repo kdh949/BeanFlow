@@ -126,10 +126,10 @@ internal class SupportOrderChangeExecutionEntity(
     val previousTargetState: String,
     @Column(name = "current_target_state", nullable = false, length = 32)
     val currentTargetState: String,
-    @Column(name = "previous_pickup_slot_id", nullable = false)
-    val previousPickupSlotId: UUID,
-    @Column(name = "current_pickup_slot_id", nullable = false)
-    val currentPickupSlotId: UUID,
+    @Column(name = "previous_pickup_slot_id")
+    val previousPickupSlotId: UUID?,
+    @Column(name = "current_pickup_slot_id")
+    val currentPickupSlotId: UUID?,
     @Column(name = "payment_recovery_state", length = 32)
     val paymentRecoveryState: String?,
     @Column(name = "authorization_id")

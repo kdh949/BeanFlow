@@ -2,6 +2,8 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.ordering.api.CreateOrderUseCase
+import io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase
 import io.github.kdh949.beanflow.payment.api.ProviderPaymentResult
 import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
 import org.hamcrest.Matchers.matchesPattern
@@ -24,6 +26,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.LocalTime
 import java.util.UUID
 
 @Import(TestcontainersConfiguration::class)
@@ -36,6 +39,8 @@ internal class OrderControllerContractTest
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
         private val paymentGateway: ScriptedTestPaymentGateway,
+        private val createOrderUseCase: CreateOrderUseCase,
+        private val orderQuoteUseCase: OrderQuoteUseCase,
     ) {
         @BeforeEach
         fun cleanDatabase() {
@@ -61,7 +66,7 @@ internal class OrderControllerContractTest
                 ).andExpect(status().isCreated)
                 .andExpect(header().string("X-Correlation-Id", matchesPattern(".+")))
                 .andExpect(jsonPath("$.order.state").value("PENDING_PAYMENT"))
-                .andExpect(jsonPath("$.order.reservationExpiresAt").isString)
+                .andExpect(jsonPath("$.order.reservationExpiresAt").doesNotExist())
                 .andExpect(jsonPath("$.order.payableKrw").value(1_000))
                 .andExpect(jsonPath("$.order.currency").value("KRW"))
                 .andExpect(jsonPath("$.order.lines[0].cashPaidKrw").value(1_000))
@@ -138,9 +143,10 @@ internal class OrderControllerContractTest
         }
 
         @Test
-        fun `quote resource contention returns its stable 409 code without writes`() {
+        fun `immediate quote ignores legacy slot capacity without writing reservations`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, slotCapacity = 0)
+            openStore(fixture)
 
             mockMvc
                 .perform(
@@ -151,19 +157,48 @@ internal class OrderControllerContractTest
                                 .authorities(SimpleGrantedAuthority("ROLE_CUSTOMER")),
                         ).contentType(MediaType.APPLICATION_JSON)
                         .content(quoteRequestBody(fixture)),
-                ).andExpect(status().isConflict)
-                .andExpect(jsonPath("$.code").value("PICKUP_SLOT_FULL"))
-                .andExpect(jsonPath("$.correlationId").isNotEmpty)
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.pickupWindow").doesNotExist())
             org.assertj.core.api.Assertions
                 .assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "ordering_order"))
                 .isZero()
+            org.assertj.core.api.Assertions
+                .assertThat(OrderCreationDatabaseFixture.count(jdbcTemplate, "fulfillment_pickup_reservation"))
+                .isZero()
+        }
+
+        @Test
+        fun `legacy pickup input is rejected by immediate quote and create contracts`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            openStore(fixture)
+            val quoteBody = quoteRequestBody(fixture).replaceFirst("{", "{\"pickupSlotId\":\"${fixture.pickupSlotId}\",")
+            val createBody = requestBody(fixture).replaceFirst("{", "{\"pickupSlotId\":\"${fixture.pickupSlotId}\",")
+
+            mockMvc
+                .perform(
+                    post("/api/v1/me/order-quotes")
+                        .with(customerJwt(fixture.customerId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(quoteBody),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            mockMvc
+                .perform(
+                    post("/api/v1/orders")
+                        .with(customerJwt(fixture.customerId))
+                        .header("Idempotency-Key", "legacy-pickup-rejected")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
         }
 
         @Test
         fun `get materializes a due order before returning it`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            createThroughHttp(fixture, "contract-get-001")
+            createLegacyOrder(fixture, "contract-get-001")
             val orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
             makeDue(orderId)
 
@@ -183,7 +218,7 @@ internal class OrderControllerContractTest
         fun `get verifies ownership before materializing expiry`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
-            createThroughHttp(fixture, "contract-get-002")
+            createLegacyOrder(fixture, "contract-get-002")
             val orderId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM ordering_order", UUID::class.java))
             makeDue(orderId)
 
@@ -343,7 +378,6 @@ internal class OrderControllerContractTest
             """
             {
               "storeId": "${fixture.storeId}",
-              "pickupSlotId": "${fixture.pickupSlotId}",
               "lines": [
                 {
                   "menuId": "${fixture.menuId}",
@@ -363,7 +397,6 @@ internal class OrderControllerContractTest
             """
             {
               "storeId": "${fixture.storeId}",
-              "pickupSlotId": "${fixture.pickupSlotId}",
               "lines": [
                 {
                   "menuId": "${fixture.menuId}",
@@ -379,6 +412,7 @@ internal class OrderControllerContractTest
             fixture: OrderCreationFixture,
             pointsToUseKrw: Long = 0,
         ): String {
+            openStore(fixture)
             val body =
                 mockMvc
                     .perform(
@@ -410,6 +444,16 @@ internal class OrderControllerContractTest
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(quotedRequestBody(fixture)),
                 ).andExpect(status().isCreated)
+        }
+
+        private fun createLegacyOrder(
+            fixture: OrderCreationFixture,
+            key: String,
+        ) {
+            val result = createOrderUseCase.create(key, orderQuoteUseCase.attachCurrentQuote(fixture.command()))
+            org.assertj.core.api.Assertions
+                .assertThat(result.status)
+                .isEqualTo(201)
         }
 
         private fun customerJwt(customerId: UUID) =
@@ -452,5 +496,24 @@ internal class OrderControllerContractTest
             val dueAt = Timestamp.from(Instant.now().minusSeconds(1))
             jdbcTemplate.update("UPDATE ordering_order SET reservation_expires_at = ? WHERE id = ?", dueAt, orderId)
             jdbcTemplate.update("UPDATE fulfillment_pickup_reservation SET expires_at = ? WHERE order_id = ?", dueAt, orderId)
+        }
+
+        private fun openStore(fixture: OrderCreationFixture) {
+            val configured =
+                requireNotNull(
+                    jdbcTemplate.queryForObject(
+                        "SELECT count(*) FROM merchant_store_operating_hours WHERE store_id = ?",
+                        Long::class.java,
+                        fixture.storeId,
+                    ),
+                )
+            if (configured == 0L) {
+                OrderCreationDatabaseFixture.insertOperatingHours(
+                    jdbcTemplate,
+                    fixture.storeId,
+                    LocalTime.of(0, 1),
+                    LocalTime.of(23, 59),
+                )
+            }
         }
     }

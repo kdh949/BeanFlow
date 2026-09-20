@@ -72,7 +72,7 @@ internal class MerchantDisplayContentTransaction(
         command: ReplaceStoreCustomerDisplayCommand,
         now: Instant,
     ): StoreCustomerDisplaySnapshot {
-        storeAccess.requireStoreAccess(actorId, command.storeId, PROFILE_ROLES)
+        storeAccess.requireStoreAuthoringAccess(actorId, command.storeId, PROFILE_ROLES)
         val change = profiles.replace(command, now)
         if (change.changed) auditProfile(actorId, command.storeId, change, now)
         return change.current

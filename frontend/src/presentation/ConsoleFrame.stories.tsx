@@ -75,4 +75,4 @@ export const SupportCases: Story = { args: { kind: "support", children: <PageHea
 
 export const SupportInvestigations: Story = { args: { kind: "ops" }, play: async ({ canvas }) => { await expect(canvas.getByRole("link", { name: "상담 요청 검토" })).toHaveAttribute("href", "/ops/support-investigations"); } };
 
-export const SupportApprovals: Story = { args: { kind: "support", children: <PageHeading title="고객지원" /> }, play: async ({ canvas }) => { const menu = canvas.queryByRole("button", { name: /업무 메뉴/ }); if (menu && menu.getClientRects().length > 0) await userEvent.click(menu); await expect(canvas.getByRole("link", { name: "승인함" })).toHaveAttribute("href", "/support/approvals"); } };
+export const SupportApprovals: Story = { args: { kind: "support", children: <PageHeading title="고객지원" /> }, play: async ({ canvas }) => { const menu = canvas.queryByRole("button", { name: /업무 메뉴/ }); if (menu && menu.getClientRects().length > 0) await userEvent.click(menu); await expect(canvas.getByRole("link", { name: "승인 이력·사후 검토" })).toHaveAttribute("href", "/support/approvals"); } };

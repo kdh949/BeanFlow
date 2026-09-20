@@ -33,7 +33,6 @@ import java.util.UUID
 
 data class CreateOrderRequest(
     val storeId: UUID,
-    val pickupSlotId: UUID,
     @field:NotEmpty
     val lines: List<@Valid CreateOrderLineRequest>,
     val couponIssuanceId: UUID?,
@@ -41,17 +40,28 @@ data class CreateOrderRequest(
     val pointsToUseKrw: Long,
     @field:Pattern(regexp = "[0-9a-f]{64}")
     val expectedQuoteFingerprint: String,
-)
+) {
+    @JsonAnySetter
+    fun rejectUnknownField(
+        @Suppress("UNUSED_PARAMETER") name: String,
+        @Suppress("UNUSED_PARAMETER") value: Any?,
+    ): Unit = throw IllegalArgumentException("Unknown create order request field")
+}
 
 data class OrderQuoteRequest(
     val storeId: UUID,
-    val pickupSlotId: UUID,
     @field:NotEmpty
     val lines: List<@Valid CreateOrderLineRequest>,
     val couponIssuanceId: UUID?,
     @field:Min(0)
     val pointsToUseKrw: Long,
-)
+) {
+    @JsonAnySetter
+    fun rejectUnknownField(
+        @Suppress("UNUSED_PARAMETER") name: String,
+        @Suppress("UNUSED_PARAMETER") value: Any?,
+    ): Unit = throw IllegalArgumentException("Unknown order quote request field")
+}
 
 data class CreateOrderLineRequest(
     val menuId: UUID,
@@ -61,7 +71,6 @@ data class CreateOrderLineRequest(
 )
 
 data class ReorderOrderRequest(
-    val pickupSlotId: UUID,
     val couponIssuanceId: UUID?,
     @field:Min(0)
     val pointsToUseKrw: Long,
@@ -98,7 +107,7 @@ internal class OrderController(
                     CreateOrderCommand(
                         customerId = customerId,
                         storeId = request.storeId,
-                        pickupSlotId = request.pickupSlotId,
+                        pickupSlotId = null,
                         lines =
                             request.lines.map {
                                 CreateOrderLineCommand(it.menuId, it.optionIds, it.quantity)
@@ -131,7 +140,7 @@ internal class OrderController(
                     ReorderOrderCommand(
                         customerId = customerId(actor),
                         sourceOrderId = sourceOrderId,
-                        pickupSlotId = request.pickupSlotId,
+                        pickupSlotId = null,
                         couponIssuanceId = request.couponIssuanceId,
                         pointsToUseKrw = request.pointsToUseKrw,
                     ),
@@ -204,7 +213,7 @@ internal class OrderQuoteController(
             OrderQuoteCommand(
                 customerId = customerId(actor),
                 storeId = request.storeId,
-                pickupSlotId = request.pickupSlotId,
+                pickupSlotId = null,
                 lines = request.lines.map { CreateOrderLineCommand(it.menuId, it.optionIds, it.quantity) },
                 couponIssuanceId = request.couponIssuanceId,
                 pointsToUseKrw = request.pointsToUseKrw,

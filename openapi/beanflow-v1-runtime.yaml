@@ -3,7 +3,7 @@ info:
   title: BeanFlow API — Runtime Contract
   version: 0.3.0
   x-beanflow-contract-status: runtime
-  x-beanflow-contract-date: 2026-08-14
+  x-beanflow-contract-date: 2026-09-16
   description: |
     BeanFlow는 다점포 카페의 선주문부터 결제, 픽업, 포인트, 정산, 환불 조정과
     이의제기까지 이어지는 거래 생명주기를 다루는 플랫폼입니다. 이 문서는 Controller

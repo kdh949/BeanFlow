@@ -53,7 +53,7 @@ internal class SubmitSupportProfileChangeHandler(
         val resource =
             if (command.payload.purpose
                     .descriptor()
-                    .requiresDualApproval
+                    .requiresExecutionRequest
             ) {
                 transactions.requestApproval(profileChangeId, command, payloadDigest, ownerVersion)
             } else {

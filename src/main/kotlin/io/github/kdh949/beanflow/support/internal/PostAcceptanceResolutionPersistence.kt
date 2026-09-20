@@ -9,6 +9,7 @@ import io.github.kdh949.beanflow.support.internal.domain.PostAcceptanceResolutio
 import io.github.kdh949.beanflow.support.internal.domain.PostAcceptanceResolutionStepState
 import io.github.kdh949.beanflow.support.internal.domain.PostAcceptanceResolutionStepType
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionType
+import io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -84,6 +85,9 @@ internal class PostAcceptanceResolutionEntity(
     val retentionExpiresAt: Instant,
     @Column(nullable = false)
     var version: Long,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "authorization_basis", nullable = false, length = 24)
+    var authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
 ) {
     fun toDomain(steps: List<PostAcceptanceResolutionStepEntity>): PostAcceptanceResolutionCase =
         PostAcceptanceResolutionCase.restore(

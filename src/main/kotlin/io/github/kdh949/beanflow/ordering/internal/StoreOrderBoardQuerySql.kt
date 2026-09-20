@@ -41,7 +41,7 @@ internal object StoreOrderBoardQuerySql {
         SELECT id, public_reference, pickup_sequence, pickup_business_date, state,
                pickup_window_start_snapshot, pickup_window_end_snapshot,
                acceptance_warning_at, acceptance_deadline_at,
-               paid_at, accepted_at, preparing_at, ready_at, completed_at
+               paid_at, accepted_at, preparing_at, ready_at, completed_at, estimated_ready_at
           FROM $table
         """.trimIndent()
 
@@ -60,7 +60,7 @@ internal object StoreOrderBoardQuerySql {
             StoreOrderBoardLane.ACCEPTED,
             StoreOrderBoardLane.PREPARING,
             StoreOrderBoardLane.READY,
-            -> "pickup_window_start_snapshot"
+            -> "COALESCE(pickup_window_start_snapshot, estimated_ready_at)"
         }
 
     const val ORDER_TABLE = "ordering_order"

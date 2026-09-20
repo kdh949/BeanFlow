@@ -6,6 +6,7 @@ import { ErrorState } from "../../../presentation/shared";
 import type { components } from "../../../api/schema";
 import { unwrap } from "../../../api/client";
 import { customerApi } from "../../../api/customerClient";
+import { couponWalletPath } from "../../customer/couponNavigation";
 import { useResource } from "../../shared/useResource";
 import { useCart } from "../../ordering/cart";
 import { FeedbackState, ButtonLink, PageHeading } from "../../../design-system";
@@ -71,5 +72,5 @@ function MyBenefits() {
 
 function MyStoreCoupons({ storeId, storeName }: { storeId: string; storeName: string }) {
   const wallet = useResource<components["schemas"]["CustomerCouponWalletPage"]>(useCallback(async () => unwrap(await customerApi.GET("/me/coupons", { params: { query: { storeId, limit: 20 } } })), [storeId]));
-  return <div className="surface-card"><h2>{storeName} 쿠폰</h2>{wallet.state.status === "loading" ? <FeedbackState kind="loading" title="쿠폰 확인 중" description="잠시만 기다려 주세요." /> : wallet.state.status === "failed" ? <ErrorState error={wallet.state.error} retry={wallet.reload} /> : <><strong className="bfr-benefit-amount">{wallet.state.value.items.filter((item) => item.applicable).length}개{wallet.state.value.page.nextCursor ? " 이상" : ""}</strong><p>이 매장에 적용되는 쿠폰입니다. 최소 주문 금액 등 사용 조건을 확인해 주세요.</p></>}<ButtonLink variant="ghost" to={`/app/coupons?storeId=${encodeURIComponent(storeId)}`}>쿠폰 확인</ButtonLink></div>;
+  return <div className="surface-card"><h2>{storeName} 쿠폰</h2>{wallet.state.status === "loading" ? <FeedbackState kind="loading" title="쿠폰 확인 중" description="잠시만 기다려 주세요." /> : wallet.state.status === "failed" ? <ErrorState error={wallet.state.error} retry={wallet.reload} /> : <><strong className="bfr-benefit-amount">{wallet.state.value.items.filter((item) => item.applicable).length}개{wallet.state.value.page.nextCursor ? " 이상" : ""}</strong><p>이 매장에 적용되는 쿠폰입니다. 최소 주문 금액 등 사용 조건을 확인해 주세요.</p></>}<ButtonLink variant="ghost" to={couponWalletPath(storeId, "/app/me")}>쿠폰 확인</ButtonLink></div>;
 }

@@ -36,6 +36,7 @@ import io.github.kdh949.beanflow.support.internal.domain.ProfileChangePurpose
 import io.github.kdh949.beanflow.support.internal.domain.ProfileOwnerType
 import io.github.kdh949.beanflow.support.internal.domain.ProfileRiskClass
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionRequestState
+import io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis
 import io.github.kdh949.beanflow.support.internal.domain.SupportCaseState
 import io.github.kdh949.beanflow.support.internal.domain.SupportProfileChange
 import io.github.kdh949.beanflow.support.internal.domain.SupportProfileChangeState
@@ -228,8 +229,6 @@ internal class SupportProfileChangeTransactionService(
     private val idempotencies: SupportProfileChangeIdempotencyJpaRepository,
     private val cases: SupportCaseJpaRepository,
     private val subjectLinks: SupportCaseSubjectLinkJpaRepository,
-    private val sessions: VerificationSessionJpaRepository,
-    private val challenges: VerificationChallengeJpaRepository,
     private val actionRequests: SupportActionRequestJpaRepository,
     private val actionRevisions: SupportActionRevisionJpaRepository,
     private val permissions: OperatorPermissionAuthorization,
@@ -268,7 +267,7 @@ internal class SupportProfileChangeTransactionService(
                 command.actorId,
                 null,
                 command.profileChangeId,
-                command.verificationSessionId,
+                null,
                 digest,
                 command.expectedActionRequestVersion,
                 command.reason,
@@ -311,12 +310,11 @@ internal class SupportProfileChangeTransactionService(
             command.caseId,
             command.subjectId,
             command.payload.purpose,
-            command.verificationSessionId,
+            null,
             ownerVersion,
             command.expectedProfileVersion,
         )
-        val session = sessions.findLockedById(command.verificationSessionId) ?: notFound("VerificationSession")
-        return ProfileChangePreflight(session.expiresAt, ownerVersion)
+        return ProfileChangePreflight(clock.instant().plus(SUPPORT_DIRECT_REQUEST_TTL), ownerVersion)
     }
 
     @Transactional
@@ -336,13 +334,13 @@ internal class SupportProfileChangeTransactionService(
             command.caseId,
             command.subjectId,
             command.payload.purpose,
-            command.verificationSessionId,
+            null,
             ownerVersion,
             command.expectedProfileVersion,
         )
         if (command.payload.purpose
                 .descriptor()
-                .requiresDualApproval
+                .requiresExecutionRequest
         ) {
             invalid("Approved profile change cannot use direct execution")
         }
@@ -355,13 +353,17 @@ internal class SupportProfileChangeTransactionService(
                 command.subjectId,
                 command.payload.purpose,
                 command.actorId,
-                command.verificationSessionId,
+                null,
                 command.expectedProfileVersion,
                 payloadDigest,
                 result,
                 now,
             )
-        val entity = aggregate.toEntity()
+        val entity =
+            aggregate.toEntity().also {
+                it.authorizationBasis = SupportAuthorizationBasis.SUPPORT_DIRECT
+                it.subjectLinkId = profileSubjectLink(command.caseId, command.subjectId, command.payload.purpose)
+            }
         changes.saveAndFlush(entity)
         saveNotificationLines(entity, result, now)
         appendAudit(entity, command.actorId, "SUPPORT_PROFILE_CHANGE_EXECUTED", "DIRECT_CHANGE", now)
@@ -386,18 +388,17 @@ internal class SupportProfileChangeTransactionService(
             command.caseId,
             command.subjectId,
             command.payload.purpose,
-            command.verificationSessionId,
+            null,
             ownerVersion,
             command.expectedProfileVersion,
         )
         if (!command.payload.purpose
                 .descriptor()
-                .requiresDualApproval
+                .requiresExecutionRequest
         ) {
             invalid("Direct profile change cannot request approval")
         }
         val now = clock.instant()
-        val session = sessions.findLockedById(command.verificationSessionId) ?: notFound("VerificationSession")
         val actionRequestId = identifiers.next()
         profileApprovals.open(
             OpenProfileChangeApprovalCommand(
@@ -406,13 +407,14 @@ internal class SupportProfileChangeTransactionService(
                 profileChangeId,
                 command.caseId,
                 command.actorId,
-                command.verificationSessionId,
+                null,
                 command.expectedProfileVersion,
                 payloadDigest,
                 command.reason,
                 command.evidenceDigest,
-                session.expiresAt,
+                now.plus(SUPPORT_DIRECT_REQUEST_TTL),
                 now,
+                profileSubjectLink(command.caseId, command.subjectId, command.payload.purpose),
             ),
         )
         val aggregate =
@@ -422,15 +424,20 @@ internal class SupportProfileChangeTransactionService(
                 command.subjectId,
                 command.payload.purpose,
                 command.actorId,
-                command.verificationSessionId,
+                null,
                 command.expectedProfileVersion,
                 payloadDigest,
                 actionRequestId,
                 now,
             )
-        val entity = aggregate.toEntity()
+        aggregate.readyForDirectExecution()
+        val entity =
+            aggregate.toEntity().also {
+                it.authorizationBasis = SupportAuthorizationBasis.SUPPORT_DIRECT
+                it.subjectLinkId = profileSubjectLink(command.caseId, command.subjectId, command.payload.purpose)
+            }
         changes.saveAndFlush(entity)
-        appendAudit(entity, command.actorId, "SUPPORT_PROFILE_CHANGE_REQUESTED", "DUAL_APPROVAL_REQUESTED", now)
+        appendAudit(entity, command.actorId, "SUPPORT_PROFILE_CHANGE_REQUESTED", "SUPPORT_DIRECT_REQUESTED", now)
         val response = resource(entity)
         saveIdempotency(command.actorId, operation, command.idempotencyKey, payloadHash, entity.id, response, 201, now)
         return response
@@ -462,7 +469,7 @@ internal class SupportProfileChangeTransactionService(
                 command.actorId,
                 null,
                 command.profileChangeId,
-                command.verificationSessionId,
+                null,
                 payloadDigest,
                 command.expectedActionRequestVersion,
                 command.reason,
@@ -480,34 +487,38 @@ internal class SupportProfileChangeTransactionService(
             entity.supportCaseId,
             entity.subjectId,
             entity.purpose,
-            command.verificationSessionId,
+            null,
             ownerVersion,
             command.expectedProfileVersion,
         )
-        val session = sessions.findLockedById(command.verificationSessionId) ?: notFound("VerificationSession")
+        val revisionTime = clock.instant()
         profileApprovals.revise(
             ReviseProfileChangeApprovalCommand(
                 entity.id,
                 requireNotNull(entity.actionRequestId),
                 command.actorId,
                 command.expectedActionRequestVersion,
-                command.verificationSessionId,
+                null,
                 command.expectedProfileVersion,
                 payloadDigest,
                 command.reason,
                 command.evidenceDigest,
-                session.expiresAt,
-                clock.instant(),
+                revisionTime.plus(SUPPORT_DIRECT_REQUEST_TTL),
+                revisionTime,
+                profileSubjectLink(entity.supportCaseId, entity.subjectId, entity.purpose),
             ),
         )
+        requireDirectAuthorization(entity.authorizationBasis)
+        entity.subjectLinkId = profileSubjectLink(entity.supportCaseId, entity.subjectId, entity.purpose)
         val aggregate = entity.toAggregate()
         aggregate.reviseBinding(
             command.actorId,
-            command.verificationSessionId,
+            null,
             command.expectedProfileVersion,
             payloadDigest,
             clock.instant(),
         )
+        aggregate.readyForDirectExecution()
         entity.apply(aggregate)
         changes.saveAndFlush(entity)
         appendAudit(entity, command.actorId, "SUPPORT_PROFILE_CHANGE_REQUESTED", "REVISION_CREATED", clock.instant())
@@ -523,13 +534,21 @@ internal class SupportProfileChangeTransactionService(
         permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_ACTION_EXECUTE)
         permissions.requireActive(command.actorId, OperatorPermission.SUPPORT_PROFILE_R3_REQUEST)
         val entity = changes.findLockedById(command.profileChangeId) ?: notFound("ProfileChange")
+        val supportCase = cases.findLockedById(entity.supportCaseId) ?: notFound("SupportCase")
+        if (entity.executorActorId != command.actorId || supportCase.currentAssigneeId != command.actorId ||
+            supportCase.state !in ACTIVE_CASE_STATES
+        ) {
+            denied()
+        }
+        requireDirectAuthorization(entity.authorizationBasis)
         if (entity.version != command.expectedProfileChangeVersion || entity.actionRequestId == null ||
             entity.state == SupportProfileChangeState.EXECUTED
         ) {
             stale()
         }
         val request = actionRequests.findLockedById(requireNotNull(entity.actionRequestId)) ?: notFound("SupportActionRequest")
-        if (request.executorActorId != command.actorId || request.currentRevisionNumber != command.revisionNumber ||
+        if (entity.requesterActorId != command.actorId || request.requesterActorId != command.actorId ||
+            request.executorActorId != command.actorId || request.currentRevisionNumber != command.revisionNumber ||
             request.version != command.expectedActionRequestVersion || request.state != SupportActionRequestState.READY_FOR_EXECUTION
         ) {
             stale()
@@ -586,7 +605,7 @@ internal class SupportProfileChangeTransactionService(
                 now,
             ),
         )
-        appendAudit(entity, command.actorId, "SUPPORT_PROFILE_CHANGE_EXECUTED", "APPROVED_CHANGE", now)
+        appendAudit(entity, command.actorId, "SUPPORT_PROFILE_CHANGE_EXECUTED", "SUPPORT_DIRECT_EXECUTED", now)
         val response = resource(entity)
         saveIdempotency(command.actorId, operation, command.idempotencyKey, hash, entity.id, response, 200, now)
         return response
@@ -791,12 +810,23 @@ internal class SupportProfileChangeTransactionService(
         if (command.expectedProfileVersion < 0) invalid("Expected profile version cannot be negative")
     }
 
+    private fun profileSubjectLink(
+        caseId: UUID,
+        subjectId: UUID,
+        purpose: ProfileChangePurpose,
+    ): UUID =
+        subjectLinks
+            .findBySupportCaseIdAndUnlinkedAtIsNullOrderByLinkedAtAsc(caseId)
+            .singleOrNull {
+                it.subjectType == purpose.descriptor().owner.supportSubjectType() && it.subjectId == subjectId
+            }?.id ?: denied()
+
     private fun validateScope(
         actorId: UUID,
         caseId: UUID,
         subjectId: UUID,
         purpose: ProfileChangePurpose,
-        sessionId: UUID,
+        sessionId: UUID?,
         ownerVersion: Long,
         expectedVersion: Long,
     ) {
@@ -817,7 +847,7 @@ internal class SupportProfileChangeTransactionService(
                 ProfileRiskClass.R0 -> invalid("R0 profile fields are immutable")
             },
         )
-        if (descriptor.requiresDualApproval) permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_REQUEST)
+        if (descriptor.requiresExecutionRequest) permissions.requireActive(actorId, OperatorPermission.SUPPORT_ACTION_REQUEST)
         if (ownerVersion != expectedVersion) stale()
         val supportCase = cases.findLockedById(caseId) ?: notFound("SupportCase")
         if (supportCase.currentAssigneeId != actorId || supportCase.state !in ACTIVE_CASE_STATES) denied()
@@ -825,25 +855,6 @@ internal class SupportProfileChangeTransactionService(
             subjectLinks.findBySupportCaseIdAndUnlinkedAtIsNullOrderByLinkedAtAsc(caseId).singleOrNull {
                 it.subjectType == descriptor.owner.supportSubjectType() && it.subjectId == subjectId
             } ?: denied()
-        val session = sessions.findLockedById(sessionId) ?: notFound("VerificationSession")
-        val requiredLevel = if (descriptor.risk == ProfileRiskClass.R1) VerificationLevel.BASIC else VerificationLevel.ENHANCED
-        if (session.actorId != actorId || session.supportCaseId != caseId || session.subjectLinkId != link.id ||
-            session.subjectId != subjectId || session.subjectType != descriptor.owner.verificationSubjectType() ||
-            session.purpose != VerificationPurpose.CASE_RESOLUTION || session.actionScope != VerificationActionScope.SUPPORT_ACTION ||
-            session.state != VerificationState.VERIFIED || !session.requestedLevel.satisfies(requiredLevel) ||
-            !clock.instant().isBefore(session.expiresAt)
-        ) {
-            deniedVerification()
-        }
-        if (purpose == ProfileChangePurpose.CUSTOMER_PRIMARY_PHONE) {
-            val channels = challenges.findDistinctChannelsBySessionIdAndState(session.id, ChallengeState.VERIFIED)
-            if (channels.none { it == VerificationChannel.REGISTERED_PHONE || it == VerificationChannel.REGISTERED_EMAIL }) {
-                throw DomainFailure(
-                    FailureCode.VERIFICATION_REQUIRED,
-                    "Primary-phone change requires verification through a previously registered channel",
-                )
-            }
-        }
     }
 
     private fun validateExecutionScope(
@@ -869,31 +880,15 @@ internal class SupportProfileChangeTransactionService(
             } ?: denied()
         val request = actionRequests.findLockedById(requireNotNull(entity.actionRequestId)) ?: notFound("SupportActionRequest")
         val revision = actionRevisions.findByRequestIdAndRevisionNumber(request.id, request.currentRevisionNumber) ?: dependency()
-        val session = sessions.findLockedById(revision.verificationSessionId) ?: notFound("VerificationSession")
-        if (request.executorActorId != actorId || request.state != SupportActionRequestState.READY_FOR_EXECUTION ||
+        requireDirectAuthorization(entity.authorizationBasis)
+        requireDirectAuthorization(revision.authorizationBasis)
+        if (entity.requesterActorId != actorId || request.requesterActorId != actorId ||
+            request.executorActorId != actorId || request.state != SupportActionRequestState.READY_FOR_EXECUTION ||
             revision.actionPayloadDigest != entity.payloadDigest || revision.targetVersion != ownerVersion ||
-            revision.verificationSessionId != entity.verificationSessionId || !clock.instant().isBefore(revision.expiresAt)
+            revision.subjectLinkId != link.id || entity.subjectLinkId != link.id ||
+            revision.policyVersion != PROFILE_CHANGE_POLICY_VERSION || !clock.instant().isBefore(revision.expiresAt)
         ) {
             stale()
-        }
-        if (session.id != entity.verificationSessionId || session.actorId != entity.requesterActorId ||
-            session.supportCaseId != entity.supportCaseId || session.subjectLinkId != link.id ||
-            session.subjectId != entity.subjectId || session.subjectType != descriptor.owner.verificationSubjectType() ||
-            session.purpose != VerificationPurpose.CASE_RESOLUTION ||
-            session.actionScope != VerificationActionScope.SUPPORT_ACTION ||
-            session.state != VerificationState.VERIFIED || !session.requestedLevel.satisfies(VerificationLevel.ENHANCED) ||
-            !clock.instant().isBefore(session.expiresAt)
-        ) {
-            deniedVerification()
-        }
-        if (entity.purpose == ProfileChangePurpose.CUSTOMER_PRIMARY_PHONE) {
-            val channels = challenges.findDistinctChannelsBySessionIdAndState(session.id, ChallengeState.VERIFIED)
-            if (channels.none { it == VerificationChannel.REGISTERED_PHONE || it == VerificationChannel.REGISTERED_EMAIL }) {
-                throw DomainFailure(
-                    FailureCode.VERIFICATION_REQUIRED,
-                    "Primary-phone change requires verification through a previously registered channel",
-                )
-            }
         }
     }
 
@@ -955,6 +950,7 @@ internal class SupportProfileChangeTransactionService(
                             "event" to event,
                             "purpose" to entity.purpose.name,
                             "riskClass" to entity.riskClass.name,
+                            "authorizationBasis" to entity.authorizationBasis.name,
                             "state" to entity.state.name,
                             "profileVersion" to (entity.currentProfileVersion ?: entity.expectedProfileVersion).toString(),
                         ),
@@ -975,7 +971,7 @@ internal class SupportProfileChangeTransactionService(
             command.actorId,
             command.caseId,
             null,
-            command.verificationSessionId,
+            null,
             digest,
             command.expectedProfileVersion,
             command.reason,
@@ -1055,6 +1051,7 @@ internal class SupportProfileChangeTransactionService(
                     it.attemptCount,
                 )
             },
+            entity.authorizationBasis,
         )
 
     private fun SupportProfileChange.toEntity(): SupportProfileChangeEntity =

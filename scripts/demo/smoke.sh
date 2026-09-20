@@ -128,13 +128,6 @@ print('       menus returned %d item(s) including an unavailable one' % len(d['i
 "
 call "available coupon wallet" 200 GET "/me/coupons?storeId=${STORE_ID}&limit=20" "$CUSTOMER_AUTH"
 python3 -c "import json;d=json.load(open('$BODY_FILE'));assert d['items'];assert any(i['applicable'] for i in d['items']);print('       available applicable coupon present')"
-call "store pickup slots"   200 GET  "/stores/${STORE_ID}/pickup-slots" "$CUSTOMER_AUTH"
-SLOT_ID="$(python3 -c "
-import json;d=json.load(open('$BODY_FILE'))
-assert d['items'], 'no open pickup slot; run stop.sh --reset then start.sh + seed.sh'
-print(d['items'][0]['pickupSlotId'])
-")"
-ok "future pickup slot selected"
 
 log "loyalty baseline"
 call "point account baseline" 200 GET "/point-accounts/${POINT_ACCOUNT_ID}" "$CUSTOMER_AUTH"
@@ -147,7 +140,10 @@ ok "point baseline ${POINT_BALANCE_BEFORE} KRW across ${POINT_TRANSACTION_COUNT_
 
 log "ordering"
 ORDER_KEY="demo-order-${RUN_ID}"
-ORDER_BODY="{\"storeId\":\"${STORE_ID}\",\"pickupSlotId\":\"${SLOT_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[\"${OPTION_ID}\"],\"quantity\":2}],\"pointsToUseKrw\":0}"
+ORDER_INPUT="{\"storeId\":\"${STORE_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[\"${OPTION_ID}\"],\"quantity\":2}],\"pointsToUseKrw\":0}"
+call "quote immediate order" 200 POST "/me/order-quotes" "$CUSTOMER_AUTH" "$ORDER_INPUT"
+ORDER_QUOTE_FINGERPRINT="$(json "d['quoteFingerprint']")"
+ORDER_BODY="{\"storeId\":\"${STORE_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[\"${OPTION_ID}\"],\"quantity\":2}],\"pointsToUseKrw\":0,\"expectedQuoteFingerprint\":\"${ORDER_QUOTE_FINGERPRINT}\"}"
 call "create order"         201 POST "/orders" "$CUSTOMER_AUTH" "$ORDER_BODY" "$ORDER_KEY"
 ORDER_ID="$(python3 -c "import json;print(json.load(open('$BODY_FILE'))['order']['orderId'])")"
 
@@ -157,7 +153,7 @@ REPLAY_ORDER_ID="$(python3 -c "import json;print(json.load(open('$BODY_FILE'))['
 same_resource_or_fail "$REPLAY_ORDER_ID" "$ORDER_ID" "Order replay returned a different resource."
 ok "replay returned the original order"
 
-CHANGED_BODY="{\"storeId\":\"${STORE_ID}\",\"pickupSlotId\":\"${SLOT_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[],\"quantity\":2}],\"pointsToUseKrw\":0}"
+CHANGED_BODY="{\"storeId\":\"${STORE_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[],\"quantity\":2}],\"pointsToUseKrw\":0,\"expectedQuoteFingerprint\":\"${ORDER_QUOTE_FINGERPRINT}\"}"
 call "same key changed payload is 409" 409 POST "/orders" "$CUSTOMER_AUTH" "$CHANGED_BODY" "$ORDER_KEY"
 
 log "payment"
@@ -225,8 +221,12 @@ log "public store fulfilment"
 for transition in "ACCEPT PAID" "START_PREPARING ACCEPTED" "MARK_READY PREPARING" "COMPLETE READY"; do
   action="${transition% *}"
   expected="${transition#* }"
+  transition_body="{\"action\":\"${action}\",\"expectedStatus\":\"${expected}\",\"reason\":null}"
+  if [ "$action" = "ACCEPT" ]; then
+    transition_body="{\"action\":\"${action}\",\"expectedStatus\":\"${expected}\",\"reason\":null,\"preparationMinutes\":10}"
+  fi
   call "public store transition ${action}" 200 POST "/stores/${STORE_ID}/orders/${ORDER_REFERENCE}/transitions" "$MERCHANT_AUTH" \
-    "{\"action\":\"${action}\",\"expectedStatus\":\"${expected}\",\"reason\":null}" "demo-${action}-${RUN_ID}"
+    "$transition_body" "demo-${action}-${RUN_ID}"
 done
 
 log "customer read-back"
@@ -290,7 +290,10 @@ ok "public settlement adjustment and dispute tail verified"
 
 log "unknown confirmation query recovery"
 RECOVERY_ORDER_KEY="demo-recovery-order-${RUN_ID}"
-RECOVERY_ORDER_BODY="{\"storeId\":\"${STORE_ID}\",\"pickupSlotId\":\"${SLOT_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[\"${OPTION_ID}\"],\"quantity\":1}],\"pointsToUseKrw\":0}"
+RECOVERY_ORDER_INPUT="{\"storeId\":\"${STORE_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[\"${OPTION_ID}\"],\"quantity\":1}],\"pointsToUseKrw\":0}"
+call "quote recovery order" 200 POST "/me/order-quotes" "$CUSTOMER_AUTH" "$RECOVERY_ORDER_INPUT"
+RECOVERY_QUOTE_FINGERPRINT="$(json "d['quoteFingerprint']")"
+RECOVERY_ORDER_BODY="{\"storeId\":\"${STORE_ID}\",\"lines\":[{\"menuId\":\"${MENU_ID}\",\"optionIds\":[\"${OPTION_ID}\"],\"quantity\":1}],\"pointsToUseKrw\":0,\"expectedQuoteFingerprint\":\"${RECOVERY_QUOTE_FINGERPRINT}\"}"
 call "create recovery order" 201 POST "/orders" "$CUSTOMER_AUTH" "$RECOVERY_ORDER_BODY" "$RECOVERY_ORDER_KEY"
 RECOVERY_ORDER_ID="$(json "d['order']['orderId']")"
 call "prepare recovery payment" 200 POST "/orders/${RECOVERY_ORDER_ID}/payment-attempts" "$CUSTOMER_AUTH" "" "demo-recovery-attempt-${RUN_ID}"
@@ -331,7 +334,7 @@ cat <<EOF
 
   customer alias   ${CUSTOMER_LOGIN_ID}
   merchant alias   ${MERCHANT_LOGIN_ID}
-  journey          coupon, option, slot, points, public payment, refund, settlement, dispute
+  journey          coupon, option, immediate checkout, points, public payment, refund, settlement, dispute
   outcome          completed (runtime IDs and provider keys were not printed)
 
 EOF

@@ -66,7 +66,7 @@ internal data class SupportCompensationIncidentPage(
 )
 
 internal data class RegisterSupportCompensationIncidentRequest(
-    val verificationSessionId: UUID,
+    val subjectLinkId: UUID,
     val orderId: UUID?,
     val occurredAt: Instant,
 ) : StrictSupportRequest
@@ -199,7 +199,7 @@ internal class SupportCompensationIncidentDirectory(
         permissions.requireActive(actorId, OperatorPermission.SUPPORT_COMPENSATION_REQUEST)
         commandLock.lock(caseId, actorId, "REGISTER_COMPENSATION_INCIDENT", normalizedKey)
         val supportCase = authorizeCase(actorId, caseId)
-        val hash = sha256("$caseId|${request.verificationSessionId}|${request.orderId}|${request.occurredAt}")
+        val hash = sha256("$caseId|${request.subjectLinkId}|${request.orderId}|${request.occurredAt}")
         val replay =
             jdbc
                 .query(
@@ -212,7 +212,7 @@ internal class SupportCompensationIncidentDirectory(
             if (replay.first != hash) throw DomainFailure(FailureCode.IDEMPOTENCY_KEY_REUSED, "Incident registration key was reused")
             return replay.second
         }
-        val customerId = requireContext(actorId, caseId, request.verificationSessionId, request.orderId)
+        val customerId = requireContext(actorId, caseId, request.subjectLinkId, request.orderId)
         val now = clock.instant().truncatedTo(ChronoUnit.MICROS)
         if (request.occurredAt.isAfter(now)) invalid()
         val occurredAt = request.occurredAt.truncatedTo(ChronoUnit.MICROS)
@@ -274,15 +274,8 @@ internal class SupportCompensationIncidentDirectory(
         sessionId: UUID,
         orderId: UUID?,
     ): UUID {
-        val session = sessions.findLockedById(sessionId) ?: denied()
-        if (session.actorId != actorId || session.supportCaseId != caseId || session.subjectType != VerificationSubjectType.CUSTOMER ||
-            session.state != VerificationState.VERIFIED || session.actionScope != VerificationActionScope.SUPPORT_ACTION ||
-            session.purpose != VerificationPurpose.CASE_RESOLUTION || !clock.instant().isBefore(session.expiresAt)
-        ) {
-            denied()
-        }
-        val link = links.findByIdAndSupportCaseId(session.subjectLinkId, caseId) ?: denied()
-        if (link.unlinkedAt != null || link.subjectType != SupportSubjectType.CUSTOMER || link.subjectId != session.subjectId) denied()
+        val link = links.findByIdAndSupportCaseId(sessionId, caseId) ?: denied()
+        if (link.unlinkedAt != null || link.subjectType != SupportSubjectType.CUSTOMER) denied()
         if (orderId != null) {
             if (!links.existsBySupportCaseIdAndSubjectTypeAndSubjectIdAndRelationshipAndUnlinkedAtIsNull(
                     caseId,
@@ -294,9 +287,9 @@ internal class SupportCompensationIncidentDirectory(
                 denied()
             }
             val order = orders.find(orderId) ?: throw DomainFailure(FailureCode.RESOURCE_NOT_FOUND, "Order is missing")
-            if (order.customerId != session.subjectId) denied()
+            if (order.customerId != link.subjectId) denied()
         }
-        return session.subjectId
+        return link.subjectId
     }
 
     private fun resource(rs: ResultSet) =
@@ -338,7 +331,7 @@ internal class SupportCompensationIncidentController(
     fun list(
         actor: OperatorActor,
         @PathVariable caseId: UUID,
-        @RequestParam verificationSessionId: UUID,
+        @RequestParam subjectLinkId: UUID,
         @RequestParam(required = false) orderId: UUID?,
         @RequestParam(required = false) @Size(max = 2048) cursor: String?,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) limit: Int,
@@ -348,7 +341,7 @@ internal class SupportCompensationIncidentController(
             .ok()
             .cacheControl(
                 CacheControl.noStore(),
-            ).body(service.list(actor.actorId, caseId, verificationSessionId, orderId, cursor, limit, incidentId))
+            ).body(service.list(actor.actorId, caseId, subjectLinkId, orderId, cursor, limit, incidentId))
 
     @PostMapping("/api/v1/support/cases/{caseId}/compensation-incidents")
     fun register(

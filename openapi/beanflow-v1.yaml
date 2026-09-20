@@ -787,8 +787,9 @@ paths:
         returns 400. Coordinates are request-only and never persisted or written to logs.
         openOnly retains its transport spelling but means that the Store is currently accepting
         orders with pickup enabled (`orderingAvailable=true`);
-        pickupAvailable additionally requires a reservable slot and is a point-in-time
-        projection that does not reserve one. Both default to unset, and a closed store
+        pickupAvailable additionally requires the current Asia/Seoul same-day operating status to
+        be OPEN. It does not require a legacy pickup slot and is only a point-in-time hint; quote
+        and order commitment revalidate the policy. Both filters default to unset, and a closed store
         is then still returned with its status in the flags. The relevance score itself
         is not part of the response.
       x-beanflow-contract-status: TARGET
@@ -949,9 +950,9 @@ paths:
         그것을 내림한 정수 미터 표시값을 반환합니다. 요청값이 범위를 벗어나면 400을 반환합니다.
 
         이 endpoint는 픽업 주문을 받고 있는 매장만 반환합니다. pickupAvailable은 거기서
-        reservable slot inside the seven-day window(7일 창 안의 예약 가능한 슬롯)가 있는
-        매장으로 더 좁히며, same meaning as on GET /stores/search(GET /stores/search와 동일한
-        의미)입니다. 특정 시점의 사영이며 슬롯을 예약하지 않습니다. 이 필터는 공간 질의 뒤에
+        현재 Asia/Seoul 영업시간이 OPEN인 매장으로 더 좁히며, GET /stores/search와 같은
+        의미입니다. legacy pickup slot 존재 여부는 보지 않으며 quote와 주문 확정에서 정책을
+        다시 검증합니다. 이 필터는 공간 질의 뒤에
         적용되므로 한 page가 limit보다 짧아도 nextCursor가 함께 나올 수 있고, 그 cursor는
         마지막 반환 row가 아니라 last examined candidate(마지막으로 검사한 candidate)에
         앵커됩니다.
@@ -962,7 +963,7 @@ paths:
         - in: query
           name: pickupAvailable
           required: false
-          description: true로 지정하면 7일 창 안에 예약 가능한 슬롯이 남아 있는 매장만 반환합니다. 픽업 설정만으로는 충족되지 않습니다.
+          description: true로 지정하면 주문받기와 pickup이 활성화되고 현재 영업시간이 OPEN인 매장만 반환합니다. legacy pickup slot은 필요하지 않습니다.
           schema: { type: boolean }
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/DiscoveryLimit"
@@ -1529,7 +1530,7 @@ paths:
       summary: 현재 owner 상태로 비예약 주문 견적 계산
       security: [{ customerSession: [] }]
       description: |
-        메뉴·옵션·픽업 슬롯·쿠폰·포인트와 주문 정책을 현재 상태로 검증하고
+        메뉴·옵션·쿠폰·포인트와 매장 영업·주문 정책을 현재 상태로 검증하고
         서버 권위 금액 및 opaque quoteFingerprint를 반환합니다. 이 계산은 Order,
         reservation, Payment, idempotency record, Audit, event를 만들지 않으며 Provider를
         호출하지 않습니다. quotedAt은 정보 필드이고 fingerprint 입력이 아닙니다.
@@ -1578,9 +1579,9 @@ paths:
       responses:
         "201":
           description: |
-            Order creation committed. External-payment orders have a required
-            five-minute reservation deadline. Zero-payable orders include an
-            approved BENEFIT_ONLY payment and no active reservation deadline.
+            Order creation committed. External-payment orders enter PENDING_PAYMENT
+            without reserving a pickup slot or benefits. Zero-payable orders include
+            an approved BENEFIT_ONLY payment and no active payment deadline.
             An idempotent replay returns the originally stored 201 response.
           content:
             application/json:
@@ -1605,13 +1606,13 @@ paths:
       description: |
         소유 고객은 COMPLETED, CANCELLED, REJECTED, EXPIRED 상태의 원본(source)
         주문으로만 재주문할 수 있습니다. 서버는 메뉴 ID, 정규화된 옵션 ID, 수량만
-        복사한 뒤 현재 시점의 Merchant 가격과 판매 상태를 다시 검증하고, 기존과 동일한
-        원자적 예약(reservation) 흐름을 사용합니다. 과거의 혜택, 결제, 픽업 슬롯,
+        복사한 뒤 현재 시점의 Merchant 가격과 판매 상태를 다시 검증하고, 신규 주문과 동일한
+        비예약 즉시 결제 흐름을 사용합니다. 과거의 혜택, 결제, 픽업 슬롯,
         정산 스냅샷은 절대 복사하지 않습니다. 원본 항목 중 하나라도 더 이상 이용할
         수 없으면 요청 전체가 실패하며, 부분 주문은 생성되지 않습니다.
 
         멱등성(idempotency) 범위는 actor ID, REORDER_ORDER_V1, Idempotency-Key로
-        결정됩니다. 정규 payload는 sourceOrderId, pickupSlotId, couponIssuanceId
+        결정됩니다. 정규 payload는 sourceOrderId, couponIssuanceId
         (null 포함), pointsToUseKrw로 구성됩니다. 동일 key/동일 payload로 종료
         상태를 재요청하면 최초 응답의 상태 코드와 본문을 그대로 재생합니다. 원본이나
         요청 내용이 다르면 최초 주문 응답을 노출하지 않고 IDEMPOTENCY_KEY_REUSED를
@@ -1632,8 +1633,8 @@ paths:
       responses:
         "201":
           description: |
-            새 Order, 필요한 모든 예약(reservation)과 불변 스냅샷, 가격 비교
-            결과, 최초 멱등 응답이 모두 커밋됐습니다.
+            새 Order, 불변 입력 스냅샷, 가격 비교 결과와 최초 멱등 응답이 모두
+            커밋됐습니다. 신규 즉시 주문은 픽업 슬롯과 혜택을 예약하지 않습니다.
           content:
             application/json:
               schema:
@@ -1654,13 +1655,13 @@ paths:
     get:
       tags: [Ordering]
       operationId: getOrder
-      summary: Get an order and materialize a due reservation expiry
+      summary: 주문을 조회하고 도래한 결제 대기 종료를 확정
       security: [{ customerSession: [] }]
       description: |
-        If a PENDING_PAYMENT order has reached reservationExpiresAt, the server
-        atomically expires the order and releases all reserved resources before
-        returning EXPIRED. If that transaction fails, the request returns 503
-        instead of a stale successful representation.
+        LEGACY_RESERVED 주문이 reservationExpiresAt에 도달했거나 IMMEDIATE 주문이
+        불변 영업 마감 cutoff에 도달하면 서버는 Order를 원자적으로 EXPIRED로 전이합니다.
+        실제 예약 자원만 해제하며 IMMEDIATE에는 가짜 해제를 만들지 않습니다. transaction이
+        실패하면 오래된 성공 표현 대신 503을 반환합니다.
       parameters:
         - $ref: "#/components/parameters/OrderId"
       responses:
@@ -4806,41 +4807,23 @@ paths:
     post:
       tags: [Support]
       operationId: createSupportVerificationSession
-      summary: 목적 결합 단계적 본인확인 세션 시작
-      description: |
-        담당 Case, 활성 subject link 하나, 인증된 운영자, purpose와 닫힌 action scope에 묶인
-        15분짜리 BASIC 또는 ENHANCED 본인확인 세션을 시작합니다. scope를 생략하면
-        PERSONAL_DATA_REVEAL로 간주되며, SUPPORT_ACTION은 CASE_RESOLUTION purpose에서만
-        허용됩니다. OTP, raw link, 답변, proof는 저장하지 않습니다.
-        현재 할당된 담당자가 아니거나 subject link가 비활성이면 403, Case나 subject link를
-        찾을 수 없으면 404, 같은 Case+Subject에 대해 lockout 기간(30분) 내 재요청이면 409를
-        반환합니다.
+      summary: 종료된 고객센터 본인확인 쓰기 API
+      deprecated: true
+      description: ADR-136에 따라 종료되었습니다. 새 본인확인을 생성하거나 Provider를 호출하지 않고 SUPPORT_VERIFICATION_RETIRED와 410을 반환합니다. 과거 세션 조회는 유지합니다. 본문과 멱등키는 요구하거나 검증하지 않습니다.
       parameters:
         - $ref: "#/components/parameters/SupportCaseId"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateVerificationSessionRequest"
       responses:
-        "201":
-          description: Verification session started or the original response replayed
+        "410":
+          description: Support verification retired; use the active case subject link.
           headers:
             Cache-Control:
               $ref: "#/components/headers/NoStore"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/VerificationSessionResource"
+                $ref: "#/components/schemas/Error"
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "429": { $ref: "#/components/responses/TooManyRequests" }
-        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/verification-sessions/{sessionId}:
     get:
       tags: [Support]
@@ -4870,74 +4853,44 @@ paths:
     post:
       tags: [Support]
       operationId: issueSupportVerificationChallenge
-      summary: 등록된 채널로 opaque challenge 발급
-      description: |
-        challenge intent를 저장한 뒤 DB transaction 밖에서 설정된 Identity provider를 호출하고,
-        확정 결과 또는 UNKNOWN 결과를 기록합니다. secret이나 raw link는 응답에 절대 포함하지
-        않습니다. 세션이 만료·잠김 상태이면 409, provider 호출이 실패하거나 지연되면 503을
-        반환할 수 있습니다.
+      summary: 종료된 고객센터 본인확인 쓰기 API
+      deprecated: true
+      description: ADR-136에 따라 종료되었습니다. 새 본인확인을 생성하거나 Provider를 호출하지 않고 SUPPORT_VERIFICATION_RETIRED와 410을 반환합니다. 과거 세션 조회는 유지합니다. 본문과 멱등키는 요구하거나 검증하지 않습니다.
       parameters:
         - $ref: "#/components/parameters/VerificationSessionId"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/IssueVerificationChallengeRequest"
       responses:
-        "201":
-          description: Opaque challenge metadata; never contains a secret or raw link
+        "410":
+          description: Support verification retired; use the active case subject link.
           headers:
             Cache-Control:
               $ref: "#/components/headers/NoStore"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/VerificationChallengeResource"
+                $ref: "#/components/schemas/Error"
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/verification-challenges/{challengeId}/verifications:
     post:
       tags: [Support]
       operationId: verifySupportVerificationChallenge
-      summary: opaque challenge proof 한 건 검증
-      description: |
-        proof는 일시적인 write-only 입력이며 저장하지 않습니다. 잘못된 proof는 Case+Subject
-        단위 시도 횟수를 소진시키며, 5번째 실패 시 30분 lockout이 걸립니다. 동시 요청이나
-        재검증 요청이 provider를 두 번 호출하지 않도록 idempotent하게 처리합니다.
-        challenge가 이미 terminal 상태이거나 세션이 잠겼으면 409, 시도 횟수를 초과하면
-        429를 반환합니다.
+      summary: 종료된 고객센터 본인확인 쓰기 API
+      deprecated: true
+      description: ADR-136에 따라 종료되었습니다. 새 본인확인을 생성하거나 Provider를 호출하지 않고 SUPPORT_VERIFICATION_RETIRED와 410을 반환합니다. 과거 세션 조회는 유지합니다. 본문과 멱등키는 요구하거나 검증하지 않습니다.
       parameters:
         - $ref: "#/components/parameters/VerificationChallengeId"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/VerifyVerificationChallengeRequest"
       responses:
-        "200":
-          description: Verification outcome without proof or provider reference
+        "410":
+          description: Support verification retired; use the active case subject link.
           headers:
             Cache-Control:
               $ref: "#/components/headers/NoStore"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/VerificationResultResource"
+                $ref: "#/components/schemas/Error"
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "429": { $ref: "#/components/responses/TooManyRequests" }
-        "503": { $ref: "#/components/responses/DependencyUnavailable" }
   /support/verification-sessions/{sessionId}/revocations:
     post:
       tags: [Support]
@@ -5761,7 +5714,7 @@ paths:
       operationId: executeSupportCompensation
       summary: (고객센터) 고객 불편 보상 지급
       description: |
-        고객센터가 승인된 포인트 또는 쿠폰 고객 불편 보상을 한 번만 지급하는 API입니다.
+        고객센터 담당자가 등록한 포인트 또는 쿠폰 고객 불편 보상을 한 번만 지급하는 API입니다.
         실행 담당자, 권한, 활성 상담 건과 주문, 요청·대상 버전, 현재 정책과 승인·조사 결과를 다시 확인합니다. 동시 요청이 최근 기간 한도를 중복 사용하지 못하도록 관련 고객·주문·사고·담당자·매장 정보를 정해진 순서로 잠급니다. 혜택 지급, 한도·승인 사용, 감사 기록과 중복 처리 방지 기록은 한 트랜잭션에서 함께 저장하며, 감사 기록 저장에 실패하면 혜택 지급도 취소합니다. 고객 알림은 혜택 저장 후 별도로 요청하고 알림 실패 상태를 그대로 남깁니다.
 
         주요 오류:
@@ -5946,7 +5899,7 @@ paths:
       operationId: executeCustomerPrimaryPhoneChange
       summary: (고객센터) 고객 휴대전화 변경 실행
       description: |
-        고객센터가 승인된 고객 주 휴대전화 변경을 실제 고객 프로필에 반영하는 API입니다.
+        고객센터 담당자가 등록한 고객 주 휴대전화 변경을 실제 고객 프로필에 반영하는 API입니다.
         승인받은 전화번호와 현재 처리 건·승인 요청·고객 프로필 버전이 모두 일치해야 합니다. 새 전화번호 원문은 요청으로만 받고 조회 응답에는 가린 값만 표시합니다.
 
         주요 오류:
@@ -6264,7 +6217,7 @@ paths:
       operationId: executeCourierPayoutReferenceChange
       summary: (고객센터) 외부 배달원 정산 식별값 변경 실행
       description: |
-        고객센터가 승인된 외부 배달원 정산 식별값 변경을 실제 외부 배달원 프로필에 반영하는 API입니다.
+        고객센터 담당자가 등록한 외부 배달원 정산 식별값 변경을 실제 외부 배달원 프로필에 반영하는 API입니다.
         승인받은 `payoutReference`와 현재 처리 건·승인 요청·프로필 버전이 모두 일치해야 합니다. 실제 계좌번호는 받지 않으며 이 값은 조회 응답에 원문으로 노출하지 않습니다.
 
         주요 오류:
@@ -6302,7 +6255,7 @@ paths:
     post:
       tags: [Support]
       operationId: executeSupportOrderChange
-      summary: 승인된 취소 또는 픽업 재조정 리비전을 정확히 실행
+      summary: 등록한 취소 또는 픽업 재조정 요청을 정확히 실행
       description: |
         표준 action payload digest를 다시 계산하고, 배정된 실행자, 활성 Case와 관계, 검증,
         영속 권한, 불변 정책, 정확한 리비전/요청/대상 버전, 최신 오너 상태를 모두 재검증합니다.
@@ -6521,7 +6474,7 @@ paths:
       operationId: executeCourierProviderIdentityChange
       summary: (고객센터) 외부 배달원 연동 식별값 변경 실행
       description: |
-        고객센터가 승인된 외부 배달원 연동 식별값 변경을 실제 외부 배달원 프로필에 반영하는 API입니다.
+        고객센터 담당자가 등록한 외부 배달원 연동 식별값 변경을 실제 외부 배달원 프로필에 반영하는 API입니다.
         승인받은 `providerReference`와 현재 처리 건·승인 요청·프로필 버전이 모두 일치해야 합니다. 이 값은 요청으로만 받고 조회 응답에는 가린 값만 표시합니다.
 
         주요 오류:
@@ -6603,8 +6556,8 @@ paths:
       operationId: decideOperationsSupportInvestigation
       summary: (운영팀) 고객센터 요청 승인·반려
       description: |
-        요청 작성자와 다른 운영팀 담당자가 고객센터의 중요 변경 요청을 승인하거나 반려하는 API입니다.
-        운영팀 결정과 고객센터 요청 상태는 함께 저장됩니다. 고객센터 상태 반영이나 감사 기록 저장에 실패하면 어느 쪽도 승인된 것으로 남기지 않습니다.
+        ADR-136 이후 이전 정책의 미실행 요청에는 새 결정을 적용하지 않고 409와 재작성 안내를 반환합니다.
+        과거 완료 결정의 동일 멱등키 응답은 유지합니다. 이전 요청의 종료 상태와 감사·멱등 기록은 함께 저장하며 감사 실패 시 모두 rollback합니다.
 
         주요 오류:
         - 400: 요청 값, 경로·쿼리·헤더 형식 또는 본문 검증에 실패한 경우
@@ -6862,7 +6815,7 @@ paths:
       operationId: executeStoreRepresentativeChange
       summary: (고객센터) 매장 대표자 변경 실행
       description: |
-        고객센터가 승인된 매장 대표자 변경을 실제 매장 프로필에 반영하는 API입니다.
+        고객센터 담당자가 등록한 매장 대표자 변경을 실제 매장 프로필에 반영하는 API입니다.
         승인받은 대표자 이름과 현재 처리 건·승인 요청·매장 프로필 버전이 모두 일치해야 합니다. 대표자 이름 원문은 요청으로만 받고 조회 응답에는 가린 값만 표시합니다.
 
         주요 오류:
@@ -6903,7 +6856,7 @@ paths:
       operationId: executeStoreSettlementAccountChange
       summary: (고객센터) 매장 정산 식별값 변경 실행
       description: |
-        고객센터가 승인된 매장 정산 식별값 변경을 실제 매장 프로필에 반영하는 API입니다.
+        고객센터 담당자가 등록한 매장 정산 식별값 변경을 실제 매장 프로필에 반영하는 API입니다.
         `accountReference`는 정산 시스템에서 지급 계정을 찾는 식별값이며 실제 계좌번호가 아닙니다. 승인받은 요청 내용과 현재 처리 건·매장 프로필 버전이 모두 일치해야 합니다.
 
         주요 오류:
@@ -6988,7 +6941,7 @@ paths:
       operationId: executeCustomerCredentialReset
       summary: (고객센터) 고객 계정 재설정 실행
       description: |
-        고객센터가 승인된 고객 계정 재설정 절차를 실행하는 API입니다.
+        고객센터 담당자가 등록한 고객 계정 재설정 절차를 실행하는 API입니다.
         비밀번호, OTP, 인증 토큰 같은 비밀값을 입력받지 않습니다. 승인받은 요청 내용과 현재 처리 건·고객 프로필 버전이 일치할 때 계정 재설정 절차를 시작합니다.
 
         주요 오류:
@@ -7156,7 +7109,7 @@ paths:
       operationId: executeCourierProviderReregistration
       summary: (고객센터) 외부 배달원 연동 재설정 실행
       description: |
-        고객센터가 승인된 외부 배달원 연동 재설정 절차를 실행하는 API입니다.
+        고객센터 담당자가 등록한 외부 배달원 연동 재설정 절차를 실행하는 API입니다.
         외부 연동 비밀번호나 토큰 같은 비밀값을 입력받지 않습니다. 승인받은 요청 내용과 현재 처리 건·외부 배달원 프로필 버전이 일치할 때 재등록 절차를 시작합니다.
 
         주요 오류:
@@ -7238,7 +7191,7 @@ paths:
       operationId: executeStoreAccessReregistration
       summary: (고객센터) 매장 계정 접근 재설정 실행
       description: |
-        고객센터가 승인된 매장 계정 접근 재설정 절차를 실행하는 API입니다.
+        고객센터 담당자가 등록한 매장 계정 접근 재설정 절차를 실행하는 API입니다.
         비밀번호, 인증키, OTP 같은 비밀값을 입력받지 않습니다. 승인받은 요청 내용과 현재 처리 건·매장 프로필 버전이 일치할 때 매장 계정의 재설정 또는 재등록 절차를 시작합니다.
 
         주요 오류:
@@ -7680,7 +7633,7 @@ paths:
       operationId: executePostAcceptanceResolution
       summary: (고객센터) 매장 수락 후 주문 문제 해결 실행
       description: |
-        고객센터가 승인된 매장 수락 후 해결안의 다음 처리 단계를 실행하는 API입니다.
+        고객센터 담당자가 등록한 매장 수락 후 해결안의 다음 처리 단계를 실행하는 API입니다.
         실행 담당자, 권한, 상담 건과 주문 관계, 요청·주문 버전, 현재 결제·포인트·쿠폰·정산 상태를 다시 확인합니다. 환불, 포인트·쿠폰 복원, 정산 조정, 고객 알림 중 아직 필요한 단계 하나만 실행합니다. 담당 시스템의 실제 처리 결과와 고객센터 감사 기록·상태 저장이 모두 끝난 뒤에만 성공으로 표시합니다. 외부 결제사 결과가 불명확하면 `UNKNOWN` 또는 `RECONCILING`으로 남기고 상태만 다시 조회하며, 같은 환불 요청을 자동으로 다시 보내지 않습니다.
 
         주요 오류:
@@ -7894,7 +7847,8 @@ paths:
       operationId: reassignSupportActionRequest
       summary: (고객센터) 주문 변경 요청 담당자 변경
       description: |
-        고객센터가 실행 준비된 주문 변경 요청과 상담 건의 담당자를 함께 변경하는 API입니다.
+        과거 요청의 담당자 변경 기록을 처리하는 API입니다. SUPPORT_DIRECT 요청의 실행자 변경은 409로 거부합니다.
+        직접 처리 업무는 상담 담당자를 재배정한 후 새 담당자가 새 요청을 작성해야 합니다.
         현재 요청 내용 버전, 요청 버전, 상담 건 버전이 모두 일치해야 합니다. 새 담당자는 상담 건 수정, 작업 실행, 해당 기능 권한을 모두 보유해야 하며 이 요청의 승인자여서는 안 됩니다.
 
         주요 오류:
@@ -10262,7 +10216,7 @@ paths:
         schema:
           $ref: "#/components/schemas/Identifier"
       - $ref: '#/components/parameters/SupportCaseId'
-      - name: verificationSessionId
+      - name: subjectLinkId
         in: query
         required: true
         schema:
@@ -11654,7 +11608,7 @@ components:
       - approval
       - caseVersion
       - currentProfileVersion
-      - verificationExpiresAt
+      - executionExpiresAt
       - allowedActions
       properties:
         profileChange:
@@ -11673,7 +11627,7 @@ components:
           format: int64
           minimum: 0
           description: 현재 소유 모듈의 프로필 버전입니다.
-        verificationExpiresAt:
+        executionExpiresAt:
           $ref: '#/components/schemas/DateTime'
         allowedActions:
           type: array
@@ -11713,7 +11667,7 @@ components:
         approval: null
         caseVersion: 2
         currentProfileVersion: 1
-        verificationExpiresAt: '2026-09-11T09:15:00Z'
+        executionExpiresAt: '2026-09-11T09:15:00Z'
         allowedActions: []
     OperationsSupportInvestigationSnapshot:
       type: object
@@ -11787,7 +11741,7 @@ components:
     OperationsSupportInvestigationWorkflowResource:
       type: object
       additionalProperties: false
-      description: 현재 별도 검토자의 운영 조사와 결정 가능 여부입니다.
+      description: 과거 운영 조사 조회입니다. ADR-136 이후 신규 승인 결정은 종료되었습니다.
       required:
       - investigation
       - canDecide
@@ -11796,7 +11750,7 @@ components:
           $ref: '#/components/schemas/OperationsSupportInvestigationSnapshot'
         canDecide:
           type: boolean
-          description: 현재 권한·상태·시간 및 요청자·승인자·실행자 분리를 만족하는지입니다. 결정 시 재검증합니다.
+          description: 승인 결정 종료로 항상 false입니다. 과거 이력 조회와 완료 응답 복구는 유지합니다.
       example:
         investigation:
           investigationId: 83000000-0000-4000-8000-000000000001
@@ -11809,7 +11763,7 @@ components:
           decidedByActorId: null
           decidedAt: null
           version: 0
-        canDecide: true
+        canDecide: false
     SupportCompensationWorkflowAction:
       type: string
       description: 현재 계정과 승인 상태에서 가능한 보상 명령입니다. 실행 시 모든 조건을 다시 검증합니다.
@@ -11919,7 +11873,7 @@ components:
       - terms
       - approval
       - currentTargetVersion
-      - verificationExpiresAt
+      - executionExpiresAt
       - allowedActions
       - couponTemplate
       properties:
@@ -11938,7 +11892,7 @@ components:
           format: int64
           minimum: 0
           description: 현재 주문 버전입니다. 주문 없는 요청은 0이며 조회 불가능한 주문은 null입니다.
-        verificationExpiresAt:
+        executionExpiresAt:
           $ref: '#/components/schemas/DateTime'
         allowedActions:
           type: array
@@ -11990,7 +11944,7 @@ components:
           caseVersion: 2
           executorActorId: 75000000-0000-4000-8000-000000000001
         currentTargetVersion: 4
-        verificationExpiresAt: '2026-09-11T09:15:00Z'
+        executionExpiresAt: '2026-09-11T09:15:00Z'
         allowedActions:
         - DECIDE_SUPPORT_MANAGER
         couponTemplate: null
@@ -13687,7 +13641,7 @@ components:
     CustomerOrderSummary:
       type: object
       additionalProperties: false
-      required: [orderReference, pickupNumber, storeName, status, orderedAt, pickupWindowStart, pickupWindowEnd, totalAmountKrw, currency, itemSummary, allowedActions]
+      required: [orderReference, pickupNumber, storeName, status, orderedAt, totalAmountKrw, currency, itemSummary, allowedActions]
       properties:
         orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
         pickupNumber: { type: string, minLength: 1, maxLength: 32 }
@@ -13913,6 +13867,14 @@ components:
         preparingAt: { $ref: "#/components/schemas/DateTime" }
         readyAt: { $ref: "#/components/schemas/DateTime" }
         completedAt: { $ref: "#/components/schemas/DateTime" }
+        preparationMinutes:
+          type: integer
+          minimum: 1
+          maximum: 120
+          description: 최초 매장 수락에서 한 번 정해진 준비시간입니다.
+        estimatedReadyAt:
+          allOf: [{ $ref: "#/components/schemas/DateTime" }]
+          description: 최초 acceptedAt과 preparationMinutes로 계산해 저장한 예상 준비시각입니다. 자동 상태 전이 기준이 아닙니다.
     PublicCheckout:
       type: object
       additionalProperties: false
@@ -13926,20 +13888,24 @@ components:
     CustomerOrderDetail:
       type: object
       additionalProperties: false
-      required: [orderReference, storeId, pickupNumber, storeName, status, orderedAt, pickupWindowStart, pickupWindowEnd, pricing, lines, allowedActions]
+      required: [orderReference, storeId, pickupNumber, storeName, status, orderedAt, pricing, lines, allowedActions, checkoutMode]
       properties:
         orderReference: { type: string, pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$' }
         storeId:
           allOf:
             - $ref: "#/components/schemas/Identifier"
-          description: |
-            Server-supplied opaque store identifier. It exists so the customer can
-            read that store's current pickup slots when reordering; no customer
-            screen accepts it as input.
+          description: Server-supplied opaque store identifier used to bind a reorder to its original Store.
         pickupNumber: { type: string, minLength: 1, maxLength: 32 }
         storeName: { type: string, minLength: 1, maxLength: 200 }
         status: { $ref: "#/components/schemas/OrderState" }
         reservationExpiresAt: { $ref: "#/components/schemas/DateTime" }
+        checkoutMode:
+          type: string
+          enum: [IMMEDIATE, LEGACY_RESERVED]
+          description: 신규 즉시 주문과 과거 슬롯 예약 주문을 구분합니다.
+        paymentDeadlineAt:
+          allOf: [{ $ref: "#/components/schemas/DateTime" }]
+          description: 현재 결제 시도의 서버 소유 종료 경계입니다. IMMEDIATE는 영업 마감 cutoff, legacy는 예약 lease입니다.
         orderedAt: { $ref: "#/components/schemas/DateTime" }
         pickupWindowStart: { $ref: "#/components/schemas/DateTime" }
         pickupWindowEnd: { $ref: "#/components/schemas/DateTime" }
@@ -14103,8 +14069,12 @@ components:
         orderingAvailable:
           type: boolean
           description: 현재 Store가 주문 수락과 pickup을 모두 활성화했는지 나타냅니다. 영업시간 상태가 아닙니다.
-        pickupAvailable: { type: boolean }
-        nextPickupWindow: { $ref: "#/components/schemas/NextPickupWindow" }
+        pickupAvailable:
+          type: boolean
+          description: 주문받기와 pickup이 활성화되고 현재 Asia/Seoul 영업시간이 OPEN인지 나타냅니다.
+        nextPickupWindow:
+          allOf: [{ $ref: "#/components/schemas/NextPickupWindow" }]
+          description: Legacy compatibility field. Immediate-order discovery omits it and never invents an ETA.
         customerDisplay: { $ref: "#/components/schemas/CustomerStoreDisplay" }
         matchedMenus:
           type: array
@@ -14399,8 +14369,12 @@ components:
         orderingAvailable:
           type: boolean
           description: acceptingOrders와 pickupEnabled가 모두 true인 주문 가능성입니다. 영업시간 상태가 아닙니다.
-        pickupAvailable: { type: boolean }
-        nextPickupWindow: { $ref: "#/components/schemas/NextPickupWindow" }
+        pickupAvailable:
+          type: boolean
+          description: 주문받기와 pickup이 활성화되고 현재 Asia/Seoul 영업시간이 OPEN인지 나타냅니다.
+        nextPickupWindow:
+          allOf: [{ $ref: "#/components/schemas/NextPickupWindow" }]
+          description: Legacy compatibility field. Immediate-order discovery omits it and never invents an ETA.
         customerDisplay: { $ref: "#/components/schemas/CustomerStoreDisplay" }
         distanceMeters: { type: integer, minimum: 0 }
         image: { $ref: "#/components/schemas/StorefrontImage" }
@@ -14474,6 +14448,9 @@ components:
         acceptedAt: { $ref: '#/components/schemas/DateTime' }
         preparingAt: { $ref: '#/components/schemas/DateTime' }
         readyAt: { $ref: '#/components/schemas/DateTime' }
+        estimatedReadyAt:
+          allOf: [{ $ref: '#/components/schemas/DateTime' }]
+          description: 최초 수락 때 고정한 예상 준비시각이며 READY 자동 전이 기준이 아닙니다.
     StoreOrderBoardItem:
       type: object
       additionalProperties: false
@@ -14496,8 +14473,6 @@ components:
         - pickupNumber
         - pickupBusinessDate
         - status
-        - pickupWindowStart
-        - pickupWindowEnd
         - itemSummary
         - allowedActions
       properties:
@@ -14527,10 +14502,10 @@ components:
           description: 현재 주문 상태입니다.
         pickupWindowStart:
           $ref: '#/components/schemas/DateTime'
-          description: 고객이 선택한 픽업 가능 구간의 시작 시각입니다.
+          description: LEGACY_RESERVED 주문에서 고객이 선택한 픽업 구간 시작입니다. IMMEDIATE 주문에는 없습니다.
         pickupWindowEnd:
           $ref: '#/components/schemas/DateTime'
-          description: 고객이 선택한 픽업 가능 구간의 종료 시각입니다.
+          description: LEGACY_RESERVED 주문에서 고객이 선택한 픽업 구간 종료입니다. IMMEDIATE 주문에는 없습니다.
         itemSummary:
           type: string
           minLength: 1
@@ -14673,6 +14648,11 @@ components:
           maxLength: 500
           pattern: ^[^\u0000-\u001F\u007F]*$
           description: 변경이나 운영 처리가 필요한 이유입니다. 개인정보나 비밀번호·인증키 같은 비밀값을 적지 않습니다.
+        preparationMinutes:
+          type: integer
+          minimum: 1
+          maximum: 120
+          description: ACCEPT에서만 필수인 준비시간입니다. 같은 수락 요청 재시도에서 변경할 수 없습니다.
     MerchantRefundSelection:
       type: object
       additionalProperties: false
@@ -15319,7 +15299,7 @@ components:
             orderingAvailable: true
             pickupAvailable: true
             customerDisplay:
-              operatingStatus: UNSPECIFIED
+              operatingStatus: OPEN
         page:
           nextCursor: eyJvIjoiZGlzdGFuY2UiLCJ2IjoiMzIwIn0
       properties:
@@ -15342,7 +15322,7 @@ components:
         orderingAvailable: true
         pickupAvailable: true
         customerDisplay:
-          operatingStatus: UNSPECIFIED
+          operatingStatus: OPEN
       properties:
         storeId:
           $ref: "#/components/schemas/Identifier"
@@ -15360,7 +15340,8 @@ components:
         pickupAvailable:
           type: boolean
         nextPickupWindow:
-          $ref: "#/components/schemas/NextPickupWindow"
+          allOf: [{ $ref: "#/components/schemas/NextPickupWindow" }]
+          description: Legacy compatibility field. Immediate-order discovery omits it and never invents an ETA.
         customerDisplay:
           $ref: "#/components/schemas/CustomerStoreDisplay"
         image:
@@ -15499,14 +15480,13 @@ components:
     CreateOrderRequest:
       type: object
       additionalProperties: false
-      required: [storeId, pickupSlotId, lines, pointsToUseKrw, expectedQuoteFingerprint]
+      required: [storeId, lines, pointsToUseKrw, expectedQuoteFingerprint]
       description: |
         신규 주문 생성 요청입니다. 서버 소유 장바구니가 없으므로 주문 항목 전체를 한
-        번에 보냅니다. 메뉴 가격, 픽업 슬롯, 쿠폰, 포인트를 이 요청 하나의
-        트랜잭션에서 모두 재검증·예약합니다.
+        번에 보냅니다. 신규 IMMEDIATE 주문은 픽업 슬롯과 혜택을 예약하지 않으며,
+        메뉴·금액·거래조건 snapshot만 고정합니다.
       example:
         storeId: 9f1c2a3b-4d5e-6f70-8192-a3b4c5d6e7f8
-        pickupSlotId: 1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f809
         lines:
           - menuId: c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f
             optionIds: [e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b]
@@ -15516,8 +15496,6 @@ components:
         expectedQuoteFingerprint: 3a6f04f95b4fbc6c25d31e4e1551b52b30ac27a5bf9f5f83a454d9172303b778
       properties:
         storeId:
-          $ref: "#/components/schemas/Identifier"
-        pickupSlotId:
           $ref: "#/components/schemas/Identifier"
         lines:
           type: array
@@ -15536,11 +15514,9 @@ components:
     OrderQuoteRequest:
       type: object
       additionalProperties: false
-      required: [storeId, pickupSlotId, lines, pointsToUseKrw]
+      required: [storeId, lines, pointsToUseKrw]
       properties:
         storeId:
-          $ref: "#/components/schemas/Identifier"
-        pickupSlotId:
           $ref: "#/components/schemas/Identifier"
         lines:
           type: array
@@ -15554,7 +15530,7 @@ components:
     OrderQuote:
       type: object
       additionalProperties: false
-      required: [quotedAt, quoteFingerprint, store, pickupWindow, lines, pricing, guarantee]
+      required: [quotedAt, quoteFingerprint, store, lines, pricing, guarantee]
       properties:
         quotedAt:
           $ref: "#/components/schemas/DateTime"
@@ -15562,13 +15538,10 @@ components:
           type: string
           pattern: "^[0-9a-f]{64}$"
           description: >-
-            order-quote-fingerprint/v3으로 생성한 opaque 거래 조건 사전조건입니다.
-            공유 슬롯의 사용량 및 기술적 version은 비교하지 않으며 최종 주문의 잠금 아래에서
-            현재 가용성을 별도로 검증합니다. 가격·구성·혜택·픽업 시간/정원 변경은 재확인이 필요합니다.
+            order-quote-fingerprint/v7으로 생성한 opaque 거래 조건 사전조건입니다.
+            가격·구성·혜택·Store 영업/주문 정책 변경은 최종 주문의 잠금 아래에서 재검증합니다.
         store:
           $ref: "#/components/schemas/OrderQuoteStore"
-        pickupWindow:
-          $ref: "#/components/schemas/OrderQuotePickupWindow"
         lines:
           type: array
           minItems: 1
@@ -15674,17 +15647,14 @@ components:
     ReorderOrderRequest:
       type: object
       additionalProperties: false
-      required: [pickupSlotId, pointsToUseKrw]
+      required: [pointsToUseKrw]
       description: |
         재주문(reorder) 요청입니다. 메뉴 구성은 원본 주문에서 그대로 복사되므로 여기서는
-        새 픽업 슬롯과 쿠폰/포인트 사용 여부만 지정합니다.
+        쿠폰/포인트 사용 여부만 지정합니다. 신규 재주문은 슬롯 없이 즉시 결제로 진행합니다.
       example:
-        pickupSlotId: 3fa1c2e0-9b7a-4e2a-8b8e-1a2b3c4d5e6f
         couponIssuanceId: null
         pointsToUseKrw: 0
       properties:
-        pickupSlotId:
-          $ref: "#/components/schemas/Identifier"
         couponIssuanceId:
           $ref: "#/components/schemas/Identifier"
         pointsToUseKrw:
@@ -15710,10 +15680,7 @@ components:
           pickupNumber: A-12
           pickupBusinessDate: "2026-08-15"
           storeName: 성수 1호점
-          pickupWindowStart: "2026-08-15T10:00:00+09:00"
-          pickupWindowEnd: "2026-08-15T10:15:00+09:00"
           state: PENDING_PAYMENT
-          reservationExpiresAt: "2026-08-15T09:45:00+09:00"
           lines:
             - orderLineId: 9b7a4e2a-8b8e-1a2b-3c4d-5e6f7a8b9c0d
               menuId: c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f
@@ -15757,8 +15724,6 @@ components:
           pickupNumber: A-12
           pickupBusinessDate: "2026-08-15"
           storeName: 성수 1호점
-          pickupWindowStart: "2026-08-15T10:00:00+09:00"
-          pickupWindowEnd: "2026-08-15T10:15:00+09:00"
           state: PAID
           lines:
             - orderLineId: 9b7a4e2a-8b8e-1a2b-3c4d-5e6f7a8b9c0d
@@ -15914,17 +15879,16 @@ components:
         payment:
           $ref: "#/components/schemas/BenefitOnlyPayment"
     PendingPaymentOrder:
-      description: 결제 대기 상태(`PENDING_PAYMENT`)로 생성된 주문입니다. 예약이 만료되기 전에 결제를 완료해야 합니다.
+      description: 결제 대기 상태(`PENDING_PAYMENT`)로 생성된 주문입니다. IMMEDIATE는 영업 마감 cutoff, legacy는 예약 lease를 따릅니다.
       allOf:
         - $ref: "#/components/schemas/Order"
         - type: object
-          required: [reservationExpiresAt]
           properties:
             state:
               const: PENDING_PAYMENT
             reservationExpiresAt:
               $ref: "#/components/schemas/DateTime"
-              description: 이 시각까지 결제를 완료하지 않으면 예약과 주문이 만료됩니다.
+              description: LEGACY_RESERVED에서만 존재하는 예약 만료 시각입니다.
             payableKrw:
               type: integer
               format: int64
@@ -15955,8 +15919,6 @@ components:
         - pickupNumber
         - pickupBusinessDate
         - storeName
-        - pickupWindowStart
-        - pickupWindowEnd
         - state
         - lines
         - subtotalKrw
@@ -16022,16 +15984,16 @@ components:
           maxLength: 200
         pickupWindowStart:
           $ref: '#/components/schemas/DateTime'
-          description: 고객이 선택한 픽업 가능 구간의 시작 시각입니다.
+          description: LEGACY_RESERVED 주문의 픽업 구간 시작입니다. IMMEDIATE에는 없습니다.
         pickupWindowEnd:
           $ref: '#/components/schemas/DateTime'
-          description: 고객이 선택한 픽업 가능 구간의 종료 시각입니다.
+          description: LEGACY_RESERVED 주문의 픽업 구간 종료입니다. IMMEDIATE에는 없습니다.
         state:
           $ref: '#/components/schemas/OrderState'
           description: 주문의 현재 상태입니다.
         reservationExpiresAt:
           $ref: '#/components/schemas/DateTime'
-          description: 결제 대기 예약이 만료되는 시각입니다.
+          description: LEGACY_RESERVED 결제 대기 예약의 만료 시각이며 IMMEDIATE 주문에는 없습니다.
         lines:
           type: array
           minItems: 1
@@ -16071,6 +16033,14 @@ components:
         acceptedAt:
           $ref: '#/components/schemas/DateTime'
           description: 매장이 주문을 수락한 시각입니다.
+        preparationMinutes:
+          type: integer
+          minimum: 1
+          maximum: 120
+          description: 최초 수락에서 한 번 정한 준비시간입니다.
+        estimatedReadyAt:
+          allOf: [{ $ref: '#/components/schemas/DateTime' }]
+          description: acceptedAt 기준으로 계산해 고정한 예상 준비시각입니다. 자동 상태 전이 기준이 아닙니다.
         rejectedAt:
           $ref: '#/components/schemas/DateTime'
           description: 매장이 주문을 거절한 시각입니다.
@@ -16214,11 +16184,12 @@ components:
     CancellationCause:
       type: string
       description: |
-        주문이 취소된 직접 원인입니다. `CUSTOMER_REQUEST`는 고객 요청, `SUPPORT_REQUEST`는 고객센터 처리, `PAYMENT_DECLINED`는 결제 승인 거절을 뜻합니다.
+        주문이 취소된 직접 원인입니다. `PAYMENT_COMMITMENT_FAILED`는 PG 승인 뒤 로컬 혜택·정산 확정이 성립하지 않아 결제 복구 중인 경우입니다.
       example: CUSTOMER_REQUEST
       enum:
         - CUSTOMER_REQUEST
         - PAYMENT_DECLINED
+        - PAYMENT_COMMITMENT_FAILED
         - SUPPORT_REQUEST
     StoreOrder:
       description: '스토어 화면에 제공하는 주문 정보입니다. 주문 취소 사실과 원인은 보여 주지만 고객이 입력한 취소 상세와 고객 전용 환불 진행 정보는 제외합니다.'
@@ -18809,15 +18780,15 @@ components:
     RequestDataAccessGrantRequest:
       type: object
       additionalProperties: false
-      required: [verificationSessionId, purpose, fields, reasonCode]
-      description: 검증된 본인확인 세션을 근거로 특정 필드에 대한 개인정보 열람 승인(Grant)을 요청합니다.
+      required: [subjectLinkId, purpose, fields, reasonCode]
+      description: 현재 담당 상담의 활성 대상 연결을 근거로 특정 필드에 대한 개인정보 열람권(Grant)을 즉시 생성합니다.
       example:
-        verificationSessionId: 1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d
+        subjectLinkId: 1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d
         purpose: CONTACT_CONFIRMATION
         fields: [CUSTOMER_PRIMARY_PHONE]
         reasonCode: CONTACT_CONFIRMATION
       properties:
-        verificationSessionId:
+        subjectLinkId:
           $ref: "#/components/schemas/Identifier"
         purpose:
           $ref: "#/components/schemas/VerificationPurpose"
@@ -18896,6 +18867,10 @@ components:
         expiresAt: "2026-08-15T09:25:00Z"
         version: 2
       properties:
+        authorizationBasis:
+          type: string
+          enum: [LEGACY, SUPPORT_DIRECT]
+          description: Stored authorization basis; absent only in pre-transition idempotent responses.
         grantId:
           $ref: "#/components/schemas/Identifier"
         caseId:
@@ -19072,6 +19047,10 @@ components:
         expiresAt: null
         version: 0
       properties:
+        authorizationBasis:
+          type: string
+          enum: [LEGACY, SUPPORT_DIRECT]
+          description: 과거 정책 또는 상담원 직접 처리 근거
         requestId:
           $ref: "#/components/schemas/Identifier"
         caseId:
@@ -19392,7 +19371,7 @@ components:
           $ref: "#/components/schemas/DateTime"
     SupportOrderOverview:
       type: object
-      required: [orderId, publicReference, storeName, state, version, orderedAt, pickupWindowStart, pickupWindowEnd, subtotalKrw, couponDiscountKrw, pointsAppliedKrw, payableKrw, currency, lines]
+      required: [orderId, publicReference, storeName, state, version, orderedAt, subtotalKrw, couponDiscountKrw, pointsAppliedKrw, payableKrw, currency, lines]
       properties:
         orderId: { $ref: "#/components/schemas/Identifier" }
         publicReference: { type: string }
@@ -19400,8 +19379,14 @@ components:
         state: { $ref: "#/components/schemas/OrderState" }
         version: { type: integer, format: int64 }
         orderedAt: { type: string, format: date-time }
-        pickupWindowStart: { type: string, format: date-time }
-        pickupWindowEnd: { type: string, format: date-time }
+        pickupWindowStart:
+          type: [string, "null"]
+          format: date-time
+          description: LEGACY_RESERVED 주문의 픽업 구간 시작이며 IMMEDIATE 주문에는 없습니다.
+        pickupWindowEnd:
+          type: [string, "null"]
+          format: date-time
+          description: LEGACY_RESERVED 주문의 픽업 구간 종료이며 IMMEDIATE 주문에는 없습니다.
         subtotalKrw: { type: integer, format: int64 }
         couponDiscountKrw: { type: integer, format: int64 }
         pointsAppliedKrw: { type: integer, format: int64 }
@@ -19715,7 +19700,7 @@ components:
     CustomerPrimaryPhoneProfileChangeExecutionRequest:
       type: object
       additionalProperties: false
-      description: 승인된 고객 전화번호 변경을 실행하는 요청입니다. 승인안과 현재 프로필 버전, 기존 등록 채널을 통한 본인 확인을 다시 검사합니다.
+      description: 승인된 고객 전화번호 변경을 실행하는 요청입니다. 승인안과 현재 프로필 버전, 활성 상담 대상 연결을 다시 검사합니다.
       example:
         binding:
           revisionNumber: 2
@@ -19729,7 +19714,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeExecutionBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         primaryPhone:
           type: string
           minLength: 1
@@ -19771,7 +19756,6 @@ components:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 고객에게 공개되는 매장 정보의 오타와 안내 문구 정정
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         displayName: 빈플로우 성수점
@@ -19784,7 +19768,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         displayName:
           type:
             - string
@@ -19859,7 +19843,6 @@ components:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 외부 배달 서비스의 배달원 연동 식별값 변경 요청
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         providerReference: sample:provider:courier-001
@@ -19869,7 +19852,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         providerReference:
           type: string
           pattern: ^[A-Za-z0-9:_-]{4,200}$
@@ -19899,7 +19882,6 @@ components:
           expectedProfileChangeVersion: 1
           expectedActionRequestVersion: 2
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 추가 증빙을 반영해 매장 정산 식별값 변경 요청 수정
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         accountReference: sample:settlement:account-ref-002
@@ -19909,7 +19891,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeRevisionBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         accountReference:
           type: string
           pattern: ^[A-Za-z0-9:_-]{4,200}$
@@ -19923,12 +19905,12 @@ components:
         action: ORDER_CANCELLATION
         orderId: 74131bb9-688f-5370-8042-21015b3cd43a
         expectedTargetVersion: 7
-        verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
+        subjectLinkId: d55c076e-be1e-5e1b-8328-730750a4173a
       required:
         - action
         - orderId
         - expectedTargetVersion
-        - verificationSessionId
+        - subjectLinkId
       properties:
         action:
           $ref: '#/components/schemas/SupportActionType'
@@ -19941,7 +19923,7 @@ components:
           format: int64
           minimum: 0
           description: 대상 정보를 확인했을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
-        verificationSessionId:
+        subjectLinkId:
           $ref: '#/components/schemas/Identifier'
           description: 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다.
     CreateSupportActionRequest:
@@ -19953,7 +19935,7 @@ components:
         action: ORDER_CANCELLATION
         orderId: 74131bb9-688f-5370-8042-21015b3cd43a
         expectedTargetVersion: 7
-        verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
+        subjectLinkId: d55c076e-be1e-5e1b-8328-730750a4173a
         actionPayloadDigest: b4e2d0c8a6f4b2d1e9c7a5f3d1b0e8c6a4f2d0b8e6c4a2f1d9b7e5c3a1f0d8b6
         amountKrw: 9000
         reason: 고객 본인 확인 후 취소 승인을 요청함
@@ -19962,7 +19944,7 @@ components:
         - action
         - orderId
         - expectedTargetVersion
-        - verificationSessionId
+        - subjectLinkId
         - actionPayloadDigest
         - reason
         - evidenceDigest
@@ -19978,7 +19960,7 @@ components:
           format: int64
           minimum: 0
           description: 대상 정보를 확인했을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
-        verificationSessionId:
+        subjectLinkId:
           $ref: '#/components/schemas/Identifier'
           description: 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다.
         actionPayloadDigest:
@@ -20016,7 +19998,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeExecutionBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         representativeName:
           type: string
           minLength: 1
@@ -20093,7 +20075,7 @@ components:
         - responsibility
         - platformShareBps
         - storeShareBps
-        - verificationSessionId
+        - subjectLinkId
       properties:
         incidentId:
           $ref: '#/components/schemas/Identifier'
@@ -20147,7 +20129,7 @@ components:
           minimum: 0
           maximum: 10000
           description: 매장이 부담하는 비율입니다. `10000`은 100%를 뜻합니다.
-        verificationSessionId:
+        subjectLinkId:
           $ref: '#/components/schemas/Identifier'
           description: 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다.
       description: |-
@@ -20164,7 +20146,7 @@ components:
         costEvidenceDigest: d6a4f2e0c8b6a4f3d1e9c7b5a3f1d0e8c6b4a2f0d9e7c5b3a1f8d6c4b2a0e9c7
         platformShareBps: 5000
         storeShareBps: 5000
-        verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
+        subjectLinkId: d55c076e-be1e-5e1b-8328-730750a4173a
     CreateSupportCompensationRequest:
       type: object
       additionalProperties: false
@@ -20176,7 +20158,7 @@ components:
         - responsibility
         - platformShareBps
         - storeShareBps
-        - verificationSessionId
+        - subjectLinkId
         - evidenceDigest
       properties:
         incidentId:
@@ -20231,7 +20213,7 @@ components:
           minimum: 0
           maximum: 10000
           description: 매장이 부담하는 비율입니다. `10000`은 100%를 뜻합니다.
-        verificationSessionId:
+        subjectLinkId:
           $ref: '#/components/schemas/Identifier'
           description: 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다.
         evidenceDigest:
@@ -20252,7 +20234,7 @@ components:
         costEvidenceDigest: d6a4f2e0c8b6a4f3d1e9c7b5a3f1d0e8c6b4a2f0d9e7c5b3a1f8d6c4b2a0e9c7
         platformShareBps: 5000
         storeShareBps: 5000
-        verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
+        subjectLinkId: d55c076e-be1e-5e1b-8328-730750a4173a
         evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
     SupportActionRequestResource:
       type: object
@@ -20296,7 +20278,6 @@ components:
         - state
         - approvalRoute
         - actionPayloadDigest
-        - verificationSessionId
         - policyVersion
         - targetVersion
         - amountKrw
@@ -20309,6 +20290,13 @@ components:
         - terminalCompensationId
         - terminalProfileChangeId
       properties:
+        authorizationBasis:
+          type: string
+          enum: [LEGACY, SUPPORT_DIRECT]
+          description: Stored authorization basis; absent only in pre-transition idempotent responses.
+        subjectLinkId:
+          type: [string, "null"]
+          format: uuid
         requestId:
           $ref: '#/components/schemas/Identifier'
           description: 해당 요청 자원을 가리키는 UUID 식별자입니다.
@@ -20342,8 +20330,9 @@ components:
           pattern: ^[0-9a-f]{64}$
           description: 승인 대상 요청 내용이 바뀌지 않았는지 확인하는 SHA-256 해시값입니다.
         verificationSessionId:
-          $ref: '#/components/schemas/Identifier'
-          description: 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다.
+          type: [string, 'null']
+          format: uuid
+          description: 과거 정책의 실제 본인확인 참조입니다. 신규 직접 처리에는 식별자를 반환하지 않습니다.
         policyVersion:
           type: string
           minLength: 1
@@ -20408,7 +20397,6 @@ components:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 고객이 로그인 정보를 잊어 계정 재설정 요청
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
       required:
@@ -20416,7 +20404,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
     PostAcceptanceResolutionResource:
       type: object
       additionalProperties: false
@@ -20761,13 +20749,12 @@ components:
     CustomerPrimaryPhoneProfileChangeRevisionRequest:
       type: object
       additionalProperties: false
-      description: 고객 전화번호 변경 승인안을 새 버전으로 다시 제출하는 요청입니다. 새 번호와 현재 요청·프로필 버전, 본인 확인, 증거 해시를 포함합니다.
+      description: 고객 전화번호 변경 승인안을 새 버전으로 다시 제출하는 요청입니다. 새 번호와 현재 요청·프로필 버전, 증거 해시를 포함합니다.
       example:
         binding:
           expectedProfileChangeVersion: 1
           expectedActionRequestVersion: 2
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 기존 등록 채널의 추가 확인 결과를 반영해 휴대전화 변경 요청 수정
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         primaryPhone: 010-0000-0000
@@ -20777,7 +20764,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeRevisionBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         primaryPhone:
           type: string
           minLength: 1
@@ -20853,7 +20840,6 @@ components:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 정산 시스템에서 새 매장 정산 식별값이 발급되어 변경 요청
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         accountReference: sample:settlement:account-ref-001
@@ -20863,7 +20849,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         accountReference:
           type: string
           pattern: ^[A-Za-z0-9:_-]{4,200}$
@@ -20927,7 +20913,6 @@ components:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 외부 배달 서비스 계정 연동이 해제되어 재설정 요청
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
       required:
@@ -20935,7 +20920,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
     SupportOrderChangeExecutionOutcome:
       type: string
       enum: [EXECUTED, RESOLUTION_REQUIRED]
@@ -20957,19 +20942,18 @@ components:
       required:
         - binding
         - primaryPhone
-      description: '고객 전화번호 변경 요청입니다. 새 번호만으로는 계정 소유를 확인할 수 없으므로 기존 등록 채널을 이용한 강화 본인 확인과 관리자·운영팀 승인이 필요합니다.'
+      description: '고객 전화번호 변경 요청입니다. 새 번호만으로는 계정 소유를 확인할 수 없으므로 기존 등록 채널을 이용한 강화 관리자·운영팀 승인이 필요합니다.'
       example:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 기존 등록 채널로 본인 확인 후 휴대전화 번호 변경 요청
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         primaryPhone: 010-0000-0000
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         primaryPhone:
           type: string
           minLength: 1
@@ -20982,20 +20966,19 @@ components:
       required:
         - binding
         - legalName
-      description: 고객의 본인 확인용 실명에 있는 단순 오타를 정정하는 요청입니다. 강화 본인 확인과 전문 담당자 권한을 검사한 뒤 바로 반영하며 새 실명은 응답에 원문으로 노출하지
+      description: 고객의 본인 확인용 실명에 있는 단순 오타를 정정하는 요청입니다. 강화 전문 담당자 권한을 검사한 뒤 바로 반영하며 새 실명은 응답에 원문으로 노출하지
         않습니다.
       example:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 본인 확인용 실명 표기의 단순 오타 정정
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         legalName: 홍길동
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         legalName:
           type: string
           minLength: 1
@@ -21010,7 +20993,6 @@ components:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 외부 배달원 중계 연락처가 변경되어 정정 요청
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         phone: 010-0000-0000
@@ -21021,7 +21003,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         phone:
           type:
             - string
@@ -21173,7 +21155,6 @@ components:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 외부 배달원 화면 표시 이름의 오타 정정
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         displayName: 샘플 배달원
@@ -21183,7 +21164,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         displayName:
           type: string
           minLength: 1
@@ -21305,7 +21286,6 @@ components:
         - expectedProfileChangeVersion
         - expectedActionRequestVersion
         - expectedProfileVersion
-        - verificationSessionId
         - reason
         - evidenceDigest
       description: '수정 요청을 받은 프로필 변경 승인 요청을 다시 제출할 때 필요한 정보입니다. 현재 처리 건·승인 요청·프로필 버전, 새 본인 확인 세션, 수정 사유와 증거 해시를
@@ -21314,8 +21294,7 @@ components:
         expectedProfileChangeVersion: 1
         expectedActionRequestVersion: 2
         expectedProfileVersion: 4
-        verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
-        reason: 추가 본인 확인과 새 근거를 반영해 승인안을 수정함
+        reason: 추가 새 근거를 반영해 승인안을 수정함
         evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
       properties:
         expectedProfileChangeVersion:
@@ -21333,9 +21312,6 @@ components:
           format: int64
           minimum: 0
           description: 프로필을 확인했을 때의 버전입니다. 현재 버전이 다르면 승인안을 수정하지 않습니다.
-        verificationSessionId:
-          $ref: '#/components/schemas/Identifier'
-          description: 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다.
         reason:
           type: string
           minLength: 1
@@ -21353,7 +21329,7 @@ components:
         expectedRevisionNumber: 1
         expectedRequestVersion: 3
         expectedTargetVersion: 7
-        verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
+        subjectLinkId: d55c076e-be1e-5e1b-8328-730750a4173a
         actionPayloadDigest: b4e2d0c8a6f4b2d1e9c7a5f3d1b0e8c6a4f2d0b8e6c4a2f1d9b7e5c3a1f0d8b6
         amountKrw: 9000
         reason: 추가 본인 확인 결과를 반영해 요청을 다시 제출함
@@ -21362,7 +21338,7 @@ components:
         - expectedRevisionNumber
         - expectedRequestVersion
         - expectedTargetVersion
-        - verificationSessionId
+        - subjectLinkId
         - actionPayloadDigest
         - reason
         - evidenceDigest
@@ -21381,7 +21357,7 @@ components:
           format: int64
           minimum: 0
           description: 대상 정보를 확인했을 때의 버전입니다. 현재 버전이 달라졌으면 충돌로 처리합니다.
-        verificationSessionId:
+        subjectLinkId:
           $ref: '#/components/schemas/Identifier'
           description: 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다.
         actionPayloadDigest:
@@ -21411,8 +21387,7 @@ components:
           expectedProfileChangeVersion: 1
           expectedActionRequestVersion: 2
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
-          reason: 추가 본인 확인과 새 증빙을 반영해 연동 식별값 변경 요청 수정
+          reason: 추가 새 증빙을 반영해 연동 식별값 변경 요청 수정
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         providerReference: sample:provider:courier-002
       required:
@@ -21421,7 +21396,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeRevisionBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         providerReference:
           type: string
           pattern: ^[A-Za-z0-9:_-]{4,200}$
@@ -21495,14 +21470,13 @@ components:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 고객 화면 표시 이름의 오타 정정
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         displayName: 홍길동
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         displayName:
           type: string
           minLength: 1
@@ -21601,6 +21575,10 @@ components:
       - updatedAt
       - notifications
       properties:
+        authorizationBasis:
+          type: string
+          enum: [LEGACY, SUPPORT_DIRECT]
+          description: Stored authorization basis; absent only in pre-transition idempotent responses.
         profileChangeId:
           $ref: '#/components/schemas/Identifier'
         caseId:
@@ -21642,7 +21620,8 @@ components:
         executorActorId:
           $ref: '#/components/schemas/Identifier'
         verificationSessionId:
-          $ref: '#/components/schemas/Identifier'
+          type: [string, 'null']
+          format: uuid
         expectedProfileVersion:
           type: integer
           format: int64
@@ -21724,7 +21703,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeExecutionBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         payoutReference:
           type: string
           pattern: ^[A-Za-z0-9:_-]{4,200}$
@@ -21738,7 +21717,6 @@ components:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 매장 계정 접근 정보를 사용할 수 없어 재설정 요청
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
       required:
@@ -21746,7 +21724,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
     SupportActionDecision:
       type: string
       description: 현재 상태에서 주문 변경 작업을 바로 실행할 수 있는지 나타냅니다.
@@ -21763,7 +21741,6 @@ components:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 외부 배달 서비스에서 새 정산 식별값이 발급되어 변경 요청
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         payoutReference: sample:payout:ref-001
@@ -21773,7 +21750,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         payoutReference:
           type: string
           pattern: ^[A-Za-z0-9:_-]{4,200}$
@@ -21794,7 +21771,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeExecutionBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
     SupportTimelinePage:
       type: object
       additionalProperties: false
@@ -21917,7 +21894,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeExecutionBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         accountReference:
           type: string
           pattern: ^[A-Za-z0-9:_-]{4,200}$
@@ -21926,14 +21903,13 @@ components:
     CourierPayoutReferenceProfileChangeRevisionRequest:
       type: object
       additionalProperties: false
-      description: 배달원 정산 식별값 변경 승인안을 새 버전으로 다시 제출하는 요청입니다. 새 식별값과 현재 요청·프로필 버전, 본인 확인, 증거 해시를 포함합니다.
+      description: 배달원 정산 식별값 변경 승인안을 새 버전으로 다시 제출하는 요청입니다. 새 식별값과 현재 요청·프로필 버전, 증거 해시를 포함합니다.
       example:
         binding:
           expectedProfileChangeVersion: 1
           expectedActionRequestVersion: 2
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
-          reason: 추가 본인 확인과 새 증빙을 반영해 정산 식별값 변경 요청 수정
+          reason: 추가 새 증빙을 반영해 정산 식별값 변경 요청 수정
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         payoutReference: sample:payout:ref-002
       required:
@@ -21942,7 +21918,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeRevisionBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         payoutReference:
           type: string
           pattern: ^[A-Za-z0-9:_-]{4,200}$
@@ -21979,6 +21955,7 @@ components:
       description: 매장 또는 공동 비용 부담을 인정할 때 사용할 수 있는 근거 유형입니다.
       example: STORE_CONSENT
       enum:
+        - SUPPORT_DECISION
         - STORE_CONSENT
         - OPERATIONS_FINDING
         - CONTRACTUAL_RULE
@@ -22100,6 +22077,10 @@ components:
         - createdAt
         - updatedAt
       properties:
+        authorizationBasis:
+          type: string
+          enum: [LEGACY, SUPPORT_DIRECT]
+          description: Stored authorization basis; absent only in pre-transition idempotent responses.
         compensationRequestId:
           $ref: '#/components/schemas/Identifier'
           description: 이 고객 보상 요청을 가리키는 UUID 식별자입니다.
@@ -22248,7 +22229,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeExecutionBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         providerReference:
           type: string
           pattern: ^[A-Za-z0-9:_-]{4,200}$
@@ -22257,12 +22238,11 @@ components:
     StoreRepresentativeProfileChangeRequest:
       type: object
       additionalProperties: false
-      description: 매장 대표자 변경 요청입니다. 강화 본인 확인과 고객센터 관리자·운영팀 승인을 거친 뒤 별도 실행 API에서 반영합니다.
+      description: 매장 대표자 변경 요청입니다. 강화 고객센터 관리자·운영팀 승인을 거친 뒤 별도 실행 API에서 반영합니다.
       example:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 사업자 정보 변경에 따른 매장 대표자 변경 요청
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         representativeName: 홍길동
@@ -22272,7 +22252,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         representativeName:
           type: string
           minLength: 1
@@ -22301,7 +22281,6 @@ components:
           expectedProfileChangeVersion: 1
           expectedActionRequestVersion: 2
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 추가 증빙을 반영해 매장 대표자 변경 요청 수정
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         representativeName: 홍길동
@@ -22311,7 +22290,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeRevisionBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         representativeName:
           type: string
           minLength: 1
@@ -22409,7 +22388,6 @@ components:
         binding:
           subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
           reason: 매장 내부 운영 연락처 변경 요청
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
         phone: 010-0000-0000
@@ -22420,7 +22398,7 @@ components:
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
         phone:
           type:
             - string
@@ -22578,7 +22556,6 @@ components:
       required:
         - subjectId
         - expectedProfileVersion
-        - verificationSessionId
         - reason
         - evidenceDigest
       description: |
@@ -22586,7 +22563,6 @@ components:
       example:
         subjectId: 4fec1f73-d3c6-54a9-9db6-2ff5ba713bbd
         expectedProfileVersion: 4
-        verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
         reason: 고객이 제출한 정보와 현재 프로필의 오타를 정정함
         evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
       properties:
@@ -22598,9 +22574,6 @@ components:
           format: int64
           minimum: 0
           description: 프로필을 확인했을 때의 버전입니다. 현재 버전이 다르면 변경하지 않습니다.
-        verificationSessionId:
-          $ref: '#/components/schemas/Identifier'
-          description: 이 변경을 위해 완료한 본인 확인 세션의 식별자입니다. 변경 대상과 목적이 일치해야 합니다.
         reason:
           type: string
           minLength: 1
@@ -22621,13 +22594,12 @@ components:
           expectedProfileChangeVersion: 1
           expectedActionRequestVersion: 2
           expectedProfileVersion: 4
-          verificationSessionId: d55c076e-be1e-5e1b-8328-730750a4173a
-          reason: 추가 본인 확인과 새 증빙을 반영해 계정 재설정 요청 수정
+          reason: 추가 새 증빙을 반영해 계정 재설정 요청 수정
           evidenceDigest: a3f1c9e27b4d8065f2a1c7d9e4b6a8c0d2f5e7a9b1c3d5e7f9a0b2c4d6e8f1a3
       properties:
         binding:
           $ref: '#/components/schemas/ProfileChangeRevisionBinding'
-          description: 대상과 현재 버전, 본인 확인, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
+          description: 대상과 현재 버전, 사유, 증거 해시 등 이 변경에 공통으로 필요한 정보를 담습니다.
     StoreOrderChangeCandidate:
       type: object
       required:
@@ -22795,11 +22767,11 @@ components:
     RegisterSupportCompensationIncidentRequest:
       type: object
       required:
-      - verificationSessionId
+      - subjectLinkId
       - orderId
       - occurredAt
       properties:
-        verificationSessionId:
+        subjectLinkId:
           $ref: '#/components/schemas/Identifier'
         orderId:
           type:

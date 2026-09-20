@@ -566,9 +566,9 @@ export const MenuDraftLocksNavigation: Story = { ...ManagementWorkspace, play: a
   await userEvent.click(await canvas.findByRole("button", { name: "카페 라테 편집" }));
   const name = await canvas.findByLabelText("메뉴 이름");
   await userEvent.type(name, " 추가");
-  await expect(canvas.getByRole("tab", { name: "영업시간과 픽업" })).toBeDisabled();
+  await expect(canvas.getByRole("tab", { name: "영업시간과 이미지" })).toBeDisabled();
   await expect(canvas.getByLabelText("매장 선택")).toBeDisabled();
   await userEvent.click(canvas.getByRole("button", { name: "편집 닫기" }));
-  await expect(canvas.getByRole("tab", { name: "영업시간과 픽업" })).toBeEnabled();
+  await expect(canvas.getByRole("tab", { name: "영업시간과 이미지" })).toBeEnabled();
   await expect(canvas.getByLabelText("매장 선택")).toBeEnabled();
 } };

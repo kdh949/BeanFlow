@@ -50,6 +50,7 @@ data class ClaimOneTimePaymentConfirmationCommand(
     val paymentKey: String,
     val amountKrw: Long,
     val now: Instant,
+    val providerConfirmationDeadline: Instant? = null,
 )
 
 enum class OneTimePaymentConfirmationClaimState {
@@ -73,6 +74,9 @@ interface OneTimePaymentOperations {
     fun existing(command: PrepareOneTimePaymentCommand): OneTimePaymentAttemptView?
 
     fun prepare(command: PrepareOneTimePaymentCommand): OneTimePaymentAttemptView
+
+    /** Returns the current result only when this exact callback was already claimed. */
+    fun replayClaimedConfirmation(command: ClaimOneTimePaymentConfirmationCommand): OneTimePaymentConfirmationClaim?
 
     fun claimConfirmation(command: ClaimOneTimePaymentConfirmationCommand): OneTimePaymentConfirmationClaim
 

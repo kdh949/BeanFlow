@@ -110,11 +110,12 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
         }
 
         @Test
-        fun `the Store display endpoint stays two statements with or without seven operating days`() {
+        fun `the Store display endpoint stays one statement with or without seven operating days`() {
             val small = countStatements { readStoreOk(smallStore) }
             val large = countStatements { readStoreOk(largeStore) }
 
-            // Merchant profile/hours is one flat batch projection; Fulfillment earliest-slot is one.
+            // Merchant profile/hours is one flat projection. Immediate discovery does not query
+            // the legacy Fulfillment slot inventory.
             assertThat(small).isEqualTo(STORE_ENDPOINT_STATEMENTS)
             assertThat(large).isEqualTo(STORE_ENDPOINT_STATEMENTS)
         }
@@ -265,7 +266,7 @@ internal class DiscoveryStoreCatalogEndpointQueryCountTest
         private companion object {
             const val MENU_ENDPOINT_STATEMENTS = 3
             const val SLOT_ENDPOINT_STATEMENTS = 2
-            const val STORE_ENDPOINT_STATEMENTS = 2
+            const val STORE_ENDPOINT_STATEMENTS = 1
         }
 
         /** Counts preparations only during the measured synchronous request on this thread. */

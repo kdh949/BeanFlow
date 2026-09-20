@@ -50,6 +50,7 @@ internal class PaymentConfirmationIntegrationTest
         private val expiryUseCase: ReservationExpiryUseCase,
         private val confirmationService: PaymentConfirmationService,
         private val reconciliationWorker: PaymentReconciliationWorker,
+        private val commitmentRecovery: PaymentCommitmentRecoveryTransaction,
         private val reconciliationOperations: PaymentReconciliationOperations,
         private val gateway: ScriptedTestPaymentGateway,
         private val providerRequestLoader: PaymentProviderRequestLoader,
@@ -714,6 +715,57 @@ internal class PaymentConfirmationIntegrationTest
                     "SELECT count(*) FROM payment_reconciliation WHERE kind = 'LATE_VOID' " +
                         "AND payment_id = (SELECT id FROM payment_payment WHERE order_id = ?)",
                     orderId,
+                ),
+            ).isEqualTo(1)
+        }
+
+        @Test
+        fun `legacy approval recovery waits for a terminal order and then records the late approval`() {
+            val fixture = OrderCreationFixture()
+            val orderId = pendingOrder(fixture, "payment-legacy-recovery-order")
+            val paymentMethodId = insertPaymentMethod(fixture.customerId)
+            gateway.enqueueApproval(ProviderPaymentResult.Unknown("TIMEOUT"))
+            confirmationService.confirm(
+                fixture.customerId,
+                orderId,
+                paymentMethodId,
+                "payment-legacy-recovery-key",
+            )
+            val paymentId = value<UUID>("SELECT id FROM payment_payment WHERE order_id = ?", orderId)
+            val approval = ProviderPaymentResult.Approved("provider-legacy-recovery", 1_000, "KRW")
+
+            assertThatThrownBy {
+                commitmentRecovery.recoverApproved(
+                    fixture.customerId,
+                    orderId,
+                    paymentId,
+                    approval,
+                    FailureCode.DEPENDENCY_UNAVAILABLE.name,
+                    Instant.now(),
+                )
+            }.isInstanceOfSatisfying(DomainFailure::class.java) {
+                assertThat(it.code).isEqualTo(FailureCode.DEPENDENCY_UNAVAILABLE)
+            }
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PENDING_PAYMENT")
+            assertThat(value<String>("SELECT approval_state FROM payment_payment WHERE id = ?", paymentId)).isEqualTo("UNKNOWN")
+
+            makeOrderAndApprovalLookupDue(orderId)
+            expiryUseCase.expireIfDue(orderId, Instant.now())
+            commitmentRecovery.recoverApproved(
+                fixture.customerId,
+                orderId,
+                paymentId,
+                approval,
+                FailureCode.DEPENDENCY_UNAVAILABLE.name,
+                Instant.now(),
+            )
+
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("EXPIRED")
+            assertThat(value<String>("SELECT approval_state FROM payment_payment WHERE id = ?", paymentId)).isEqualTo("RECONCILING")
+            assertThat(
+                value<Long>(
+                    "SELECT count(*) FROM payment_reconciliation WHERE kind = 'LATE_VOID' AND payment_id = ?",
+                    paymentId,
                 ),
             ).isEqualTo(1)
         }

@@ -17,7 +17,7 @@ internal object CanonicalOrderPayload {
         val canonical =
             """{"couponIssuanceId":${command.couponIssuanceId?.let { "\"$it\"" } ?: "null"},""" +
                 """"expectedQuoteFingerprint":${command.expectedQuoteFingerprint?.let { "\"$it\"" } ?: "null"},""" +
-                """"lines":$lines,"pickupSlotId":"${command.pickupSlotId}",""" +
+                """"lines":$lines,"pickupSlotId":${command.pickupSlotId?.let { "\"$it\"" } ?: "null"},""" +
                 """"pointsToUseKrw":${command.pointsToUseKrw},"storeId":"${command.storeId}"}"""
         return MessageDigest
             .getInstance("SHA-256")

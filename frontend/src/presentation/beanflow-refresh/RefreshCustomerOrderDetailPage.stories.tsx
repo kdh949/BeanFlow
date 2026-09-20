@@ -105,10 +105,9 @@ export const ReorderFromHistory: Story = {
   },
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("region", { name: "다시 주문" })).toBeVisible();
-    await userEvent.click(await canvas.findByRole("radio", { name: /7잔 가능/ }));
     await expect(await canvas.findByText("1,500P")).toBeVisible();
     await userEvent.type(canvas.getByRole("textbox", { name: "사용할 포인트" }), "500");
-    await userEvent.click(canvas.getByRole("button", { name: "이 시간으로 주문" }));
+    await userEvent.click(canvas.getByRole("button", { name: "현재 조건으로 주문" }));
     await expect(await canvas.findByRole("alert")).toHaveTextContent("포인트");
     await expect(reorderRequest).toHaveBeenCalledWith(expect.objectContaining({ pointsToUseKrw: 500 }));
   },

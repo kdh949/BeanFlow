@@ -58,16 +58,15 @@ export const EmptyTimeline: Story = {
   parameters: { msw: { handlers: [caseHandler, http.get("/api/v1/support/cases/:caseId/timeline", () => HttpResponse.json({ items: [], nextCursor: null }))] } },
   play: async ({ canvas }) => { await expect(await canvas.findByText("표시할 이력이 없습니다")).toBeVisible(); },
 };
-export const OrderWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "주문 변경" })); await expect(await canvas.findByRole("button", { name: "기존 주문 변경 요청 찾기" })).toBeVisible(); await expect(canvas.getByText("업무 처리 목적의 본인확인이 필요합니다")).toBeVisible(); } };
+export const OrderWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "주문 변경" })); await expect(await canvas.findByRole("button", { name: "기존 주문 변경 요청 찾기" })).toBeVisible(); await expect(canvas.getByText("연결된 주문이 없습니다")).toBeVisible(); } };
 
-export const CompensationWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "고객 보상" })); await expect(await canvas.findByRole("button", { name: "기존 보상 요청 찾기" })).toBeVisible(); await expect(canvas.getByText("고객 본인확인이 필요합니다")).toBeVisible(); } };
+export const CompensationWorkflow: Story = { play: async ({ canvas }) => { await userEvent.click(await canvas.findByRole("tab", { name: "고객 보상" })); await expect(await canvas.findByRole("button", { name: "기존 보상 요청 찾기" })).toBeVisible(); await expect(canvas.getByText("처리할 고객을 선택해 주세요")).toBeVisible(); } };
 export const ReturnedCompensation: Story = {
-  parameters: { routing: { path: "/support/follow-up", initialEntry: `/support/follow-up?caseId=${caseId}&incidentId=${caseId}` }, msw: { handlers: [http.get("/api/v1/support/cases/:caseId", () => HttpResponse.json({ ...supportCase, subjectLinks: [{ linkId: caseId, subjectId: caseId, subjectType: "CUSTOMER", relationship: "REQUESTER" }] })), timelineHandler] } },
+  parameters: { routing: { path: "/support/follow-up", initialEntry: `/support/follow-up?caseId=${caseId}&incidentId=${caseId}` }, msw: { handlers: [http.get("/api/v1/support/cases/:caseId", () => HttpResponse.json({ ...supportCase, subjectLinks: [{ linkId: caseId, subjectId: caseId, subjectType: "CUSTOMER", relationship: "REQUESTER", display: { state: "AVAILABLE", label: "김*객" } }] })), timelineHandler] } },
   play: async ({ canvas, msw }) => {
     msw.use(http.get("/api/v1/support/work-items", () => HttpResponse.json({ items: [{ requestId: caseId, kind: "VERIFICATION", caseId, caseCategory: "COMPENSATION", caseOpenedAt: "2026-09-11T00:00:00Z", purpose: "CASE_RESOLUTION", state: "VERIFIED", createdAt: "2026-09-11T00:00:00Z", expiresAt: "2099-09-11T00:15:00Z" }], nextCursor: null })),
       http.get("/api/v1/support/verification-sessions/:sessionId", () => HttpResponse.json({ sessionId: caseId, caseId, subjectLinkId: caseId, subjectId: caseId, subjectType: "CUSTOMER", purpose: "CASE_RESOLUTION", actionScope: "SUPPORT_ACTION", requestedLevel: "BASIC", achievedLevel: "BASIC", state: "VERIFIED", startedAt: "2026-09-11T00:00:00Z", expiresAt: "2099-09-11T00:15:00Z", challenges: [] })),
       http.get("/api/v1/support/cases/:caseId/compensation-incidents", ({ request }) => { expect(new URL(request.url).searchParams.get("incidentId")).toBe(caseId); return HttpResponse.json({ items: [{ incidentId: caseId, category: "COMPENSATION", occurredAt: null, createdAt: "2026-09-11T00:00:00Z", source: "EXISTING_COMPENSATION", benefitIssued: false }], nextCursor: null }); }));
-    await userEvent.click(await canvas.findByRole("button", { name: "기존 본인확인 요청 찾기" })); await userEvent.click(await canvas.findByRole("button", { name: "이 요청 열기" }));
     await expect(await canvas.findByText("재검토 링크의 기존 사고를 확인합니다.")).toBeVisible(); await userEvent.click(await canvas.findByRole("button", { name: "이 사고 선택" })); await expect(await canvas.findByText("선택한 사고 · 보상")).toBeVisible();
   },
 };
@@ -90,7 +89,7 @@ export const PendingOrderKeepsWorkspace: Story = {
     await canvas.findByRole("button", { name: "같은 요청으로 결과 확인" });
     await expect(canvas.getByRole("tab", { name: "상담 이력" })).toBeDisabled();
     await expect(canvas.getByRole("tab", { name: "고객 보상" })).toBeDisabled();
-    await expect(canvas.getByRole("button", { name: "기존 본인확인 요청 찾기" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "기존 주문 변경 요청 찾기" })).toBeDisabled();
   },
 };
 
@@ -102,7 +101,7 @@ function lockedBreakGlass(unknown: boolean): Story {
     play: async ({ canvas, msw }) => {
       let revealed = false, calls = 0;
       msw.use(http.get("/api/v1/support/break-glass-requests/:id/workflow", () => HttpResponse.json({
-        request: { requestId: id, caseId, subjectId: id, subjectType: "CUSTOMER", requesterId: id, approverId: caseId, field: "CUSTOMER_PRIMARY_EMAIL", purpose: "PRIVACY_INCIDENT", reasonCode: "PRIVACY_INCIDENT", state: revealed ? "REVIEW_PENDING" : "ACTIVE", version: 1, requestedAt: "2026-09-11T09:03:00Z", expiresAt: "2026-09-11T09:06:00Z" },
+        request: { authorizationBasis: "SUPPORT_DIRECT", requestId: id, caseId, subjectId: id, subjectType: "CUSTOMER", requesterId: id, approverId: null, field: "CUSTOMER_PRIMARY_EMAIL", purpose: "PRIVACY_INCIDENT", reasonCode: "PRIVACY_INCIDENT", state: revealed ? "REVIEW_PENDING" : "ACTIVE", version: 1, requestedAt: "2026-09-11T09:03:00Z", expiresAt: "2026-09-11T09:06:00Z" },
         allowedActions: revealed ? [] : ["REVEAL"], canViewRevealedValue: true, postReview: null,
       })), http.post("/api/v1/support/break-glass-requests/:id/reveals", () => { revealed = true; calls++; return unknown ? HttpResponse.error() : HttpResponse.json({ revealAttemptId: id, requestId: id, caseId, subjectId: id, field: "CUSTOMER_PRIMARY_EMAIL", value: "emergency@example.invalid", revealedAt: "2026-09-11T09:04:00Z" }); }));
       await userEvent.click(await canvas.findByRole("button", { name: "긴급 정보 한 번 열람" }));

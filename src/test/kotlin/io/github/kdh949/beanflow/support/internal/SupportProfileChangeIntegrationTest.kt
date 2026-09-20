@@ -115,13 +115,13 @@ internal class SupportProfileChangeIntegrationTest
         }
 
         @Test
-        fun `work directory finds profile requests for the approver without including profile values`() {
+        fun `work directory finds direct profile requests without creating approval tasks`() {
             val created = profiles.submit(primaryPhoneCommand("directory-profile"))
             val body =
                 mockMvc
                     .perform(
                         get("/api/v1/support/work-items")
-                            .with(jwt().jwt { it.subject(managerId.toString()) })
+                            .with(jwt().jwt { it.subject(requesterId.toString()) })
                             .param("kind", "PROFILE_CHANGE")
                             .param("caseId", caseId.toString()),
                     ).andExpect(status().isOk)
@@ -135,53 +135,30 @@ internal class SupportProfileChangeIntegrationTest
                         .with(jwt().jwt { it.subject(managerId.toString()) })
                         .param("kind", "PROFILE_CHANGE"),
                 ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.items[0].requestId").value(created.profileChangeId.toString()))
-                .andExpect(jsonPath("$.items[0].reviewAction").value("DECIDE"))
-            mockMvc
-                .perform(
-                    get("/api/v1/support/approval-tasks/PROFILE_CHANGE/${created.profileChangeId}/history")
-                        .with(jwt().jwt { it.subject(managerId.toString()) }),
-                ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.items").isEmpty())
         }
 
         @Test
-        fun `operations only reviewer reads the exact profile review chain without Support case grant`() {
+        fun `direct profile request creates no operations investigation or approval record`() {
             val created = profiles.submit(primaryPhoneCommand("operations-review-metadata"))
-            val requestId = requireNotNull(created.actionRequestId)
-            decideManager(requestId, managerId, "operations-review-manager")
-            val actor = jwt().jwt { it.subject(operationsId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR"))
-            val beforeAudits = jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java)
-            mockMvc.perform(get("/api/v1/support/action-requests/$requestId").with(actor)).andExpect(status().isForbidden)
-            val read =
-                mockMvc
-                    .perform(get("/api/v1/operations/support-action-requests/$requestId/review").with(actor))
-                    .andExpect(status().isOk)
-                    .andExpect(header().string("Cache-Control", "no-store"))
-                    .andExpect(jsonPath("$.request.revisionNumber").value(1))
-                    .andExpect(jsonPath("$.profile.purpose").value("CUSTOMER_PRIMARY_PHONE"))
-                    .andExpect(jsonPath("$.profile.subjectId").value(customerId.toString()))
-                    .andExpect(jsonPath("$.request.verificationSessionId").doesNotExist())
-                    .andExpect(jsonPath("$.request.requesterActorId").doesNotExist())
-                    .andExpect(jsonPath("$.profile.maskedBefore").doesNotExist())
-                    .andReturn()
-            assertThat(read.response.contentAsString).doesNotContain("010-1234-5678")
-            mockMvc
-                .perform(
-                    get("/api/v1/operations/investigations")
-                        .param("supportActionRequestId", requestId.toString())
-                        .param("revisionNumber", "1")
-                        .with(actor),
-                ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.canDecide").value(true))
+            assertThat(created.verificationSessionId).isNull()
             assertThat(
-                jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java),
-            ).isEqualTo(beforeAudits)
-            jdbcTemplate.update(
-                "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ?",
-                operationsId,
-            )
-            mockMvc.perform(get("/api/v1/operations/support-action-requests/$requestId/review").with(actor)).andExpect(status().isForbidden)
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM operations_support_investigation_case WHERE support_action_request_id = ?",
+                    Int::class.java,
+                    created.actionRequestId,
+                ),
+            ).isZero()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM support_action_approval_step WHERE request_id = ?",
+                    Int::class.java,
+                    created.actionRequestId,
+                ),
+            ).isZero()
+            val action = actionRequests.get(requesterId, requireNotNull(created.actionRequestId))
+            assertThat(action.approvalSteps).isEmpty()
+            assertThat(action.executorActorId).isEqualTo(requesterId)
         }
 
         @Test
@@ -198,7 +175,7 @@ internal class SupportProfileChangeIntegrationTest
                 .andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.currentProfileVersion").value(0))
-                .andExpect(jsonPath("$.requiredVerificationLevel").value("BASIC"))
+                .andExpect(jsonPath("$.requiredVerificationLevel").value("UNVERIFIED"))
                 .andExpect(jsonPath("$.displayName").doesNotExist())
                 .andExpect(jsonPath("$.primaryPhone").doesNotExist())
             mockMvc
@@ -268,32 +245,23 @@ internal class SupportProfileChangeIntegrationTest
             mockMvc
                 .perform(
                     get("/api/v1/support/profile-changes/${created.profileChangeId}/workflow")
-                        .with(jwt().jwt { it.subject(managerId.toString()) }),
+                        .with(jwt().jwt { it.subject(requesterId.toString()) }),
                 ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.allowedActions[0]").value("DECIDE_SUPPORT_MANAGER"))
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.hasItem("EXECUTE")))
         }
 
         @Test
-        fun `profile workflow exposes separate approval and current execution without raw payload`() {
+        fun `profile workflow exposes direct execution and removes it after permission revocation`() {
             val created = profiles.submit(primaryPhoneCommand("profile-workflow-request"))
             val path = "/api/v1/support/profile-changes/${created.profileChangeId}/workflow"
             mockMvc
-                .perform(get(path).with(jwt().jwt { it.subject(managerId.toString()) }))
-                .andExpect(status().isOk)
-                .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.allowedActions[0]").value("DECIDE_SUPPORT_MANAGER"))
-                .andExpect(jsonPath("$.approval.targetId").value(created.profileChangeId.toString()))
-                .andExpect(jsonPath("$.profileChange.primaryPhone").doesNotExist())
-            mockMvc
-                .perform(get(path).with(jwt().jwt { it.subject(replacementId.toString()) }))
-                .andExpect(status().isForbidden)
-            decideManager(requireNotNull(created.actionRequestId), managerId, "profile-workflow-manager")
-            approveOperations(created.actionRequestId)
-            mockMvc
                 .perform(get(path).with(jwt().jwt { it.subject(requesterId.toString()) }))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$.allowedActions[0]").value("EXECUTE"))
-                .andExpect(jsonPath("$.currentProfileVersion").value(0))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.allowedActions").value(org.hamcrest.Matchers.hasItem("EXECUTE")))
+                .andExpect(jsonPath("$.approval.approvalSteps").isEmpty())
+                .andExpect(jsonPath("$.profileChange.primaryPhone").doesNotExist())
+            mockMvc.perform(get(path).with(jwt().jwt { it.subject(replacementId.toString()) })).andExpect(status().isForbidden)
             jdbcTemplate.update(
                 "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_PROFILE_R3_REQUEST'",
                 requesterId,
@@ -331,15 +299,12 @@ internal class SupportProfileChangeIntegrationTest
         }
 
         @Test
-        fun `new phone alone cannot replace a registered-channel verification`() {
+        fun `primary phone request needs no registered channel or verification session`() {
             jdbcTemplate.update("DELETE FROM support_verification_challenge WHERE session_id = ?", sessionId)
-            seedChallenge("IN_APP")
-
-            assertThatThrownBy { profiles.submit(primaryPhoneCommand("phone-new-channel-only")) }
-                .isInstanceOf(DomainFailure::class.java)
-                .extracting("code")
-                .isEqualTo(FailureCode.VERIFICATION_REQUIRED)
-            assertThat(count("support_profile_change")).isZero()
+            jdbcTemplate.update("DELETE FROM support_verification_session WHERE id = ?", sessionId)
+            val created = profiles.submit(primaryPhoneCommand("phone-no-verification").copy(verificationSessionId = null))
+            assertThat(created.state).isEqualTo(SupportProfileChangeState.READY_FOR_EXECUTION)
+            assertThat(created.verificationSessionId).isNull()
             assertThat(currentCustomerVersion()).isZero()
         }
 
@@ -350,7 +315,7 @@ internal class SupportProfileChangeIntegrationTest
                 "binding": {
                   "subjectId": "$customerId",
                   "expectedProfileVersion": 0,
-                  "verificationSessionId": "$sessionId",
+
                   "reason": "Profile correction requested",
                   "evidenceDigest": "$EVIDENCE_DIGEST"
                 }
@@ -385,7 +350,7 @@ internal class SupportProfileChangeIntegrationTest
                 "binding": {
                   "subjectId": "$missing",
                   "expectedProfileVersion": 0,
-                  "verificationSessionId": "$sessionId",
+
                   "reason": "Missing owner contract check",
                   "evidenceDigest": "$EVIDENCE_DIGEST"
                 }
@@ -408,34 +373,55 @@ internal class SupportProfileChangeIntegrationTest
         }
 
         @Test
-        fun `R3 exact payload requires different manager and operations approvers before execution`() {
+        fun `R4 credential reset registers and executes by the same operator without verification`() {
+            jdbcTemplate.update("DELETE FROM support_verification_challenge WHERE session_id = ?", sessionId)
+            jdbcTemplate.update("DELETE FROM support_verification_session WHERE id = ?", sessionId)
+            val created =
+                profiles.submit(
+                    primaryPhoneCommand(
+                        "r4-reset-create",
+                    ).copy(verificationSessionId = null, payload = SupportProfileChangePayload.CustomerCredentialReset),
+                )
+            assertThat(created.riskClass).isEqualTo(ProfileRiskClass.R4)
+            val action = actionRequests.get(requesterId, requireNotNull(created.actionRequestId))
+            assertThat(action.approvalSteps).isEmpty()
+            val command =
+                ExecuteSupportProfileChangeCommand(
+                    requesterId,
+                    created.profileChangeId,
+                    1,
+                    action.requestVersion,
+                    created.version,
+                    0,
+                    "r4-reset-execute",
+                    SupportProfileChangePayload.CustomerCredentialReset,
+                )
+            val executed = profiles.execute(command)
+            assertThat(executed.state).isEqualTo(SupportProfileChangeState.EXECUTED)
+            assertThat(profiles.execute(command).profileChangeId).isEqualTo(executed.profileChangeId)
+            assertThat(count("identity_customer_profile_change_history")).isOne()
+            assertThat(count("support_verification_session")).isZero()
+            val audit = audits.commands.single { it.action == "SUPPORT_PROFILE_CHANGE_EXECUTED" && it.targetId == created.profileChangeId }
+            assertThat(
+                audit.afterSummary,
+            ).containsEntry("event", "SUPPORT_DIRECT_EXECUTED").containsEntry("authorizationBasis", "SUPPORT_DIRECT")
+        }
+
+        @Test
+        fun `R3 exact payload executes by requester without manager or operations approval`() {
             val created = profiles.submit(primaryPhoneCommand("phone-dual-create"))
             assertThat(created.riskClass).isEqualTo(ProfileRiskClass.R3)
-            assertThat(created.state).isEqualTo(SupportProfileChangeState.AWAITING_APPROVAL)
+            assertThat(created.state).isEqualTo(SupportProfileChangeState.READY_FOR_EXECUTION)
 
-            grant(requesterId, "SUPPORT_ACTION_APPROVE")
-            grant(requesterId, "SUPPORT_PROFILE_R3_APPROVE")
-            assertThatThrownBy {
-                decideManager(requireNotNull(created.actionRequestId), requesterId, "phone-self-approval")
-            }.isInstanceOf(DomainFailure::class.java)
-                .extracting("code")
-                .isEqualTo(FailureCode.SUPPORT_APPROVER_MUST_DIFFER)
-
-            val managerApproved =
-                decideManager(requireNotNull(created.actionRequestId), managerId, "phone-manager-approval")
-                    as SupportActionCommandOutcome.Succeeded
-            assertThat(managerApproved.resource.state).isEqualTo(SupportActionRequestState.AWAITING_OPERATIONS)
-            val operationsApproved = approveOperations(requireNotNull(created.actionRequestId))
-            val approvedRequest = operationsApproved.resource
-            assertThat(approvedRequest.supportRequestState).isEqualTo("READY_FOR_EXECUTION")
-
+            val action = actionRequests.get(requesterId, requireNotNull(created.actionRequestId))
+            assertThat(action.approvalSteps).isEmpty()
             val executed =
                 profiles.execute(
                     ExecuteSupportProfileChangeCommand(
                         requesterId,
                         created.profileChangeId,
                         1,
-                        approvedRequest.supportRequestVersion,
+                        action.requestVersion,
                         created.version,
                         0,
                         "phone-dual-execute",
@@ -455,8 +441,8 @@ internal class SupportProfileChangeIntegrationTest
         }
 
         @Test
-        fun `approved execution fails closed after subject link is removed`() {
-            val (created, approved) = approvePrimaryPhone("phone-link-revoked")
+        fun `direct execution fails closed after subject link is removed`() {
+            val (created, approved) = directPrimaryPhone("phone-link-revoked")
             jdbcTemplate.update(
                 "UPDATE support_case_subject_link SET unlinked_at = now(), unlinked_by_actor_id = ?, " +
                     "unlink_reason = 'REVIEW_TEST_UNLINK', unlink_case_version = 1 WHERE support_case_id = ? AND subject_id = ?",
@@ -470,8 +456,8 @@ internal class SupportProfileChangeIntegrationTest
         }
 
         @Test
-        fun `approved execution fails closed after requester permission is revoked`() {
-            val (created, approved) = approvePrimaryPhone("phone-permission-revoked")
+        fun `direct execution fails closed after requester permission is revoked`() {
+            val (created, approved) = directPrimaryPhone("phone-permission-revoked")
             jdbcTemplate.update(
                 "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
                     "WHERE actor_id = ? AND permission = 'SUPPORT_PROFILE_R3_REQUEST'",
@@ -483,35 +469,38 @@ internal class SupportProfileChangeIntegrationTest
         }
 
         @Test
-        fun `approved primary-phone execution fails after registered-channel challenge is invalidated`() {
-            val (created, approved) = approvePrimaryPhone("phone-challenge-invalidated")
-            jdbcTemplate.update(
-                "UPDATE support_verification_challenge SET state = 'EXPIRED' WHERE session_id = ?",
-                sessionId,
-            )
-
-            assertExecutionDenied(created, approved, FailureCode.VERIFICATION_REQUIRED)
-            assertThat(currentCustomerVersion()).isZero()
+        fun `direct primary phone execution ignores expired legacy verification`() {
+            val (created, version) = directPrimaryPhone("phone-challenge-invalidated")
+            jdbcTemplate.update("UPDATE support_verification_challenge SET state = 'EXPIRED' WHERE session_id = ?", sessionId)
+            val executed =
+                profiles.execute(
+                    ExecuteSupportProfileChangeCommand(
+                        requesterId,
+                        created.profileChangeId,
+                        1,
+                        version,
+                        created.version,
+                        0,
+                        "phone-expired-legacy-execute",
+                        SupportProfileChangePayload.CustomerPrimaryPhone("010-5555-7777"),
+                    ),
+                )
+            assertThat(executed.state).isEqualTo(SupportProfileChangeState.EXECUTED)
+            assertThat(currentCustomerVersion()).isEqualTo(1)
         }
 
         @Test
-        fun `approved request becomes stale when the owner profile version changes`() {
-            val created = profiles.submit(primaryPhoneCommand("phone-stale-create"))
+        fun `direct request becomes stale when the owner profile version changes`() {
+            val (created, version) = directPrimaryPhone("phone-stale-create")
             profiles.submit(displayNameCommand("display-version-advance", "버전변경"))
-
-            val outcome = decideManager(requireNotNull(created.actionRequestId), managerId, "phone-stale-manager")
-            assertThat(outcome).isInstanceOf(SupportActionCommandOutcome.Failed::class.java)
-            assertThat((outcome as SupportActionCommandOutcome.Failed).code)
-                .isEqualTo(FailureCode.SUPPORT_ACTION_REQUEST_STALE)
+            assertExecutionDenied(created, version, FailureCode.SUPPORT_ACTION_REQUEST_STALE)
             assertThat(currentCustomerVersion()).isEqualTo(1)
             assertThat(count("identity_customer_profile_change_history")).isOne()
         }
 
         @Test
-        fun `inactive original executor requires explicit case and profile reassignment`() {
+        fun `inactive original executor cannot transfer a direct profile request`() {
             val created = profiles.submit(primaryPhoneCommand("phone-reassign-create"))
-            decideManager(requireNotNull(created.actionRequestId), managerId, "phone-reassign-manager")
-            val approved = approveOperations(requireNotNull(created.actionRequestId)).resource
             jdbcTemplate.update(
                 "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() " +
                     "WHERE actor_id = ? AND permission = 'SUPPORT_ACTION_EXECUTE'",
@@ -528,7 +517,7 @@ internal class SupportProfileChangeIntegrationTest
                 "SUPPORT_PROFILE_R3_REQUEST",
             ).forEach { grant(replacementId, it) }
 
-            val reassigned =
+            assertThatThrownBy {
                 actionRequests.reassign(
                     ReassignSupportActionRequestCommand(
                         managerId,
@@ -541,17 +530,14 @@ internal class SupportProfileChangeIntegrationTest
                         "phone-reassign-command",
                     ),
                 )
-            assertThat(reassigned.executorActorId).isEqualTo(replacementId)
-            assertThat(reassigned.state).isEqualTo(SupportActionRequestState.READY_FOR_EXECUTION)
-            assertThat(profiles.get(replacementId, created.profileChangeId).executorActorId).isEqualTo(replacementId)
+            }.isInstanceOfSatisfying(DomainFailure::class.java) { failure ->
+                assertThat(failure.code).isEqualTo(FailureCode.SUPPORT_ACTION_REQUEST_STALE)
+            }
+            assertThat(actionRequests.get(managerId, requireNotNull(created.actionRequestId)).executorActorId).isEqualTo(requesterId)
             assertThat(
-                jdbcTemplate.queryForObject(
-                    "SELECT current_assignee_id FROM support_case WHERE id = ?",
-                    UUID::class.java,
-                    caseId,
-                ),
-            ).isEqualTo(replacementId)
-            assertThat(reassigned.requestVersion).isGreaterThan(approved.supportRequestVersion)
+                jdbcTemplate.queryForObject("SELECT current_assignee_id FROM support_case WHERE id = ?", UUID::class.java, caseId),
+            ).isEqualTo(requesterId)
+            assertThat(count("identity_customer_profile_change_history")).isZero()
         }
 
         @Test
@@ -702,7 +688,7 @@ internal class SupportProfileChangeIntegrationTest
                       "binding": {
                         "subjectId": "$customerId",
                         "expectedProfileVersion": 0,
-                        "verificationSessionId": "$sessionId",
+
                         "reason": "Customer requested a display-name correction",
                         "evidenceDigest": "$EVIDENCE_DIGEST"
                       },
@@ -740,11 +726,9 @@ internal class SupportProfileChangeIntegrationTest
                 SupportProfileChangePayload.CustomerPrimaryPhone("010-5555-7777"),
             )
 
-        private fun approvePrimaryPhone(key: String): Pair<SupportProfileChangeResource, Long> {
+        private fun directPrimaryPhone(key: String): Pair<SupportProfileChangeResource, Long> {
             val created = profiles.submit(primaryPhoneCommand("$key-create"))
-            decideManager(requireNotNull(created.actionRequestId), managerId, "$key-manager")
-            val approved = approveOperations(requireNotNull(created.actionRequestId)).resource
-            return created to approved.supportRequestVersion
+            return created to actionRequests.get(requesterId, requireNotNull(created.actionRequestId)).requestVersion
         }
 
         private fun assertExecutionDenied(

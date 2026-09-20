@@ -85,6 +85,12 @@ internal class DataAccessGrant private constructor(
         validateState()
     }
 
+    fun activateDirect(occurredAt: Instant) {
+        check(state == DataAccessGrantState.REQUESTED)
+        require(occurredAt >= requestedAt)
+        activate(occurredAt, if (risk == DataAccessRisk.BASIC) BASIC_TTL else SENSITIVE_TTL)
+    }
+
     fun qualify(
         verifiedLevel: VerificationLevel,
         occurredAt: Instant,

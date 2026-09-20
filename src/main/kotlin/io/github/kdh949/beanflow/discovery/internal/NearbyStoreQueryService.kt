@@ -4,8 +4,6 @@ import io.github.kdh949.beanflow.discovery.api.NearbyStorePage
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreQueryOperations
 import io.github.kdh949.beanflow.discovery.api.NearbyStoreView
 import io.github.kdh949.beanflow.discovery.api.SearchNearbyStoresCommand
-import io.github.kdh949.beanflow.fulfillment.api.PickupAvailabilityQueryOperations
-import io.github.kdh949.beanflow.fulfillment.api.PickupAvailabilityView
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileCursor
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileProjection
 import io.github.kdh949.beanflow.merchant.api.NearbyStoreProfileQuery
@@ -80,8 +78,7 @@ internal class NearbyStoreQueryService(
 }
 
 /**
- * One read-only transaction around the Merchant public Query API and the Fulfillment availability
- * batch.
+ * One read-only transaction around the Merchant public Query API.
  *
  * A spatial, extension or database failure becomes an explicit 503. It is never converted into an
  * empty successful page, a cached page or an application distance calculation.
@@ -89,7 +86,6 @@ internal class NearbyStoreQueryService(
 @Component
 internal class NearbyStoreReadTransaction(
     private val stores: StoreDiscoveryQueryOperations,
-    private val availability: PickupAvailabilityQueryOperations,
     private val signedCursorCodec: SignedCursorCodec,
     private val metrics: NearbyStoreQueryMetrics,
     private val imageViews: StorefrontImageViewResolver,
@@ -104,16 +100,9 @@ internal class NearbyStoreReadTransaction(
             } catch (failure: PersistenceException) {
                 spatialUnavailable(failure)
             }
-        // 검사 대상은 probe row를 뺀 앞 limit개다. 가용성도 딱 그만큼만 묻는다.
-        val examined = fetched.take(prepared.limit)
-        val pickupWindows =
-            availability.findEarliestAvailableSlots(
-                examined.map(NearbyStoreProfileProjection::storeId),
-                prepared.now,
-            )
         val scanned =
             scanCandidates(fetched, prepared.limit) { candidate ->
-                !prepared.pickupAvailableOnly || candidate.storeId in pickupWindows
+                !prepared.pickupAvailableOnly || candidate.immediateOrderingAvailable(prepared.now)
             }
         val nextCursor =
             scanned.boundary?.let { boundary ->
@@ -124,7 +113,7 @@ internal class NearbyStoreReadTransaction(
                 )
             }
         return NearbyStorePage(
-            items = scanned.items.map { it.toView(pickupWindows[it.storeId], prepared.now, imageViews) },
+            items = scanned.items.map { it.toView(prepared.now, imageViews) },
             nextCursor = nextCursor,
         )
     }
@@ -139,20 +128,21 @@ internal class NearbyStoreReadTransaction(
 }
 
 internal fun NearbyStoreProfileProjection.toView(
-    pickupWindow: PickupAvailabilityView?,
     now: Instant,
     imageViews: StorefrontImageViewResolver,
-): NearbyStoreView =
-    NearbyStoreView(
+): NearbyStoreView {
+    val customerDisplay = customerDisplay.toCustomerView(now)
+    return NearbyStoreView(
         storeId = storeId,
         name = name,
         distanceMeters = distanceMicrometers / MICROMETERS_PER_METER,
         orderingAvailable = orderingAvailable,
-        pickupAvailable = pickupWindow != null,
-        nextPickupWindow = pickupWindow?.toCustomerView(),
-        customerDisplay = customerDisplay.toCustomerView(now),
+        pickupAvailable = immediateOrderingAvailable(customerDisplay),
+        nextPickupWindow = null,
+        customerDisplay = customerDisplay,
         image = imageViews.resolve(imageThumbnailKey),
     )
+}
 
 private const val MICROMETERS_PER_METER = 1_000_000L
 

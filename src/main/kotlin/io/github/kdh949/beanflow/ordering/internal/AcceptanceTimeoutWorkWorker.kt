@@ -93,7 +93,7 @@ internal class AcceptanceTimeoutWorkService(
         }
         return when (order.state) {
             OrderState.REJECTED -> {
-                if (order.rejectionReason == TIMEOUT_REASON &&
+                if (order.rejectionReason == expectedRejectionReason(order) &&
                     order.rejectedAt?.let { !it.isBefore(claim.acceptanceDeadlineAt) } == true
                 ) {
                     AcceptanceTimeoutSourceOutcome.REJECTED
@@ -228,9 +228,19 @@ internal class AcceptanceTimeoutWorkService(
             else -> UNEXPECTED_FAILURE
         }
 
+    private fun expectedRejectionReason(order: OrderEntity): String =
+        if (order.checkoutMode == io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode.IMMEDIATE &&
+            order.orderingWindowClosesAt == order.acceptanceDeadlineAt
+        ) {
+            STORE_CLOSED_REASON
+        } else {
+            TIMEOUT_REASON
+        }
+
     private companion object {
         const val MAX_ATTEMPTS = 4
         const val TIMEOUT_REASON = "STORE_ACCEPTANCE_TIMEOUT"
+        const val STORE_CLOSED_REASON = "STORE_CLOSED"
         const val CLAIM_LEASE_EXPIRED = "CLAIM_LEASE_EXPIRED"
         const val TIMEOUT_SOURCE_CONFLICT = "TIMEOUT_SOURCE_CONFLICT"
         const val UNEXPECTED_FAILURE = "UNEXPECTED_FAILURE"

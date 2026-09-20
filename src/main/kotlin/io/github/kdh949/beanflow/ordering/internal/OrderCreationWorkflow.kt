@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.fulfillment.api.PickupReservationOperations
 import io.github.kdh949.beanflow.fulfillment.api.ReservePickupCommand
 import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.ReservePointsCommand
+import io.github.kdh949.beanflow.loyalty.api.UsePointsImmediatelyCommand
 import io.github.kdh949.beanflow.merchant.api.MenuLineQuote
 import io.github.kdh949.beanflow.merchant.api.MenuQuoteUseCase
 import io.github.kdh949.beanflow.merchant.api.QuoteOrderLine
@@ -12,6 +13,7 @@ import io.github.kdh949.beanflow.merchant.api.StoreSettlementTermsOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.OrdinaryPointAccrualPolicyOperations
 import io.github.kdh949.beanflow.ordering.api.CreateOrderCommand
+import io.github.kdh949.beanflow.ordering.internal.domain.CheckoutInputSnapshot
 import io.github.kdh949.beanflow.ordering.internal.domain.Krw
 import io.github.kdh949.beanflow.ordering.internal.domain.Order
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderDisplayIdentitySnapshot
@@ -23,6 +25,7 @@ import io.github.kdh949.beanflow.payment.api.BenefitOnlyPaymentResult
 import io.github.kdh949.beanflow.promotion.api.CouponPricingLine
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
 import io.github.kdh949.beanflow.promotion.api.ReserveCouponCommand
+import io.github.kdh949.beanflow.promotion.api.UseCouponImmediatelyCommand
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -83,6 +86,17 @@ internal class OrderCreationWorkflow(
         if (prevalidatedQuotes != null && preparedQuote != null) {
             throw DomainFailure(FailureCode.INVALID_REQUEST, "Only one prevalidated order quote may be supplied")
         }
+        if (command.pickupSlotId == null) {
+            return createImmediate(
+                orderId,
+                command,
+                preparedQuote
+                    ?: throw DomainFailure(
+                        FailureCode.DEPENDENCY_UNAVAILABLE,
+                        "Immediate checkout requires a locked quote",
+                    ),
+            )
+        }
         val createdAt = preparedQuote?.response?.quotedAt ?: clock.instant()
         val requestedExpiresAt = createdAt.plus(RESERVATION_LEASE)
         val storeDisplaySnapshot = preparedQuote?.storeDisplay ?: storeDisplaySnapshotOperations.require(command.storeId)
@@ -95,7 +109,7 @@ internal class OrderCreationWorkflow(
                     ReservePickupCommand(
                         orderId = orderId,
                         storeId = command.storeId,
-                        pickupSlotId = command.pickupSlotId,
+                        pickupSlotId = requireNotNull(command.pickupSlotId),
                         expiresAt = requestedExpiresAt,
                         sourceReference = OrderCreationTransaction.pickupSource(orderId),
                     ),
@@ -220,7 +234,7 @@ internal class OrderCreationWorkflow(
                     id = orderId,
                     customerId = command.customerId,
                     storeId = command.storeId,
-                    pickupSlotId = command.pickupSlotId,
+                    pickupSlotId = requireNotNull(command.pickupSlotId),
                     displayIdentity = displayIdentity,
                     lineIds = lineIds,
                     quotes = quotes,
@@ -233,7 +247,7 @@ internal class OrderCreationWorkflow(
                     id = orderId,
                     customerId = command.customerId,
                     storeId = command.storeId,
-                    pickupSlotId = command.pickupSlotId,
+                    pickupSlotId = requireNotNull(command.pickupSlotId),
                     displayIdentity = displayIdentity,
                     lineIds = lineIds,
                     quotes = quotes,
@@ -274,6 +288,174 @@ internal class OrderCreationWorkflow(
                 pickupReservationId = pickupReservation.reservationId,
                 coupon = couponQuote,
                 points = pointReservation,
+                benefit = benefitConfirmation,
+                occurredAt = createdAt,
+                correlationId = correlationId,
+            ),
+        )
+        return OrderCreationOutcome(order, benefitConfirmation?.payment)
+    }
+
+    private fun createImmediate(
+        orderId: UUID,
+        command: CreateOrderCommand,
+        prepared: OrderQuoteCalculation,
+    ): OrderCreationOutcome {
+        val createdAt = prepared.response.quotedAt
+        val availability =
+            prepared.availability
+                ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Immediate availability snapshot is missing")
+        val cutoff =
+            availability.orderingWindowClosesAt
+                ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Immediate checkout cutoff is missing")
+        if (!availability.available || !cutoff.isAfter(createdAt)) {
+            throw DomainFailure(FailureCode.STORE_CLOSED, "Store ordering window has closed")
+        }
+        val quotes = prepared.menu.lines
+        val pricing = prepared.pricing
+        val checkoutInput =
+            CheckoutInputSnapshot(
+                schemaVersion = 1,
+                couponIssuanceId = command.couponIssuanceId,
+                pointsToUseKrw = command.pointsToUseKrw,
+                quoteFingerprint = prepared.response.quoteFingerprint,
+                cartRevision = null,
+                subtotalKrw = pricing.subtotal.value,
+                couponDiscountKrw = pricing.couponDiscount.value,
+                pointsAppliedKrw = pricing.pointsApplied.value,
+                payableKrw = pricing.payable.value,
+                settlementTerms = prepared.settlementTerms,
+                couponQuote = prepared.coupon,
+            )
+        val allocatedDisplayIdentity = displayIdentityAllocator.allocate(command.storeId, createdAt)
+        val displayIdentity =
+            OrderDisplayIdentitySnapshot(
+                publicReference = allocatedDisplayIdentity.publicReference.value,
+                pickupBusinessDate = allocatedDisplayIdentity.pickupBusinessDate,
+                pickupSequence = allocatedDisplayIdentity.pickupSequence,
+                storeName = prepared.storeDisplay.name,
+                pickupWindowStart = null,
+                pickupWindowEnd = null,
+            )
+        val lineIds = quotes.map { identifierSource.next() }
+        val benefitOnly = pricing.payable == Krw.ZERO
+        val order =
+            if (benefitOnly) {
+                Order.benefitOnlyImmediatePaid(
+                    orderId,
+                    command.customerId,
+                    command.storeId,
+                    displayIdentity,
+                    lineIds,
+                    quotes,
+                    pricing,
+                    createdAt,
+                    cutoff,
+                    checkoutInput,
+                )
+            } else {
+                Order.pendingImmediate(
+                    orderId,
+                    command.customerId,
+                    command.storeId,
+                    displayIdentity,
+                    lineIds,
+                    quotes,
+                    pricing,
+                    createdAt,
+                    cutoff,
+                    checkoutInput,
+                )
+            }
+        orderRepository.save(snapshotAssembler.order(order))
+        orderLineRepository.saveAll(snapshotAssembler.lines(order))
+        orderLineRepository.flush()
+
+        val selectedPointAccrualPolicy = prepared.pointAccrualPolicy
+        val pointAccrualCalculation =
+            pointAccrualCalculator.calculate(
+                selectedPointAccrualPolicy.policy,
+                snapshotAssembler.pointAccrualLines(order),
+            )
+        pointAccrualSnapshotService.save(
+            orderId = order.id,
+            orderPayableKrw = order.payableKrw,
+            selected = selectedPointAccrualPolicy,
+            calculation = pointAccrualCalculation,
+            createdAt = createdAt,
+        )
+
+        val coupon =
+            if (benefitOnly) {
+                prepared.coupon?.let { quoted ->
+                    couponOperations.useImmediately(
+                        UseCouponImmediatelyCommand(
+                            orderId = order.id,
+                            customerId = order.customerId,
+                            storeId = order.storeId,
+                            couponIssuanceId = quoted.couponIssuanceId,
+                            quoted = quoted,
+                            sourceReference = OrderCreationTransaction.couponSource(order.id),
+                            usedAt = clock.instant(),
+                        ),
+                    )
+                }
+            } else {
+                null
+            }
+        val points =
+            if (benefitOnly && order.pointsAppliedKrw > 0) {
+                pointOperations.useImmediately(
+                    UsePointsImmediatelyCommand(
+                        orderId = order.id,
+                        customerId = order.customerId,
+                        amountKrw = order.pointsAppliedKrw,
+                        sourceReference = OrderCreationTransaction.pointsSource(order.id),
+                        usedAt = clock.instant(),
+                    ),
+                )
+            } else {
+                null
+            }
+        val correlationId = correlationIdSource.currentOrCreate()
+        val benefitConfirmation =
+            if (benefitOnly) {
+                settlementInputSnapshotService.materialize(
+                    order = order,
+                    terms = prepared.settlementTerms,
+                    coupon = coupon,
+                    points = points,
+                    createdAt = createdAt,
+                )
+                val payment =
+                    benefitOnlyPaymentOperations.approve(
+                        ApproveBenefitOnlyPaymentCommand(
+                            paymentId = identifierSource.next(),
+                            orderId = order.id,
+                            approvedAmountKrw = 0,
+                            currency = "KRW",
+                            benefitSnapshotReference = OrderCreationTransaction.benefitSnapshotSource(order.id),
+                            sourceReference = OrderCreationTransaction.paymentSource(order.id),
+                            correlationId = correlationId,
+                            approvedAt = createdAt,
+                        ),
+                    )
+                BenefitOnlyConfirmation(
+                    payment = payment,
+                    pickup = null,
+                    coupon = coupon?.let { ReservationTransitionReport(ReservationTransitionResult.APPLIED, listOf(it.reservationId)) },
+                    points = points?.let { ReservationTransitionReport(ReservationTransitionResult.APPLIED, listOf(it.reservationId)) },
+                )
+            } else {
+                null
+            }
+        auditRecordOperations.appendAll(
+            auditFactory.create(
+                command = command,
+                order = order,
+                pickupReservationId = null,
+                coupon = coupon,
+                points = points,
                 benefit = benefitConfirmation,
                 occurredAt = createdAt,
                 correlationId = correlationId,
@@ -335,7 +517,7 @@ internal class OrderCreationWorkflow(
 
 internal data class BenefitOnlyConfirmation(
     val payment: BenefitOnlyPaymentResult,
-    val pickup: ReservationTransitionReport,
+    val pickup: ReservationTransitionReport?,
     val coupon: ReservationTransitionReport?,
-    val points: ReservationTransitionReport,
+    val points: ReservationTransitionReport?,
 )

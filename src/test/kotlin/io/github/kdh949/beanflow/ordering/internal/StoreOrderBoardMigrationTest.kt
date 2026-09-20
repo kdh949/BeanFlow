@@ -35,20 +35,23 @@ internal class StoreOrderBoardMigrationTest : IsolatedPostgresSupport() {
     }
 
     @Test
-    fun `V56 creates both store board indexes with the paid partial predicate`() {
+    fun `board migrations retain the legacy indexes and add the immediate ready sort index`() {
         val definitions =
             jdbcTemplate
                 .query(
                     "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public' " +
-                        "AND indexname IN ('ix_ordering_order_store_board', 'ix_ordering_order_store_acceptance_board')",
+                        "AND indexname IN ('ix_ordering_order_store_board', 'ix_ordering_order_store_acceptance_board', " +
+                        "'idx_order_store_state_immediate_board_sort')",
                 ) { resultSet, _ -> resultSet.getString("indexname") to resultSet.getString("indexdef") }
                 .toMap()
-        assertThat(definitions).hasSize(2)
+        assertThat(definitions).hasSize(3)
         assertThat(definitions.getValue("ix_ordering_order_store_board"))
             .contains("store_id", "state", "pickup_window_start_snapshot", "id")
         assertThat(definitions.getValue("ix_ordering_order_store_acceptance_board"))
             .contains("store_id", "state", "acceptance_deadline_at", "id", "WHERE")
             .contains("'PAID'")
+        assertThat(definitions.getValue("idx_order_store_state_immediate_board_sort"))
+            .contains("store_id", "state", "COALESCE(pickup_window_start_snapshot, estimated_ready_at)", "id")
     }
 
     @Test
@@ -111,15 +114,16 @@ internal class StoreOrderBoardMigrationTest : IsolatedPostgresSupport() {
                 pickup_sequence bigint NOT NULL,
                 pickup_business_date date NOT NULL,
                 state varchar(32) NOT NULL,
-                pickup_window_start_snapshot timestamptz NOT NULL,
-                pickup_window_end_snapshot timestamptz NOT NULL,
+                pickup_window_start_snapshot timestamptz,
+                pickup_window_end_snapshot timestamptz,
                 acceptance_warning_at timestamptz,
                 acceptance_deadline_at timestamptz,
                 paid_at timestamptz,
                 accepted_at timestamptz,
                 preparing_at timestamptz,
                 ready_at timestamptz,
-                completed_at timestamptz
+                completed_at timestamptz,
+                estimated_ready_at timestamptz
             )
             """.trimIndent(),
         )
@@ -169,7 +173,7 @@ internal class StoreOrderBoardMigrationTest : IsolatedPostgresSupport() {
     ) {
         jdbcTemplate.execute(
             "CREATE INDEX ix_board_$suffix ON $PLAN_SCHEMA.$table " +
-                "(store_id, state, pickup_window_start_snapshot, id)",
+                "(store_id, state, (COALESCE(pickup_window_start_snapshot, estimated_ready_at)), id)",
         )
         jdbcTemplate.execute(
             "CREATE INDEX ix_acceptance_$suffix ON $PLAN_SCHEMA.$table " +

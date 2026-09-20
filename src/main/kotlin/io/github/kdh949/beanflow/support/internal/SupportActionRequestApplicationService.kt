@@ -49,7 +49,7 @@ internal class CreateSupportActionRequestHandler(
                     command.action,
                     command.orderId,
                     command.expectedTargetVersion,
-                    command.verificationSessionId,
+                    command.subjectLinkId,
                 ),
             )
         if (evaluation.decision == SupportActionDecision.DENIED) {
@@ -64,6 +64,7 @@ internal class ReviseSupportActionRequestHandler(
     private val evaluations: SupportActionEvaluationApplicationService,
     private val transactions: SupportActionRequestTransactionService,
 ) {
+    @Transactional
     fun handle(command: ReviseSupportActionRequestCommand): SupportActionRequestResource {
         val guard = transactions.requesterGuard(command.actorId, command.requestId)
         val evaluation =
@@ -74,7 +75,7 @@ internal class ReviseSupportActionRequestHandler(
                     guard.action,
                     guard.targetId,
                     command.expectedTargetVersion,
-                    command.verificationSessionId,
+                    command.subjectLinkId,
                 ),
             )
         if (evaluation.decision == SupportActionDecision.DENIED) {

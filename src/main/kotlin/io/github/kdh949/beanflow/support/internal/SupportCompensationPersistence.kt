@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.support.internal
 
 import io.github.kdh949.beanflow.support.internal.domain.SupportActionApprovalRoute
+import io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis
 import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationBand
 import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationBenefitType
 import io.github.kdh949.beanflow.support.internal.domain.SupportCompensationCostSnapshot
@@ -48,6 +49,9 @@ internal class SupportCompensationPolicyVersionEntity(
     val lowOrderRatioMaximumBps: Int,
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "authorization_basis", nullable = false)
+    val authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
 ) {
     fun toDomain(rules: List<SupportCompensationLimitRuleEntity>): SupportCompensationPolicyVersion =
         SupportCompensationPolicyVersion(
@@ -59,6 +63,7 @@ internal class SupportCompensationPolicyVersionEntity(
             supportedAmountMaximumKrw,
             lowOrderRatioMaximumBps,
             rules.sortedBy { it.scope.ordinal }.map { it.toDomain() },
+            authorizationBasis,
         )
 }
 
@@ -127,8 +132,8 @@ internal class SupportCompensationRequestEntity(
     @Enumerated(EnumType.STRING)
     @Column(name = "approval_route", nullable = false, length = 48)
     val approvalRoute: SupportActionApprovalRoute,
-    @Column(name = "verification_session_id", nullable = false)
-    val verificationSessionId: UUID,
+    @Column(name = "verification_session_id")
+    val verificationSessionId: UUID?,
     @Column(name = "target_version", nullable = false)
     val targetVersion: Long,
     @Enumerated(EnumType.STRING)
@@ -164,6 +169,13 @@ internal class SupportCompensationRequestEntity(
     var updatedAt: Instant,
     @Column(nullable = false)
     var version: Long,
+    @Column(name = "subject_link_id")
+    var subjectLinkId: UUID? = null,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "authorization_basis", nullable = false, length = 24)
+    var authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
+    @Column(name = "execution_expires_at")
+    var executionExpiresAt: Instant? = null,
 ) {
     fun toAggregate(): SupportCompensationRequest =
         SupportCompensationRequest.reconstitute(

@@ -55,7 +55,7 @@ internal class PublicCheckoutService(
         val payment = payments.checkout(customerId, resolved.orderId, now)
         val canPay =
             order.status == "PENDING_PAYMENT" && order.pricing.payableKrw > 0 &&
-                order.reservationExpiresAt?.isAfter(now) == true && (payment == null || payment.readyAttempt != null)
+                order.paymentDeadlineAt?.isAfter(now) == true && (payment == null || payment.readyAttempt != null)
         return PublicCheckoutResponse(
             order,
             canPay,

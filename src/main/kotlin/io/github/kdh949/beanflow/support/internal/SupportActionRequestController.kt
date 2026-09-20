@@ -34,7 +34,7 @@ internal data class CreateSupportActionRequestRequest(
     @field:NotNull @field:PositiveOrZero
     val expectedTargetVersion: Long?,
     @field:NotNull
-    val verificationSessionId: UUID?,
+    val subjectLinkId: UUID?,
     @field:NotBlank @field:Pattern(regexp = "^[0-9a-f]{64}$")
     val actionPayloadDigest: String?,
     @field:PositiveOrZero
@@ -53,7 +53,7 @@ internal data class ReviseSupportActionRequestRequest(
     @field:PositiveOrZero
     val expectedTargetVersion: Long,
     @field:NotNull
-    val verificationSessionId: UUID?,
+    val subjectLinkId: UUID?,
     @field:NotBlank @field:Pattern(regexp = "^[0-9a-f]{64}$")
     val actionPayloadDigest: String?,
     @field:PositiveOrZero
@@ -113,7 +113,7 @@ internal class SupportActionRequestController(
                         request.action ?: invalid(),
                         request.orderId ?: invalid(),
                         request.expectedTargetVersion ?: invalid(),
-                        request.verificationSessionId ?: invalid(),
+                        request.subjectLinkId ?: invalid(),
                         request.actionPayloadDigest ?: invalid(),
                         request.amountKrw,
                         request.reason ?: invalid(),
@@ -153,7 +153,7 @@ internal class SupportActionRequestController(
                         request.expectedRevisionNumber,
                         request.expectedRequestVersion,
                         request.expectedTargetVersion,
-                        request.verificationSessionId ?: invalid(),
+                        request.subjectLinkId ?: invalid(),
                         request.actionPayloadDigest ?: invalid(),
                         request.amountKrw,
                         request.reason ?: invalid(),

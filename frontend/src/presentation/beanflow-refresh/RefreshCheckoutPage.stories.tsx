@@ -40,7 +40,7 @@ export const ExpiredOrder: Story = {
 };
 
 export const ResumeReadyAttempt: Story = {
-  parameters: { msw: { handlers: [http.get("/api/v1/me/orders/:orderReference/checkout", () => HttpResponse.json({ ...publicCheckout, paymentId: ids.payment, paymentState: "READY", readyAttempt: { paymentId: ids.payment, orderReference: publicCheckout.order.orderReference, state: "READY", providerOrderId: "bf_same_payment", customerKey: "bf_customer_key", orderName: "오트 라떼", amount: { value: 12800, currency: "KRW" }, method: "CARD", successUrl: "https://checkout.beanflow.test/success", failUrl: "https://checkout.beanflow.test/fail", expiresAt: publicCheckout.order.reservationExpiresAt, updatedAt: "2026-08-15T02:55:00Z", correlationId: "CHECKOUT-1" } })), http.get("/api/v1/payment-config", () => HttpResponse.json({ clientKey: "test_ck_storybook" })), ...signedInHandlers] } },
+  parameters: { msw: { handlers: [http.get("/api/v1/me/orders/:orderReference/checkout", () => HttpResponse.json({ ...publicCheckout, paymentId: ids.payment, paymentState: "READY", readyAttempt: { paymentId: ids.payment, orderReference: publicCheckout.order.orderReference, state: "READY", providerOrderId: "bf_same_payment", customerKey: "bf_customer_key", orderName: "오트 라떼", amount: { value: 12800, currency: "KRW" }, method: "CARD", successUrl: "https://checkout.beanflow.test/success", failUrl: "https://checkout.beanflow.test/fail", expiresAt: publicCheckout.order.paymentDeadlineAt, updatedAt: "2026-08-15T02:55:00Z", correlationId: "CHECKOUT-1" } })), http.get("/api/v1/payment-config", () => HttpResponse.json({ clientKey: "test_ck_storybook" })), ...signedInHandlers] } },
   play: async ({ canvas }) => {
     await waitFor(() => expect(canvas.getByRole("button", { name: /결제하기/ })).toBeEnabled());
     await userEvent.click(canvas.getByRole("button", { name: /결제하기/ }));
@@ -59,9 +59,9 @@ export const UnknownPayment: Story = {
   },
 };
 
-export const LeaseExpiresWhileOpen: Story = {
+export const StoreCutoffClosesWhileOpen: Story = {
   tags: ["!autodocs"],
-  parameters: { msw: { handlers: [http.get("/api/v1/me/orders/:orderReference/checkout", () => HttpResponse.json({ ...publicCheckout, canPay: Date.now() < Date.parse("2026-08-15T03:00:00.500Z"), order: { ...publicCheckout.order, reservationExpiresAt: "2026-08-15T03:00:00.500Z", status: Date.now() < Date.parse("2026-08-15T03:00:00.500Z") ? "PENDING_PAYMENT" : "EXPIRED" } })), ...signedInHandlers] } },
+  parameters: { msw: { handlers: [http.get("/api/v1/me/orders/:orderReference/checkout", () => HttpResponse.json({ ...publicCheckout, canPay: Date.now() < Date.parse("2026-08-15T03:00:00.500Z"), order: { ...publicCheckout.order, paymentDeadlineAt: "2026-08-15T03:00:00.500Z", status: Date.now() < Date.parse("2026-08-15T03:00:00.500Z") ? "PENDING_PAYMENT" : "EXPIRED" } })), ...signedInHandlers] } },
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("button", { name: /결제하기/ })).toBeEnabled();
     MockDate.set("2026-08-15T03:00:01Z");

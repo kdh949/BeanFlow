@@ -31,7 +31,7 @@ internal data class EvaluateSupportActionCommand(
     val action: SupportActionType,
     val orderId: UUID,
     val expectedTargetVersion: Long,
-    val verificationSessionId: UUID,
+    val subjectLinkId: UUID,
 )
 
 internal data class SupportActionEvaluationResource(
@@ -83,7 +83,7 @@ internal class SupportActionEvaluationAuthorization(
     private val permissions: OperatorPermissionAuthorization,
     private val cases: SupportCaseJpaRepository,
     private val subjectLinks: SupportCaseSubjectLinkJpaRepository,
-    private val sessions: VerificationSessionJpaRepository,
+    private val directAuthorization: SupportDirectAuthorization,
     private val clock: Clock,
 ) {
     @Transactional
@@ -98,37 +98,17 @@ internal class SupportActionEvaluationAuthorization(
     @Transactional
     fun loadPolicySnapshot(command: EvaluateSupportActionCommand): SupportActionAuthorizationSnapshot {
         val supportCase = requireReadableTarget(command.actorId, command.caseId, command.orderId)
-        val session = sessions.findLockedById(command.verificationSessionId) ?: notFound("VerificationSession")
-        if (session.actorId != command.actorId || session.supportCaseId != command.caseId) denied()
-        val subjectLink =
-            subjectLinks
-                .findByIdAndSupportCaseId(session.subjectLinkId, command.caseId)
-                ?.takeIf { it.unlinkedAt == null && it.subjectId == session.subjectId }
-                ?: denied()
-        val now = clock.instant()
-        if ((session.state == VerificationState.PENDING || session.state == VerificationState.VERIFIED) &&
-            !now.isBefore(session.expiresAt)
-        ) {
-            session.state = VerificationState.EXPIRED
-            session.version += 1
-            sessions.saveAndFlush(session)
-        }
-        val level =
-            if (session.state == VerificationState.VERIFIED) {
-                session.requestedLevel
-            } else {
-                VerificationLevel.UNVERIFIED
-            }
+        val subjectLink = directAuthorization.requireSubject(command.actorId, command.caseId, command.subjectLinkId)
         return SupportActionAuthorizationSnapshot(
             caseEligible = supportCase.state in ACTIVE_CASE_STATES,
-            subjectType = session.subjectType,
-            subjectId = session.subjectId,
+            subjectType = subjectLink.verificationSubjectType(),
+            subjectId = subjectLink.subjectId,
             subjectRelationship = subjectLink.relationship,
             hasGenericPermission = permissions.hasActive(command.actorId, OperatorPermission.SUPPORT_ACTION_REQUEST),
             hasCapabilityPermission = permissions.hasActive(command.actorId, command.action.capabilityPermission()),
-            verificationScope = session.actionScope,
-            verificationPurpose = session.purpose,
-            verificationLevel = level,
+            verificationScope = VerificationActionScope.SUPPORT_ACTION,
+            verificationPurpose = VerificationPurpose.CASE_RESOLUTION,
+            verificationLevel = VerificationLevel.UNVERIFIED,
         )
     }
 

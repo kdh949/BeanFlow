@@ -22,7 +22,6 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
-import java.time.Clock
 import java.util.UUID
 
 /**
@@ -57,9 +56,6 @@ internal class StoreSearchEndpointIntegrationTest {
     private lateinit var index: StoreSearchIndexOperations
 
     @Autowired
-    private lateinit var clock: Clock
-
-    @Autowired
     private lateinit var transactionManager: PlatformTransactionManager
 
     private val fixture by lazy {
@@ -84,8 +80,6 @@ internal class StoreSearchEndpointIntegrationTest {
                     ),
                 menus = listOf("아메리카노"),
             )
-        fixture.indexPickupSlot(storeId, clock.instant())
-
         mockMvc
             .perform(search(query = "스타벅스"))
             .andExpect(status().isOk)
@@ -99,9 +93,8 @@ internal class StoreSearchEndpointIntegrationTest {
             .andExpect(jsonPath("$.items[0].matchReason[0]").value("STORE_NAME"))
             .andExpect(jsonPath("$.items[0].orderingAvailable").value(true))
             .andExpect(jsonPath("$.items[0].pickupAvailable").value(true))
-            .andExpect(jsonPath("$.items[0].nextPickupWindow.startsAt").isString)
-            .andExpect(jsonPath("$.items[0].nextPickupWindow.endsAt").isString)
-            .andExpect(jsonPath("$.items[0].customerDisplay.operatingStatus").value("UNSPECIFIED"))
+            .andExpect(jsonPath("$.items[0].nextPickupWindow").doesNotExist())
+            .andExpect(jsonPath("$.items[0].customerDisplay.operatingStatus").value("OPEN"))
             .andExpect(jsonPath("$.items[0].open").doesNotExist())
             .andExpect(jsonPath("$.items[0].matchedMenus").isArray)
             // 좌표를 주지 않았으므로 거리 항은 `null`이 아니라 아예 없다.

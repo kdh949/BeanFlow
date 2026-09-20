@@ -82,7 +82,7 @@ internal class OrderReferenceMigrationTest : IsolatedPostgresSupport() {
     }
 
     @Test
-    fun `V51 closes the window and makes six display identity fields immutable`() {
+    fun `V51 closes the backfill window and V89 reopens only the pickup columns for immediate orders`() {
         val dataSource = database("order_reference_contract")
         flyway(dataSource).target("49").load().migrate()
         val jdbc = JdbcTemplate(dataSource)
@@ -108,11 +108,20 @@ internal class OrderReferenceMigrationTest : IsolatedPostgresSupport() {
             fixture.orderId,
         )
 
-        assertThatCode { migrateThroughRegionCoverage(dataSource, jdbc) }.doesNotThrowAnyException()
+        flyway(dataSource).target("51").load().migrate()
         assertThat(nullableColumnCount(jdbc)).isZero()
         assertThatThrownBy {
             jdbc.update("UPDATE ordering_order SET store_name_snapshot = 'Changed' WHERE id = ?", fixture.orderId)
         }.hasMessageContaining("ordering_order_display_identity_immutable")
+
+        assertThatCode { migrateThroughRegionCoverage(dataSource, jdbc) }.doesNotThrowAnyException()
+        assertThat(nullableColumnCount(jdbc)).isEqualTo(2)
+        assertThat(
+            value<Timestamp>(jdbc, "SELECT pickup_window_start_snapshot FROM ordering_order WHERE id = ?", fixture.orderId)!!.toInstant(),
+        ).isEqualTo(SLOT_START)
+        assertThat(
+            value<Timestamp>(jdbc, "SELECT pickup_window_end_snapshot FROM ordering_order WHERE id = ?", fixture.orderId)!!.toInstant(),
+        ).isEqualTo(SLOT_END)
         assertThatCode {
             jdbc.update("UPDATE ordering_order SET updated_at = ? WHERE id = ?", Timestamp.from(FIXED_NOW.plusSeconds(1)), fixture.orderId)
         }.doesNotThrowAnyException()

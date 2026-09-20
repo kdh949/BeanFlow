@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { EventCampaignPage } from "./EventCampaignPage";
+import { couponWalletPath } from "../../features/customer/couponNavigation";
 
 const campaign = (index: number, title: string, color: string, accent: string) => ({
   campaignId: `8a8999bf-3432-4a5d-b599-43bbc3ddc2e${index}`,
@@ -57,7 +58,7 @@ export const ActiveEvents: Story = {
     await expect(canvas.getByText("선착순 93명")).toBeVisible();
     await userEvent.click(canvas.getAllByRole("button", { name: "쿠폰 받기" })[0]!);
     await expect(await canvas.findByText("쿠폰을 받았어요. 쿠폰함에서 바로 확인할 수 있어요.")).toBeVisible();
-    await expect(canvas.getByRole("link", { name: "쿠폰함 보기" })).toHaveAttribute("href", `/app/coupons?storeId=${events[0]!.store.storeId}`);
+    await expect(canvas.getByRole("link", { name: "쿠폰함 보기" })).toHaveAttribute("href", couponWalletPath(events[0]!.store.storeId, "/app/events"));
   },
 };
 

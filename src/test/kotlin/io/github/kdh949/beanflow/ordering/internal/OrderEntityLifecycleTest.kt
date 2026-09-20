@@ -20,7 +20,7 @@ class OrderEntityLifecycleTest {
         val order = pendingOrder()
 
         order.markPaid(paidAt)
-        order.accept(paidAt.plusSeconds(179))
+        order.accept(paidAt.plusSeconds(179), 10)
         order.startPreparing(paidAt.plusSeconds(180))
         order.markReady(paidAt.plusSeconds(240))
         order.complete(paidAt.plusSeconds(300))
@@ -29,7 +29,36 @@ class OrderEntityLifecycleTest {
         assertThat(order.paidAt).isEqualTo(paidAt)
         assertThat(order.acceptanceWarningAt).isEqualTo(paidAt.plusSeconds(120))
         assertThat(order.acceptanceDeadlineAt).isEqualTo(paidAt.plusSeconds(180))
+        assertThat(order.acceptedAt).isEqualTo(paidAt.plusSeconds(179))
+        assertThat(order.preparationMinutes).isEqualTo(10)
+        assertThat(order.estimatedReadyAt).isEqualTo(paidAt.plusSeconds(779))
         assertThat(order.completedAt).isEqualTo(paidAt.plusSeconds(300))
+    }
+
+    @Test
+    fun `acceptance preparation is a positive integer bounded at one hundred twenty minutes`() {
+        listOf(0, 121).forEach { invalidMinutes ->
+            val order = pendingOrder().also { it.markPaid(paidAt) }
+
+            assertThatThrownBy { order.accept(paidAt.plusSeconds(60), invalidMinutes) }
+                .isInstanceOfSatisfying(DomainFailure::class.java) {
+                    assertThat(it.code).isEqualTo(FailureCode.INVALID_REQUEST)
+                }
+            assertThat(order.state).isEqualTo(OrderState.PAID)
+            assertThat(order.acceptedAt).isNull()
+            assertThat(order.preparationMinutes).isNull()
+            assertThat(order.estimatedReadyAt).isNull()
+        }
+
+        listOf(1, 120).forEach { validMinutes ->
+            val acceptedAt = paidAt.plusSeconds(60)
+            val order = pendingOrder().also { it.markPaid(paidAt) }
+
+            order.accept(acceptedAt, validMinutes)
+
+            assertThat(order.preparationMinutes).isEqualTo(validMinutes)
+            assertThat(order.estimatedReadyAt).isEqualTo(acceptedAt.plusSeconds(validMinutes * 60L))
+        }
     }
 
     @Test
@@ -37,7 +66,7 @@ class OrderEntityLifecycleTest {
         val order = pendingOrder()
         order.markPaid(paidAt)
 
-        assertThatThrownBy { order.accept(paidAt.plusSeconds(180)) }
+        assertThatThrownBy { order.accept(paidAt.plusSeconds(180), 10) }
             .isInstanceOfSatisfying(DomainFailure::class.java) {
                 assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
             }
@@ -48,7 +77,7 @@ class OrderEntityLifecycleTest {
     fun `accepted order cannot be rejected`() {
         val order = pendingOrder()
         order.markPaid(paidAt)
-        order.accept(paidAt.plusSeconds(60))
+        order.accept(paidAt.plusSeconds(60), 10)
 
         assertThatThrownBy { order.reject(paidAt.plusSeconds(70), "store reason") }
             .isInstanceOfSatisfying(DomainFailure::class.java) {
@@ -159,7 +188,7 @@ class OrderEntityLifecycleTest {
         val accepted =
             pendingOrder().also {
                 it.markPaid(paidAt)
-                it.accept(paidAt.plusSeconds(60))
+                it.accept(paidAt.plusSeconds(60), 10)
             }
 
         listOf(pending, paid, accepted).forEach { order ->
@@ -171,7 +200,7 @@ class OrderEntityLifecycleTest {
         val preparing =
             pendingOrder().also {
                 it.markPaid(paidAt)
-                it.accept(paidAt.plusSeconds(60))
+                it.accept(paidAt.plusSeconds(60), 10)
                 it.startPreparing(paidAt.plusSeconds(61))
             }
         assertThatThrownBy {

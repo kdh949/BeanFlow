@@ -261,7 +261,7 @@ internal class SupportWorkDirectoryService(
                         it.request.benefitType.name,
                         it.request.state.name,
                         it.request.createdAt,
-                        it.verificationExpiresAt,
+                        it.executionExpiresAt,
                     )
                 }
             }

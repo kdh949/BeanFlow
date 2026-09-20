@@ -204,6 +204,12 @@ version을 늘려 두 form을 동시에 받는 대신 400을 택한다. 두 form
 않은 candidate가 남아 있으면 cursor를 발급한다. 이 규칙은 `/stores/search`와 `/stores/nearby`가
 공유한다.
 
+**2026-09-16 Immediate Checkout amendment.** ADR-103의 즉시 주문 개정에 따라
+`pickupAvailable`은 Fulfillment slot 존재가 아니라 Store owner state와 현재 Asia/Seoul 영업시간
+`OPEN`의 결합이다. filter hash의 property 이름·순서, candidate scan boundary와 24시간 cursor 계약은
+바뀌지 않는다. 같은 boolean filter가 여전히 결과 집합을 바꾸므로 hash binding을 제거하지 않으며,
+legacy slot batch는 두 신규 탐색 endpoint에서 호출하지 않는다.
+
 2026-08-03 implementation evidence: Settlement Batch 목록은 active OWNER membership 확인 뒤
 `CALCULATED`/`CONFIRMED` summary만 `(settlementDate DESC, settlementBatchId DESC)`로 반환하고
 `OPEN` summary를 0으로 만들지 않는다. default 20/maximum 100, 15분 expiry, endpoint+store filter
@@ -288,7 +294,7 @@ default/max limit, tamper/expiry, 다른 store/Batch scope 재사용과 authoriz
 parameter로 bind한다. PostgreSQL HTTP tests는 default 20, limit 1, tamper와 다른 account cursor의 400을
 검증했다. endpoint는 별도 cursor secret, unsigned/base64 fallback 또는 cursor store를 추가하지 않았다.
 
-**Nearby endpoint evidence (2026-08-06, 2026-08-15 개정):** `GET /stores/nearby`는 common codec의
+**Nearby endpoint evidence (2026-08-06, 2026-08-15/2026-09-16 개정):** `GET /stores/nearby`는 common codec의
 24시간 expiry와 `stores-nearby` endpoint scope를 사용한다. filter hash는 key 순서가 고정된
 canonical JSON (`endpoint`, `pickupAvailable`, canonical latitude, canonical longitude, integer
 `radiusMeters`)의 SHA-256이며 raw coordinate text는 token에 없다. `pickupAvailable`은 2026-08-15
@@ -323,3 +329,6 @@ cursor payload confidentiality, user-specific page snapshot consistency, result 
 - [ADR-020](ADR-020-nearby-location-privacy.md)
 - [ADR-062](ADR-062-settlement-batch-item-discovery.md)
 - [ADR-072](ADR-072-execplan-unattended-execution-and-migration-lane.md)
+- [ADR-103](ADR-103-store-search-strategy.md)
+- [ADR-133](ADR-133-immediate-checkout-and-store-preparation.md)
+- [ADR-135](ADR-135-store-hours-payment-gate-and-cutoff.md)
