@@ -121,5 +121,10 @@ internal class OrderRejectionCoordinator(
             compensationValidityDays = compensationValidityDays,
         )
 
-    private fun OrderRejectionSourceActorType.toEventActorType(): OrderRejectionActorType = OrderRejectionActorType.valueOf(name)
+    private fun OrderRejectionSourceActorType.toEventActorType(): OrderRejectionActorType =
+        when (this) {
+            OrderRejectionSourceActorType.STORE_OWNER -> OrderRejectionActorType.STORE_OWNER
+            OrderRejectionSourceActorType.STORE_STAFF -> OrderRejectionActorType.STORE_STAFF
+            OrderRejectionSourceActorType.SYSTEM_TIMEOUT -> OrderRejectionActorType.SYSTEM_TIMEOUT
+        }
 }
