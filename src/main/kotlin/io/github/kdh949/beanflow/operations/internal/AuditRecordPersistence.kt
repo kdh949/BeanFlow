@@ -66,4 +66,11 @@ internal interface AuditRecordJpaRepository : JpaRepository<AuditRecordEntity, U
         targetId: UUID,
         sourceReference: String,
     ): Boolean
+
+    fun findByActionAndTargetTypeAndTargetIdAndSourceReference(
+        action: String,
+        targetType: String,
+        targetId: UUID,
+        sourceReference: String,
+    ): AuditRecordEntity?
 }

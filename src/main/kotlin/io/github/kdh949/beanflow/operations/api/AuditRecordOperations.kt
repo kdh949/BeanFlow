@@ -98,6 +98,13 @@ data class AuditRecordKey(
     val sourceReference: String,
 )
 
+data class AuditRecordEvidence(
+    val id: UUID,
+    val reason: String,
+)
+
 interface AuditRecordQueryOperations {
     fun exists(key: AuditRecordKey): Boolean
+
+    fun find(key: AuditRecordKey): AuditRecordEvidence?
 }
