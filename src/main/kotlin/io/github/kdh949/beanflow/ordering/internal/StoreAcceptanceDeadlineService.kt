@@ -1,12 +1,13 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
-import io.github.kdh949.beanflow.eventing.api.OrderRejectionActorType
 import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
+import io.github.kdh949.beanflow.ordering.api.OrderRejectionCause
+import io.github.kdh949.beanflow.ordering.api.OrderRejectionSourceActorType
 import io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
@@ -98,7 +99,8 @@ internal class StoreAcceptanceDeadlineService(
         val causationId = "order:$orderId:acceptance-timeout"
         rejectionCoordinator.reject(
             order = order,
-            actor = RejectionActor("SYSTEM", OrderRejectionActorType.SYSTEM_TIMEOUT),
+            actor = RejectionActor("SYSTEM", OrderRejectionSourceActorType.SYSTEM_TIMEOUT),
+            cause = OrderRejectionCause.ACCEPTANCE_TIMEOUT,
             reason = reason,
             now = now,
             correlationId = correlationId,

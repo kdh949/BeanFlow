@@ -559,6 +559,30 @@ internal class CustomerCancellationCommandIntegrationTest
                 .isEqualTo("REJECTED")
             assertThat(value("SELECT rejection_reason FROM ordering_order WHERE id = ?", orderId))
                 .isEqualTo("STORE_ACCEPTANCE_TIMEOUT")
+            assertThat(value("SELECT rejection_cause FROM ordering_order WHERE id = ?", orderId))
+                .isEqualTo("ACCEPTANCE_TIMEOUT")
+            assertThat(value("SELECT rejection_actor_type FROM ordering_order WHERE id = ?", orderId))
+                .isEqualTo("SYSTEM_TIMEOUT")
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT rejection_event_id FROM ordering_order WHERE id = ?",
+                    UUID::class.java,
+                    orderId,
+                ),
+            ).isNotNull()
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT rejection_terminal_version FROM ordering_order WHERE id = ?",
+                    Long::class.java,
+                    orderId,
+                ),
+            ).isEqualTo(
+                jdbcTemplate.queryForObject(
+                    "SELECT version FROM ordering_order WHERE id = ?",
+                    Long::class.java,
+                    orderId,
+                ),
+            )
             assertThat(paymentGateway.rejectionRefundCalls.get()).isZero()
         }
 

@@ -2,6 +2,8 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
+import io.github.kdh949.beanflow.ordering.api.OrderRejectionCause
+import io.github.kdh949.beanflow.ordering.api.OrderRejectionSourceActorType
 import io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -170,6 +172,24 @@ internal class OrderEntity(
     var rejectionReason: String? = null
         protected set
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rejection_cause", length = 32)
+    var rejectionCause: OrderRejectionCause? = null
+        protected set
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rejection_actor_type", length = 32)
+    var rejectionActorType: OrderRejectionSourceActorType? = null
+        protected set
+
+    @Column(name = "rejection_event_id")
+    var rejectionEventId: UUID? = null
+        protected set
+
+    @Column(name = "rejection_terminal_version")
+    var rejectionTerminalVersion: Long? = null
+        protected set
+
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = updatedAt
         protected set
@@ -216,6 +236,10 @@ internal class OrderEntity(
     fun reject(
         now: Instant,
         reason: String,
+        cause: OrderRejectionCause,
+        actorType: OrderRejectionSourceActorType,
+        eventId: UUID,
+        terminalVersion: Long,
     ) {
         requireState(OrderState.PAID, "Only a paid order can be rejected")
         val normalizedReason = reason.trim()
@@ -225,9 +249,30 @@ internal class OrderEntity(
                 "Rejection reason must contain between 1 and 500 characters",
             )
         }
+        val sourceMatches =
+            when (cause) {
+                OrderRejectionCause.STORE_REJECTION -> {
+                    actorType == OrderRejectionSourceActorType.STORE_OWNER ||
+                        actorType == OrderRejectionSourceActorType.STORE_STAFF
+                }
+
+                OrderRejectionCause.ACCEPTANCE_TIMEOUT -> {
+                    actorType == OrderRejectionSourceActorType.SYSTEM_TIMEOUT
+                }
+            }
+        if (!sourceMatches || terminalVersion != Math.addExact(version, 1L)) {
+            throw DomainFailure(
+                FailureCode.ORDER_STATE_CONFLICT,
+                "Order rejection cause, actor and terminal version do not match",
+            )
+        }
         state = OrderState.REJECTED
         rejectedAt = now
         rejectionReason = normalizedReason
+        rejectionCause = cause
+        rejectionActorType = actorType
+        rejectionEventId = eventId
+        rejectionTerminalVersion = terminalVersion
         updatedAt = now
     }
 

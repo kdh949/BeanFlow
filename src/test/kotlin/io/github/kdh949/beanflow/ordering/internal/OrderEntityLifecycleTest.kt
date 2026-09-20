@@ -2,6 +2,8 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.CustomerCancellationReasonCode
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
+import io.github.kdh949.beanflow.ordering.api.OrderRejectionCause
+import io.github.kdh949.beanflow.ordering.api.OrderRejectionSourceActorType
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -79,11 +81,63 @@ class OrderEntityLifecycleTest {
         order.markPaid(paidAt)
         order.accept(paidAt.plusSeconds(60), 10)
 
-        assertThatThrownBy { order.reject(paidAt.plusSeconds(70), "store reason") }
-            .isInstanceOfSatisfying(DomainFailure::class.java) {
-                assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
-            }
+        assertThatThrownBy {
+            order.reject(
+                paidAt.plusSeconds(70),
+                "store reason",
+                OrderRejectionCause.STORE_REJECTION,
+                OrderRejectionSourceActorType.STORE_OWNER,
+                UUID.randomUUID(),
+                1,
+            )
+        }.isInstanceOfSatisfying(DomainFailure::class.java) {
+            assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
+        }
         assertThat(order.state).isEqualTo(OrderState.ACCEPTED)
+    }
+
+    @Test
+    fun `store rejection records closed settlement evidence apart from free form reason`() {
+        val order = pendingOrder()
+        val eventId = UUID.randomUUID()
+        order.markPaid(paidAt)
+
+        order.reject(
+            paidAt.plusSeconds(60),
+            " sold out ",
+            OrderRejectionCause.STORE_REJECTION,
+            OrderRejectionSourceActorType.STORE_STAFF,
+            eventId,
+            1,
+        )
+
+        assertThat(order.state).isEqualTo(OrderState.REJECTED)
+        assertThat(order.rejectionReason).isEqualTo("sold out")
+        assertThat(order.rejectionCause).isEqualTo(OrderRejectionCause.STORE_REJECTION)
+        assertThat(order.rejectionActorType).isEqualTo(OrderRejectionSourceActorType.STORE_STAFF)
+        assertThat(order.rejectionEventId).isEqualTo(eventId)
+        assertThat(order.rejectionTerminalVersion).isEqualTo(1)
+    }
+
+    @Test
+    fun `timeout cause rejects a store actor without changing the order`() {
+        val order = pendingOrder()
+        order.markPaid(paidAt)
+
+        assertThatThrownBy {
+            order.reject(
+                paidAt.plusSeconds(180),
+                "STORE_ACCEPTANCE_TIMEOUT",
+                OrderRejectionCause.ACCEPTANCE_TIMEOUT,
+                OrderRejectionSourceActorType.STORE_OWNER,
+                UUID.randomUUID(),
+                1,
+            )
+        }.isInstanceOfSatisfying(DomainFailure::class.java) {
+            assertThat(it.code).isEqualTo(FailureCode.ORDER_STATE_CONFLICT)
+        }
+        assertThat(order.state).isEqualTo(OrderState.PAID)
+        assertThat(order.rejectionCause).isNull()
     }
 
     @Test

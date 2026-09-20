@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.operations.internal
 
 import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditCategory
+import io.github.kdh949.beanflow.operations.api.AuditRecordEvidence
 import io.github.kdh949.beanflow.operations.api.AuditRecordKey
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.operations.api.AuditRecordQueryOperations
@@ -87,6 +88,16 @@ internal class AuditRecordService(
             key.targetId,
             key.sourceReference,
         )
+
+    @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
+    override fun find(key: AuditRecordKey): AuditRecordEvidence? =
+        repository
+            .findByActionAndTargetTypeAndTargetIdAndSourceReference(
+                key.action,
+                key.targetType,
+                key.targetId,
+                key.sourceReference,
+            )?.let { AuditRecordEvidence(it.id, it.reason) }
 
     private fun validate(command: AppendAuditRecordCommand) {
         if (command.actorId.isBlank() || command.action.isBlank() || command.targetType.isBlank() ||
