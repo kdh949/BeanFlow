@@ -90,10 +90,13 @@ in that time range; the k6 panels are test-ID scoped.
 
 | Capture | Scope | SHA-256 |
 | --- | --- | --- |
-| [before causal panels](../../.ci-artifacts/payment-idempotency-index-2026-09-21/grafana-before-causal-panels-final.jpg) | CPU/workflow, transaction/workflow, SQL calls | `b0f8d9bae7f90e175a469c19f7b462c2054e5b066d2fe9191d12e73aec3f6a80` |
-| [after causal panels](../../.ci-artifacts/payment-idempotency-index-2026-09-21/grafana-after-causal-panels-final.jpg) | same panel positions and selected after test ID | `9acf8e838203ae6ccd450052e7a17ef87b9f77070414abdbb708be58dd7d9585` |
-| [before SQL/resource panels](../../.ci-artifacts/payment-idempotency-index-2026-09-21/grafana-before-sql-resource-panels-final.jpg) | SQL seconds, WAL, allocation, GC and throwable paths | `ed2b8363ccdefb50e16983618185e5153347e3392c998e603fd1e291d62d02e7` |
-| [after SQL/resource panels](../../.ci-artifacts/payment-idempotency-index-2026-09-21/grafana-after-sql-resource-panels-final.jpg) | same resource panels after the index | `d3f65424ce8579ddfae683525c48e34fa1fb3d24dabf1b4e1b7106fb5ddbd918` |
+| `grafana-before-causal-panels-final.jpg` | CPU/workflow, transaction/workflow, SQL calls | `b0f8d9bae7f90e175a469c19f7b462c2054e5b066d2fe9191d12e73aec3f6a80` |
+| `grafana-after-causal-panels-final.jpg` | same panel positions and selected after test ID | `9acf8e838203ae6ccd450052e7a17ef87b9f77070414abdbb708be58dd7d9585` |
+| `grafana-before-sql-resource-panels-final.jpg` | SQL seconds, WAL, allocation, GC and throwable paths | `ed2b8363ccdefb50e16983618185e5153347e3392c998e603fd1e291d62d02e7` |
+| `grafana-after-sql-resource-panels-final.jpg` | same resource panels after the index | `d3f65424ce8579ddfae683525c48e34fa1fb3d24dabf1b4e1b7106fb5ddbd918` |
+
+The files are preserved in the ignored local evidence directory
+`.ci-artifacts/payment-idempotency-index-2026-09-21/`; only their bounded names and hashes are committed.
 
 ## Limits and revisit conditions
 
