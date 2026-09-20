@@ -20,9 +20,11 @@ import type { DemoOrderState } from "./demoGuideModel";
 
 const initial: DemoSession = { workspaceId: "a0000000-0000-4000-8000-000000000001", status: "ACTIVE", mode: "GUIDED",
   storeId: ids.store, storeName: "BeanFlow 체험점", expiresAt: "2026-08-15T03:30:00Z",
-  order: { orderReference: orderDetail.orderReference, status: "PAID", pickupNumber: "A-142", pickupWindowStart: "2026-08-15T03:40:00Z", acceptanceDeadlineAt: "2026-08-15T03:03:00Z" } };
+  order: { orderReference: orderDetail.orderReference, status: "PAID", pickupNumber: "A-142", pickupWindowStart: null, acceptanceDeadlineAt: "2026-08-15T03:03:00Z" } };
 let current: DemoSession | null = null;
 let startKeys: string[] = [];
+let trackKeys: string[] = [];
+let trackFailuresRemaining = 0;
 function boardItem(): StoreOrderBoardItem {
   const status = current?.order?.status ?? "PAID";
   const stages: Partial<Record<DemoOrderState, Pick<StoreOrderBoardItem, "lane" | "allowedActions">>> = {
@@ -48,7 +50,12 @@ const handlers = [
   }),
   http.post("/api/v1/demo/session/resume", () => HttpResponse.json(current)),
   http.post("/api/v1/demo/session/orders", () => { current = structuredClone(initial); return HttpResponse.json(current); }),
-  http.post("/api/v1/demo/session/order", () => HttpResponse.json(current)),
+  http.post("/api/v1/demo/session/order", ({ request }) => {
+    trackKeys.push(request.headers.get("Idempotency-Key")!);
+    if (trackFailuresRemaining > 0) { trackFailuresRemaining -= 1; return HttpResponse.error(); }
+    current = structuredClone(initial);
+    return HttpResponse.json(current);
+  }),
   http.delete("/api/v1/demo/session", () => { current = null; return new HttpResponse(null, { status: 204 }); }),
   http.get("/api/v1/stores/:storeId/orders", () => HttpResponse.json({ groups: boardItem().lane ? [{ pickupBusinessDate: "2026-08-15", items: [boardItem()] }] : [], overflow: [] })),
   http.post("/api/v1/stores/:storeId/orders/:orderReference/transitions", async ({ request }) => {
@@ -76,7 +83,7 @@ const meta = {
   title: "Pages/Demo/Journey", component: DemoRoot, render: () => <Runtime />, tags: ["autodocs"],
   parameters: { layout: "fullscreen", a11y: { test: "error" }, routing: { path: "*", initialEntry: "/demo" }, msw: { handlers } },
   beforeEach: async () => {
-    MockDate.set("2026-08-15T03:00:30Z"); current = null; startKeys = []; cart.clear();
+    MockDate.set("2026-08-15T03:00:30Z"); current = null; startKeys = []; trackKeys = []; trackFailuresRemaining = 0; cart.clear();
     localStorage.removeItem("beanflow.demo.active.v1"); sessionStorage.removeItem("beanflow.demo.intent.v1");
     document.cookie = "BEANFLOW_DEMO_XSRF=storybook-demo-csrf; path=/";
     document.cookie = "BEANFLOW_MERCHANT_XSRF=storybook-merchant-csrf; path=/";
@@ -133,6 +140,21 @@ export const RetrySameStart: Story = { play: async ({ canvas, msw }) => {
   await expect(await canvas.findByRole("heading", { name: "첫 주문을 접수해보세요" })).toBeVisible();
   await expect(startKeys).toHaveLength(2); await expect(startKeys[0]).toBe(startKeys[1]);
 } };
+export const RetryFailedOrderTracking: Story = {
+  parameters: { routing: { path: "*", initialEntry: `/app/orders/${orderDetail.orderReference}` } },
+  beforeEach: () => {
+    current = { ...structuredClone(initial), mode: "DIRECT", order: null };
+    trackFailuresRemaining = 1;
+    localStorage.setItem("beanflow.demo.active.v1", "true");
+  },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("alert")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "상태 다시 확인" }));
+    await expect(await canvas.findByRole("heading", { name: "첫 주문을 접수해보세요" })).toBeVisible();
+    await expect(trackKeys).toHaveLength(2);
+    await expect(trackKeys[0]).toBe(trackKeys[1]);
+  },
+};
 export const FullJourney: Story = { play: async ({ canvas }) => {
   await userEvent.click(await canvas.findByRole("button", { name: "주문 처리 체험 시작" }));
   const step = async (button: string, title: string) => {

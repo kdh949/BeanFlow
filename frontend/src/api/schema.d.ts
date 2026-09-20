@@ -6283,8 +6283,11 @@ export interface components {
             /** @enum {string} */
             status: "PENDING_PAYMENT" | "PAID" | "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED" | "CANCELLED" | "EXPIRED";
             pickupNumber: string;
-            /** Format: date-time */
-            pickupWindowStart: string;
+            /**
+             * Format: date-time
+             * @description 즉시 주문에는 별도 픽업 시간 선택이 없으므로 null입니다.
+             */
+            pickupWindowStart: string | null;
             /** Format: date-time */
             acceptanceDeadlineAt: string | null;
         };

@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.demo.internal
 
 import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.annotation.Order
@@ -44,6 +45,7 @@ internal class DemoConfiguration {
 
     @Bean
     @Order(-1)
+    @ConditionalOnProperty(name = ["beanflow.demo.enabled"], havingValue = "true")
     fun demoSecurity(http: HttpSecurity): SecurityFilterChain {
         val csrf =
             CookieCsrfTokenRepository.withHttpOnlyFalse().apply {

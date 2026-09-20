@@ -286,7 +286,10 @@ components:
         orderReference: {type: string}
         status: {type: string, enum: [PENDING_PAYMENT, PAID, ACCEPTED, PREPARING, READY, COMPLETED, REJECTED, CANCELLED, EXPIRED]}
         pickupNumber: {type: string}
-        pickupWindowStart: {type: string, format: date-time}
+        pickupWindowStart:
+          type: [string, 'null']
+          format: date-time
+          description: 즉시 주문에는 별도 픽업 시간 선택이 없으므로 null입니다.
         acceptanceDeadlineAt: {type: [string, 'null'], format: date-time}
     DemoCsrfToken:
       type: object

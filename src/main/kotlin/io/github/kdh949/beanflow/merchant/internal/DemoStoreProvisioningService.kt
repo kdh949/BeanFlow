@@ -6,13 +6,18 @@ import io.github.kdh949.beanflow.merchant.api.DemoStoreProvisioning
 import io.github.kdh949.beanflow.merchant.api.MenuCatalogOperations
 import io.github.kdh949.beanflow.merchant.api.MenuConfigurationTradeContent
 import io.github.kdh949.beanflow.merchant.api.MenuTradeDefinition
+import io.github.kdh949.beanflow.merchant.api.ReplaceStoreCustomerDisplayCommand
+import io.github.kdh949.beanflow.merchant.api.StoreCustomerDisplayOperations
 import io.github.kdh949.beanflow.merchant.api.StoreIdentityCommand
 import io.github.kdh949.beanflow.merchant.api.StoreIdentityOperations
+import io.github.kdh949.beanflow.merchant.api.StoreOperatingDay
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalTime
 import java.util.UUID
 
 @Service
@@ -23,6 +28,7 @@ internal class DemoStoreProvisioningService(
     private val stores: StoreJpaRepository,
     private val catalogs: MenuCatalogOperations,
     private val terms: StoreSettlementTermsJpaRepository,
+    private val displays: StoreCustomerDisplayOperations,
 ) : DemoStoreProvisioning {
     override fun close(
         storeId: UUID,
@@ -55,6 +61,20 @@ internal class DemoStoreProvisioningService(
         val entity = stores.findById(store.storeId).orElseThrow()
         entity.replaceOrderingPolicy(true, true, now)
         stores.flush()
+        displays.replace(
+            ReplaceStoreCustomerDisplayCommand(
+                storeId = store.storeId,
+                expectedVersion = 0,
+                addressLine = null,
+                directionsHint = null,
+                timezone = "Asia/Seoul",
+                operatingDays =
+                    DayOfWeek.entries.map { day ->
+                        StoreOperatingDay(day, closed = false, opensAt = LocalTime.MIN, closesAt = LocalTime.MAX)
+                    },
+            ),
+            now,
+        )
         // Initial terms belong to this newly created store; no existing effective interval is changed.
         terms.saveAndFlush(
             StoreSettlementTermsEntity(

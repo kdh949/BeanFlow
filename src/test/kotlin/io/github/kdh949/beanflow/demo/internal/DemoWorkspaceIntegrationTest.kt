@@ -19,11 +19,13 @@ import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.context.ApplicationContext
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.security.web.SecurityFilterChain
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
@@ -61,7 +63,9 @@ internal class DemoWorkspaceIntegrationTest
     constructor(
         @Qualifier("requestMappingHandlerMapping")
         private val mapping: RequestMappingHandlerMapping,
+        private val applicationContext: ApplicationContext,
         private val service: DemoWorkspaceService,
+        private val expiryWorker: DemoExpiryWorker,
         private val jdbc: JdbcTemplate,
         private val mvc: MockMvc,
         private val mapper: ObjectMapper,
@@ -119,6 +123,17 @@ internal class DemoWorkspaceIntegrationTest
             assertThat(actual).hasSize(8).isEqualTo(documented)
         }
 
+        @Test fun `enabled demo registers its dedicated security chain`() {
+            assertThat(applicationContext.getBeansOfType(SecurityFilterChain::class.java).keys)
+                .containsExactlyInAnyOrder(
+                    "demoSecurity",
+                    "publicSecurityFilterChain",
+                    "operationsSecurityFilterChain",
+                    "merchantSecurityFilterChain",
+                    "customerSecurityFilterChain",
+                )
+        }
+
         @Test fun `fresh visitors get isolated accounts stores and real paid benefit orders`() {
             val a = start()
             val b = start()
@@ -127,6 +142,7 @@ internal class DemoWorkspaceIntegrationTest
             assertThat(a.storeId).isNotEqualTo(b.storeId)
             assertThat(a.orderReference).isNotEqualTo(b.orderReference)
             assertThat(service.current(a.browserHash)?.order?.status).isEqualTo("PAID")
+            assertThat(service.current(a.browserHash)?.order?.pickupWindowStart).isNull()
             assertThat(
                 jdbc.queryForObject(
                     "SELECT payable_krw FROM ordering_order WHERE public_reference = ?",
@@ -179,7 +195,7 @@ internal class DemoWorkspaceIntegrationTest
             assertThatThrownBy { customer.load(w.customerId, 0) }.isInstanceOf(BrowserAuthenticationInvalid::class.java)
             assertThatThrownBy { merchant.load(w.merchantId, 0) }.isInstanceOf(BrowserAuthenticationInvalid::class.java)
             assertThat(service.current(w.browserHash)?.status).isEqualTo("EXPIRED")
-            service.expire()
+            service.expire(w.id)
             assertThat(
                 jdbc.queryForObject(
                     "SELECT accepting_orders FROM merchant_store WHERE id = ?",
@@ -199,6 +215,46 @@ internal class DemoWorkspaceIntegrationTest
             assertThatThrownBy { customer.load(fresh.customerId, 0) }.isInstanceOf(BrowserAuthenticationInvalid::class.java)
             assertThatThrownBy { merchant.load(fresh.merchantId, 0) }.isInstanceOf(BrowserAuthenticationInvalid::class.java)
             assertThat(service.current(fresh.browserHash)?.status).isEqualTo("ENDED")
+        }
+
+        @Test fun `one expiry failure does not roll back another expired workspace`() {
+            val failed = start()
+            val healthy = start()
+            clock.set(failed.expiresAt)
+            jdbc.execute(
+                """
+                CREATE FUNCTION demo_test_fail_expiry() RETURNS trigger LANGUAGE plpgsql AS ${'$'}${'$'}
+                BEGIN
+                    IF NEW.id = '${failed.id}'::uuid THEN
+                        RAISE EXCEPTION 'demo injected expiry failure';
+                    END IF;
+                    RETURN NEW;
+                END
+                ${'$'}${'$'}
+                """.trimIndent(),
+            )
+            jdbc.execute(
+                "CREATE TRIGGER demo_test_expiry_failure BEFORE UPDATE OF ended_at ON demo_workspace " +
+                    "FOR EACH ROW EXECUTE FUNCTION demo_test_fail_expiry()",
+            )
+            try {
+                expiryWorker.run()
+            } finally {
+                jdbc.execute("DROP TRIGGER demo_test_expiry_failure ON demo_workspace")
+                jdbc.execute("DROP FUNCTION demo_test_fail_expiry()")
+            }
+            assertThat(
+                jdbc.queryForObject("SELECT ended_at IS NULL FROM demo_workspace WHERE id = ?", Boolean::class.java, failed.id),
+            ).isTrue()
+            assertThat(
+                jdbc.queryForObject("SELECT ended_at IS NOT NULL FROM demo_workspace WHERE id = ?", Boolean::class.java, healthy.id),
+            ).isTrue()
+            assertThat(
+                jdbc.queryForObject("SELECT accepting_orders FROM merchant_store WHERE id = ?", Boolean::class.java, failed.storeId),
+            ).isTrue()
+            assertThat(
+                jdbc.queryForObject("SELECT accepting_orders FROM merchant_store WHERE id = ?", Boolean::class.java, healthy.storeId),
+            ).isFalse()
         }
 
         @Test fun `existing login is preserved and active orders cannot be silently replaced`() {
@@ -395,6 +451,14 @@ internal class DemoWorkspaceIntegrationTest
                 )
             var previous = "PAID"
             transitions.forEach { (action, expected) ->
+                val transition =
+                    mutableMapOf<String, Any?>(
+                        "action" to action,
+                        "expectedStatus" to previous,
+                        "reason" to null,
+                    ).apply {
+                        if (action == "ACCEPT") put("preparationMinutes", 10)
+                    }
                 mvc
                     .perform(
                         post("/api/v1/stores/${body.path("storeId").asText()}/orders/$reference/transitions")
@@ -403,7 +467,7 @@ internal class DemoWorkspaceIntegrationTest
                             .header("X-BEANFLOW-CSRF", merchantToken)
                             .header("Idempotency-Key", UUID.randomUUID().toString())
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(mapper.writeValueAsString(mapOf("action" to action, "expectedStatus" to previous, "reason" to null))),
+                            .content(mapper.writeValueAsString(transition)),
                     ).andExpect(status().isOk)
                     .andExpect(jsonPath("$.status").value(expected))
                 mvc

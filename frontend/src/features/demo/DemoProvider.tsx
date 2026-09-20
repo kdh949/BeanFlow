@@ -11,7 +11,7 @@ type DemoContextValue = {
   session: DemoSession | null; config: DemoConfig | null; busy: boolean; checking: boolean;
   error: string | undefined; customerChecked: boolean;
   refresh: () => Promise<void>; start: (mode: "GUIDED" | "DIRECT") => Promise<void>;
-  resume: () => Promise<void>; act: (action: DemoAction) => Promise<void>;
+  resume: () => Promise<void>; retry: () => Promise<void>; act: (action: DemoAction) => Promise<void>;
 };
 const DemoContext = createContext<DemoContextValue | null>(null);
 export const useDemo = () => useContext(DemoContext);
@@ -24,6 +24,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false); const busyRef = useRef(false);
   const [checking, setChecking] = useState(false); const [error, setError] = useState<string>();
   const [checkedReference, setCheckedReference] = useState<string | null>(null);
+  const [trackRetry, setTrackRetry] = useState(0);
   const generation = useRef(0); const refreshInFlight = useRef<Promise<void> | null>(null);
   const wanted = location.pathname === "/demo" || localStorage.getItem(marker) === "true";
   const refresh = useCallback(async () => {
@@ -108,6 +109,12 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   }
   // Bind a newly created real order when its route is entered. The server checks both customer and store ownership.
   const routeReference = /^\/app\/orders\/([^/]+)(?:\/checkout)?$/.exec(location.pathname)?.[1];
+  async function retry() {
+    if (session?.status === "ACTIVE" && routeReference && routeReference !== session.order?.orderReference) {
+      setError(undefined); setTrackRetry((current) => current + 1); return;
+    }
+    await refresh();
+  }
   useEffect(() => {
     if (!session || session.status !== "ACTIVE" || !routeReference || routeReference === session.order?.orderReference || busyRef.current) return;
     let disposed = false;
@@ -117,8 +124,8 @@ export function DemoProvider({ children }: { children: ReactNode }) {
       if (!disposed && trackGeneration === generation.current) { generation.current += 1; setSession(next); setCheckedReference(null); sessionStorage.removeItem(intentKey); }
     }).catch((failure) => { if (!disposed) setError(demoFailureCopy(failure)); });
     return () => { disposed = true; };
-  }, [routeReference, session?.workspaceId, session?.order?.orderReference, session?.status]);
+  }, [routeReference, session?.workspaceId, session?.order?.orderReference, session?.status, trackRetry]);
   return <DemoContext.Provider value={{ session, config, busy, checking, error, customerChecked: checkedReference === session?.order?.orderReference,
-    refresh, start, resume, act }}>{children}</DemoContext.Provider>;
+    refresh, start, resume, retry, act }}>{children}</DemoContext.Provider>;
 }
 export function DemoRoot() { return <DemoProvider><Outlet /></DemoProvider>; }

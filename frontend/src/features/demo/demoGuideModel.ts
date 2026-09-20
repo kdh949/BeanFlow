@@ -5,7 +5,7 @@ export type DemoGuideView = {
   footer: string; actions: Array<{ kind: DemoAction; label: string }>;
 };
 const processingSteps = ["주문 접수", "제조·준비", "고객 화면 확인", "픽업 완료"];
-const directSteps = ["메뉴 선택", "픽업 시간·혜택 확인", "테스트 결제"];
+const directSteps = ["메뉴 선택", "주문 금액·혜택 확인", "테스트 결제"];
 
 /** Derives instructions from a confirmed server state, never from an action button click. */
 export function demoGuideView(input: {
@@ -18,8 +18,8 @@ export function demoGuideView(input: {
   if (input.expired) return { ...base, step: 0, title: "체험 시간이 끝났어요", body: "체험 계정의 접근이 종료됐어요. 새 체험 공간에서 다시 시작할 수 있어요.", actions: [{ kind: "restart", label: "새 체험 시작" }] };
   if (surface === "customer" && (/\/stores\//.test(pathname) || pathname === "/app/cart" || pathname.endsWith("/checkout") || status === "PENDING_PAYMENT" || status === null)) {
     const step = pathname === "/app/cart" ? 1 : pathname.endsWith("/checkout") || status === "PENDING_PAYMENT" ? 2 : 0;
-    const titles = ["원하는 메뉴를 골라보세요", "픽업 시간과 주문 금액을 확인하세요", "테스트 결제로 주문을 완료하세요"];
-    const bodies = ["메뉴와 옵션을 선택해 장바구니에 담아주세요.", "예약 가능한 픽업 시간을 고르고, 사용할 수 있는 혜택을 확인해 주세요.", "Toss 테스트 결제창에서 결제를 진행해 주세요. 결제 결과가 확인되면 점주 화면에서 이어갈 수 있어요."];
+    const titles = ["원하는 메뉴를 골라보세요", "주문 금액과 혜택을 확인하세요", "테스트 결제로 주문을 완료하세요"];
+    const bodies = ["메뉴와 옵션을 선택해 장바구니에 담아주세요.", "즉시 주문의 결제 금액과 사용할 수 있는 혜택을 확인해 주세요.", "Toss 테스트 결제창에서 결제를 진행해 주세요. 결제 결과가 확인되면 점주 화면에서 이어갈 수 있어요."];
     return { ...base, steps: directSteps, step, title: titles[step]!, body: bodies[step]!, footer: "테스트 환경에서 진행하며 실제 청구는 발생하지 않습니다." };
   }
   if (status === "REJECTED" || status === "CANCELLED" || status === "EXPIRED") return { ...base, step: 0,

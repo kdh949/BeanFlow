@@ -16,7 +16,6 @@ internal data class DemoWorkspace(
     val merchantId: UUID,
     val storeId: UUID,
     val menuId: UUID,
-    val slotId: UUID,
     val customerSessionId: String,
     val merchantSessionId: String,
     val orderReference: String?,
@@ -55,6 +54,17 @@ internal class DemoWorkspaceRepository(
     ): DemoWorkspace? =
         jdbc.query("SELECT * FROM demo_workspace WHERE browser_hash = ? AND start_key = ?", { rs, _ -> map(rs) }, hash, key).singleOrNull()
 
+    fun findById(
+        id: UUID,
+        lock: Boolean = false,
+    ): DemoWorkspace? =
+        jdbc
+            .query(
+                "SELECT * FROM demo_workspace WHERE id = ?" + if (lock) " FOR UPDATE" else "",
+                { rs, _ -> map(rs) },
+                id,
+            ).singleOrNull()
+
     fun activeCount(now: Instant): Int =
         jdbc.queryForObject(
             "SELECT count(*) FROM demo_workspace WHERE ended_at IS NULL AND expires_at > ?",
@@ -75,9 +85,9 @@ internal class DemoWorkspaceRepository(
     fun insert(w: DemoWorkspace) {
         jdbc.update(
             """INSERT INTO demo_workspace
-            (id,browser_hash,start_key,mode,customer_id,merchant_id,store_id,menu_id,slot_id,
+            (id,browser_hash,start_key,mode,customer_id,merchant_id,store_id,menu_id,
              customer_session_id,merchant_session_id,order_reference,created_at,expires_at,ended_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             w.id,
             w.browserHash,
             w.startKey,
@@ -86,7 +96,6 @@ internal class DemoWorkspaceRepository(
             w.merchantId,
             w.storeId,
             w.menuId,
-            w.slotId,
             w.customerSessionId,
             w.merchantSessionId,
             w.orderReference,
@@ -110,10 +119,10 @@ internal class DemoWorkspaceRepository(
         jdbc.update("UPDATE demo_workspace SET ended_at = ? WHERE id = ?", Timestamp.from(now), id)
     }
 
-    fun expired(now: Instant): List<DemoWorkspace> =
+    fun expiredIds(now: Instant): List<UUID> =
         jdbc.query(
-            "SELECT * FROM demo_workspace WHERE ended_at IS NULL AND expires_at <= ? ORDER BY expires_at LIMIT 20 FOR UPDATE SKIP LOCKED",
-            { rs, _ -> map(rs) },
+            "SELECT id FROM demo_workspace WHERE ended_at IS NULL AND expires_at <= ? ORDER BY expires_at, id LIMIT 20",
+            { rs, _ -> rs.getObject("id", UUID::class.java) },
             Timestamp.from(now),
         )
 
@@ -156,7 +165,6 @@ internal class DemoWorkspaceRepository(
             rs.getObject("merchant_id", UUID::class.java),
             rs.getObject("store_id", UUID::class.java),
             rs.getObject("menu_id", UUID::class.java),
-            rs.getObject("slot_id", UUID::class.java),
             rs.getString("customer_session_id"),
             rs.getString("merchant_session_id"),
             rs.getString("order_reference"),

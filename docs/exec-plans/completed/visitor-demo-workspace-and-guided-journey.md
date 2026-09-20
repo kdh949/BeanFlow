@@ -28,7 +28,7 @@
 BR-58과 ADR-132를 따른다. 각 방문자는 별도 계정/매장을 가진다. 다른 매장 주문 생성 및 만료된 계정 인증을 서버에서 차단한다. 일반 로그인 Session을 덮어쓰지 않는다. 종료/만료 후 거래 증거는 보존한다. timeout 주문은 되살리지 않는다.
 
 ## Architecture and Transaction Boundaries
-Demo 모듈은 발급/수명주기만 소유하고 각 owner API로 Identity, Merchant, Fulfillment, Loyalty, Ordering을 조합한다. 발급은 같은 PostgreSQL transaction에서 계정/매장/슬롯/포인트/감사/Session/workspace를 commit한다. 샘플 생성은 workspace lock 아래 기존 quote/OrderCreationWorkflow/benefit-only 승인 경계를 사용한다. 외부 PG 호출은 포함하지 않는다. 주문 상태 변경은 기존 API를 유지한다.
+Demo 모듈은 발급/수명주기만 소유하고 각 owner API로 Identity, Merchant, Loyalty, Ordering을 조합한다. 발급은 같은 PostgreSQL transaction에서 계정/매장/영업시간/포인트/감사/Session/workspace를 commit한다. 샘플 생성은 workspace lock 아래 기존 즉시 quote/OrderCreationWorkflow/benefit-only 승인 경계를 사용한다. 외부 PG 호출은 포함하지 않는다. 주문 상태 변경은 기존 API를 유지한다.
 
 ## Alternatives Considered
 공유 계정은 방문자 간 주문 간섭 때문에 제외. 브라우저 시뮬레이션은 실제 상태 확인 목적에 맞지 않는다. DB를 매 방문자마다 생성하는 대신 전용 account/store와 서버 소유권 검사로 격리한다.
@@ -37,7 +37,7 @@ Demo 모듈은 발급/수명주기만 소유하고 각 owner API로 Identity, Me
 발급 실패는 rollback 및 명시적 오류다. 응답 유실은 동일 브라우저 cookie와 Idempotency-Key로 복구한다. 외부 결제 UNKNOWN은 기존 복구 경로를 유지한다. 만료/종료는 확정 전이를 보존하고 새 공간 시작을 안내한다. 활성 공간 및 누적 발급 상한 초과는 429이며 자동 성공/공유 계정 fallback이 없다.
 
 ## Data and Migration
-V88만 이 작업이 소유한다. V87은 PR #189가 소유하며 이 PR에는 포함하지 않는다. Draft 검토 후 #189 병합과 최신 main의 마이그레이션 순서 검증이 완료되어야 V88을 병합·배포한다. Demo workspace와 명령 원장, Identity의 제한된 체험 계정 scope를 추가한다. 기존 account/order row를 변환하지 않는다.
+V92만 이 작업이 소유한다. 최신 main의 마지막 V91과 기존 V87/V88 미적용 확인을 기준으로 미적용 V88을 재번호했다. Demo workspace와 명령 원장, Identity의 제한된 체험 계정 scope를 추가한다. 기존 account/order row를 변환하지 않는다.
 
 ## API and Event Contracts
 `/api/v1/demo/config`, `/csrf`, `/session`, `/sessions`, `/session/resume`, `/session/orders`, `/session/order`와 종료 API. 별도 CSRF와 opaque HttpOnly 브라우저 cookie를 사용한다. 인증 Session 식별자는 JSON에 노출하지 않는다. 외부 event는 기존 주문/결제 event만 사용한다.
@@ -69,13 +69,13 @@ BR-58, ADR-132, 전용 runbook, frontend Storybook docs.
 - [x] 최종 검증/문서 정리
 
 ## Surprises & Discoveries
-일반 메뉴/슬롯/정산 정책 변경 API는 운영 인가를 필요로 한다. 체험 초기화는 운영자를 사칭하지 않고 신규 체험 자원만 생성하는 owner port와 SYSTEM 감사를 사용한다. 기본 주문은 기존 BENEFIT_ONLY 경로로 만들 수 있다.
+일반 메뉴/영업시간/정산 정책 변경 API는 운영 인가를 필요로 한다. 체험 초기화는 운영자를 사칭하지 않고 신규 체험 자원만 생성하는 owner port와 SYSTEM 감사를 사용한다. 기본 주문은 픽업 슬롯 없는 IMMEDIATE BENEFIT_ONLY 경로로 만든다.
 
 ## Decision Log
 - 2026-09-15: 방문자별 계정·매장 격리 및 서버 발급/만료를 채택. 기본 주문은 혜택 전액 사용, 직접 주문은 테스트 PG 사용.
 
 ## Outcomes & Retrospective
-`/demo`와 11개 독립 상태, 실제 주문 화면 안내, 방문자별 발급/격리/30분 만료를 구현했다. V88 및 전용 CSRF/Session 변경을 함께 구현했다. 일반 로그인, 실제 주문 상태 전환과 거래 증거 보존은 기존 경계를 유지한다.
+`/demo`와 11개 독립 상태, 실제 주문 화면 안내, 방문자별 발급/격리/30분 만료를 구현했다. V92 및 전용 CSRF/Session 변경을 함께 구현했다. 일반 로그인, 실제 주문 상태 전환과 거래 증거 보존은 기존 경계를 유지한다.
 
 Backend 17개, frontend unit 250개, 전체 Storybook 792개 테스트 실행이 통과했다. 영향 범위 134개 스토리는 MCP 상호작용/접근성 결과도 모두 수신했다. 전체 MCP 호출은 테스트 통과 후 JSON 직렬화 중 heap OOM으로 응답 수신에 실패했다. 타입/디자인/제품·Storybook 빌드/사이트 smoke/변경 Kotlin 포맷 검사를 통과했다. 1440px 및 390px에서 실제 제품 페이지의 안내 배치와 모바일 접기를 확인했다.
 
@@ -86,3 +86,4 @@ Backend 17개, frontend unit 250개, 전체 Storybook 792개 테스트 실행이
 - 2026-09-15: 구현과 로컬 검증 완료. 완료 경로로 이동하고 테스트 도구 응답 한계를 기록.
 
 - 2026-09-15: 최신 main `0ea0055`에서 데모 전용 PR 브랜치 분리. 원래 작업 폴더와 별도 성능/복구 변경을 보존하고 V87 적용 순서 제약을 명시.
+- 2026-09-21: 최신 main을 병합하고 샘플·직접 주문을 IMMEDIATE로 통일했다. 미적용 V88은 최신 V91 다음 V92로 재번호하고 보안 체인 조건, 만료 실패 격리와 주문 추적 재시도를 보강했다.

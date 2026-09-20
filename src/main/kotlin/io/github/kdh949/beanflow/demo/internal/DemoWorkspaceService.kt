@@ -1,6 +1,5 @@
 package io.github.kdh949.beanflow.demo.internal
 
-import io.github.kdh949.beanflow.fulfillment.api.DemoPickupProvisioning
 import io.github.kdh949.beanflow.identity.api.DemoIdentityOperations
 import io.github.kdh949.beanflow.loyalty.api.DemoPointProvisioning
 import io.github.kdh949.beanflow.merchant.api.DemoStoreProvisioning
@@ -16,6 +15,7 @@ import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.CreateLoginSession
 import io.github.kdh949.beanflow.shared.api.LoginSessionCoordinator
 import io.micrometer.core.instrument.MeterRegistry
+import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -58,7 +58,6 @@ internal class DemoWorkspaceService(
     private val settings: DemoSettings,
     private val identities: DemoIdentityOperations,
     private val stores: DemoStoreProvisioning,
-    private val pickup: DemoPickupProvisioning,
     private val points: DemoPointProvisioning,
     private val orders: DemoOrderOperations,
     private val sessions: LoginSessionCoordinator,
@@ -106,7 +105,6 @@ internal class DemoWorkspaceService(
         val expiresAt = now.plusSeconds(settings.lifetimeSeconds)
         val store = stores.create(id, now)
         identities.provision(customerId, merchantId, store.storeId, now, expiresAt)
-        val slotId = pickup.create(store.storeId, expiresAt)
         val customerSession = sessions.create(CreateLoginSession(BrowserActorType.CUSTOMER, customerId, now.toEpochMilli(), 0))
         val merchantSession = sessions.create(CreateLoginSession(BrowserActorType.MERCHANT, merchantId, now.toEpochMilli(), 0))
         var workspace =
@@ -119,7 +117,6 @@ internal class DemoWorkspaceService(
                 merchantId,
                 store.storeId,
                 store.sampleMenuId,
-                slotId,
                 customerSession.sessionId,
                 merchantSession.sessionId,
                 null,
@@ -199,10 +196,16 @@ internal class DemoWorkspaceService(
         return w
     }
 
+    @Transactional(readOnly = true)
+    fun expiredWorkspaceIds(): List<UUID> = repository.expiredIds(clock.instant())
+
     @Transactional
-    fun expire() {
+    fun expire(workspaceId: UUID): Boolean {
         val now = clock.instant()
-        repository.expired(now).forEach { close(it, now) }
+        val workspace = repository.findById(workspaceId, lock = true) ?: return false
+        if (workspace.endedAt != null || workspace.expiresAt.isAfter(now)) return false
+        close(workspace, now)
+        return true
     }
 
     @Transactional
@@ -214,7 +217,7 @@ internal class DemoWorkspaceService(
         now: Instant,
     ): DemoOrderSnapshot {
         points.grantSample(w.customerId, w.storeId, "demo:${w.id}:$key", w.expiresAt.plusSeconds(3600), now)
-        val order = orders.createSample(w.customerId, w.storeId, w.menuId, w.slotId)
+        val order = orders.createSample(w.customerId, w.storeId, w.menuId)
         repository.track(w.id, order.orderReference)
         repository.record(w.id, key, "SAMPLE", "", order.orderReference)
         audit(w, "DEMO_SAMPLE_CREATED", now, order.orderReference)
@@ -333,14 +336,26 @@ internal class DemoExpiryWorker(
     private val service: DemoWorkspaceService,
     private val metrics: MeterRegistry,
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     @Scheduled(fixedDelay = 60000, initialDelayString = "\${beanflow.demo.expiry-initial-delay-ms:60000}")
     fun run() {
         try {
-            service.expire()
-        } catch (
-            _: RuntimeException,
-        ) {
-            metrics.counter("beanflow.demo.workspace", "outcome", "expiry_failed").increment()
+            service.expiredWorkspaceIds().forEach { workspaceId ->
+                try {
+                    service.expire(workspaceId)
+                } catch (failure: RuntimeException) {
+                    logger.error("Visitor demo expiry failed; workspaceId={}", workspaceId, failure)
+                    failureMetric()
+                }
+            }
+        } catch (failure: RuntimeException) {
+            logger.error("Visitor demo expiry candidate scan failed", failure)
+            failureMetric()
         }
+    }
+
+    private fun failureMetric() {
+        metrics.counter("beanflow.demo.workspace", "outcome", "expiry_failed").increment()
     }
 }

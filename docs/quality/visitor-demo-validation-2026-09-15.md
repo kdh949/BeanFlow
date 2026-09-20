@@ -6,10 +6,10 @@
 
 ## 구현 결과
 
-- `/demo`에서 별도 고객·점주·매장·메뉴·슬롯·포인트와 실제 샘플 주문을 원자적으로 발급한다. 공개 공유 계정을 사용하지 않는다.
+- `/demo`에서 별도 고객·점주·매장·메뉴·영업시간·포인트와 실제 즉시 샘플 주문을 원자적으로 발급한다. 공개 공유 계정을 사용하지 않는다.
 - 기존 점주 주문 전환과 고객 조회 API로 PAID → ACCEPTED → PREPARING → READY → COMPLETED를 처리한다. 안내는 서버에서 확인한 상태를 따른다.
 - 30분 만료/종료는 양쪽 인증 접근을 차단하고 주문·결제·원장 증거를 보존한다. timeout 재시작은 원래 주문을 보존하며 새 주문을 생성한다.
-- V88과 전용 CSRF/Session 경계를 함께 추가한다. 기본 비활성, local + local-demo/toss-sandbox 조합에서만 활성화할 수 있다.
+- 현재 파일명은 V92다. 최초 V88은 미적용 확인 후 최신 main의 V91 다음으로 재번호했다. 전용 CSRF/Session 경계는 기본 비활성이며 local + local-demo/toss-sandbox 조합에서만 활성화할 수 있다.
 
 ## 자동 검증
 
@@ -56,7 +56,7 @@ Frontend에서 위 npm 명령을 실행한다. Storybook MCP의 `run-story-tests
 
 ## 미수행 범위
 
-- 운영 DB V88 적용, 원격 배포, 도메인/HTTPS 활성화.
+- 운영 DB V92 적용, 원격 배포, 도메인/HTTPS 활성화.
 - 실제 Toss SDK 결제 승인·콜백 및 외부 알림 전달. Backend 테스트는 기존 테스트용 adapter를 사용한다.
 - 배포 환경의 부하/장기 보존/만료 worker 운영 안정성 검증.
 
@@ -72,4 +72,13 @@ Frontend에서 위 npm 명령을 실행한다. Storybook MCP의 `run-story-tests
 - Passed: `npm run test:storybook:docs` — 125개 Docs, 15개 상태별 Docs, 47개 상태 화면.
 - Passed: 명시적 51개 staged 파일 목록, `git diff --cached --check`, 제품 코드의 원본 일치 및 관련 없는 파일/credential 패턴 검사.
 
-V88의 적용 순서는 #189의 V87 병합 후 최신 main에서 재검증한다. 이 검증은 V87 없이 main 위 데모 코드의 독립 실행을 확인한 것이며 두 migration을 합친 배포 검증이 아니다. 원격 CI, 병합과 배포는 별도 결과다. 전체 Storybook 상호작용/MCP와 390px/1440px 브라우저 검증은 동일 소스에 대해 위에서 실행한 결과를 유지한다.
+최초 V88 검증 기록은 당시 분리 기준이다. 2026-09-21 최신 main 통합에서는 V87/V88 미적용 확인을 근거로 V92로 재번호했다. 원격 CI, 병합과 배포는 별도 결과다. 전체 Storybook 상호작용/MCP와 390px/1440px 브라우저 검증은 당시 소스에 대해 위에서 실행한 결과다.
+
+## 최신 main 통합 후 재검증 — 2026-09-21
+
+- Passed: `./gradlew spotlessCheck test --tests '*DemoSafetyTest' --tests '*DemoWorkspaceIntegrationTest' --tests '*AuthenticationSecurityIntegrationTest' --tests '*AuthenticationArchUnitTest' --tests '*ModularityTests' --tests '*RuntimeOpenApiParityTest' bootJar verifyCiTestShards` — 선택된 28개 테스트, Kotlin 포맷, 실행 파일 빌드 및 328개 test class의 shard 중복/누락 검사.
+- Passed: `scripts/verify-docs.sh` — OpenAPI 265/300 target, 255/290 runtime, 512 schema, BR 58개, ADR 135개, Markdown 385개, ExecPlan 111개.
+- Passed: `npm run typecheck`, `npm test` (37개 파일/257개 테스트와 boundary/copy 검사), `npm run check:design`, `npm run build`, `npm run build-storybook`, `npm run test:sites` (4개).
+- Passed: 영향 범위 Storybook `DemoJourney.stories.tsx` 18개 테스트 및 `npm run test:storybook:docs` — 125개 Docs, 15개 상태별 Docs, 47개 상태 화면.
+
+원격 CI와 병합·배포는 이 로컬 재검증에 포함하지 않는다. 전체 Backend test class는 원격 CI shard 결과로 별도 확인한다.

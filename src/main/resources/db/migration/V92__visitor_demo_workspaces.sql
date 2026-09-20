@@ -10,7 +10,7 @@ CREATE TABLE demo_workspace (
     customer_id uuid NOT NULL UNIQUE REFERENCES identity_customer_account(id),
     merchant_id uuid NOT NULL UNIQUE REFERENCES identity_merchant_account(id),
     store_id uuid NOT NULL UNIQUE REFERENCES merchant_store(id),
-    menu_id uuid NOT NULL REFERENCES merchant_menu(id), slot_id uuid NOT NULL REFERENCES fulfillment_pickup_slot(id),
+    menu_id uuid NOT NULL REFERENCES merchant_menu(id),
     customer_session_id varchar(128) NOT NULL, merchant_session_id varchar(128) NOT NULL,
     order_reference varchar(12), created_at timestamptz NOT NULL, expires_at timestamptz NOT NULL, ended_at timestamptz,
     CHECK (expires_at > created_at), UNIQUE (browser_hash, start_key)

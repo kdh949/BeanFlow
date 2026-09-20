@@ -7,7 +7,7 @@ data class DemoOrderSnapshot(
     val orderReference: String,
     val status: String,
     val pickupNumber: String,
-    val pickupWindowStart: Instant,
+    val pickupWindowStart: Instant?,
     val acceptanceDeadlineAt: Instant?,
 )
 
@@ -16,7 +16,6 @@ interface DemoOrderOperations {
         customerId: UUID,
         storeId: UUID,
         menuId: UUID,
-        slotId: UUID,
     ): DemoOrderSnapshot
 
     fun inspect(

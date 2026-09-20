@@ -25,13 +25,12 @@ internal class DemoOrderService(
         customerId: UUID,
         storeId: UUID,
         menuId: UUID,
-        slotId: UUID,
     ): DemoOrderSnapshot {
         val command =
             CreateOrderCommand(
                 customerId,
                 storeId,
-                slotId,
+                null,
                 listOf(CreateOrderLineCommand(menuId, emptyList(), 1)),
                 null,
                 4500,
