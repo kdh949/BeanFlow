@@ -36,8 +36,8 @@ data class SupportOrderChangeOwnerReport(
     val orderId: UUID,
     val previousState: String,
     val currentState: String,
-    val previousPickupSlotId: UUID,
-    val currentPickupSlotId: UUID,
+    val previousPickupSlotId: UUID?,
+    val currentPickupSlotId: UUID?,
     val orderVersion: Long,
     val paymentRecoveryState: String? = null,
 )

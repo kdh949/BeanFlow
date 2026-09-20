@@ -53,7 +53,7 @@ internal data class SupportCompensationWorkflowResource(
     val terms: SupportCompensationTermsResource,
     val approval: SupportCompensationApprovalResource?,
     val currentTargetVersion: Long?,
-    val verificationExpiresAt: Instant,
+    val executionExpiresAt: Instant,
     val allowedActions: List<SupportCompensationWorkflowAction>,
     val couponTemplate: GoodwillCouponTemplateView? = null,
 )

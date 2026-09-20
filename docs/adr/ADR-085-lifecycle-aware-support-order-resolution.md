@@ -1,6 +1,6 @@
 # ADR-085: 주문 생명주기별 Support 변경과 post-acceptance resolution
 
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR-136](ADR-136-support-direct-processing.md)
 - **Date:** 2026-08-10
 
 ## Context
@@ -88,3 +88,8 @@ State별 decision/outcome, slot conflict, resolution partial/unknown duration.
 ## Related Decisions
 
 ADR-029~040, ADR-048, ADR-061.
+
+## 직접 처리 정책 전환 (2026-09-18)
+
+신규 업무의 본인확인·타인 승인 조건은 [ADR-136](ADR-136-support-direct-processing.md)으로 대체한다.
+기존 기록의 의미와 이 문서의 금융·감사·마스킹·복구 불변식은 유지한다.

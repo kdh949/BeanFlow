@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.ordering.internal
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
+import io.github.kdh949.beanflow.merchant.api.StoreOrderingWindowShortened
 import io.github.kdh949.beanflow.notification.internal.NotificationDeliveryWorker
 import io.github.kdh949.beanflow.notification.internal.NotificationProviderResult
 import io.github.kdh949.beanflow.notification.internal.ScriptedTestNotificationProvider
@@ -16,6 +17,7 @@ import io.github.kdh949.beanflow.payment.internal.ScriptedTestPaymentGateway
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -39,6 +41,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
@@ -69,6 +72,7 @@ internal class StoreOrderLifecycleIntegrationTest
         private val createOrderUseCase: CreateOrderUseCase,
         private val orderQuoteUseCase: io.github.kdh949.beanflow.ordering.api.OrderQuoteUseCase,
         private val confirmationService: PaymentConfirmationService,
+        private val oneTimeCheckoutService: OneTimeCheckoutService,
         private val transitionService: StoreOrderTransitionService,
         private val partialRefundService: PartialRefundService,
         private val pointRecoveryWorker: RefundEarnedPointRecoveryWorker,
@@ -76,6 +80,7 @@ internal class StoreOrderLifecycleIntegrationTest
         private val settlementInputSnapshots: OrderSettlementInputSnapshotOperations,
         private val orderCompletedV2Factory: OrderCompletedV2Factory,
         private val deadlineService: StoreAcceptanceDeadlineService,
+        private val orderingWindowShortenedListener: StoreOrderingWindowShortenedListener,
         private val orderRepository: OrderJpaRepository,
         private val refundWorker: RejectionRefundWorker,
         private val notificationWorker: NotificationDeliveryWorker,
@@ -141,7 +146,7 @@ internal class StoreOrderLifecycleIntegrationTest
                         .with(csrf())
                         .header("Idempotency-Key", "public-store-accept")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"action":"ACCEPT","expectedStatus":"PAID","reason":null}"""),
+                        .content("""{"action":"ACCEPT","expectedStatus":"PAID","reason":null,"preparationMinutes":10}"""),
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.orderId").doesNotExist())
                 .andExpect(jsonPath("$.orderReference").value(reference))
@@ -235,12 +240,136 @@ internal class StoreOrderLifecycleIntegrationTest
                     .response
                     .contentAsString
             assertThat(replay).isEqualTo(first)
-            patchStatus(actorId, orderId, "store-accept-key", "PREPARING")
+            assertThat(value<Int>("SELECT preparation_minutes FROM ordering_order WHERE id = ?", orderId)).isEqualTo(10)
+            assertThat(
+                value<Boolean>(
+                    "SELECT estimated_ready_at = accepted_at + interval '10 minutes' FROM ordering_order WHERE id = ?",
+                    orderId,
+                ),
+            ).isTrue()
+            patchStatus(actorId, orderId, "store-accept-key", "ACCEPTED", preparationMinutes = 15)
                 .andExpect(status().isConflict)
                 .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"))
             patchStatus(actorId, orderId, "store-another-key", "ACCEPTED")
                 .andExpect(status().isConflict)
                 .andExpect(jsonPath("$.code").value("ORDER_STATE_CONFLICT"))
+        }
+
+        @Test
+        fun `public and UUID acceptance APIs require preparation minutes only for acceptance`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidOrder(fixture, "store-preparation-contract-order")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "STAFF", "ACTIVE")
+            val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+
+            mockMvc
+                .perform(
+                    post("/api/v1/stores/{storeId}/orders/{orderReference}/transitions", fixture.storeId, reference)
+                        .with(storeJwt(actorId))
+                        .with(csrf())
+                        .header("Idempotency-Key", "public-missing-preparation")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"action":"ACCEPT","expectedStatus":"PAID","reason":null}"""),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+
+            mockMvc
+                .perform(
+                    patch("/api/v1/store-orders/{orderId}/status", orderId)
+                        .with(storeJwt(actorId))
+                        .with(csrf())
+                        .header("Idempotency-Key", "uuid-missing-preparation")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"targetState":"ACCEPTED","reason":null}"""),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+
+            mockMvc
+                .perform(
+                    post("/api/v1/stores/{storeId}/orders/{orderReference}/transitions", fixture.storeId, reference)
+                        .with(storeJwt(actorId))
+                        .with(csrf())
+                        .header("Idempotency-Key", "public-reject-with-preparation")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            """{"action":"REJECT","expectedStatus":"PAID","reason":"busy","preparationMinutes":10}""",
+                        ),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PAID")
+            assertThat(value<Long>("SELECT count(*) FROM ordering_store_command_idempotency WHERE order_id = ?", orderId)).isZero()
+        }
+
+        @Test
+        fun `immediate paid timeout at the store close boundary uses store closed and needs no pickup restoration`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidImmediateOrder(fixture, "immediate-store-close-timeout")
+            val deadline = requireNotNull(orderRepository.findById(orderId).orElseThrow().acceptanceDeadlineAt)
+            jdbcTemplate.update(
+                "UPDATE ordering_order SET ordering_window_closes_at = ? WHERE id = ?",
+                Timestamp.from(deadline),
+                orderId,
+            )
+
+            assertThat(deadlineService.rejectTimedOut(orderId, deadline)).isEqualTo(StoreAcceptanceDeadlineOutcome.APPLIED)
+
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("REJECTED")
+            assertThat(value<String>("SELECT rejection_reason FROM ordering_order WHERE id = ?", orderId)).isEqualTo("STORE_CLOSED")
+            assertThat(count("SELECT count(*) FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId)).isZero()
+            assertThat(
+                value<String>(
+                    "SELECT step.state FROM operations_order_compensation_step step " +
+                        "JOIN operations_order_compensation_case bean_case ON bean_case.id = step.case_id " +
+                        "WHERE bean_case.order_id = ? AND step.step_type = 'PICKUP'",
+                    orderId,
+                ),
+            ).isEqualTo("NOT_REQUIRED")
+            awaitNoOutstandingPublications()
+        }
+
+        @Test
+        fun `early close removes an impossible warning and shortens an unaccepted paid deadline only once`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidImmediateOrder(fixture, "immediate-early-close-timeout")
+            val paidAt = value<Instant>("SELECT paid_at FROM ordering_order WHERE id = ?", orderId)
+            val originalCutoff = value<Instant>("SELECT ordering_window_closes_at FROM ordering_order WHERE id = ?", orderId)
+            val shortenedCutoff = paidAt.plusSeconds(60)
+
+            orderingWindowShortenedListener.shorten(
+                StoreOrderingWindowShortened(
+                    storeId = fixture.storeId,
+                    previousClosesAt = originalCutoff,
+                    shortenedClosesAt = shortenedCutoff,
+                    displayVersion = 1,
+                    changedAt = paidAt.plusSeconds(30),
+                ),
+            )
+            orderingWindowShortenedListener.shorten(
+                StoreOrderingWindowShortened(
+                    storeId = fixture.storeId,
+                    previousClosesAt = originalCutoff,
+                    shortenedClosesAt = originalCutoff,
+                    displayVersion = 2,
+                    changedAt = paidAt.plusSeconds(40),
+                ),
+            )
+
+            assertThat(value<Instant>("SELECT ordering_window_closes_at FROM ordering_order WHERE id = ?", orderId))
+                .isEqualTo(shortenedCutoff)
+            assertThat(value<Instant>("SELECT acceptance_deadline_at FROM ordering_order WHERE id = ?", orderId))
+                .isEqualTo(shortenedCutoff)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT acceptance_warning_at FROM ordering_order WHERE id = ?",
+                    Timestamp::class.java,
+                    orderId,
+                ),
+            ).isNull()
+
+            assertThat(deadlineService.rejectTimedOut(orderId, shortenedCutoff)).isEqualTo(StoreAcceptanceDeadlineOutcome.APPLIED)
+            assertThat(value<String>("SELECT rejection_reason FROM ordering_order WHERE id = ?", orderId)).isEqualTo("STORE_CLOSED")
         }
 
         @Test
@@ -640,7 +769,7 @@ internal class StoreOrderLifecycleIntegrationTest
                             StoreTransitionActor(actorId, setOf(StoreActorRole.STAFF)),
                             orderId,
                             "accept-race-key",
-                            StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null),
+                            StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null, 10),
                         )
                     }
                 }
@@ -658,6 +787,66 @@ internal class StoreOrderLifecycleIntegrationTest
             assertThat(orderRepository.findById(orderId).orElseThrow().state)
                 .isIn(OrderState.ACCEPTED, OrderState.REJECTED)
             if (timeoutWon) awaitNoOutstandingPublications()
+        }
+
+        @Test
+        fun `immediate acceptance waits for the Store writer and observes its closed schedule`() {
+            val fixture = OrderCreationFixture()
+            val orderId = paidImmediateOrder(fixture, "store-accept-schedule-lock-order")
+            val actorId = UUID.randomUUID()
+            insertMembership(actorId, fixture.storeId, "STAFF", "ACTIVE")
+
+            requireNotNull(jdbcTemplate.dataSource).connection.use { writer: java.sql.Connection ->
+                writer.autoCommit = false
+                writer.prepareStatement("SELECT id FROM merchant_store WHERE id = ? FOR UPDATE").use { statement ->
+                    statement.setObject(1, fixture.storeId)
+                    statement.executeQuery().use { assertThat(it.next()).isTrue() }
+                }
+                val executor = Executors.newSingleThreadExecutor()
+                try {
+                    val acceptance =
+                        executor.submit<Result<Int>> {
+                            runCatching {
+                                transitionService
+                                    .transition(
+                                        StoreTransitionActor(actorId, setOf(StoreActorRole.STAFF)),
+                                        orderId,
+                                        "store-accept-schedule-lock-key",
+                                        StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null, 10),
+                                    ).status
+                            }
+                        }
+                    awaitStoreLockWait()
+                    val currentDay =
+                        Instant
+                            .now()
+                            .atZone(ZoneId.of("Asia/Seoul"))
+                            .dayOfWeek.value
+                    writer
+                        .prepareStatement(
+                            """
+                            UPDATE merchant_store_operating_hours
+                               SET closed = true, opens_at = NULL, closes_at = NULL
+                             WHERE store_id = ? AND day_of_week = ?
+                            """.trimIndent(),
+                        ).use { statement ->
+                            statement.setObject(1, fixture.storeId)
+                            statement.setInt(2, currentDay)
+                            assertThat(statement.executeUpdate()).isOne()
+                        }
+                    writer.commit()
+
+                    assertThatThrownBy { acceptance.get(5, TimeUnit.SECONDS).getOrThrow() }
+                        .isInstanceOfSatisfying(DomainFailure::class.java) {
+                            assertThat(it.code).isEqualTo(FailureCode.STORE_CLOSED)
+                        }
+                } finally {
+                    runCatching { writer.rollback() }
+                    executor.shutdownNow()
+                }
+            }
+
+            assertThat(orderRepository.findById(orderId).orElseThrow().state).isEqualTo(OrderState.PAID)
         }
 
         @Test
@@ -720,7 +909,7 @@ internal class StoreOrderLifecycleIntegrationTest
                             actor,
                             orderId,
                             "concurrent-store-key",
-                            StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null),
+                            StoreOrderTransitionRequest(StoreOrderTargetState.ACCEPTED, null, 10),
                         )
                     }
                 }
@@ -760,6 +949,35 @@ internal class StoreOrderLifecycleIntegrationTest
                         orderId,
                         paymentMethodId,
                         "$key-payment",
+                    ).status,
+            ).isEqualTo(200)
+            return orderId
+        }
+
+        private fun paidImmediateOrder(
+            fixture: OrderCreationFixture,
+            key: String,
+        ): UUID {
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            OrderCreationDatabaseFixture.insertOperatingHours(
+                jdbcTemplate,
+                fixture.storeId,
+                opensAt = LocalTime.MIDNIGHT,
+                closesAt = LocalTime.of(23, 59),
+            )
+            val command = fixture.command().copy(pickupSlotId = null)
+            val creation = createOrderUseCase.create(key, orderQuoteUseCase.attachCurrentQuote(command))
+            assertThat(creation.status).withFailMessage(creation.body).isEqualTo(201)
+            val orderId = value<UUID>("SELECT id FROM ordering_order WHERE customer_id = ?", fixture.customerId)
+            val prepared = oneTimeCheckoutService.prepare(fixture.customerId, orderId, "$key-prepare")
+            paymentGateway.enqueueOneTimeConfirmation(ProviderPaymentResult.Approved("provider-$key", 1_000, "KRW"))
+            assertThat(
+                oneTimeCheckoutService
+                    .confirm(
+                        fixture.customerId,
+                        prepared.paymentId,
+                        "$key-confirm",
+                        OneTimePaymentConfirmationRequest("provider-$key", prepared.providerOrderId, 1_000),
                     ).status,
             ).isEqualTo(200)
             return orderId
@@ -857,6 +1075,7 @@ internal class StoreOrderLifecycleIntegrationTest
             idempotencyKey: String,
             targetState: String,
             reason: String? = null,
+            preparationMinutes: Int? = if (targetState == "ACCEPTED") 10 else null,
         ) = mockMvc.perform(
             patch("/api/v1/store-orders/{orderId}/status", orderId)
                 .with(storeJwt(actorId))
@@ -867,7 +1086,8 @@ internal class StoreOrderLifecycleIntegrationTest
                     """
                     {
                       "targetState": "$targetState",
-                      "reason": ${reason?.let { "\"$it\"" } ?: "null"}
+                      "reason": ${reason?.let { "\"$it\"" } ?: "null"},
+                      "preparationMinutes": ${preparationMinutes ?: "null"}
                     }
                     """.trimIndent(),
                 ),
@@ -953,6 +1173,21 @@ internal class StoreOrderLifecycleIntegrationTest
             sql: String,
             vararg args: Any,
         ): Long = value(sql, *args)
+
+        private fun awaitStoreLockWait() {
+            await("Store row lock") {
+                count(
+                    """
+                    SELECT count(*)
+                      FROM pg_stat_activity
+                     WHERE datname = current_database()
+                       AND pid <> pg_backend_pid()
+                       AND wait_event_type = 'Lock'
+                       AND query ILIKE '%merchant_store%'
+                    """.trimIndent(),
+                ) > 0
+            }
+        }
 
         private inline fun <reified T : Any> value(
             sql: String,

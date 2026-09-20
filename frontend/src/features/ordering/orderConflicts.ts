@@ -24,6 +24,18 @@ export function orderConflictGuidance(failure: unknown): ConflictGuidance | null
         description: "다른 픽업 시간을 골라 주세요. 담아둔 메뉴는 그대로 있어요.",
         recovery: "recheck-slots",
       };
+    case "STORE_CLOSED":
+      return {
+        title: "매장 영업 시간이 끝났어요",
+        description: "담아둔 메뉴는 그대로 있어요. 다음 영업시간에 다시 확인해 주세요.",
+        recovery: "retry",
+      };
+    case "STORE_NOT_ACCEPTING_ORDERS":
+      return {
+        title: "매장이 지금은 주문을 받지 않아요",
+        description: "담아둔 메뉴는 그대로 있어요. 매장이 주문 받기를 다시 시작한 뒤 확인해 주세요.",
+        recovery: "retry",
+      };
     case "MENU_CONFIGURATION_NOT_AVAILABLE":
       return {
         title: "지금 주문할 수 없는 메뉴 구성이에요",

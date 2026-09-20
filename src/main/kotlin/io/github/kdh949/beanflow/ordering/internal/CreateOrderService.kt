@@ -12,6 +12,7 @@ import io.github.kdh949.beanflow.shared.api.PerformancePhaseTelemetry
 import io.github.kdh949.beanflow.shared.api.PerformanceStage
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataAccessException
 import org.springframework.stereotype.Service
@@ -29,6 +30,8 @@ internal class CreateOrderService(
     @Value("\${beanflow.idempotency.retry-after-seconds:2}")
     private val retryAfterSeconds: Long,
 ) : CreateOrderUseCase {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     override fun create(
         idempotencyKey: String,
         command: CreateOrderCommand,
@@ -143,6 +146,12 @@ internal class CreateOrderService(
                     val response = errorResponse(failure, correlationId)
                     return persistFailureOrDependencyError(registration.recordId, response, correlationId)
                 } catch (failure: DataAccessException) {
+                    logger.warn(
+                        "Order creation transaction failed correlationId={} idempotencyRecordId={}",
+                        correlationId,
+                        registration.recordId,
+                        failure,
+                    )
                     val response =
                         errorResponse(
                             DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Order dependency is unavailable"),

@@ -9,6 +9,7 @@ test('order load preserves quote fingerprint contract', () => {
   assert.match(suite, /\/api\/v1\/me\/order-quotes/);
   assert.match(suite, /expectedQuoteFingerprint: fingerprint/);
   assert.match(suite, /\/api\/v1\/orders/);
+  assert.doesNotMatch(suite, /pickupSlotId/);
 });
 
 test('all requests carry bounded diagnostics metadata', () => {

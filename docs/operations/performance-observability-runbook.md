@@ -242,8 +242,9 @@ export BEANFLOW_PYROSCOPE_ENABLED=true
 ## 3. 부하 fixture 준비
 
 fixture는 repository 밖의 권한 `0600` JSON 파일로 만든다. 운영 계정·bucket·Vault grant를 사용하지 않는다.
-Session은 부하 직전에 전용 계정의 정상 login/CSRF API로 발급하고 종료 후 폐기한다. target iteration보다
-메뉴 판매 가능 상태와 충분한 픽업 슬롯 수용량을 준비하지 않으면 business conflict를 서버 처리량 한계로 오해하게 된다.
+Session은 부하 직전에 전용 계정의 정상 login/CSRF API로 발급하고 종료 후 폐기한다. target iteration 동안
+메뉴 판매 가능 상태, 매장 주문받기와 완전한 영업시간 설정을 유지하지 않으면 business conflict를 서버 처리량
+한계로 오해하게 된다. 즉시 주문 fixture는 픽업 슬롯 ID나 정원을 입력하지 않는다.
 
 ```json
 {
@@ -255,7 +256,6 @@ Session은 부하 직전에 전용 계정의 정상 login/CSRF API로 발급하�
   ],
   "order": {
     "storeId": "PERF_STORE_UUID",
-    "pickupSlotIds": ["PERF_SLOT_UUID"],
     "lines": [
       {"menuId": "PERF_MENU_UUID", "optionIds": ["PERF_OPTION_UUID"], "quantity": 1}
     ],

@@ -12,7 +12,6 @@ import { SupportBreakGlassWorkspace } from "./SupportBreakGlassWorkspace";
 import { SupportProfileChangeWorkspace } from "./SupportProfileChangeWorkspace";
 import { SupportCompensationWorkspace } from "./SupportCompensationWorkspace";
 import { SupportOrderActionWorkspace } from "./SupportOrderActionWorkspace";
-import { SupportVerificationPanel } from "./SupportVerificationPanel";
 import { SupportTimelinePanel } from "./SupportTimelinePanel";
 
 type Timeline = components["schemas"]["SupportTimelinePage"];
@@ -33,10 +32,8 @@ function CaseHistory({ caseId, requestId, compensationId, incidentId, profileCha
   const [profileBusy, setProfileBusy] = useState(false);
   const [orderBusy, setOrderBusy] = useState(false);
   const [compensationBusy, setCompensationBusy] = useState(false);
-  const [verificationBusy, setVerificationBusy] = useState(false);
   const workBusy = profileBusy || breakGlassBusy || orderBusy || compensationBusy;
-  const navigationLocked = workBusy || verificationBusy;
-  const [verification, setVerification] = useState<components["schemas"]["VerificationSessionResource"] | null>(null);
+  const navigationLocked = workBusy;
   const { state, reload } = useResource(useCallback(async () => {
     const [caseResponse, timelineResponse] = await Promise.all([
       operationsApi.GET("/support/cases/{caseId}", { params: { path: { caseId } } }),
@@ -73,6 +70,6 @@ function CaseHistory({ caseId, requestId, compensationId, incidentId, profileCha
     <SupportTimelinePanel timeline={timeline} />
     {moreError ? <ErrorState error={moreError} retry={() => void loadMore()} /> : null}
     {timeline?.nextCursor ? <Button variant="secondary" loading={loadingMore} onClick={() => void loadMore()}>이력 더 보기</Button> : null}
-    </TabPanel><TabPanel value="orders"><div className="management-workspace"><SupportVerificationPanel initialActionScope="SUPPORT_ACTION" caseId={caseId} links={supportCase.subjectLinks} disabled={["RESOLVED", "CLOSED"].includes(supportCase.state)} locked={workBusy} onBusyChange={setVerificationBusy} onChange={setVerification} /><SupportOrderActionWorkspace supportCase={supportCase} verification={verification} initialRequestId={requestId} onBusyChange={setOrderBusy} /></div></TabPanel><TabPanel value="compensation"><div className="management-workspace"><SupportVerificationPanel initialActionScope="SUPPORT_ACTION" caseId={caseId} links={supportCase.subjectLinks} disabled={["RESOLVED", "CLOSED"].includes(supportCase.state)} locked={workBusy} onBusyChange={setVerificationBusy} onChange={setVerification} /><SupportCompensationWorkspace supportCase={supportCase} verification={verification} initialCompensationId={compensationId} initialIncidentId={incidentId} onBusyChange={setCompensationBusy} /></div></TabPanel><TabPanel value="profile"><div className="management-workspace"><SupportVerificationPanel initialActionScope="SUPPORT_ACTION" caseId={caseId} links={supportCase.subjectLinks} disabled={["RESOLVED", "CLOSED"].includes(supportCase.state)} locked={workBusy} onBusyChange={setVerificationBusy} onChange={setVerification} /><SupportProfileChangeWorkspace supportCase={supportCase} verification={verification} initialProfileChangeId={profileChangeId} onBusyChange={setProfileBusy} /></div></TabPanel><TabPanel value="break-glass"><SupportBreakGlassWorkspace supportCase={supportCase} initialRequestId={breakGlassRequestId} onBusyChange={setBreakGlassBusy} /></TabPanel></Tabs>
+    </TabPanel><TabPanel value="orders"><div className="management-workspace"><SupportOrderActionWorkspace supportCase={supportCase} initialRequestId={requestId} onBusyChange={setOrderBusy} /></div></TabPanel><TabPanel value="compensation"><div className="management-workspace"><SupportCompensationWorkspace supportCase={supportCase} initialCompensationId={compensationId} initialIncidentId={incidentId} onBusyChange={setCompensationBusy} /></div></TabPanel><TabPanel value="profile"><div className="management-workspace"><SupportProfileChangeWorkspace supportCase={supportCase} initialProfileChangeId={profileChangeId} onBusyChange={setProfileBusy} /></div></TabPanel><TabPanel value="break-glass"><SupportBreakGlassWorkspace supportCase={supportCase} initialRequestId={breakGlassRequestId} onBusyChange={setBreakGlassBusy} /></TabPanel></Tabs>
   </>;
 }

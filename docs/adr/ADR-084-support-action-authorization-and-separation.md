@@ -1,6 +1,6 @@
 # ADR-084: risk-based Support action, exact approval binding과 Operations handoff
 
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR-136](ADR-136-support-direct-processing.md)
 - **Date:** 2026-08-10
 
 ## Context
@@ -122,3 +122,8 @@ ADR-053, ADR-064, ADR-069.
 요청의 해시·버전과 목적·비용 조건만 반환하고, 상담 내용·원문·본인확인 세션·담당자 정보는 제외한다.
 읽기는 상태 보정·Audit append를 수행하지 않으며, 실제 결정은 기존 Operations→Support 동기 경계에서
 현재 grant·승인 revision·배정·정책을 다시 검증한다. 별도 SUPPORT_CASE_READ grant를 암묵적으로 요구하지 않는다.
+
+## 직접 처리 정책 전환 (2026-09-18)
+
+신규 업무의 본인확인·타인 승인 조건은 [ADR-136](ADR-136-support-direct-processing.md)으로 대체한다.
+기존 기록의 의미와 이 문서의 금융·감사·마스킹·복구 불변식은 유지한다.

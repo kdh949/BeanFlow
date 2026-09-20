@@ -9,6 +9,10 @@
 > 계약을 이해하기 위한 이력으로 남긴다.
 >
 > 2026-08-16: 색인 source 참조 무결성, 재색인 snapshot, freshness 관측을 보강했다.
+>
+> 2026-09-16: ADR-133/135의 즉시 주문에 맞춰 `pickupAvailable`을 현재 영업시간과 Store owner state의
+> 결합으로 바꾸고 신규 탐색의 Fulfillment slot dependency를 제거했다. 아래 Immediate Checkout
+> Amendment가 이전 slot availability 문구보다 우선한다.
 
 ## Context
 
@@ -497,6 +501,25 @@ profile과 earliest slot은 후보 Store ID의 bounded batch projection으로 �
 `UNSPECIFIED` 정상 결과지만 profile/slot read 실패는 빈 field나 Store 누락이 아니라 전체 503이다.
 기존 검색 grammar, rank, cursor binding, `openOnly` transport와 ADR-115 image 계약은 바꾸지 않는다.
 
+### Immediate Checkout Discovery Amendment (2026-09-16)
+
+신규 주문이 슬롯을 선택·예약하지 않으므로 customer search/nearby/favorite/recent/recommendation/detail의
+`pickupAvailable`은 더 이상 7일 내 reservable slot 존재를 뜻하지 않는다. 다음을 적용한다.
+
+- `orderingAvailable`은 기존 `acceptingOrders && pickupEnabled` owner state를 유지한다.
+- `pickupAvailable`은 `orderingAvailable && customerDisplay.operatingStatus == OPEN`이다. 완전한 schedule이
+  없으면 `UNSPECIFIED`이므로 false다.
+- `pickupAvailable=true` filter는 위 현재 즉시 주문 가능성만 남긴다. `openOnly` spelling과 owner-state
+  의미, cursor filter hash의 parameter 이름은 유지한다.
+- 신규 탐색 projection은 Fulfillment slot batch를 호출하지 않고 `nextPickupWindow`를 생략한다. 준비 ETA,
+  자동 슬롯 또는 다음 영업시간을 만들어 채우지 않는다.
+- `/stores/{storeId}/pickup-slots`, 과거 `LEGACY_RESERVED` 주문과 support reschedule의 실제 슬롯 read는
+  ADR-076 계약대로 남는다.
+
+이 projection은 purchase guarantee가 아니다. quote/Tx A/provider confirm 전/Tx C가 ADR-135의 Merchant
+availability를 owner lock 경계에서 다시 검증한다. profile read 오류는 기존처럼 503이며 슬롯 의존성 실패를
+신규 탐색에 전파하지 않는다.
+
 ## Related Decisions
 
 - [ADR-020](ADR-020-nearby-location-privacy.md)
@@ -506,3 +529,5 @@ profile과 earliest slot은 후보 Store ID의 bounded batch projection으로 �
   브랜드·행정구역 데이터 모델
 - [BR-47](../product/business-policy-decisions.md) — 개정된 검색 계약의 제품 정책 수치
 - [ADR-117](ADR-117-store-customer-display-profile.md) — customer display profile과 상태 용어
+- [ADR-133](ADR-133-immediate-checkout-and-store-preparation.md),
+  [ADR-135](ADR-135-store-hours-payment-gate-and-cutoff.md) — 슬롯 없는 신규 주문과 영업시간 결제 gate

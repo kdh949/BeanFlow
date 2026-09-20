@@ -7,9 +7,6 @@ import io.github.kdh949.beanflow.shared.api.StoreSearchTermEntry
 import io.github.kdh949.beanflow.shared.api.StoreSearchTermKind
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.support.TransactionTemplate
-import java.sql.Timestamp
-import java.time.Duration
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -33,35 +30,6 @@ internal class StoreSearchIndexTestFixture(
         jdbc.update("DELETE FROM merchant_store")
     }
 
-    /**
-     * One pickup slot for [storeId]. The default is reservable inside the seven-day window, which
-     * is what makes the public `pickupAvailable` flag true (ADR-103 2026-08-15 Amendment).
-     */
-    fun indexPickupSlot(
-        storeId: UUID,
-        now: Instant,
-        startsIn: Duration = Duration.ofDays(1),
-        capacity: Long = 4,
-        reserved: Long = 0,
-        confirmed: Long = 0,
-    ) {
-        val startsAt = now.plus(startsIn)
-        jdbc.update(
-            """
-            INSERT INTO fulfillment_pickup_slot (
-                id, store_id, starts_at, ends_at, capacity, reserved_count, confirmed_count, version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-            """.trimIndent(),
-            UUID.randomUUID(),
-            storeId,
-            Timestamp.from(startsAt),
-            Timestamp.from(startsAt.plus(Duration.ofMinutes(20))),
-            capacity,
-            reserved,
-            confirmed,
-        )
-    }
-
     fun indexStore(
         name: String,
         longitude: Double = SEOUL_LONGITUDE,
@@ -71,6 +39,8 @@ internal class StoreSearchIndexTestFixture(
         menus: List<String> = emptyList(),
         acceptingOrders: Boolean = true,
         pickupEnabled: Boolean = true,
+        operatingHoursConfigured: Boolean = true,
+        currentlyOpen: Boolean = true,
     ): UUID {
         val storeId = UUID.randomUUID()
         jdbc.update(
@@ -89,6 +59,9 @@ internal class StoreSearchIndexTestFixture(
             longitude,
             latitude,
         )
+        if (operatingHoursConfigured) {
+            replaceOperatingHours(storeId, currentlyOpen)
+        }
         // V59 constrains MENU_NAME terms with a composite FK to merchant_menu(id, store_id), so a
         // menu term can only exist for a menu row this store actually owns.
         val menuIds =
@@ -132,6 +105,39 @@ internal class StoreSearchIndexTestFixture(
             }
         }
         return storeId
+    }
+
+    /**
+     * Replaces the same-day schedule with a deterministic all-week fixture. `currentlyOpen=true`
+     * uses `[00:00, 23:59:59)`, so the result does not depend on the test JVM's current date.
+     */
+    fun replaceOperatingHours(
+        storeId: UUID,
+        currentlyOpen: Boolean,
+    ) {
+        jdbc.update("DELETE FROM merchant_store_customer_display_profile WHERE store_id = ?", storeId)
+        jdbc.update(
+            """
+            INSERT INTO merchant_store_customer_display_profile (
+                store_id, address_line, directions_hint, version, created_at, updated_at
+            ) VALUES (?, NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """.trimIndent(),
+            storeId,
+        )
+        (1..7).forEach { dayOfWeek ->
+            jdbc.update(
+                """
+                INSERT INTO merchant_store_operating_hours (
+                    store_id, day_of_week, closed, opens_at, closes_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """.trimIndent(),
+                storeId,
+                dayOfWeek,
+                !currentlyOpen,
+                if (currentlyOpen) java.time.LocalTime.MIDNIGHT else null,
+                if (currentlyOpen) java.time.LocalTime.of(23, 59, 59) else null,
+            )
+        }
     }
 
     companion object {

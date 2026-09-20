@@ -25,6 +25,7 @@ internal class ApiExceptionHandler(
     @ExceptionHandler(DomainFailure::class)
     fun domainFailure(failure: DomainFailure): ResponseEntity<ErrorResponse> {
         val headers = HttpHeaders()
+        if (failure.code == FailureCode.SUPPORT_VERIFICATION_RETIRED) headers.cacheControl = "no-store"
         failure.retryAfterSeconds?.let { headers.set(HttpHeaders.RETRY_AFTER, it.toString()) }
         return ResponseEntity(
             ErrorResponse(
@@ -127,6 +128,8 @@ internal class ApiExceptionHandler(
             FailureCode.INVALID_IMAGE,
             FailureCode.PASSWORD_POLICY_VIOLATION,
             -> HttpStatus.BAD_REQUEST
+
+            FailureCode.SUPPORT_VERIFICATION_RETIRED -> HttpStatus.GONE
 
             FailureCode.AUTHENTICATION_FAILED -> HttpStatus.UNAUTHORIZED
 

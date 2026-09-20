@@ -8,6 +8,7 @@ import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.operations.api.AuditRecordOperations
 import io.github.kdh949.beanflow.ordering.api.OrderRejectionCause
 import io.github.kdh949.beanflow.ordering.api.OrderRejectionSourceActorType
+import io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -93,13 +94,14 @@ internal class StoreAcceptanceDeadlineService(
         if (now.isBefore(deadline)) {
             return StoreAcceptanceDeadlineOutcome.NOT_ELIGIBLE
         }
+        val reason = rejectionReason(order, deadline)
         val correlationId = correlationIdSource.currentOrCreate()
         val causationId = "order:$orderId:acceptance-timeout"
         rejectionCoordinator.reject(
             order = order,
             actor = RejectionActor("SYSTEM", OrderRejectionSourceActorType.SYSTEM_TIMEOUT),
             cause = OrderRejectionCause.ACCEPTANCE_TIMEOUT,
-            reason = "STORE_ACCEPTANCE_TIMEOUT",
+            reason = reason,
             now = now,
             correlationId = correlationId,
             causationId = causationId,
@@ -115,6 +117,43 @@ internal class StoreAcceptanceDeadlineService(
         )
         return StoreAcceptanceDeadlineOutcome.APPLIED
     }
+
+    @Transactional
+    fun expireImmediateDraft(
+        orderId: UUID,
+        now: Instant,
+    ): StoreAcceptanceDeadlineOutcome {
+        val order = locked(orderId)
+        if (order.state != OrderState.PENDING_PAYMENT || order.checkoutMode != CheckoutMode.IMMEDIATE) {
+            return StoreAcceptanceDeadlineOutcome.NOT_ELIGIBLE
+        }
+        val cutoff =
+            order.orderingWindowClosesAt
+                ?: throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Immediate order cutoff is missing")
+        if (now.isBefore(cutoff)) return StoreAcceptanceDeadlineOutcome.NOT_ELIGIBLE
+        order.expire(now)
+        val correlationId = correlationIdSource.currentOrCreate()
+        appendAudit(
+            order,
+            "ORDER_EXPIRED_AT_STORE_CLOSE",
+            "PENDING_PAYMENT",
+            "EXPIRED",
+            now,
+            correlationId,
+            "order:$orderId:store-close-expiry",
+        )
+        return StoreAcceptanceDeadlineOutcome.APPLIED
+    }
+
+    private fun rejectionReason(
+        order: OrderEntity,
+        deadline: Instant,
+    ): String =
+        if (order.checkoutMode == CheckoutMode.IMMEDIATE && order.orderingWindowClosesAt == deadline) {
+            "STORE_CLOSED"
+        } else {
+            "STORE_ACCEPTANCE_TIMEOUT"
+        }
 
     private fun appendAudit(
         order: OrderEntity,

@@ -450,7 +450,6 @@ internal class PostAcceptanceResolutionTransactionService(
     private val revisions: SupportActionRevisionJpaRepository,
     private val cases: SupportCaseJpaRepository,
     private val subjectLinks: SupportCaseSubjectLinkJpaRepository,
-    private val sessions: VerificationSessionJpaRepository,
     private val permissions: OperatorPermissionAuthorization,
     private val payloads: PostAcceptanceResolutionPayloadCanonicalizer,
     private val audits: AuditRecordOperations,
@@ -497,8 +496,11 @@ internal class PostAcceptanceResolutionTransactionService(
         }
         val request = requests.findLockedById(command.requestId) ?: notFound("SupportActionRequest")
         val supportCase = cases.findLockedById(request.supportCaseId) ?: notFound("SupportCase")
-        requireRequestAndCase(request, supportCase, command.actorId, command.revisionNumber, command.expectedRequestVersion)
+        if (request.executorActorId != command.actorId) denied()
+        requireCaseScope(supportCase, request, command.actorId)
         val revision = currentRevision(request)
+        requireDirectAuthorization(revision.authorizationBasis)
+        requireRequestAndCase(request, supportCase, command.actorId, command.revisionNumber, command.expectedRequestVersion)
         requireRevision(request, revision, command, order, now)
         resolutions.findBySupportActionRequestId(request.id)?.let {
             if (it.payloadHash != payloadHash || it.commandActorId != command.actorId) reused()
@@ -567,6 +569,10 @@ internal class PostAcceptanceResolutionTransactionService(
         val revision = currentRevision(request)
         if (!clock.instant().isBefore(revision.expiresAt) && request.state != SupportActionRequestState.EXECUTED) expired()
         if (request.state == SupportActionRequestState.READY_FOR_EXECUTION) {
+            requireDirectAuthorization(revision.authorizationBasis)
+            requireRequestAndCase(request, supportCase, command.actorId, request.currentRevisionNumber, request.version)
+            if (revision.policyVersion != SupportActionPolicy.POLICY_VERSION) stale()
+            requireResolutionSubject(request, revision, order)
             val now = clock.instant()
             val aggregate = request.toAggregate(revision)
             try {
@@ -790,12 +796,13 @@ internal class PostAcceptanceResolutionTransactionService(
         ) {
             stale()
         }
+        if (request.requesterActorId != actorId) stale()
         if (request.executorActorId != actorId ||
             request.state != SupportActionRequestState.READY_FOR_EXECUTION
         ) {
             conflict("Request is not ready")
         }
-        if (actorId in setOfNotNull(request.requesterActorId, request.supportApproverActorId, request.operationsApproverActorId)) denied()
+        if (actorId in setOfNotNull(request.supportApproverActorId, request.operationsApproverActorId)) denied()
         requireCaseScope(supportCase, request, actorId)
         if (!permissions.hasActive(request.requesterActorId, OperatorPermission.SUPPORT_ACTION_REQUEST) ||
             !permissions.hasActive(request.requesterActorId, OperatorPermission.SUPPORT_RESOLUTION_REQUEST)
@@ -811,6 +818,7 @@ internal class PostAcceptanceResolutionTransactionService(
         order: PostAcceptanceResolutionOrderFact,
         now: Instant,
     ) {
+        requireDirectAuthorization(revision.authorizationBasis)
         if (!now.isBefore(revision.expiresAt)) expired()
         if (revision.policyVersion != SupportActionPolicy.POLICY_VERSION || revision.targetId != command.orderId ||
             revision.targetVersion != command.expectedOrderVersion || revision.amountKrw != command.cashRefundKrw ||
@@ -819,16 +827,23 @@ internal class PostAcceptanceResolutionTransactionService(
             stale()
         }
         requireOrder(order, command.orderId, command.expectedOrderVersion)
-        val session = sessions.findLockedById(revision.verificationSessionId) ?: stale()
-        if (session.actorId != request.requesterActorId || session.supportCaseId != request.supportCaseId ||
-            session.state != VerificationState.VERIFIED || session.actionScope != VerificationActionScope.SUPPORT_ACTION ||
-            session.purpose != VerificationPurpose.CASE_RESOLUTION || session.expiresAt != revision.expiresAt ||
-            !now.isBefore(session.expiresAt)
-        ) {
-            stale()
-        }
-        val link = subjectLinks.findByIdAndSupportCaseId(session.subjectLinkId, request.supportCaseId)
-        if (link == null || link.unlinkedAt != null || link.subjectId != session.subjectId) stale()
+        requireResolutionSubject(request, revision, order)
+    }
+
+    private fun requireResolutionSubject(
+        request: SupportActionRequestEntity,
+        revision: SupportActionRevisionEntity,
+        order: PostAcceptanceResolutionOrderFact,
+    ) {
+        val link = subjectLinks.findByIdAndSupportCaseId(requireNotNull(revision.subjectLinkId), request.supportCaseId) ?: stale()
+        if (link.unlinkedAt != null) stale()
+        val matches =
+            when (link.subjectType) {
+                SupportSubjectType.CUSTOMER -> link.subjectId == order.customerId
+                SupportSubjectType.STORE -> link.subjectId == order.storeId
+                else -> false
+            }
+        if (!matches) denied()
     }
 
     private fun requireResolutionScope(
@@ -854,6 +869,7 @@ internal class PostAcceptanceResolutionTransactionService(
         if (resolution.executorActorId != actorId || request.executorActorId != actorId) denied()
         val consumable = request.state == SupportActionRequestState.READY_FOR_EXECUTION && request.terminalResolutionId == null
         val replay = request.state == SupportActionRequestState.EXECUTED && request.terminalResolutionId == resolution.id
+        if (!replay) requireDirectAuthorization(resolution.authorizationBasis)
         if (!consumable && !replay) conflict("Support action request is not bound to an executable ResolutionCase")
         requireCaseScope(supportCase, request, actorId)
     }
@@ -954,7 +970,7 @@ internal class PostAcceptanceResolutionTransactionService(
         updatedAt,
         createdAt.plus(Duration.ofDays(90)),
         version,
-    )
+    ).also { it.authorizationBasis = io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis.SUPPORT_DIRECT }
 
     private fun io.github.kdh949.beanflow.support.internal.domain.PostAcceptanceResolutionStep.toEntity(resolutionId: UUID) =
         PostAcceptanceResolutionStepEntity(

@@ -14,8 +14,8 @@ internal data class StoreOrderBoardOrderProjection(
     val pickupSequence: Long,
     val pickupBusinessDate: LocalDate,
     val state: String,
-    val pickupWindowStart: Instant,
-    val pickupWindowEnd: Instant,
+    val pickupWindowStart: Instant?,
+    val pickupWindowEnd: Instant?,
     val acceptanceWarningAt: Instant?,
     val acceptanceDeadlineAt: Instant?,
     val paidAt: Instant?,
@@ -23,6 +23,7 @@ internal data class StoreOrderBoardOrderProjection(
     val preparingAt: Instant?,
     val readyAt: Instant?,
     val completedAt: Instant?,
+    val estimatedReadyAt: Instant?,
 )
 
 internal data class StoreOrderBoardLineProjection(
@@ -190,8 +191,8 @@ internal class StoreOrderBoardQueryRepository(
         pickupSequence = resultSet.getLong("pickup_sequence"),
         pickupBusinessDate = resultSet.getObject("pickup_business_date", LocalDate::class.java),
         state = resultSet.getString("state"),
-        pickupWindowStart = resultSet.getTimestamp("pickup_window_start_snapshot").toInstant(),
-        pickupWindowEnd = resultSet.getTimestamp("pickup_window_end_snapshot").toInstant(),
+        pickupWindowStart = resultSet.getTimestamp("pickup_window_start_snapshot")?.toInstant(),
+        pickupWindowEnd = resultSet.getTimestamp("pickup_window_end_snapshot")?.toInstant(),
         acceptanceWarningAt = resultSet.getTimestamp("acceptance_warning_at")?.toInstant(),
         acceptanceDeadlineAt = resultSet.getTimestamp("acceptance_deadline_at")?.toInstant(),
         paidAt = resultSet.getTimestamp("paid_at")?.toInstant(),
@@ -199,6 +200,7 @@ internal class StoreOrderBoardQueryRepository(
         preparingAt = resultSet.getTimestamp("preparing_at")?.toInstant(),
         readyAt = resultSet.getTimestamp("ready_at")?.toInstant(),
         completedAt = resultSet.getTimestamp("completed_at")?.toInstant(),
+        estimatedReadyAt = resultSet.getTimestamp("estimated_ready_at")?.toInstant(),
     )
 
     private fun line(
@@ -239,7 +241,7 @@ internal class StoreOrderBoardQueryRepository(
             StoreOrderBoardLane.PREPARING,
             StoreOrderBoardLane.READY,
             -> {
-                order.pickupWindowStart
+                order.pickupWindowStart ?: order.estimatedReadyAt ?: dependency("Store order has no board sort time")
             }
         }
 

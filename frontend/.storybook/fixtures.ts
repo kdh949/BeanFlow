@@ -42,8 +42,6 @@ export const orderSummary: components["schemas"]["CustomerOrderSummary"] = {
   storeName: "시청점",
   status: "READY",
   orderedAt: "2026-08-15T02:50:00Z",
-  pickupWindowStart: "2026-08-15T03:20:00Z",
-  pickupWindowEnd: "2026-08-15T03:30:00Z",
   totalAmountKrw: 12_800,
   currency: "KRW",
   itemSummary: "아이스 아메리카노 외 1건",
@@ -57,8 +55,7 @@ export const orderDetail = {
   storeName: orderSummary.storeName,
   status: orderSummary.status,
   orderedAt: orderSummary.orderedAt,
-  pickupWindowStart: orderSummary.pickupWindowStart,
-  pickupWindowEnd: orderSummary.pickupWindowEnd,
+  checkoutMode: "IMMEDIATE" as const,
   pricing: {
     subtotalKrw: 15_000,
     couponDiscountKrw: 1_200,
@@ -71,6 +68,8 @@ export const orderDetail = {
     acceptedAt: "2026-08-15T02:54:00Z",
     preparingAt: "2026-08-15T03:00:00Z",
     readyAt: "2026-08-15T03:12:00Z",
+    preparationMinutes: 15,
+    estimatedReadyAt: "2026-08-15T03:09:00Z",
   },
   allowedActions: [],
   lines: [
@@ -86,8 +85,6 @@ export const checkoutOrder = {
   pickupNumber: orderSummary.pickupNumber,
   pickupBusinessDate: "2026-08-15",
   storeName: orderSummary.storeName,
-  pickupWindowStart: orderSummary.pickupWindowStart,
-  pickupWindowEnd: orderSummary.pickupWindowEnd,
   customerId: "60000000-0000-4000-8000-000000000001",
   state: "PENDING_PAYMENT",
   lines: [
@@ -110,13 +107,13 @@ export const checkoutOrder = {
   pointsAppliedKrw: 0,
   payableKrw: 12_800,
   currency: "KRW",
-  reservationExpiresAt: "2026-08-15T03:10:00Z",
+  paymentDeadlineAt: "2026-08-15T11:00:00Z",
   createdAt: "2026-08-15T02:50:00Z",
   updatedAt: "2026-08-15T02:50:00Z",
 };
 
 export const publicCheckout = {
-  order: { ...orderDetail, status: "PENDING_PAYMENT", lifecycle: undefined, allowedActions: ["CANCEL"], reservationExpiresAt: checkoutOrder.reservationExpiresAt, pricing: { subtotalKrw: 12800, couponDiscountKrw: 0, pointsAppliedKrw: 0, payableKrw: 12800, currency: "KRW" }, lines: checkoutOrder.lines.map((line, index) => ({ lineSequence: index + 1, menuName: line.menuName, optionNames: line.optionNames, quantity: line.quantity, lineTotalKrw: line.subtotalKrw })) },
+  order: { ...orderDetail, status: "PENDING_PAYMENT", lifecycle: undefined, allowedActions: ["CANCEL"], paymentDeadlineAt: checkoutOrder.paymentDeadlineAt, pricing: { subtotalKrw: 12800, couponDiscountKrw: 0, pointsAppliedKrw: 0, payableKrw: 12800, currency: "KRW" }, lines: checkoutOrder.lines.map((line, index) => ({ lineSequence: index + 1, menuName: line.menuName, optionNames: line.optionNames, quantity: line.quantity, lineTotalKrw: line.subtotalKrw })) },
   canPay: true,
 };
 
@@ -175,8 +172,6 @@ export const boardOrder: StoreOrderBoardItem = {
   pickupBusinessDate: "2026-08-15",
   lane: "PENDING_ACCEPTANCE",
   status: "PAID",
-  pickupWindowStart: "2026-08-15T03:20:00Z",
-  pickupWindowEnd: "2026-08-15T03:30:00Z",
   itemSummary: orderSummary.itemSummary,
   acceptanceDeadlineAt: "2026-08-15T03:03:00Z",
   acceptancePhase: "WARNING",

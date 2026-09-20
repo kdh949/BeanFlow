@@ -74,7 +74,7 @@ const statefulDocs = {
   },
   "pages-refresh-customer-store-detail--docs": {
     "pages-refresh-customer-store-detail--orderable": "오트 라떼",
-    "pages-refresh-customer-store-detail--pickup-unavailable": "판매 중인 메뉴가 없어요",
+    "pages-refresh-customer-store-detail--no-legacy-slots": "판매 중인 메뉴가 없어요",
   },
   "pages-refresh-customer-checkout--docs": {
     "pages-refresh-customer-checkout--pending-payment": "다음 결제창에서 카드·간편결제를 선택해 주세요.",

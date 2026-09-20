@@ -101,6 +101,9 @@ body:has(.bfr-customer-stage) { min-width: 0; }
 .bfr-store-hero__media { width: var(--sp-13); height: var(--sp-13); display: grid; place-items: center; overflow: hidden; border-radius: var(--r-card); background: var(--surface-card); color: var(--text-muted); }
 .bfr-store-hero h1 { font-size: var(--fs-title-2); line-height: var(--lh-title-2); }
 .bfr-store-hero p { margin-top: var(--sp-2); color: var(--text-muted); font-size: var(--fs-caption); }
+.bfr-store-actions { margin-bottom: var(--sp-5); display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+.bfr-store-actions > .bf-action { flex: none; }
+.bfr-store-actions > .favorite-action { margin-left: auto; }
 .bfr-store-facts { display: grid; gap: var(--sp-4); margin-block: var(--sp-6); }
 .bfr-store-facts > div { display: flex; gap: var(--sp-5); align-items: baseline; }
 .bfr-store-facts span { min-width: var(--sp-12); color: var(--text-muted); font-size: var(--fs-caption); }
@@ -127,7 +130,7 @@ body:has(.bfr-customer-stage) { min-width: 0; }
 .bfr-menu-config fieldset { margin: 0 0 var(--sp-5); padding: 0; border: 0; }
 .bfr-menu-config legend { margin-bottom: var(--sp-4); font-weight: var(--fw-bold); }
 .bfr-config-actions, .bfr-point-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); margin-top: var(--sp-4); }
-.bfr-floating-cart { position: sticky; z-index: 10; bottom: calc(var(--tabbar-h) + var(--sp-4) + env(safe-area-inset-bottom)); margin-top: var(--sp-6); }
+.bfr-floating-cart { width: min(calc(100% - 2 * var(--gutter-mobile)), calc(var(--mobile-max) - 2 * var(--gutter-mobile))); position: fixed; z-index: 10; left: 50%; bottom: calc(var(--tabbar-h) + var(--sp-4) + env(safe-area-inset-bottom)); transform: translateX(-50%); }
 .bfr-cart-store, .bfr-cart-lines, .bfr-slot-section, .bfr-coupon-row, .bfr-transaction-card, .bfr-checkout-card, .bfr-order-summary-card, .bfr-pickup-card, .bfr-timeline-card, .bfr-point-use, .bf-action-panel { margin-bottom: var(--sp-6); padding: var(--sp-6); border: var(--bw-hair) solid var(--divider); border-radius: var(--r-card); background: var(--surface-card); }
 .bfr-cart-store { display: grid; gap: var(--sp-4); }
 .bfr-cart-store > div { display: flex; align-items: center; gap: var(--sp-4); }

@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.identity.api.PreparedCustomerProfileChange
 import io.github.kdh949.beanflow.merchant.api.PreparedStoreProfileChange
 import io.github.kdh949.beanflow.support.internal.domain.ProfileChangePurpose
 import io.github.kdh949.beanflow.support.internal.domain.ProfileRiskClass
+import io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis
 import io.github.kdh949.beanflow.support.internal.domain.SupportProfileChangeState
 import io.github.kdh949.beanflow.support.internal.domain.SupportProfileNotificationState
 import java.io.ByteArrayOutputStream
@@ -171,7 +172,7 @@ internal data class SubmitSupportProfileChangeCommand(
     val caseId: UUID,
     val subjectId: UUID,
     val expectedProfileVersion: Long,
-    val verificationSessionId: UUID,
+    val verificationSessionId: UUID?,
     val reason: String,
     val evidenceDigest: String,
     val idempotencyKey: String,
@@ -189,7 +190,7 @@ internal data class ReviseSupportProfileChangeCommand(
     val expectedProfileChangeVersion: Long,
     val expectedActionRequestVersion: Long,
     val expectedProfileVersion: Long,
-    val verificationSessionId: UUID,
+    val verificationSessionId: UUID?,
     val reason: String,
     val evidenceDigest: String,
     val idempotencyKey: String,
@@ -236,7 +237,7 @@ internal data class SupportProfileChangeResource(
     val riskClass: ProfileRiskClass,
     val requesterActorId: UUID,
     val executorActorId: UUID,
-    val verificationSessionId: UUID,
+    val verificationSessionId: UUID?,
     val expectedProfileVersion: Long,
     val currentProfileVersion: Long?,
     val payloadDigest: String,
@@ -250,6 +251,7 @@ internal data class SupportProfileChangeResource(
     val createdAt: Instant,
     val updatedAt: Instant,
     val notifications: List<SupportProfileChangeNotificationResource>,
+    val authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
 )
 
 internal object SupportProfilePayloadDigest {

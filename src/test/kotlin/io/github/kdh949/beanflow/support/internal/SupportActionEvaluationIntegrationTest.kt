@@ -100,48 +100,29 @@ internal class SupportActionEvaluationIntegrationTest
         }
 
         @Test
-        fun `pending payment cancellation is allowed with current action bound verification`() {
+        fun `pending payment cancellation is allowed with active case subject without verification`() {
             evaluate(expectedVersion = 0)
                 .andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.decision").value("ALLOWED"))
                 .andExpect(jsonPath("$.reasonCodes[0]").value("POLICY_ALLOWED"))
-                .andExpect(jsonPath("$.requiredVerificationLevel").value("BASIC"))
+                .andExpect(jsonPath("$.requiredVerificationLevel").value("UNVERIFIED"))
                 .andExpect(jsonPath("$.requiredPermissions[0]").value("SUPPORT_ACTION_REQUEST"))
                 .andExpect(jsonPath("$.requiredPermissions[1]").value("SUPPORT_ORDER_CANCEL"))
-                .andExpect(jsonPath("$.policyVersion").value("support-action-policy/2026-08-12/v1"))
+                .andExpect(jsonPath("$.policyVersion").value("support-action-policy/2026-09-18/v2"))
                 .andExpect(jsonPath("$.targetVersion").value(0))
         }
 
         @Test
-        fun `stale target scope mismatch revoked verification and permission revoke are closed denials`() {
+        fun `stale target and permission revoke are denied while missing verification is allowed`() {
             evaluate(expectedVersion = 1)
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.decision").value("DENIED"))
                 .andExpect(jsonPath("$.reasonCodes[0]").value("STALE_TARGET_VERSION"))
 
-            jdbcTemplate.update(
-                "UPDATE support_verification_session SET action_scope = 'PERSONAL_DATA_REVEAL' WHERE id = ?",
-                sessionId,
-            )
-            evaluate(expectedVersion = 0)
-                .andExpect(status().isOk)
-                .andExpect(jsonPath("$.decision").value("DENIED"))
-                .andExpect(jsonPath("$.reasonCodes[0]").value("VERIFICATION_SCOPE_MISMATCH"))
+            jdbcTemplate.update("DELETE FROM support_verification_session WHERE id = ?", sessionId)
+            evaluate(expectedVersion = 0).andExpect(status().isOk).andExpect(jsonPath("$.decision").value("ALLOWED"))
 
-            jdbcTemplate.update(
-                "UPDATE support_verification_session SET action_scope = 'SUPPORT_ACTION', state = 'REVOKED', revoked_at = now() WHERE id = ?",
-                sessionId,
-            )
-            evaluate(expectedVersion = 0)
-                .andExpect(status().isOk)
-                .andExpect(jsonPath("$.decision").value("DENIED"))
-                .andExpect(jsonPath("$.reasonCodes[0]").value("INSUFFICIENT_VERIFICATION"))
-
-            jdbcTemplate.update(
-                "UPDATE support_verification_session SET state = 'VERIFIED', revoked_at = NULL WHERE id = ?",
-                sessionId,
-            )
             jdbcTemplate.update(
                 "UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now() WHERE actor_id = ? AND permission = 'SUPPORT_ORDER_CANCEL'",
                 actorId,
@@ -180,7 +161,7 @@ internal class SupportActionEvaluationIntegrationTest
                     .content(
                         """
                         {"action":"ORDER_CANCELLATION","orderId":"$orderId","expectedTargetVersion":$expectedVersion,
-                         "verificationSessionId":"$sessionId"}
+                         "subjectLinkId":"$customerLinkId"}
                         """.trimIndent(),
                     ),
             )

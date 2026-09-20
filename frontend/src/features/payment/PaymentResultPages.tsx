@@ -1,5 +1,5 @@
 import { RefreshCw, XCircle } from "lucide-react";
-import { useLayoutEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router";
 import { ApiRequestError } from "../../api/client";
 import { LoadingState, SuccessMark } from "../../design-system";
@@ -7,8 +7,10 @@ import { PageHeading } from "../../design-system";
 import { won } from "../../lib/format";
 import { ButtonLink } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
-import { checkCallback, hasCallbackQuery, type PaymentCallback } from "./paymentAttempt";
+import { attemptStorage, checkoutCartStorage, checkCallback, hasCallbackQuery, type PaymentCallback } from "./paymentAttempt";
 import { type Payment, type PaymentResolution, usePaymentResolution } from "./usePaymentResolution";
+import { cart } from "../ordering/cart";
+import { couponSelection } from "../customer/couponSelection";
 
 type PaymentSuccessLocation = Pick<Location, "pathname" | "search" | "hash">;
 type PaymentSuccessHistory = Pick<History, "state" | "replaceState">;
@@ -45,6 +47,24 @@ export function PaymentSuccessPage() {
   useLayoutEffect(() => clearPaymentSuccessQuery(), []);
 
   const { resolution, refresh } = usePaymentResolution(paymentId, callback);
+
+  useEffect(() => {
+    if (resolution.phase !== "approved") return;
+    const context = attemptStorage.get(paymentId)?.checkoutCart
+      ?? checkoutCartStorage.get(resolution.payment.orderReference);
+    if (context) {
+      const checkoutCanBeConsumed = context.cartRevision
+        ? cart.clearIfRevision(context.cartRevision)
+        : true;
+      if (checkoutCanBeConsumed
+        && context.couponIssuanceId
+        && couponSelection.forStore(context.cartStoreId)?.couponIssuanceId === context.couponIssuanceId) {
+        couponSelection.clear(context.cartStoreId);
+      }
+    }
+    attemptStorage.remove(paymentId);
+    checkoutCartStorage.remove(resolution.payment.orderReference);
+  }, [paymentId, resolution]);
 
   if (callbackCheck && !callbackCheck.valid) {
     return (

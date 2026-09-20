@@ -5,6 +5,7 @@ import io.github.kdh949.beanflow.operations.api.AppendAuditRecordCommand
 import io.github.kdh949.beanflow.operations.api.AuditActorType
 import io.github.kdh949.beanflow.operations.api.AuditCategory
 import io.github.kdh949.beanflow.ordering.api.CreateOrderCommand
+import io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode
 import io.github.kdh949.beanflow.ordering.internal.domain.Order
 import io.github.kdh949.beanflow.promotion.api.CouponReservationQuote
 import org.springframework.stereotype.Component
@@ -16,7 +17,7 @@ internal class OrderCreationAuditFactory {
     fun create(
         command: CreateOrderCommand,
         order: Order,
-        pickupReservationId: UUID,
+        pickupReservationId: UUID?,
         coupon: CouponReservationQuote?,
         points: PointReservationResult?,
         benefit: BenefitOnlyConfirmation?,
@@ -36,41 +37,77 @@ internal class OrderCreationAuditFactory {
                     source,
                     after = mapOf("state" to order.state.name, "payableKrw" to order.payableKrw.toString()),
                 ),
+            )
+        if (order.checkoutMode == CheckoutMode.IMMEDIATE) {
+            records +=
+                audit(
+                    command,
+                    "ORDER_CHECKOUT_INPUT_CAPTURED",
+                    "ORDER",
+                    order.id,
+                    occurredAt,
+                    correlationId,
+                    source,
+                    after = mapOf("checkoutMode" to "IMMEDIATE", "reservation" to "NOT_REQUIRED"),
+                )
+        }
+        pickupReservationId?.let {
+            records +=
                 audit(
                     command,
                     "PICKUP_RESERVED",
                     "PICKUP_RESERVATION",
-                    pickupReservationId,
+                    it,
                     occurredAt,
                     correlationId,
                     source,
                     after = mapOf("state" to "RESERVED"),
-                ),
-            )
+                )
+        }
         coupon?.let {
             records +=
                 audit(
                     command,
-                    "COUPON_RESERVED",
+                    if (order.checkoutMode == CheckoutMode.IMMEDIATE) "COUPON_USED_AT_APPROVAL" else "COUPON_RESERVED",
                     "COUPON_RESERVATION",
                     it.reservationId,
                     occurredAt,
                     correlationId,
                     source,
-                    after = mapOf("state" to "RESERVED", "discountKrw" to it.discountKrw.toString()),
+                    after =
+                        mapOf(
+                            "state" to if (order.checkoutMode == CheckoutMode.IMMEDIATE) "USED" else "RESERVED",
+                            "discountKrw" to it.discountKrw.toString(),
+                        ),
+                    category =
+                        if (order.checkoutMode == CheckoutMode.IMMEDIATE) {
+                            AuditCategory.FINANCIAL_TRANSACTION
+                        } else {
+                            AuditCategory.ORDER_AND_FULFILLMENT
+                        },
                 )
         }
         points?.let {
             records +=
                 audit(
                     command,
-                    "POINTS_RESERVED",
+                    if (order.checkoutMode == CheckoutMode.IMMEDIATE) "POINTS_USED_AT_APPROVAL" else "POINTS_RESERVED",
                     "POINT_RESERVATION",
                     it.reservationId,
                     occurredAt,
                     correlationId,
                     source,
-                    after = mapOf("state" to "RESERVED", "amountKrw" to command.pointsToUseKrw.toString()),
+                    after =
+                        mapOf(
+                            "state" to if (order.checkoutMode == CheckoutMode.IMMEDIATE) "USED" else "RESERVED",
+                            "amountKrw" to command.pointsToUseKrw.toString(),
+                        ),
+                    category =
+                        if (order.checkoutMode == CheckoutMode.IMMEDIATE) {
+                            AuditCategory.FINANCIAL_TRANSACTION
+                        } else {
+                            AuditCategory.ORDER_AND_FULFILLMENT
+                        },
                 )
         }
         benefit?.let {
@@ -85,14 +122,18 @@ internal class OrderCreationAuditFactory {
                     source,
                     after = mapOf("approvalState" to "APPROVED", "approvedAmountKrw" to "0"),
                 )
-            it.pickup.targetIds.forEach { id ->
+            it.pickup?.targetIds?.forEach { id ->
                 records += confirmation(command, "PICKUP", id, occurredAt, correlationId, source)
             }
-            it.coupon?.targetIds?.forEach { id ->
-                records += confirmation(command, "COUPON", id, occurredAt, correlationId, source, "USED")
+            if (order.checkoutMode != CheckoutMode.IMMEDIATE) {
+                it.coupon?.targetIds?.forEach { id ->
+                    records += confirmation(command, "COUPON", id, occurredAt, correlationId, source, "USED")
+                }
             }
-            it.points.targetIds.forEach { id ->
-                records += confirmation(command, "POINTS", id, occurredAt, correlationId, source, "USED")
+            if (order.checkoutMode != CheckoutMode.IMMEDIATE) {
+                it.points?.targetIds?.forEach { id ->
+                    records += confirmation(command, "POINTS", id, occurredAt, correlationId, source, "USED")
+                }
             }
         }
         return records
@@ -129,10 +170,11 @@ internal class OrderCreationAuditFactory {
         source: String,
         after: Map<String, String>,
         before: Map<String, String> = emptyMap(),
+        category: AuditCategory = AuditCategory.ORDER_AND_FULFILLMENT,
     ) = AppendAuditRecordCommand(
         actorId = command.customerId.toString(),
         actorType = AuditActorType.CUSTOMER,
-        category = AuditCategory.ORDER_AND_FULFILLMENT,
+        category = category,
         action = action,
         targetType = targetType,
         targetId = targetId,

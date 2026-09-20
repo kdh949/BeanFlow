@@ -11,6 +11,7 @@ import io.github.kdh949.beanflow.promotion.api.CouponReservationQuote
 import io.github.kdh949.beanflow.promotion.api.ExpiredCouponRestorationMode
 import io.github.kdh949.beanflow.promotion.api.ReserveCouponCommand
 import io.github.kdh949.beanflow.promotion.api.RestoreCouponAfterTerminationCommand
+import io.github.kdh949.beanflow.promotion.api.UseCouponImmediatelyCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
@@ -210,6 +211,71 @@ internal class CouponReservationService(
                     ).increment()
             }
         }
+        return reservation.toQuote()
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun useImmediately(command: UseCouponImmediatelyCommand): CouponReservationQuote {
+        if (command.sourceReference.isBlank() || command.quoted.couponIssuanceId != command.couponIssuanceId) {
+            fail(FailureCode.INVALID_REQUEST, "Immediate coupon source or quote is invalid")
+        }
+        val issuance =
+            issuanceRepository.findLockedById(command.couponIssuanceId)
+                ?: fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon issuance is not available")
+        reservationRepository.findBySourceReference(command.sourceReference)?.let { existing ->
+            if (existing.orderId == command.orderId &&
+                existing.couponIssuanceId == command.couponIssuanceId &&
+                existing.state == CouponReservationState.USED
+            ) {
+                return existing.toQuote()
+            }
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Coupon source reference was reused")
+        }
+        val usedAt = command.usedAt
+        if (issuance.customerId != command.customerId ||
+            issuance.state !in setOf(CouponIssuanceState.AVAILABLE, CouponIssuanceState.RESTORED) ||
+            !usedAt.isBefore(issuance.couponExpiresAt)
+        ) {
+            fail(FailureCode.COUPON_NOT_AVAILABLE, "Coupon issuance is expired, used, or owned by another customer")
+        }
+        val quoted = command.quoted
+        if (quoted.discountKrw <= 0 ||
+            quoted.eligibleLineSequences.isEmpty() ||
+            quoted.platformCouponCostKrw + quoted.storeCouponCostKrw != quoted.discountKrw
+        ) {
+            fail(FailureCode.SETTLEMENT_INPUT_UNAVAILABLE, "Immediate coupon quote is incomplete")
+        }
+        val reservation =
+            CouponReservationEntity(
+                id = identifierSource.next(),
+                orderId = command.orderId,
+                couponIssuanceId = issuance.id,
+                campaignId = quoted.campaignId,
+                campaignVersion = quoted.campaignVersion,
+                storeId = command.storeId,
+                state = CouponReservationState.USED,
+                discountKrw = quoted.discountKrw,
+                eligibleLineSequences = quoted.eligibleLineSequences.sorted().joinToString(","),
+                allMenusEligible = quoted.allMenusEligible,
+                eligibleMenuIds = quoted.eligibleMenuIds.sortedBy(UUID::toString).joinToString(","),
+                discountType = quoted.discountType,
+                fixedAmountKrw = quoted.fixedAmountKrw,
+                rateBps = quoted.rateBps,
+                minimumEligibleSubtotalKrw = quoted.minimumEligibleSubtotalKrw,
+                maximumDiscountKrw = quoted.maximumDiscountKrw,
+                costBearer = quoted.costBearer,
+                platformShareBps = quoted.platformShareBps,
+                storeShareBps = quoted.storeShareBps,
+                platformCouponCostKrw = quoted.platformCouponCostKrw,
+                storeCouponCostKrw = quoted.storeCouponCostKrw,
+                reservationExpiresAt = null,
+                sourceReference = command.sourceReference,
+                createdAt = usedAt,
+                updatedAt = usedAt,
+            )
+        issuance.state = CouponIssuanceState.USED
+        issuance.reservedOrderId = command.orderId
+        reservationRepository.save(reservation)
         return reservation.toQuote()
     }
 

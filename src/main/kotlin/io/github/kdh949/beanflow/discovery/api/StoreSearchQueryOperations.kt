@@ -56,10 +56,11 @@ data class StoreSearchItemView(
     /** `acceptingOrders && pickupEnabled` — the owner state the `openOnly` filter matches. */
     val orderingAvailable: Boolean,
     /**
-     * A reservable slot exists inside the seven-day window. Fulfillment's batch judgement, and the
-     * same meaning the field carries on `GET /stores/nearby` (ADR-103 2026-08-15 Amendment).
+     * The Store owner state permits pickup and the same-day Merchant schedule is currently open.
+     * No Fulfillment slot is required (ADR-103 2026-09-16 Immediate Checkout Amendment).
      */
     val pickupAvailable: Boolean,
+    /** Legacy compatibility field. Immediate discovery leaves this absent instead of inventing an ETA. */
     val nextPickupWindow: NextPickupWindowView?,
     val customerDisplay: CustomerStoreDisplayView,
     val matchedMenus: List<StoreSearchMenuView>,

@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-@Import(TestcontainersConfiguration::class, SupportVerificationIntegrationTest.ProviderConfiguration::class)
+@Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
 @BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest(
@@ -59,7 +59,7 @@ internal class SupportVerificationIntegrationTest
     constructor(
         private val mockMvc: MockMvc,
         private val jdbcTemplate: JdbcTemplate,
-        private val provider: ScriptedVerificationProvider,
+        private val context: org.springframework.context.ApplicationContext,
         private val recoveryWorker: SupportVerificationRecoveryWorker,
     ) {
         private val actorId = UUID.fromString("44000000-0000-0000-0000-000000000001")
@@ -69,190 +69,68 @@ internal class SupportVerificationIntegrationTest
         fun reset() {
             jdbcTemplate.execute("TRUNCATE TABLE support_case CASCADE")
             jdbcTemplate.execute("TRUNCATE TABLE operations_audit_record, operations_operator_permission_grant")
-            provider.reset()
             grant(actorId, "SUPPORT_VERIFICATION_MANAGE")
         }
 
         @Test
-        fun `basic verification is provider-backed idempotent and no-store`() {
+        fun `retired writes return explicit gone without provider or persistent verification`() {
             val binding = insertBinding(actorId)
-            val sessionId = createSession(binding, "BASIC", "verification-create-0001")
-            val challengeId = issue(sessionId, "REGISTERED_PHONE", "verification-issue-0001")
+            val id = UUID.randomUUID()
+            val requests =
+                listOf(
+                    "/api/v1/support/cases/${binding.caseId}/verification-sessions" to
+                        """{"subjectLinkId":"${binding.linkId}","requestedLevel":"BASIC","purpose":"CASE_RESOLUTION"}""",
+                    "/api/v1/support/verification-sessions/$id/challenges" to """{"channel":"REGISTERED_PHONE"}""",
+                    "/api/v1/support/verification-challenges/$id/verifications" to """{"proof":"TRANSIENT_PROOF"}""",
+                )
+            requests.forEachIndexed { index, (path, body) ->
+                mockMvc
+                    .perform(post(path).with(operatorJwt(actorId)).header("Idempotency-Key", "retired-command-$index").json(body))
+                    .andExpect(status().isGone)
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.code").value("SUPPORT_VERIFICATION_RETIRED"))
+            }
+            assertThat(context.getBeansOfType(VerificationChallengeOperations::class.java)).isEmpty()
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM support_verification_session", Long::class.java)).isZero()
+        }
 
-            mockMvc
-                .perform(
-                    post("/api/v1/support/verification-challenges/$challengeId/verifications")
-                        .with(operatorJwt(actorId))
-                        .header("Idempotency-Key", "verification-verify-0001")
-                        .json("""{"proof":"VALID_TEST_PROOF"}"""),
-                ).andExpect(status().isOk)
-                .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.sessionState").value("VERIFIED"))
-                .andExpect(jsonPath("$.achievedLevel").value("BASIC"))
+        @Test
+        fun `retired writes ignore absent malformed and invalid input but still require authentication`() {
+            val id = UUID.randomUUID()
+            val paths =
+                listOf(
+                    "/api/v1/support/cases/$id/verification-sessions",
+                    "/api/v1/support/verification-sessions/$id/challenges",
+                    "/api/v1/support/verification-challenges/$id/verifications",
+                )
+            paths.forEach { path ->
+                listOf("", "{", "{}", """{"proof":"","requestedLevel":"INVALID"}""").forEach { body ->
+                    mockMvc
+                        .perform(post(path).with(operatorJwt(actorId)).contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andExpect(status().isGone)
+                        .andExpect(header().string("Cache-Control", "no-store"))
+                        .andExpect(jsonPath("$.code").value("SUPPORT_VERIFICATION_RETIRED"))
+                }
+                mockMvc
+                    .perform(post(path).contentType(MediaType.APPLICATION_JSON).content("{"))
+                    .andExpect(status().isUnauthorized)
+            }
+            assertThat(context.getBeansOfType(VerificationChallengeOperations::class.java)).isEmpty()
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM support_verification_session", Long::class.java)).isZero()
+        }
 
+        @Test
+        fun `historical verified session remains readable only by authorized actor`() {
+            val binding = insertBinding(actorId)
+            val id = createSession(binding, "BASIC", "legacy-history")
             mockMvc
-                .perform(
-                    post("/api/v1/support/verification-challenges/$challengeId/verifications")
-                        .with(operatorJwt(actorId))
-                        .header("Idempotency-Key", "verification-verify-0001")
-                        .json("""{"proof":"DIFFERENT_TRANSIENT_PROOF"}"""),
-                ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.sessionState").value("VERIFIED"))
-            mockMvc
-                .perform(
-                    post("/api/v1/support/verification-challenges/$challengeId/verifications")
-                        .with(operatorJwt(actorId))
-                        .header("Idempotency-Key", "verification-verify-0002")
-                        .json("""{"proof":"VALID_TEST_PROOF"}"""),
-                ).andExpect(status().isConflict)
-
-            mockMvc
-                .perform(get("/api/v1/support/verification-sessions/$sessionId").with(operatorJwt(actorId)))
+                .perform(get("/api/v1/support/verification-sessions/$id").with(operatorJwt(actorId)))
                 .andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.state").value("VERIFIED"))
-            assertThat(provider.issueCalls.get()).isOne()
-            assertThat(provider.verifyCalls.get()).isOne()
-            assertThat(provider.observedTransaction.get()).isFalse()
-            assertThat(
-                jdbcTemplate.queryForObject(
-                    """
-                    SELECT count(*) FROM support_security_command_idempotency
-                     WHERE response_body LIKE '%VALID_TEST_PROOF%' OR response_body LIKE '%DIFFERENT_TRANSIENT_PROOF%'
-                    """.trimIndent(),
-                    Long::class.java,
-                ),
-            ).isZero()
-            assertThat(
-                jdbcTemplate.queryForObject(
-                    "SELECT count(*) FROM operations_audit_record WHERE after_summary LIKE '%VALID_TEST_PROOF%'",
-                    Long::class.java,
-                ),
-            ).isZero()
-        }
-
-        @Test
-        fun `support action verification exposes its scope and rejects an incompatible purpose`() {
-            val binding = insertBinding(actorId)
-
             mockMvc
-                .perform(
-                    post("/api/v1/support/cases/${binding.caseId}/verification-sessions")
-                        .with(operatorJwt(actorId))
-                        .header("Idempotency-Key", "verification-action-create")
-                        .json(
-                            """{"subjectLinkId":"${binding.linkId}","requestedLevel":"BASIC","purpose":"CASE_RESOLUTION","actionScope":"SUPPORT_ACTION"}""",
-                        ),
-                ).andExpect(status().isCreated)
-                .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.actionScope").value("SUPPORT_ACTION"))
-
-            mockMvc
-                .perform(
-                    post("/api/v1/support/cases/${binding.caseId}/verification-sessions")
-                        .with(operatorJwt(actorId))
-                        .header("Idempotency-Key", "verification-action-invalid")
-                        .json(
-                            """{"subjectLinkId":"${binding.linkId}","requestedLevel":"BASIC","purpose":"CONTACT_CONFIRMATION","actionScope":"SUPPORT_ACTION"}""",
-                        ),
-                ).andExpect(status().isBadRequest)
-                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-        }
-
-        @Test
-        fun `five invalid one-shot challenges lock the case subject binding for thirty minutes`() {
-            val binding = insertBinding(actorId)
-            val sessionId = createSession(binding, "BASIC", "verification-create-1001")
-
-            repeat(5) { index ->
-                val challengeId = issue(sessionId, "REGISTERED_PHONE", "verification-issue-10$index")
-                mockMvc
-                    .perform(
-                        post("/api/v1/support/verification-challenges/$challengeId/verifications")
-                            .with(operatorJwt(actorId))
-                            .header("Idempotency-Key", "verification-verify-10$index")
-                            .json("""{"proof":"INVALID_TEST_PROOF_$index"}"""),
-                    ).andExpect(status().isOk)
-                    .andExpect(jsonPath("$.invalidAttempts").value(index + 1))
-            }
-
-            mockMvc
-                .perform(
-                    post("/api/v1/support/cases/${binding.caseId}/verification-sessions")
-                        .with(operatorJwt(actorId))
-                        .header("Idempotency-Key", "verification-create-1002")
-                        .json(
-                            """{"subjectLinkId":"${binding.linkId}","requestedLevel":"BASIC","purpose":"CASE_RESOLUTION"}""",
-                        ),
-                ).andExpect(status().isTooManyRequests)
-                .andExpect(header().exists("Retry-After"))
-                .andExpect(jsonPath("$.code").value("VERIFICATION_LOCKED"))
-            assertThat(
-                jdbcTemplate.queryForObject(
-                    "SELECT invalid_attempts FROM support_verification_session WHERE id = ?",
-                    Int::class.java,
-                    sessionId,
-                ),
-            ).isEqualTo(5)
-
-            val replacementLinkId = UUID.randomUUID()
-            jdbcTemplate.update(
-                """
-                UPDATE support_case_subject_link
-                   SET unlinked_by_actor_id = ?, unlink_reason = 'SUBJECT_RELINKED', unlinked_at = ?, unlink_case_version = 1
-                 WHERE id = ?
-                """.trimIndent(),
-                actorId,
-                Timestamp.from(now.plusSeconds(1)),
-                binding.linkId,
-            )
-            jdbcTemplate.update(
-                """
-                INSERT INTO support_case_subject_link (
-                    id, support_case_id, subject_type, subject_id, relationship, linked_by_actor_id, reason, linked_at
-                ) VALUES (?, ?, 'CUSTOMER', ?, 'REQUESTER', ?, 'IDENTITY_SUBJECT_RELINKED', ?)
-                """.trimIndent(),
-                replacementLinkId,
-                binding.caseId,
-                binding.subjectId,
-                actorId,
-                Timestamp.from(now.plusSeconds(2)),
-            )
-            mockMvc
-                .perform(
-                    post("/api/v1/support/cases/${binding.caseId}/verification-sessions")
-                        .with(operatorJwt(actorId))
-                        .header("Idempotency-Key", "verification-create-1003")
-                        .json(
-                            """{"subjectLinkId":"$replacementLinkId","requestedLevel":"BASIC","purpose":"CASE_RESOLUTION"}""",
-                        ),
-                ).andExpect(status().isTooManyRequests)
-                .andExpect(jsonPath("$.code").value("VERIFICATION_LOCKED"))
-        }
-
-        @Test
-        fun `verification session cannot be reused by a replacement assignee`() {
-            val replacementActor = UUID.fromString("44000000-0000-0000-0000-000000000002")
-            val binding = insertBinding(actorId)
-            val sessionId = createSession(binding, "BASIC", "verification-owner-create")
-            grant(replacementActor, "SUPPORT_VERIFICATION_MANAGE")
-            jdbcTemplate.update(
-                "UPDATE support_case SET current_assignee_id = ?, version = version + 1 WHERE id = ?",
-                replacementActor,
-                binding.caseId,
-            )
-
-            mockMvc
-                .perform(get("/api/v1/support/verification-sessions/$sessionId").with(operatorJwt(replacementActor)))
+                .perform(get("/api/v1/support/verification-sessions/$id").with(operatorJwt(UUID.randomUUID())))
                 .andExpect(status().isForbidden)
-            mockMvc
-                .perform(
-                    post("/api/v1/support/verification-sessions/$sessionId/challenges")
-                        .with(operatorJwt(replacementActor))
-                        .header("Idempotency-Key", "verification-owner-issue")
-                        .json("""{"channel":"REGISTERED_PHONE"}"""),
-                ).andExpect(status().isForbidden)
-            assertThat(provider.issueCalls.get()).isZero()
         }
 
         @Test
@@ -309,101 +187,30 @@ internal class SupportVerificationIntegrationTest
             ).isEqualTo(2)
         }
 
-        @Test
-        fun `case subject mismatch is rejected and concurrent verification has one provider call`() {
-            val first = insertBinding(actorId)
-            val second = insertBinding(actorId)
-            mockMvc
-                .perform(
-                    post("/api/v1/support/cases/${first.caseId}/verification-sessions")
-                        .with(operatorJwt(actorId))
-                        .header("Idempotency-Key", "verification-mismatch-0001")
-                        .json(
-                            """{"subjectLinkId":"${second.linkId}","requestedLevel":"BASIC","purpose":"CASE_RESOLUTION"}""",
-                        ),
-                ).andExpect(status().isNotFound)
-
-            val sessionId = createSession(first, "BASIC", "verification-concurrent-create")
-            val challengeId = issue(sessionId, "IN_APP", "verification-concurrent-issue")
-            provider.blockVerification()
-            val executor = Executors.newFixedThreadPool(2)
-            val start = CountDownLatch(1)
-            try {
-                val futures =
-                    (1..2).map { index ->
-                        executor.submit(
-                            Callable {
-                                start.await(5, TimeUnit.SECONDS)
-                                mockMvc
-                                    .perform(
-                                        post("/api/v1/support/verification-challenges/$challengeId/verifications")
-                                            .with(operatorJwt(actorId))
-                                            .header("Idempotency-Key", "verification-concurrent-verify-$index")
-                                            .json("""{"proof":"VALID_TEST_PROOF"}"""),
-                                    ).andReturn()
-                            },
-                        )
-                    }
-                start.countDown()
-                provider.awaitVerificationStarted()
-                provider.releaseVerification()
-                val statuses = futures.map { it.get(10, TimeUnit.SECONDS).response.status }
-                assertThat(statuses).containsExactlyInAnyOrder(200, 409)
-                assertThat(provider.verifyCalls.get()).isOne()
-            } finally {
-                provider.releaseVerification()
-                executor.shutdownNow()
-            }
-        }
-
         private fun createSession(
             binding: Binding,
             level: String,
             key: String,
         ): UUID {
-            val result =
-                mockMvc
-                    .perform(
-                        post("/api/v1/support/cases/${binding.caseId}/verification-sessions")
-                            .with(operatorJwt(actorId))
-                            .header("Idempotency-Key", key)
-                            .json(
-                                """{"subjectLinkId":"${binding.linkId}","requestedLevel":"$level","purpose":"CASE_RESOLUTION"}""",
-                            ),
-                    ).andExpect(status().isCreated)
-                    .andExpect(header().string("Cache-Control", "no-store"))
-                    .andReturn()
-            return UUID.fromString(
-                JsonMapper
-                    .builder()
-                    .build()
-                    .readTree(result.response.contentAsString)["sessionId"]
-                    .asText(),
+            val id = UUID.randomUUID()
+            jdbcTemplate.update(
+                """INSERT INTO support_verification_session (id, support_case_id, subject_link_id, subject_type, subject_id, actor_id,
+                   purpose, action_scope, requested_level, state, invalid_attempts, started_at, expires_at, verified_at, version)
+                   VALUES (?, ?, ?, 'CUSTOMER', ?, ?, 'CASE_RESOLUTION', 'PERSONAL_DATA_REVEAL', ?, 'VERIFIED', 0, now(), now() + interval '15 minutes', now(), 1)""",
+                id,
+                binding.caseId,
+                binding.linkId,
+                binding.subjectId,
+                actorId,
+                level,
             )
-        }
-
-        private fun issue(
-            sessionId: UUID,
-            channel: String,
-            key: String,
-        ): UUID {
-            val result =
-                mockMvc
-                    .perform(
-                        post("/api/v1/support/verification-sessions/$sessionId/challenges")
-                            .with(operatorJwt(actorId))
-                            .header("Idempotency-Key", key)
-                            .json("""{"channel":"$channel"}"""),
-                    ).andExpect(status().isCreated)
-                    .andExpect(header().string("Cache-Control", "no-store"))
-                    .andReturn()
-            return UUID.fromString(
-                JsonMapper
-                    .builder()
-                    .build()
-                    .readTree(result.response.contentAsString)["challengeId"]
-                    .asText(),
+            jdbcTemplate.update(
+                """INSERT INTO support_verification_challenge (id, session_id, channel, state, opaque_provider_reference, requested_at, expires_at, completed_at, version)
+                   VALUES (?, ?, 'REGISTERED_PHONE', 'VERIFIED', 'legacy-opaque-reference', now(), now() + interval '5 minutes', now(), 1)""",
+                UUID.randomUUID(),
+                id,
             )
+            return id
         }
 
         private fun insertBinding(assigneeId: UUID): Binding {
@@ -494,64 +301,4 @@ internal class SupportVerificationIntegrationTest
             val linkId: UUID,
             val subjectId: UUID,
         )
-
-        @TestConfiguration(proxyBeanMethods = false)
-        internal class ProviderConfiguration {
-            @Bean
-            fun scriptedVerificationProvider(): ScriptedVerificationProvider = ScriptedVerificationProvider()
-        }
     }
-
-internal class ScriptedVerificationProvider : VerificationChallengeOperations {
-    val issueCalls = AtomicInteger()
-    val verifyCalls = AtomicInteger()
-    val observedTransaction = AtomicBoolean()
-    private var verifyStarted = CountDownLatch(0)
-    private var verifyRelease = CountDownLatch(0)
-
-    override fun issue(command: IssueVerificationChallengeCommand): VerificationChallengeIssueResult {
-        observedTransaction.compareAndSet(false, TransactionSynchronizationManager.isActualTransactionActive())
-        issueCalls.incrementAndGet()
-        return VerificationChallengeIssueResult.Issued("test-provider:${command.challengeIntentId}")
-    }
-
-    override fun verify(command: VerifyChallengeCommand): VerificationChallengeVerifyResult {
-        observedTransaction.compareAndSet(false, TransactionSynchronizationManager.isActualTransactionActive())
-        verifyCalls.incrementAndGet()
-        verifyStarted.countDown()
-        verifyRelease.await(5, TimeUnit.SECONDS)
-        val chars = command.proof.copyChars()
-        return try {
-            if (String(chars) ==
-                "VALID_TEST_PROOF"
-            ) {
-                VerificationChallengeVerifyResult.VERIFIED
-            } else {
-                VerificationChallengeVerifyResult.INVALID
-            }
-        } finally {
-            Arrays.fill(chars, '\u0000')
-        }
-    }
-
-    fun reset() {
-        issueCalls.set(0)
-        verifyCalls.set(0)
-        observedTransaction.set(false)
-        verifyStarted = CountDownLatch(0)
-        verifyRelease = CountDownLatch(0)
-    }
-
-    fun blockVerification() {
-        verifyStarted = CountDownLatch(1)
-        verifyRelease = CountDownLatch(1)
-    }
-
-    fun awaitVerificationStarted() {
-        check(verifyStarted.await(5, TimeUnit.SECONDS))
-    }
-
-    fun releaseVerification() {
-        verifyRelease.countDown()
-    }
-}

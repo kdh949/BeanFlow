@@ -12,7 +12,7 @@ import { useSupportCommand } from "./useSupportCommand";
 export type CompensationIncident = components["schemas"]["SupportCompensationIncidentResource"];
 type Props = {
   /** Current assigned case and completed customer verification bind every candidate. */
-  caseId: string; sessionId: string; orderId?: string;
+  caseId: string; subjectLinkId: string; orderId?: string;
   /** A revision link may narrow the list to its original incident; it never supplies a new identity. */
   initialIncidentId?: string;
   selected?: CompensationIncident | null; disabled?: boolean;
@@ -21,11 +21,11 @@ type Props = {
   onBusyChange: (busy: boolean) => void;
 };
 /** Composes existing form and request-state primitives into stable incident selection and registration. */
-export function SupportCompensationIncidentPicker({ caseId, sessionId, orderId, initialIncidentId, selected, disabled = false, onSelect, onBusyChange }: Props) {
+export function SupportCompensationIncidentPicker({ caseId, subjectLinkId, orderId, initialIncidentId, selected, disabled = false, onSelect, onBusyChange }: Props) {
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]), [filter, setFilter] = useState(initialIncidentId);
   const [registering, setRegistering] = useState(false), [occurred, setOccurred] = useState(""), [confirmed, setConfirmed] = useState(false), [validation, setValidation] = useState("");
   const cursor = cursors[cursors.length - 1];
-  const read = useResource(useCallback(async () => unwrap(await operationsApi.GET("/support/cases/{caseId}/compensation-incidents", { params: { path: { caseId }, query: { verificationSessionId: sessionId, orderId, incidentId: filter, cursor, limit: 20 } } })), [caseId, sessionId, orderId, filter, cursor]));
+  const read = useResource(useCallback(async () => unwrap(await operationsApi.GET("/support/cases/{caseId}/compensation-incidents", { params: { path: { caseId }, query: { subjectLinkId: subjectLinkId, orderId, incidentId: filter, cursor, limit: 20 } } })), [caseId, subjectLinkId, orderId, filter, cursor]));
   const command = useSupportCommand(`compensation-incident:${caseId}`, () => undefined);
   const ownBusy = command.busy || command.pending, blocked = disabled || ownBusy;
   useEffect(() => { onBusyChange(ownBusy); return () => onBusyChange(false); }, [ownBusy, onBusyChange]);
@@ -35,7 +35,7 @@ export function SupportCompensationIncidentPicker({ caseId, sessionId, orderId, 
     let occurredAt: string;
     try { occurredAt = seoulInstant(occurred); if (Date.parse(occurredAt) > Date.now()) throw new Error("미래 시각은 사고 발생 시각으로 등록할 수 없습니다."); }
     catch (failure) { setValidation(failure instanceof Error ? failure.message : "발생 시각을 확인해 주세요."); return; }
-    const body = { verificationSessionId: sessionId, orderId: orderId || null, occurredAt };
+    const body = { subjectLinkId: subjectLinkId, orderId: orderId || null, occurredAt };
     command.submit(JSON.stringify(body), async key => { const created = unwrap(await operationsApi.POST("/support/cases/{caseId}/compensation-incidents", { params: { path: { caseId }, header: { "Idempotency-Key": key } }, body })); onSelect(created); }, () => { setRegistering(false); setConfirmed(false); setOccurred(""); read.reload(); });
   }
   return <section className="management-workspace" aria-label="보상 사고 선택">

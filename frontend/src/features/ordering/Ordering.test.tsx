@@ -42,13 +42,10 @@ const store = {
     operatingStatus: "OPEN",
   },
 };
-const openSlots = { items: [{ pickupSlotId: "slot-1", startsAt: "2026-08-16T02:00:00Z", endsAt: "2026-08-16T02:10:00Z", remainingCapacity: 4 }] };
-const closedSlots = { items: [{ pickupSlotId: "slot-1", startsAt: "2026-08-16T02:00:00Z", endsAt: "2026-08-16T02:10:00Z", remainingCapacity: 0 }] };
 const quote = (payableKrw = 9_000, fingerprint = "a".repeat(64)) => ({
   quotedAt: "2026-08-16T01:55:00Z",
   quoteFingerprint: fingerprint,
   store: { storeId: "store-1", name: "성수 로스터리" },
-  pickupWindow: { startsAt: "2026-08-16T02:00:00Z", endsAt: "2026-08-16T02:10:00Z" },
   lines: [{ menuId: "menu-1", menuName: "메뉴 menu-1", quantity: payableKrw / 4_500, optionNames: [], lineTotalKrw: payableKrw }],
   pricing: { subtotalKrw: payableKrw, couponDiscountKrw: 0, pointsAppliedKrw: 0, payableKrw, currency: "KRW" },
   guarantee: "NONE",
@@ -163,11 +160,40 @@ describe("client cart", () => {
 
     expect(cart.read()).toEqual({ status: "empty" });
   });
+
+  it("reads a legacy cart with a stable revision and migrates it on the next edit", () => {
+    const legacy = { version: 1, storeId: "store-1", storeName: "성수", lines: [line("menu-1")] };
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(legacy));
+    runCustomerLogoutHandlers();
+
+    const first = cart.read();
+    const second = cart.read();
+    expect(first).toMatchObject({ status: "ready", cart: { version: 2, revision: expect.stringMatching(/^legacy-/) } });
+    expect(second).toEqual(first);
+
+    cart.setQuantity(0, 2);
+    expect(JSON.parse(localStorage.getItem(CART_STORAGE_KEY) ?? "{}")).toMatchObject({ version: 2, revision: expect.any(String) });
+  });
+
+  it("clears only the cart revision that started checkout", () => {
+    cart.add({ storeId: "store-1", storeName: "성수" }, line("menu-1"));
+    const started = cart.read();
+    if (started.status !== "ready") throw new Error("cart must be ready");
+
+    cart.setQuantity(0, 2);
+    expect(cart.clearIfRevision(started.cart.revision)).toBe(false);
+    expect(cart.read()).toMatchObject({ status: "ready", cart: { lines: [{ quantity: 2 }] } });
+
+    const current = cart.read();
+    if (current.status !== "ready") throw new Error("cart must be ready");
+    expect(cart.clearIfRevision(current.cart.revision)).toBe(true);
+    expect(cart.read()).toEqual({ status: "empty" });
+  });
 });
 
 describe("store identity comes from the server", () => {
   it("names the store on a direct visit that carries no navigation state", async () => {
-    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/menus": ok(menus), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/menus": ok(menus) });
 
     renderStore();
 
@@ -177,7 +203,7 @@ describe("store identity comes from the server", () => {
   });
 
   it("stores the server name in the cart rather than a placeholder", async () => {
-    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/menus": ok(menus), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/menus": ok(menus) });
 
     const { container } = renderStore();
     const user = userEvent.setup();
@@ -194,7 +220,6 @@ describe("store identity comes from the server", () => {
     routeGet({
       "/stores/{storeId}": failed(404, "RESOURCE_NOT_FOUND", "매장을 찾을 수 없습니다."),
       "/stores/{storeId}/menus": ok(menus),
-      "/stores/{storeId}/pickup-slots": ok(openSlots),
     });
 
     renderStore();
@@ -207,7 +232,7 @@ describe("store identity comes from the server", () => {
 
   it("prefers the current server name over the one saved with the cart", async () => {
     cart.add({ storeId: "store-1", storeName: "예전 이름" }, line("menu-1"));
-    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    routeGet({ "/stores/{storeId}": ok(store) });
 
     renderCart();
 
@@ -219,48 +244,55 @@ describe("store identity comes from the server", () => {
     cart.add({ storeId: "store-1", storeName: "성수 로스터리" }, line("menu-1"));
     routeGet({
       "/stores/{storeId}": failed(503, "DEPENDENCY_UNAVAILABLE", "매장 정보를 조회하지 못했습니다."),
-      "/stores/{storeId}/pickup-slots": ok(openSlots),
     });
 
     renderCart();
 
     expect(await screen.findByText("성수 로스터리")).toBeInTheDocument();
     expect(screen.getByText("매장 안내를 불러오지 못했어요.")).toBeInTheDocument();
-    expect(await screen.findByRole("radio", { name: /가능/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "견적 확인 후 주문하기" })).toBeDisabled();
   });
 });
 
 describe("store detail", () => {
-  it("disables a sold-out menu and shows a closed pickup window", async () => {
-    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/menus": ok(menus), "/stores/{storeId}/pickup-slots": ok(closedSlots) });
+  it("does not depend on legacy slot capacity when the store accepts immediate orders", async () => {
+    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/menus": ok(menus) });
 
     renderStore();
 
-    expect(await screen.findByText("지금은 픽업 시간이 모두 마감됐어요.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "성수 로스터리" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "커피" })).toBeInTheDocument();
     expect(screen.getByText("고소한 원두의 긴 여운")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "메뉴" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /오트 라떼/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /아메리카노/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /아메리카노/ })).toBeEnabled();
   });
 
   it("keeps operating hours separate from the store ordering switch", async () => {
     routeGet({
       "/stores/{storeId}": ok({ ...store, orderingAvailable: false, pickupAvailable: false, nextPickupWindow: undefined }),
       "/stores/{storeId}/menus": ok(menus),
-      "/stores/{storeId}/pickup-slots": ok(openSlots),
     });
 
     renderStore();
 
-    expect(await screen.findByText("영업 중")).toBeInTheDocument();
-    expect(screen.getByText("주문 쉬는 중")).toBeInTheDocument();
+    const storeInformation = await screen.findByRole("button", { name: "매장 정보" });
+    const storeActions = screen.getByRole("group", { name: "매장 작업" });
+    const favoriteAction = await screen.findByRole("button", { name: /즐겨찾기 추가/ });
+    expect(storeActions).toContainElement(storeInformation);
+    expect(storeActions).toContainElement(favoriteAction);
+    expect(storeInformation).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("영업 중")).not.toBeVisible();
+    await userEvent.click(storeInformation);
+    expect(storeInformation).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("영업 중")).toBeVisible();
+    expect(screen.getByText("주문 쉬는 중")).toBeVisible();
     expect(screen.getByText(/현재 주문을 받지 않아요/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /아메리카노/ })).toBeDisabled();
   });
 
   it("adds the selected menu and options to the cart", async () => {
-    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/menus": ok(menus), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/menus": ok(menus) });
 
     renderStore();
     const user = userEvent.setup();
@@ -279,22 +311,21 @@ describe("store detail", () => {
 });
 
 describe("order creation conflicts", () => {
-  it("asks for another pickup time without changing the cart", async () => {
+  it("keeps the cart when the store closes before order creation", async () => {
     cart.add({ storeId: "store-1", storeName: "성수 로스터리" }, line("menu-1"));
     document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
-    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    routeGet({ "/stores/{storeId}": ok(store) });
     vi.spyOn(customerApi, "POST").mockImplementation(async (path: string) =>
       path === "/me/order-quotes"
         ? ok(quote(4_500)) as never
-        : failed(409, "PICKUP_SLOT_FULL", "슬롯 수용량이 없습니다.") as never,
+        : failed(409, "STORE_CLOSED", "영업 시간이 끝났습니다.") as never,
     );
 
     renderCart();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     await user.click(await screen.findByRole("button", { name: /4,500.*주문하기/ }));
 
-    expect(await screen.findByText("고른 픽업 시간이 방금 마감됐어요")).toBeInTheDocument();
+    expect(await screen.findByText("매장 영업 시간이 끝났어요")).toBeInTheDocument();
     expect(cart.read()).toMatchObject({ status: "ready", cart: { lines: [{ menuId: "menu-1" }] } });
   });
 
@@ -309,41 +340,39 @@ describe("order creation conflicts", () => {
   it("sends the CSRF header and the cart lines on order creation", async () => {
     cart.add({ storeId: "store-1", storeName: "성수 로스터리" }, line("menu-1", 2));
     document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
-    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    routeGet({ "/stores/{storeId}": ok(store) });
     const post = vi.spyOn(customerApi, "POST").mockImplementation(async (path: string) =>
       path === "/me/order-quotes"
         ? ok(quote()) as never
-        : ok({ order: { orderId: "order-1", publicReference: "BF-2345-6789", payableKrw: 9_000 } }) as never,
+        : ok({ order: { orderId: "order-1", publicReference: "BF-2345-6789", payableKrw: 9_000, state: "PENDING_PAYMENT" } }) as never,
     );
 
     renderCart();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     await user.click(await screen.findByRole("button", { name: /9,000.*주문하기/ }));
 
     expect(await screen.findByRole("heading", { name: "결제 화면" })).toBeInTheDocument();
     expect(post.mock.calls[0]?.[0]).toBe("/me/order-quotes");
     expect(post.mock.calls[0]?.[1]).toMatchObject({
       params: { header: { "X-BEANFLOW-CSRF": "customer-csrf-token" } },
-      body: { storeId: "store-1", pickupSlotId: "slot-1", lines: [{ menuId: "menu-1", optionIds: [], quantity: 2 }] },
+      body: { storeId: "store-1", lines: [{ menuId: "menu-1", optionIds: [], quantity: 2 }] },
     });
     expect(post.mock.calls[1]?.[0]).toBe("/orders");
     expect(post.mock.calls[1]?.[1]).toMatchObject({
       params: { header: { "X-BEANFLOW-CSRF": "customer-csrf-token" } },
       body: {
         storeId: "store-1",
-        pickupSlotId: "slot-1",
         lines: [{ menuId: "menu-1", optionIds: [], quantity: 2 }],
         expectedQuoteFingerprint: "a".repeat(64),
       },
     });
-    expect(cart.read()).toEqual({ status: "empty" });
+    expect(cart.read()).toMatchObject({ status: "ready", cart: { lines: [{ menuId: "menu-1" }] } });
   });
 
   it("clears the previous money while a changed cart is being requoted", async () => {
     cart.add({ storeId: "store-1", storeName: "성수 로스터리" }, line("menu-1", 2));
     document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
-    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    routeGet({ "/stores/{storeId}": ok(store) });
     let quoteCall = 0;
     vi.spyOn(customerApi, "POST").mockImplementation(async (path: string) => {
       if (path !== "/me/order-quotes") throw new Error(`unexpected POST ${path}`);
@@ -353,7 +382,6 @@ describe("order creation conflicts", () => {
 
     renderCart();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     expect(await screen.findByRole("button", { name: /9,000.*주문하기/ })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "메뉴 menu-1 수량 늘리기" }));
 
@@ -366,7 +394,7 @@ describe("order creation conflicts", () => {
   it("requires explicit stale quote confirmation and submits a new key with the new fingerprint", async () => {
     cart.add({ storeId: "store-1", storeName: "성수 로스터리" }, line("menu-1", 2));
     document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
-    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    routeGet({ "/stores/{storeId}": ok(store) });
     const currentQuote = quote(10_000, "b".repeat(64));
     const orderRequests: Array<{ body?: unknown; key?: string }> = [];
     vi.spyOn(customerApi, "POST").mockImplementation(async (path: string, options: unknown) => {
@@ -379,12 +407,11 @@ describe("order creation conflicts", () => {
           response: new Response(null, { status: 409 }),
         } as never;
       }
-      return ok({ order: { orderId: "order-2", publicReference: "BF-2345-6790", payableKrw: 10_000 } }) as never;
+      return ok({ order: { orderId: "order-2", publicReference: "BF-2345-6790", payableKrw: 10_000, state: "PENDING_PAYMENT" } }) as never;
     });
 
     renderCart();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("radio", { name: /가능/ }));
     await user.click(await screen.findByRole("button", { name: /9,000.*주문하기/ }));
 
     expect(await screen.findByText("주문 금액과 조건이 변경됐어요")).toBeInTheDocument();
@@ -404,7 +431,7 @@ describe("point use in order quotes", () => {
   it("requotes point changes and submits the current amount and fingerprint", async () => {
     cart.add({ storeId: "store-1", storeName: "성수" }, line("menu-1", 2));
     document.cookie = "BEANFLOW_CUSTOMER_XSRF=customer-csrf-token; path=/";
-    routeGet({ "/stores/{storeId}": ok(store), "/stores/{storeId}/pickup-slots": ok(openSlots) });
+    routeGet({ "/stores/{storeId}": ok(store) });
     const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
     vi.spyOn(customerApi, "POST").mockImplementation(async (path: string, options: unknown) => {
       const body = (options as { body: Record<string, unknown> }).body;
@@ -414,10 +441,9 @@ describe("point use in order quotes", () => {
         const result = quote(9000, amount ? "b".repeat(64) : "a".repeat(64));
         return ok({ ...result, pricing: { ...result.pricing, pointsAppliedKrw: amount, payableKrw: 9000 - amount } }) as never;
       }
-      return ok({ order: { orderId: "order-1", payableKrw: 7500 } }) as never;
+      return ok({ order: { orderId: "order-1", publicReference: "BF-2345-6789", payableKrw: 7500, state: "PENDING_PAYMENT" } }) as never;
     });
     renderCart();
-    await userEvent.click(await screen.findByRole("radio", { name: /가능/ }));
     expect(await screen.findByRole("button", { name: /9,000.*주문하기/ })).toBeEnabled();
     await userEvent.click(screen.getByRole("button", { name: "전액 사용" }));
     expect(screen.getByRole("button", { name: "견적 확인 후 주문하기" })).toBeDisabled();

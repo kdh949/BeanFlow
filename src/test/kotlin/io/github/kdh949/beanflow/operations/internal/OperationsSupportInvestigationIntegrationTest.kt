@@ -104,7 +104,7 @@ internal class OperationsSupportInvestigationIntegrationTest
                     .andExpect(status().isOk)
                     .andExpect(header().string("Cache-Control", "no-store"))
                     .andExpect(jsonPath("$.items[0].request.action").value("ORDER_CANCELLATION"))
-                    .andExpect(jsonPath("$.items[0].canDecide").value(true))
+                    .andExpect(jsonPath("$.items[0].canDecide").value(false))
                     .andReturn()
                     .response.contentAsString
             assertThat(body).doesNotContain("actionPayloadDigest", "evidenceDigest", "verificationSessionId")
@@ -169,7 +169,7 @@ internal class OperationsSupportInvestigationIntegrationTest
                 .andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.investigation.investigationId").value(investigationId.toString()))
-                .andExpect(jsonPath("$.canDecide").value(true))
+                .andExpect(jsonPath("$.canDecide").value(false))
             read(requesterId).andExpect(status().isOk).andExpect(jsonPath("$.canDecide").value(false))
             read(managerId).andExpect(status().isOk).andExpect(jsonPath("$.canDecide").value(false))
             read(operationsId, 2).andExpect(status().isNotFound)
@@ -180,7 +180,7 @@ internal class OperationsSupportInvestigationIntegrationTest
         }
 
         @Test
-        fun `requester manager and executor cannot review while separated Operations approves exactly once`() {
+        fun `legacy pending approval is rejected and its rejection replays without new approval`() {
             val binding = seedRequest(withManager = true)
             val investigationId = open(binding)
 
@@ -191,33 +191,127 @@ internal class OperationsSupportInvestigationIntegrationTest
                 .andExpect(status().isConflict)
                 .andExpect(jsonPath("$.code").value("SUPPORT_APPROVER_MUST_DIFFER"))
 
-            decide(investigationId, operationsId, "investigation-approve-001")
-                .andExpect(status().isOk)
-                .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.state").value("APPROVED"))
-                .andExpect(jsonPath("$.supportRequestState").value("READY_FOR_EXECUTION"))
-                .andExpect(jsonPath("$.revisionNumber").value(1))
-                .andExpect(jsonPath("$.version").value(1))
-            decide(investigationId, operationsId, "investigation-approve-001")
-                .andExpect(status().isOk)
-                .andExpect(jsonPath("$.state").value("APPROVED"))
+            repeat(2) {
+                decide(investigationId, operationsId, "investigation-approve-001")
+                    .andExpect(status().isConflict)
+                    .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
+            }
             decide(investigationId, operationsId, "investigation-approve-001", decision = "DENY")
                 .andExpect(status().isConflict)
                 .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"))
 
-            assertThat(state("support_action_request", binding.requestId)).isEqualTo("READY_FOR_EXECUTION")
-            assertThat(state("operations_support_investigation_case", investigationId)).isEqualTo("APPROVED")
+            assertThat(state("support_action_request", binding.requestId)).isEqualTo("STALE")
+            assertThat(state("operations_support_investigation_case", investigationId)).isEqualTo("STALE")
             assertThat(
                 jdbcTemplate.queryForObject(
                     "SELECT count(*) FROM support_action_approval_step WHERE request_id = ? AND step_type = 'OPERATIONS' AND state = 'APPROVED'",
                     Int::class.java,
                     binding.requestId,
                 ),
+            ).isZero()
+        }
+
+        @Test
+        fun `completed legacy decision response replays without another approval or owner mutation`() {
+            val binding = seedRequest(withManager = false)
+            val investigationId = open(binding)
+            val key = "historical-approved-replay"
+            val encoded =
+                listOf(
+                    "operation" to "DECIDE_OPERATIONS_SUPPORT_INVESTIGATION",
+                    "actorId" to operationsId.toString(),
+                    "investigationId" to investigationId.toString(),
+                    "expectedVersion" to "0",
+                    "decision" to "APPROVE",
+                    "reason" to "Investigation evidence reviewed",
+                    "evidenceDigest" to EVIDENCE_DIGEST,
+                ).joinToString("") { (name, value) ->
+                    val part = "$name=$value"
+                    "${part.toByteArray(Charsets.UTF_8).size}:$part"
+                }
+            val hash =
+                java.util.HexFormat.of().formatHex(
+                    java.security.MessageDigest
+                        .getInstance("SHA-256")
+                        .digest(encoded.toByteArray(Charsets.UTF_8)),
+                )
+            jdbcTemplate.update(
+                """
+                UPDATE support_action_request
+                SET state = 'READY_FOR_EXECUTION', operations_approver_actor_id = ?, version = 1
+                WHERE id = ?
+                """.trimIndent(),
+                operationsId,
+                binding.requestId,
+            )
+            jdbcTemplate.update(
+                """
+                UPDATE operations_support_investigation_case
+                SET state = 'APPROVED', decided_by_actor_id = ?, decision_reason = 'historical approval',
+                    decision_evidence_digest = ?, decided_at = now(), updated_at = now(), version = 1
+                WHERE id = ?
+                """.trimIndent(),
+                operationsId,
+                EVIDENCE_DIGEST,
+                investigationId,
+            )
+            val response =
+                """
+                {"investigationId":"$investigationId","requestId":"${binding.requestId}",
+                 "revisionId":"${binding.revisionId}","revisionNumber":1,"state":"APPROVED",
+                 "supportRequestState":"READY_FOR_EXECUTION","supportRequestVersion":1,
+                 "decidedByActorId":"$operationsId","decidedAt":"2026-09-18T00:00:00Z","version":1}
+                """.trimIndent()
+            jdbcTemplate.update(
+                """
+                INSERT INTO operations_support_investigation_idempotency(
+                    id, actor_id, operation, idempotency_key, payload_hash, investigation_id,
+                    response_status, response_body, failure_code, created_at, retention_expires_at)
+                VALUES (?, ?, 'DECIDE', ?, ?, ?, 200, ?, NULL, now(), now() + interval '90 days')
+                """.trimIndent(),
+                UUID.randomUUID(),
+                operationsId,
+                key,
+                hash,
+                investigationId,
+                response,
+            )
+            jdbcTemplate.update(
+                """
+                INSERT INTO support_action_approval_step (
+                    id, request_id, revision_id, revision_number, step_type, state, decided_by_actor_id,
+                    decision_reason, decided_at, created_at)
+                VALUES (?, ?, ?, 1, 'OPERATIONS', 'APPROVED', ?, 'historical approval', now(), now())
+                """.trimIndent(),
+                UUID.randomUUID(),
+                binding.requestId,
+                binding.revisionId,
+                operationsId,
+            )
+            val audits = jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java)
+            repeat(2) {
+                decide(investigationId, operationsId, key)
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.state").value("APPROVED"))
+                    .andExpect(jsonPath("$.version").value(1))
+            }
+            decide(investigationId, operationsId, key, decision = "DENY")
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"))
+            assertThat(state("support_action_request", binding.requestId)).isEqualTo("READY_FOR_EXECUTION")
+            assertThat(state("operations_support_investigation_case", investigationId)).isEqualTo("APPROVED")
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM operations_audit_record", Long::class.java)).isEqualTo(audits)
+            assertThat(
+                jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM support_action_approval_step WHERE request_id = ?",
+                    Long::class.java,
+                    binding.requestId,
+                ),
             ).isOne()
         }
 
         @Test
-        fun `Operations return requires a new revision and cannot be decided twice`() {
+        fun `legacy return requires a new request rather than another revision or decision`() {
             val binding = seedRequest(withManager = false)
             val investigationId = open(binding)
 
@@ -226,14 +320,13 @@ internal class OperationsSupportInvestigationIntegrationTest
                 operationsId,
                 "investigation-return-001",
                 decision = "RETURN_FOR_REVISION",
-            ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.state").value("RETURNED"))
-                .andExpect(jsonPath("$.supportRequestState").value("REVISION_REQUIRED"))
+            ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
             decide(investigationId, otherOperationsId, "investigation-second-decision")
                 .andExpect(status().isConflict)
                 .andExpect(jsonPath("$.code").value("SUPPORT_ACTION_REQUEST_STALE"))
 
-            assertThat(state("support_action_request", binding.requestId)).isEqualTo("REVISION_REQUIRED")
+            assertThat(state("support_action_request", binding.requestId)).isEqualTo("STALE")
             assertThat(
                 jdbcTemplate.queryForObject(
                     "SELECT count(*) FROM support_action_revision WHERE request_id = ?",
@@ -266,7 +359,7 @@ internal class OperationsSupportInvestigationIntegrationTest
         }
 
         @Test
-        fun `concurrent Operations review allows one decision`() {
+        fun `concurrent legacy reviews both reject and persist one stale transition`() {
             val binding = seedRequest(withManager = false)
             val investigationId = open(binding)
             val executor = Executors.newFixedThreadPool(2)
@@ -288,10 +381,10 @@ internal class OperationsSupportInvestigationIntegrationTest
                             ),
                         ).map { it.get() }
                         .sorted()
-                assertThat(statuses).containsExactly(200, 409)
+                assertThat(statuses).containsExactly(409, 409)
                 assertThat(
                     jdbcTemplate.queryForObject(
-                        "SELECT count(*) FROM support_action_approval_step WHERE request_id = ? AND step_type = 'OPERATIONS'",
+                        "SELECT count(*) FROM support_action_approval_step WHERE request_id = ? AND step_type = 'OPERATIONS' AND state = 'STALE'",
                         Int::class.java,
                         binding.requestId,
                     ),
@@ -302,7 +395,7 @@ internal class OperationsSupportInvestigationIntegrationTest
         }
 
         @Test
-        fun `Support callback Audit failure rolls back both owner states and decision idempotency`() {
+        fun `legacy rejection Audit failure rolls back both owner states and decision idempotency`() {
             val binding = seedRequest(withManager = false)
             val investigationId = open(binding)
             jdbcTemplate.update(
@@ -312,7 +405,7 @@ internal class OperationsSupportInvestigationIntegrationTest
                     before_summary, after_summary, correlation_id, source_reference, retention_expires_at,
                     retention_class, retention_policy_version_id, retention_provenance
                 )
-                SELECT ?, ?, 'PLATFORM_OPERATOR', audit_category, 'SUPPORT_ACTION_OPERATIONS_DECIDED',
+                SELECT ?, ?, 'PLATFORM_OPERATOR', audit_category, 'SUPPORT_ACTION_APPROVAL_STALE',
                        'SUPPORT_ACTION_REQUEST', ?, occurred_at, reason, before_summary, after_summary, correlation_id,
                        ?, retention_expires_at, retention_class, retention_policy_version_id, retention_provenance
                   FROM operations_audit_record
@@ -321,7 +414,7 @@ internal class OperationsSupportInvestigationIntegrationTest
                 UUID.randomUUID(),
                 operationsId.toString(),
                 binding.requestId,
-                "support-action:${binding.requestId}:SUPPORT_ACTION_OPERATIONS_DECIDED:1",
+                "support-action:${binding.requestId}:SUPPORT_ACTION_APPROVAL_STALE:1",
                 investigationId,
             )
 

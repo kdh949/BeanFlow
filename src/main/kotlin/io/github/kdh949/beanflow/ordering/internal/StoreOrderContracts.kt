@@ -18,6 +18,7 @@ internal data class StoreOrderTransitionRequest(
     val targetState: StoreOrderTargetState,
     @field:Size(max = 500)
     val reason: String?,
+    val preparationMinutes: Int? = null,
 )
 
 internal data class StoreOrderResult(
@@ -32,8 +33,8 @@ internal data class StoreOrderResponse(
     val pickupNumber: String,
     val pickupBusinessDate: LocalDate,
     val storeName: String,
-    val pickupWindowStart: Instant,
-    val pickupWindowEnd: Instant,
+    val pickupWindowStart: Instant?,
+    val pickupWindowEnd: Instant?,
     val state: String,
     val reservationExpiresAt: Instant?,
     val paidAt: Instant?,
@@ -41,6 +42,8 @@ internal data class StoreOrderResponse(
     val acceptanceWarningRequestedAt: Instant?,
     val acceptanceDeadlineAt: Instant?,
     val acceptedAt: Instant?,
+    val preparationMinutes: Int?,
+    val estimatedReadyAt: Instant?,
     val rejectedAt: Instant?,
     val preparingAt: Instant?,
     val readyAt: Instant?,

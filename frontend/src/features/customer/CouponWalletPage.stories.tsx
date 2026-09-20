@@ -3,6 +3,7 @@ import { expect, userEvent } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { apiError, ids, pending, storeIdentityHandlers } from "../../../.storybook/fixtures";
 import { couponSelection } from "./couponSelection";
+import { couponWalletPath } from "./couponNavigation";
 import { CouponWalletPage } from "./CouponWalletPage";
 
 const couponItems = [
@@ -34,7 +35,7 @@ const meta = {
       },
       story: { inline: false, height: "720px" },
     },
-    routing: { path: "/app/coupons", initialEntry: `/app/coupons?storeId=${ids.store}` },
+    routing: { path: "/app/coupons", initialEntry: couponWalletPath(ids.store, "/app/cart") },
   },
   beforeEach: () => couponSelection.clear(),
 } satisfies Meta<typeof CouponWalletPage>;
@@ -53,6 +54,7 @@ export const ApplicableAndUnavailable: Story = {
   },
   play: async ({ canvas }) => {
     const select = await canvas.findByRole("button", { name: /₩1,000 할인 쿠폰 선택/ });
+    await expect(canvas.getByRole("link", { name: "장바구니" })).toHaveAttribute("href", "/app/cart");
     await expect(canvas.getByRole("button", { name: /이 매장에서는 사용할 수 없음/ })).toBeDisabled();
     await userEvent.click(select);
     await expect(canvas.getByRole("button", { name: /₩1,000 할인 선택됨/ })).toHaveAttribute("aria-pressed", "true");

@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.time.LocalTime
 import java.util.UUID
 
 /**
@@ -70,7 +71,7 @@ internal class PublicReferenceReorderContractTest
                         .with(customer(source.fixture.customerId))
                         .header("Idempotency-Key", "public-reorder-003")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(source.fixture.pickupSlotId)),
+                        .content(body()),
                 ).andExpect(status().isNotFound)
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
         }
@@ -99,7 +100,16 @@ internal class PublicReferenceReorderContractTest
                         source,
                         "public-reorder-005",
                         requestBody =
-                            """{"pickupSlotId":"${source.fixture.pickupSlotId}","pointsToUseKrw":0,"sourceOrderId":"${UUID.randomUUID()}"}""",
+                            """{"pointsToUseKrw":0,"sourceOrderId":"${UUID.randomUUID()}"}""",
+                    ),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            mockMvc
+                .perform(
+                    request(
+                        source,
+                        "public-reorder-006",
+                        requestBody = """{"pickupSlotId":"${source.fixture.pickupSlotId}","pointsToUseKrw":0}""",
                     ),
                 ).andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
@@ -108,6 +118,12 @@ internal class PublicReferenceReorderContractTest
         private fun sourceOrder(): SourceFixture {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            OrderCreationDatabaseFixture.insertOperatingHours(
+                jdbcTemplate,
+                fixture.storeId,
+                LocalTime.of(0, 1),
+                LocalTime.of(23, 59),
+            )
             check(
                 createOrder
                     .create(
@@ -127,7 +143,7 @@ internal class PublicReferenceReorderContractTest
             source: SourceFixture,
             key: String,
             customerId: UUID = source.fixture.customerId,
-            requestBody: String = body(source.fixture.pickupSlotId),
+            requestBody: String = body(),
         ) = post("/api/v1/me/orders/{orderReference}/reorders", source.reference)
             .with(csrf())
             .with(customer(customerId))
@@ -138,7 +154,7 @@ internal class PublicReferenceReorderContractTest
         private fun customer(customerId: UUID) =
             jwt().jwt { it.subject(customerId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_CUSTOMER"))
 
-        private fun body(pickupSlotId: UUID): String = """{"pickupSlotId":"$pickupSlotId","pointsToUseKrw":0}"""
+        private fun body(): String = """{"pointsToUseKrw":0}"""
 
         private data class SourceFixture(
             val fixture: OrderCreationFixture,

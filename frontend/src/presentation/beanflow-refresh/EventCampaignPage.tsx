@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
+import { couponWalletPath } from "../../features/customer/couponNavigation";
 import { Button, ButtonLink } from "../../design-system";
 import { won } from "../../lib/format";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar } from "./RefreshShared";
@@ -98,7 +99,7 @@ function EventCard({ event }: { event: EventCampaign }) {
         <p>{event.summary}</p>
         <div className="bfr-event-benefit"><strong>{benefitLabel(event)}</strong><small><TicketPercent size={14} aria-hidden="true" />선착순 {event.remainingCount.toLocaleString("ko-KR")}명</small></div>
         <div className="bfr-event-actions">
-          {claimed ? <ButtonLink size="sm" variant="secondary" to={`/app/coupons?storeId=${encodeURIComponent(event.store.storeId)}`}>쿠폰함 보기</ButtonLink> : <Button size="sm" variant="brand" loading={submitting} onClick={() => void claim()}>쿠폰 받기</Button>}
+          {claimed ? <ButtonLink size="sm" variant="secondary" to={couponWalletPath(event.store.storeId, "/app/events")}>쿠폰함 보기</ButtonLink> : <Button size="sm" variant="brand" loading={submitting} onClick={() => void claim()}>쿠폰 받기</Button>}
         </div>
         {notice ? <p className="bfr-event-notice" role="status" aria-live="polite">{notice}</p> : null}
       </div>

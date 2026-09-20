@@ -5,7 +5,7 @@ import java.util.UUID
 data class ReorderOrderCommand(
     val customerId: UUID,
     val sourceOrderId: UUID,
-    val pickupSlotId: UUID,
+    val pickupSlotId: UUID? = null,
     val couponIssuanceId: UUID?,
     val pointsToUseKrw: Long,
 )

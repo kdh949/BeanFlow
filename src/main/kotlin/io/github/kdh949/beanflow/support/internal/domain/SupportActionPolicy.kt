@@ -96,15 +96,6 @@ internal class SupportActionPolicy {
         if (!input.hasGenericPermission || !input.hasCapabilityPermission) {
             denialReasons += SupportActionReasonCode.MISSING_PERMISSION
         }
-        if (input.verificationScope != VerificationActionScope.SUPPORT_ACTION) {
-            denialReasons += SupportActionReasonCode.VERIFICATION_SCOPE_MISMATCH
-        }
-        if (input.verificationPurpose != VerificationPurpose.CASE_RESOLUTION) {
-            denialReasons += SupportActionReasonCode.VERIFICATION_PURPOSE_MISMATCH
-        }
-        if (rule != null && input.verificationLevel.ordinal < rule.requiredVerificationLevel.ordinal) {
-            denialReasons += SupportActionReasonCode.INSUFFICIENT_VERIFICATION
-        }
 
         val decision = if (denialReasons.isEmpty()) requireNotNull(rule).decision else SupportActionDecision.DENIED
         val reasonCodes =
@@ -113,7 +104,7 @@ internal class SupportActionPolicy {
                 SupportActionDecision.APPROVAL_REQUIRED -> listOf(SupportActionReasonCode.POLICY_APPROVAL_REQUIRED)
                 SupportActionDecision.DENIED -> denialReasons.distinct()
             }
-        val requiredLevel = rule?.requiredVerificationLevel ?: VerificationLevel.ENHANCED
+        val requiredLevel = VerificationLevel.UNVERIFIED
         val approvals =
             if (decision == SupportActionDecision.APPROVAL_REQUIRED) {
                 listOf(SupportActionApprovalRequirement.SUPPORT_MANAGER)
@@ -144,11 +135,11 @@ internal class SupportActionPolicy {
                     SupportActionOrderState.PENDING_PAYMENT,
                     SupportActionOrderState.PAID,
                     -> {
-                        PolicyRule(SupportActionDecision.ALLOWED, VerificationLevel.BASIC)
+                        PolicyRule(SupportActionDecision.ALLOWED, VerificationLevel.UNVERIFIED)
                     }
 
                     SupportActionOrderState.ACCEPTED -> {
-                        PolicyRule(SupportActionDecision.APPROVAL_REQUIRED, VerificationLevel.ENHANCED)
+                        PolicyRule(SupportActionDecision.ALLOWED, VerificationLevel.UNVERIFIED)
                     }
 
                     else -> {
@@ -162,7 +153,7 @@ internal class SupportActionPolicy {
                     SupportActionOrderState.PREPARING,
                     SupportActionOrderState.READY,
                     SupportActionOrderState.COMPLETED,
-                    -> PolicyRule(SupportActionDecision.APPROVAL_REQUIRED, VerificationLevel.ENHANCED)
+                    -> PolicyRule(SupportActionDecision.ALLOWED, VerificationLevel.UNVERIFIED)
 
                     else -> null
                 }
@@ -183,7 +174,7 @@ internal class SupportActionPolicy {
     )
 
     companion object {
-        const val POLICY_VERSION = "support-action-policy/2026-08-12/v1"
+        const val POLICY_VERSION = "support-action-policy/2026-09-18/v2"
         private val EVALUATION_TTL = Duration.ofMinutes(2)
     }
 }

@@ -9,6 +9,7 @@ import io.github.kdh949.beanflow.loyalty.api.PointReservationOperations
 import io.github.kdh949.beanflow.loyalty.api.PointReservationResult
 import io.github.kdh949.beanflow.loyalty.api.ReservePointsCommand
 import io.github.kdh949.beanflow.loyalty.api.RestorePointsAfterTerminationCommand
+import io.github.kdh949.beanflow.loyalty.api.UsePointsImmediatelyCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
@@ -155,6 +156,73 @@ internal class PointReservationService(
                     pointLotId = lot.id,
                     amountKrw = amount,
                 ),
+            )
+        }
+        return resultOf(reservation)
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun useImmediately(command: UsePointsImmediatelyCommand): PointReservationResult {
+        if (command.amountKrw <= 0 || command.sourceReference.isBlank()) {
+            fail(FailureCode.INVALID_REQUEST, "Positive point amount and source reference are required")
+        }
+        val account =
+            accountRepository.findLockedByCustomerId(command.customerId)
+                ?: fail(FailureCode.POINT_BALANCE_INSUFFICIENT, "Point account is not available")
+        reservationRepository.findBySourceReference(command.sourceReference)?.let { existing ->
+            if (existing.orderId == command.orderId &&
+                existing.amountKrw == command.amountKrw &&
+                existing.state == PointReservationState.USED
+            ) {
+                return resultOf(existing)
+            }
+            fail(FailureCode.ORDER_STATE_CONFLICT, "Point source reference was reused")
+        }
+        if (account.availablePointsKrw < command.amountKrw) {
+            fail(FailureCode.POINT_BALANCE_INSUFFICIENT, "Available point balance is insufficient")
+        }
+        val usedAt = command.usedAt
+        val lots = lotRepository.findReservableLotsLocked(account.id, usedAt)
+        var remaining = command.amountKrw
+        val allocated = mutableListOf<Pair<PointLotEntity, Long>>()
+        for (lot in lots) {
+            if (remaining == 0L) break
+            val amount = minOf(remaining, lot.availableAmountKrw)
+            if (amount > 0) {
+                allocated += lot to amount
+                remaining -= amount
+            }
+        }
+        if (remaining != 0L) {
+            fail(FailureCode.POINT_BALANCE_INSUFFICIENT, "Unexpired point lots are insufficient")
+        }
+
+        val reservation =
+            PointReservationEntity(
+                id = identifierSource.next(),
+                orderId = command.orderId,
+                pointAccountId = account.id,
+                amountKrw = command.amountKrw,
+                state = PointReservationState.USED,
+                reservationExpiresAt = null,
+                sourceReference = command.sourceReference,
+                createdAt = usedAt,
+                updatedAt = usedAt,
+            )
+        account.availablePointsKrw -= command.amountKrw
+        reservationRepository.save(reservation)
+        allocated.forEach { (lot, amount) ->
+            lot.availableAmountKrw -= amount
+            val allocation =
+                PointReservationAllocationEntity(
+                    id = identifierSource.next(),
+                    pointReservationId = reservation.id,
+                    pointLotId = lot.id,
+                    amountKrw = amount,
+                )
+            allocationRepository.save(allocation)
+            transactionRepository.save(
+                pointTransaction(reservation, allocation, PointTransactionType.USE, usedAt),
             )
         }
         return resultOf(reservation)

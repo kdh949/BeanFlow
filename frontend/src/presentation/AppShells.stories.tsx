@@ -1,14 +1,16 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { HttpResponse, http } from "msw";
 import { expect } from "storybook/test";
-import { ConsoleShell, CustomerShell, NotificationAction, RootRedirect } from "./AppShells";
+import { cart } from "../features/ordering/cart";
+import { ConsoleShell, CustomerCartAction, CustomerShell, NotificationAction, RootRedirect } from "./AppShells";
 
 const meta = {
   title: "Patterns/Navigation/App shells",
   component: RootRedirect,
-  subcomponents: { CustomerShell, ConsoleShell, NotificationAction },
+  subcomponents: { CustomerShell, CustomerCartAction, ConsoleShell, NotificationAction },
   tags: ["autodocs"],
   parameters: { a11y: { test: "error" }, docs: { story: { inline: false, height: "720px" } } },
+  beforeEach: () => cart.clear(),
 } satisfies Meta<typeof RootRedirect>;
 
 export default meta;
@@ -23,6 +25,40 @@ export const CustomerChrome: Story = {
     msw: { handlers: [http.get("/api/v1/me/notification-summary", () => HttpResponse.json({ hasUnread: false }))] },
   },
   play: async ({ canvas }) => { await expect(await canvas.findByRole("link", { name: "알림함 열기" })).toBeVisible(); },
+};
+
+export const CustomerChromeWithCart: Story = {
+  render: () => <CustomerShell />,
+  beforeEach: () => {
+    cart.add(
+      { storeId: "store-1", storeName: "시청점" },
+      { menuId: "menu-1", optionIds: [], quantity: 2, display: { menuName: "오트 라떼", optionNames: [], unitPriceKrw: 6_400 } },
+    );
+  },
+  parameters: {
+    routing: { path: "/app", initialEntry: "/app" },
+    msw: { handlers: [http.get("/api/v1/me/notification-summary", () => HttpResponse.json({ hasUnread: false }))] },
+  },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("link", { name: "장바구니 2개 보기" })).toHaveAttribute("href", "/app/cart");
+  },
+};
+
+export const CustomerChromeHidesCartActionOutsideShopping: Story = {
+  render: () => <CustomerShell />,
+  beforeEach: () => {
+    cart.add(
+      { storeId: "store-1", storeName: "시청점" },
+      { menuId: "menu-1", optionIds: [], quantity: 1, display: { menuName: "오트 라떼", optionNames: [], unitPriceKrw: 6_400 } },
+    );
+  },
+  parameters: {
+    routing: { path: "/app/orders", initialEntry: "/app/orders" },
+    msw: { handlers: [http.get("/api/v1/me/notification-summary", () => HttpResponse.json({ hasUnread: false }))] },
+  },
+  play: async ({ canvas }) => {
+    await expect(canvas.queryByRole("link", { name: "장바구니 1개 보기" })).not.toBeInTheDocument();
+  },
 };
 
 export const CustomerChromeUnread: Story = {

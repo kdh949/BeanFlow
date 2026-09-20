@@ -54,13 +54,18 @@ export function sortStoreOrderBoard(
       .map((group) => ({
         ...group,
         items: [...group.items].sort((left, right) =>
-          left.pickupWindowStart.localeCompare(right.pickupWindowStart)
+          boardSortInstant(left).localeCompare(boardSortInstant(right))
           || left.orderReference.localeCompare(right.orderReference)),
       }))
       .filter((group) => group.items.length > 0)
       .sort((left, right) => left.pickupBusinessDate.localeCompare(right.pickupBusinessDate)),
     overflow,
   };
+}
+
+function boardSortInstant(item: StoreOrderBoardItem): string {
+  if (item.lane === "PENDING_ACCEPTANCE") return item.acceptanceDeadlineAt ?? "";
+  return item.pickupWindowStart ?? item.lifecycle?.estimatedReadyAt ?? "";
 }
 
 export function reconcileBoardItem(

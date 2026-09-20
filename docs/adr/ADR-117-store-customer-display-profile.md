@@ -108,6 +108,17 @@ Store 수만큼 query를 늘리지 않는다. 검색 query parameter `openOnly`�
 호환성을 위해 유지하지만 문서와 response는 `orderingAvailable` 의미를 사용한다. 고객 UI는 이를
 `주문 가능`/ `주문 불가`로 표시하며 `영업 중`으로 번역하지 않는다.
 
+### 4.1. 즉시 주문 탐색에서는 영업시간과 owner state를 결합한다 (2026-09-16 Amendment)
+
+ADR-133의 신규 `IMMEDIATE` 주문은 슬롯을 사용하지 않는다. 따라서 신규 customer Store projection은
+`pickupAvailable = orderingAvailable && operatingStatus == OPEN`으로 계산하고 `nextPickupWindow`를
+생략한다. complete schedule 미설정은 `UNSPECIFIED`이므로 즉시 주문 불가다. 슬롯 0개는 불가 사유가
+아니며, Fulfillment slot read 실패도 신규 탐색 결과를 503으로 만들지 않는다.
+
+이 개정은 위 4절의 slot batch 문구를 신규 탐색에 한해 대체한다. `/pickup-slots`, 과거
+`LEGACY_RESERVED` 주문과 지원 목적 reschedule은 실제 slot owner 계약을 유지한다. 탐색 projection은
+결제 보장이 아니고 ADR-135의 quote/Tx A/confirm/Tx C 검증을 대체하지 않는다.
+
 ### 5. profile 미설정과 의존성 실패를 구분한다
 
 profile이 실제로 없으면 address/directions/hours를 생략하고 `UNSPECIFIED`를 정상 반환한다. profile

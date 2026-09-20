@@ -145,10 +145,10 @@ internal class OperationsSupportInvestigationService(
     ): OperationsSupportInvestigationWorkflowResource {
         permissions.requireActive(actorId, OperatorPermission.OPERATIONS_SUPPORT_INVESTIGATION)
         val entity = investigations.findBySupportActionRequestIdAndRevisionNumber(requestId, revisionNumber) ?: notFound()
-        val separated = actorId != entity.requesterActorId && actorId != entity.executorActorId && actorId != entity.supportApproverActorId
         return OperationsSupportInvestigationWorkflowResource(
             entity.toSnapshot(),
-            separated && entity.state == OperationsSupportInvestigationState.OPEN && now.isBefore(entity.expiresAt),
+            // ADR-136 retires pre-execution Operations approval; historical investigations remain readable.
+            false,
         )
     }
 
@@ -202,7 +202,7 @@ internal class OperationsSupportInvestigationService(
             return OperationsSupportInvestigationOutcome.Failed(
                 response,
                 code,
-                "Support approval binding is ${returned.state.name.lowercase()}",
+                "이전 정책의 요청이거나 처리 조건이 변경되었습니다. 같은 상담에서 새 처리 요청을 작성하세요.",
             )
         }
 
@@ -438,7 +438,7 @@ internal class OperationsSupportInvestigationService(
     private fun failureMessage(code: FailureCode): String =
         when (code) {
             FailureCode.SUPPORT_ACTION_REQUEST_EXPIRED -> "Operations investigation has expired"
-            FailureCode.SUPPORT_ACTION_REQUEST_STALE -> "Support approval binding is stale"
+            FailureCode.SUPPORT_ACTION_REQUEST_STALE -> "이전 정책의 요청이거나 처리 조건이 변경되었습니다. 같은 상담에서 새 처리 요청을 작성하세요."
             else -> "Operations investigation decision failed"
         }
 

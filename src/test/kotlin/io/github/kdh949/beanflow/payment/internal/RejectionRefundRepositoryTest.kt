@@ -410,6 +410,14 @@ internal class RejectionRefundRepositoryTest
             } finally {
                 jdbcTemplate.execute("ALTER TABLE ordering_order ENABLE TRIGGER USER")
             }
+            OrderCreationDatabaseFixture.insertSettlementInputForDirectOrder(
+                jdbcTemplate = jdbcTemplate,
+                orderId = orderId,
+                storeId = storeId,
+                grossPaidKrw = 7_000,
+                createdAt = NOW.minusSeconds(60),
+                insertStore = false,
+            )
             paymentMethodRepository.save(
                 PaymentMethodEntity(
                     id = methodId,

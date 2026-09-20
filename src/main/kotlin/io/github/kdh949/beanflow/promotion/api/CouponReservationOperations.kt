@@ -21,6 +21,16 @@ data class ReserveCouponCommand(
     val sourceReference: String,
 )
 
+data class UseCouponImmediatelyCommand(
+    val orderId: UUID,
+    val customerId: UUID,
+    val storeId: UUID,
+    val couponIssuanceId: UUID,
+    val quoted: CouponQuoteSnapshot,
+    val sourceReference: String,
+    val usedAt: Instant,
+)
+
 enum class CouponDiscountType {
     FIXED_KRW,
     RATE_BPS,
@@ -67,6 +77,9 @@ data class RestoreCouponAfterTerminationCommand(
 
 interface CouponReservationOperations {
     fun reserve(command: ReserveCouponCommand): CouponReservationQuote
+
+    /** Locks the issuance and commits directly to USED without a RESERVED state. */
+    fun useImmediately(command: UseCouponImmediatelyCommand): CouponReservationQuote
 
     fun confirm(
         orderId: UUID,

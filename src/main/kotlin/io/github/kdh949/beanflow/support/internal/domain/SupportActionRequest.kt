@@ -58,7 +58,7 @@ internal data class SupportActionRevision(
     val action: SupportActionType,
     val targetId: UUID,
     val actionPayloadDigest: String,
-    val verificationSessionId: UUID,
+    val verificationSessionId: UUID?,
     val policyVersion: String,
     val targetVersion: Long,
     val amountKrw: Long?,
@@ -67,6 +67,8 @@ internal data class SupportActionRevision(
     val expiresAt: Instant,
     val createdByActorId: UUID,
     val createdAt: Instant,
+    val subjectLinkId: UUID? = null,
+    val authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
 ) {
     init {
         require(revisionNumber > 0) { "Action revision number must be positive" }
@@ -227,7 +229,16 @@ internal class SupportActionRequest private constructor(
         check(
             state == SupportActionRequestState.AWAITING_SUPPORT_MANAGER ||
                 state == SupportActionRequestState.AWAITING_OPERATIONS ||
-                state == SupportActionRequestState.REVISION_REQUIRED,
+                state == SupportActionRequestState.REVISION_REQUIRED ||
+                (
+                    currentRevision.authorizationBasis == SupportAuthorizationBasis.SUPPORT_DIRECT &&
+                        state in
+                        setOf(
+                            SupportActionRequestState.READY_FOR_EXECUTION,
+                            SupportActionRequestState.STALE,
+                            SupportActionRequestState.EXPIRED,
+                        )
+                ),
         ) { "Action request state does not allow a new revision" }
         require(revision.revisionNumber == currentRevision.revisionNumber + 1) { "Action revision sequence is invalid" }
         require(revision.action == currentRevision.action) { "Action type cannot change within a request" }

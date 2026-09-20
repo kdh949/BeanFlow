@@ -32,6 +32,7 @@ internal enum class SupportCompensationResponsibility {
 }
 
 internal enum class SupportCompensationEvidenceBasis {
+    SUPPORT_DECISION,
     STORE_CONSENT,
     OPERATIONS_FINDING,
     CONTRACTUAL_RULE,
@@ -79,6 +80,7 @@ internal data class SupportCompensationPolicyVersion(
     val supportedAmountMaximumKrw: Long,
     val lowOrderRatioMaximumBps: Int,
     val limits: List<SupportCompensationLimitRule>,
+    val authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
 ) {
     init {
         require(code.isNotBlank()) { "policy version code is required" }
@@ -153,9 +155,14 @@ internal class SupportCompensationPolicy {
 
         val reasons = linkedSetOf<SupportCompensationReasonCode>()
         val band = selectBand(input, version, reasons)
-        val route = approvalRoute(band)
+        val direct = version.authorizationBasis == SupportAuthorizationBasis.SUPPORT_DIRECT
+        val route = if (direct) SupportActionApprovalRoute.NONE else approvalRoute(band)
         val requiredVerification =
-            if (band == SupportCompensationBand.HIGH || band == SupportCompensationBand.EXCEPTIONAL) {
+            if (direct) {
+                VerificationLevel.UNVERIFIED
+            } else if (band == SupportCompensationBand.HIGH ||
+                band == SupportCompensationBand.EXCEPTIONAL
+            ) {
                 VerificationLevel.ENHANCED
             } else {
                 VerificationLevel.BASIC
@@ -168,11 +175,11 @@ internal class SupportCompensationPolicy {
         val baseDecision =
             when {
                 input.hasTerminalIncidentBenefit -> SupportCompensationDecision.DENIED
-                band == SupportCompensationBand.LOW -> SupportCompensationDecision.ALLOWED
+                direct || band == SupportCompensationBand.LOW -> SupportCompensationDecision.ALLOWED
                 band == SupportCompensationBand.MEDIUM -> SupportCompensationDecision.APPROVAL_REQUIRED
                 else -> SupportCompensationDecision.INVESTIGATION_REQUIRED
             }
-        val verificationSufficient = verificationSatisfies(input.verificationLevel, requiredVerification)
+        val verificationSufficient = direct || verificationSatisfies(input.verificationLevel, requiredVerification)
         if (!verificationSufficient) {
             reasons += SupportCompensationReasonCode.INSUFFICIENT_VERIFICATION
         }
@@ -412,7 +419,7 @@ internal class SupportCompensationRequest private constructor(
     val policyVersionId: UUID,
     val band: SupportCompensationBand,
     val route: SupportActionApprovalRoute,
-    val verificationSessionId: UUID,
+    val verificationSessionId: UUID?,
     val targetVersion: Long,
     val costSnapshot: SupportCompensationCostSnapshot,
     val payloadDigest: String,
@@ -540,7 +547,7 @@ internal class SupportCompensationRequest private constructor(
             policyVersionId: UUID,
             band: SupportCompensationBand,
             route: SupportActionApprovalRoute,
-            verificationSessionId: UUID,
+            verificationSessionId: UUID?,
             targetVersion: Long,
             costSnapshot: SupportCompensationCostSnapshot,
             payloadDigest: String,
@@ -611,7 +618,7 @@ internal class SupportCompensationRequest private constructor(
             policyVersionId: UUID,
             band: SupportCompensationBand,
             route: SupportActionApprovalRoute,
-            verificationSessionId: UUID,
+            verificationSessionId: UUID?,
             targetVersion: Long,
             costSnapshot: SupportCompensationCostSnapshot,
             payloadDigest: String,

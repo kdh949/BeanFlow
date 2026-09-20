@@ -31,6 +31,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.sql.Timestamp
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalTime
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
@@ -966,7 +967,13 @@ internal class PaymentSetupRepairIntegrationTest
             fixture: OrderCreationFixture,
             key: String,
         ): UUID {
-            val quote = orderQuoteUseCase.attachCurrentQuote(fixture.command())
+            OrderCreationDatabaseFixture.insertOperatingHours(
+                jdbcTemplate,
+                fixture.storeId,
+                LocalTime.of(0, 1),
+                LocalTime.of(23, 59),
+            )
+            val quote = orderQuoteUseCase.attachCurrentQuote(fixture.command().copy(pickupSlotId = null))
             mockMvc
                 .perform(
                     post("/api/v1/orders")
@@ -977,7 +984,6 @@ internal class PaymentSetupRepairIntegrationTest
                             """
                             {
                               "storeId":"${fixture.storeId}",
-                              "pickupSlotId":"${fixture.pickupSlotId}",
                               "lines":[{"menuId":"${fixture.menuId}","optionIds":[],"quantity":1}],
                               "pointsToUseKrw":0,
                               "expectedQuoteFingerprint":"${quote.expectedQuoteFingerprint}"

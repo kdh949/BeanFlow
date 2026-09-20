@@ -11,7 +11,7 @@ data class CreateOrderLineCommand(
 data class CreateOrderCommand(
     val customerId: UUID,
     val storeId: UUID,
-    val pickupSlotId: UUID,
+    val pickupSlotId: UUID? = null,
     val lines: List<CreateOrderLineCommand>,
     val couponIssuanceId: UUID?,
     val pointsToUseKrw: Long,

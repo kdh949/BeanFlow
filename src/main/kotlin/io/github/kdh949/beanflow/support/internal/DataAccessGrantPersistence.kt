@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.support.internal
 import io.github.kdh949.beanflow.support.internal.domain.DataAccessGrantState
 import io.github.kdh949.beanflow.support.internal.domain.DataAccessReasonCode
 import io.github.kdh949.beanflow.support.internal.domain.DataAccessRisk
+import io.github.kdh949.beanflow.support.internal.domain.SupportAuthorizationBasis
 import io.github.kdh949.beanflow.support.internal.domain.SupportPersonalDataField
 import io.github.kdh949.beanflow.support.internal.domain.VerificationPurpose
 import io.github.kdh949.beanflow.support.internal.domain.VerificationSubjectType
@@ -38,8 +39,8 @@ internal class DataAccessGrantEntity(
     val subjectId: UUID,
     @Column(name = "requester_id", nullable = false)
     val requesterId: UUID,
-    @Column(name = "verification_session_id", nullable = false)
-    val verificationSessionId: UUID,
+    @Column(name = "verification_session_id")
+    val verificationSessionId: UUID?,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     val purpose: VerificationPurpose,
@@ -68,6 +69,11 @@ internal class DataAccessGrantEntity(
     var revokedAt: Instant?,
     @Column(nullable = false)
     var version: Long,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "authorization_basis", nullable = false, length = 24)
+    var authorizationBasis: SupportAuthorizationBasis = SupportAuthorizationBasis.LEGACY,
+    @Column(name = "direct_authorized_at")
+    var directAuthorizedAt: Instant? = null,
 )
 
 internal data class DataAccessGrantFieldId(
