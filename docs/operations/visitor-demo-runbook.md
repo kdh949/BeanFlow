@@ -13,7 +13,7 @@
 - 직접 주문을 공개하기 전 해당 환경의 Toss client/secret 키가 실제 테스트 키인지, SDK 테스트 결제와 콜백이 정상인지 확인한다. 현재 배포 정책과 같이 키 접두사만으로 PG 동작을 보장하지 않는다.
 - 비밀 값은 기존 Doppler 또는 승인된 환경 주입 방식을 사용하며 프런트엔드에 넣지 않는다.
 - 동일 origin의 HTTPS 프런트엔드에서 `/demo`로 진입한다. 로컬 검증은 Secure cookie를 지원하는 localhost를 사용한다.
-- V92는 빈 체험 테이블과 nullable 계정 컬럼을 추가한다. 기존 계정과 주문을 변환하지 않는다. 최신 main의 V91 다음 번호이며, 기존 V87/V88이 적용되지 않았다는 확인에 따라 미적용 V88을 재번호했다. 적용된 migration의 재번호나 out-of-order 설정은 허용하지 않는다.
+- V93은 빈 체험 테이블과 nullable 계정 컬럼을 추가한다. 기존 계정과 주문을 변환하지 않는다. 최신 main의 V92 결제 멱등성 인덱스 다음 번호이며, 아직 적용되지 않은 demo migration만 재번호했다. 적용된 migration의 재번호나 out-of-order 설정은 허용하지 않는다.
 
 `GET /api/v1/demo/config`의 `enabled`와 `testPaymentEnabled`를 먼저 확인한다. UI는 발급 API의 성공 결과를 받은 뒤 기존 고객·점주 Session을 다시 조회한다. 기존 일반 로그인이 있으면 발급을 거절하며 해당 계정을 덮어쓰지 않는다.
 
