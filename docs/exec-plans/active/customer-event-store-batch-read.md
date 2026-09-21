@@ -120,7 +120,8 @@ Hikari active/pending, `pg_stat_statements.calls`를 변경 전후 비교한다.
 - [x] 2026-09-21: 호출 경로, owner Port, 기존 batch projection과 실패 의미 확인.
 - [x] 2026-09-21: 변경 전 statement 수를 1개 페이지 2회, 100개 페이지 101회로 재현.
 - [x] 2026-09-21: Merchant batch Port와 고객 이벤트 hydration 구현.
-- [ ] 검증과 스테이징 변경 후 측정.
+- [x] 2026-09-22: focused·문서·패키지 기동 검증과 개인 스테이징 변경 후 50/100 VU 측정.
+- [ ] PR 전체 CI 확인과 최종 diff 검토.
 
 ## Surprises & Discoveries
 
@@ -128,6 +129,11 @@ Hikari active/pending, `pg_stat_statements.calls`를 변경 전후 비교한다.
 - `StorefrontImageStorageOperations.access()`는 object-store network 요청이 아닌 로컬 URL 서명이다.
 - endpoint statement-count 테스트는 변경 후 빈 페이지 1회, 1개·중복 매장 100개·서로 다른 매장 100개
   페이지 모두 2회를 확인한다.
+- 새 JVM의 초기 50 VU 세 번은 p95 3.13초, 1.56초, 1.67초로 guardrail에 실패했다. 같은 컨테이너를
+  warm-up한 뒤 100 VU와 마지막 50 VU는 각각 p95 995.58ms, 887.32ms로 통과했다. 짧은 단일 실행만으로
+  저부하 개선을 일반화하지 않는다.
+- 첫 fixture 출력 경로가 `/private/tmp` 자체의 권한 변경을 거부해 세션 파일 저장에 실패했다. 해당 요청이
+  만든 100개 합성 계정에 더해 전용 디렉터리 재시도로 100개 합성 계정이 추가됐다.
 
 ## Decision Log
 
@@ -138,8 +144,24 @@ Hikari active/pending, `pg_stat_statements.calls`를 변경 전후 비교한다.
 
 ## Outcomes & Retrospective
 
-진행 중. 실제 검증과 측정 전에는 완료 수치를 기록하지 않는다.
+endpoint statement는 캠페인 100개에서 101회에서 2회로 줄었다. 스테이징의 변경 후 총 6,162개 요청에서
+Store batch SQL도 정확히 6,162회 실행됐고, 각 호출은 85개 distinct store를 반환했으며 평균 실행 시간은
+0.286ms였다.
+
+동일한 320개 published campaign, `limit=100`, 30초 조건에서 warm 상태의 비교 결과는 다음과 같다.
+
+| VU | 변경 전 완료 | 변경 후 완료 | 변경 전 p95 / p99 | 변경 후 p95 / p99 | 판정 |
+| ---: | ---: | ---: | ---: | ---: | --- |
+| 50 | 1,253 | 1,216 | 442.45 / 926.26ms | 887.32 / 998.56ms | 양쪽 통과, p95는 변경 후 더 느림 |
+| 100 | 1,566 | 2,035 | 2,171.78 / 4,727.19ms | 995.58 / 1,253.51ms | 변경 전 실패, 변경 후 통과 |
+
+모든 비교 실행에서 HTTP·workflow 오류와 dropped iteration은 0이었다. 100 VU 변경 후 실행 중 표본 최대는
+API CPU 286.39%, PostgreSQL CPU 145.87%, API memory 1.643GiB/2GiB, PostgreSQL memory
+780.6MiB/1.5GiB였다. 이 결과는 현재 개인 스테이징 revision과 짧은 실행에 한정되며 SLA나 수용량 근거가
+아니다. SQL 증폭 제거는 확인됐지만 50 VU tail latency는 일관된 개선을 보이지 않아 별도 profiling 없이
+원인을 단정하지 않는다.
 
 ## Revision Notes
 
 - 2026-09-21: 고객 이벤트 매장 batch hydration 구현 계획 최초 작성.
+- 2026-09-22: statement 회귀, 패키지 기동과 개인 스테이징 변경 후 측정 결과 추가.
