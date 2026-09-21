@@ -11,7 +11,7 @@ import io.github.kdh949.beanflow.merchant.api.StoreCustomerDisplayOperations
 import io.github.kdh949.beanflow.merchant.api.StoreIdentityCommand
 import io.github.kdh949.beanflow.merchant.api.StoreIdentityOperations
 import io.github.kdh949.beanflow.merchant.api.StoreOperatingDay
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
@@ -21,7 +21,6 @@ import java.time.LocalTime
 import java.util.UUID
 
 @Service
-@ConditionalOnProperty(name = ["beanflow.demo.enabled"], havingValue = "true")
 @Transactional(propagation = Propagation.MANDATORY)
 internal class DemoStoreProvisioningService(
     private val identities: StoreIdentityOperations,
@@ -29,6 +28,7 @@ internal class DemoStoreProvisioningService(
     private val catalogs: MenuCatalogOperations,
     private val terms: StoreSettlementTermsJpaRepository,
     private val displays: StoreCustomerDisplayOperations,
+    private val jdbc: JdbcTemplate,
 ) : DemoStoreProvisioning {
     override fun close(
         storeId: UUID,
@@ -58,6 +58,12 @@ internal class DemoStoreProvisioningService(
                         now,
                     ),
                 ).snapshot
+        check(
+            jdbc.update(
+                "UPDATE merchant_store_discovery_profile SET listed_for_discovery = false WHERE store_id = ?",
+                store.storeId,
+            ) == 1,
+        ) { "Demo store discovery profile missing" }
         val entity = stores.findById(store.storeId).orElseThrow()
         entity.replaceOrderingPolicy(true, true, now)
         stores.flush()

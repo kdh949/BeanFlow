@@ -42,6 +42,7 @@ internal class StoreDiscoveryProfileQueryRepository(
                       FROM merchant_store_discovery_profile profile
                       JOIN merchant_store store ON store.id = profile.store_id
                      WHERE ST_DWithin(profile.location, $QUERY_POINT, ?)
+                       AND profile.listed_for_discovery
                        AND store.accepting_orders
                        AND store.pickup_enabled
             ),
@@ -103,6 +104,7 @@ internal class StoreDiscoveryProfileQueryRepository(
                           LEFT JOIN merchant_store_customer_display_profile display ON display.store_id = profile.store_id
                           LEFT JOIN merchant_store_operating_hours hours ON hours.store_id = profile.store_id
                          WHERE profile.store_id = ANY(?::uuid[])
+                           AND profile.listed_for_discovery
                          ORDER BY profile.store_id, hours.day_of_week
                         """.trimIndent(),
                     ).also { statement ->

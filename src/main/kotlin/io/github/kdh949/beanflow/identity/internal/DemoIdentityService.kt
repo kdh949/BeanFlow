@@ -7,7 +7,7 @@ import io.github.kdh949.beanflow.loyalty.api.CustomerPointAccountProvisioningOpe
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.MerchantAccountState
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
@@ -16,7 +16,6 @@ import java.time.Instant
 import java.util.UUID
 
 @Service
-@ConditionalOnProperty(name = ["beanflow.demo.enabled"], havingValue = "true")
 @Transactional(propagation = Propagation.MANDATORY)
 internal class DemoIdentityService(
     private val customers: CustomerAccountJpaRepository,
@@ -94,12 +93,14 @@ internal class DemoIdentityService(
 internal class CustomerOrderingAccessService(
     private val accounts: CustomerAccountJpaRepository,
     private val clock: Clock,
+    @Value("\${beanflow.demo.enabled:false}") private val demoEnabled: Boolean,
 ) : CustomerOrderingAccess {
     @Transactional(propagation = Propagation.MANDATORY, readOnly = true)
     override fun requireStore(
         customerId: UUID,
         storeId: UUID,
     ) {
+        if (!demoEnabled) return
         if (accounts.findByDemoStoreId(storeId)?.id?.let { it != customerId } == true) {
             throw DomainFailure(FailureCode.ACCESS_DENIED, "Demo store is private to its visitor")
         }

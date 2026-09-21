@@ -4,7 +4,7 @@
 
 ## 활성화
 
-기본값은 `beanflow.demo.enabled=false`다. 기존 [local-demo](local-demo-runbook.md) 또는 Toss sandbox 실행 환경의 DB, GLOBAL 포인트 적립 정책, 인증, 외부 의존성을 먼저 준비한다. 기능 활성화와 배포·운영 DB 마이그레이션은 별도 절차다.
+기본값은 `beanflow.demo.enabled=false`다. 이 값은 신규 공간 발급과 데모 API 노출만 막으며, 과거에 발급된 공간의 만료 worker는 설정을 끈 뒤에도 계속 동작한다. 기존 [local-demo](local-demo-runbook.md) 또는 Toss sandbox 실행 환경의 DB, GLOBAL 포인트 적립 정책, 인증, 외부 의존성을 먼저 준비한다. 기능 활성화와 배포·운영 DB 마이그레이션은 별도 절차다.
 
 전용 비운영 환경에서 기존 실행 명령에 `--beanflow.demo.enabled=true`를 추가한다. 허용 profile은 `local`과 `local-demo` 또는 `toss-sandbox` 조합이다. `prod`, `perf`, `toss-perf`와의 조합은 기동 실패한다. 기존 포트폴리오 prod 서버에서는 이 기능을 켤 수 없다.
 
@@ -25,6 +25,8 @@
 4. 점주 화면으로 돌아가 픽업 완료. Toss sandbox에서는 직접 메뉴 주문으로 이어갈 수 있다.
 5. 접수 제한 3분이 지나면 기존 timeout worker가 주문을 거절한다. 안내에서 새 샘플 주문을 발급해 재시작한다. 기존 주문 상태를 되돌리지 않는다.
 6. 30분 경과 또는 체험 종료 시 양쪽 계정 접근을 끝낸다. 만료 worker는 매장 주문 접수를 닫고 Session을 제거한다. 주문·결제·포인트·감사 증거는 보존한다.
+
+체험 매장은 일반 가까운 매장, 통합 검색, 즐겨찾기, 최근 주문과 추천 결과에 노출되지 않는다. 체험 화면은 발급 응답의 store ID로 기존 매장 상세와 메뉴 경로를 직접 연다.
 
 안내는 서버 응답을 3초마다 확인하며 버튼 클릭만으로 성공 상태를 표시하지 않는다. 새로고침 후 같은 공간을 이어가며, 발급 응답을 잃으면 sessionStorage의 동일 요청 키로 재시도한다. localStorage에는 체험 여부 표시만 저장하고 인증 식별자는 HttpOnly cookie로 보관한다.
 
@@ -58,6 +60,6 @@
 
 ## 검증 경계
 
-PostGIS Testcontainers 통합 테스트는 실제 Flyway 마이그레이션, 발급 원자성, 두 방문자의 접근 격리, 만료, quota, 같은 키 동시 발급, timeout 다음 새 주문, Spring MVC 쿠키/CSRF와 기존 주문 전환을 검증한다. 테스트용 PG/알림 adapter를 사용하므로 외부 Toss 및 알림 전달 성공 증거는 아니다.
+PostGIS Testcontainers 통합 테스트는 실제 Flyway 마이그레이션, 발급 원자성, 두 방문자의 접근 격리, 일반 탐색 비노출, 기능 비활성 재시작 뒤 만료 정리, quota, 같은 키 동시 발급, timeout 다음 새 주문, Spring MVC 쿠키/CSRF와 기존 주문 전환을 검증한다. 비활성 주문 접근의 단위 테스트는 Identity repository 호출이 없음을 검증한다. 테스트용 PG/알림 adapter를 사용하므로 외부 Toss 및 알림 전달 성공 증거는 아니다.
 
 원격 배포, 운영 DB 적용, 실제 Toss SDK 승인·콜백, 외부 알림 전달은 아직 수행하지 않았다. 기능은 명시적으로 활성화하기 전까지 비활성 상태다.

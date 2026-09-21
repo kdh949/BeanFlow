@@ -298,7 +298,8 @@ components:
         token: {type: string}
     DemoError:
       type: object
-      required: [code, message]
+      required: [code, message, correlationId]
       properties:
         code: {type: string}
         message: {type: string}
+        correlationId: {type: string, minLength: 1, maxLength: 160}

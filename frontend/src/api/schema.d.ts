@@ -6297,6 +6297,7 @@ export interface components {
         DemoError: {
             code: string;
             message: string;
+            correlationId: string;
         };
         OperationsCustomerPointAccountResponse: {
             customerId: components["schemas"]["Identifier"];

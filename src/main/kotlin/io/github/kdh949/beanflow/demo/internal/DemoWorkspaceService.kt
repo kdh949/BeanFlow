@@ -20,6 +20,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
@@ -52,6 +53,65 @@ internal data class DemoSessionView(
 )
 
 @Service
+internal class DemoWorkspaceLifecycleService(
+    private val repository: DemoWorkspaceRepository,
+    private val identities: DemoIdentityOperations,
+    private val stores: DemoStoreProvisioning,
+    private val sessions: BrowserSessionLifecycle,
+    private val audits: AuditRecordOperations,
+    private val correlation: CorrelationIdSource,
+    private val clock: Clock,
+    private val metrics: MeterRegistry,
+) {
+    @Transactional(readOnly = true)
+    fun expiredWorkspaceIds(): List<UUID> = repository.expiredIds(clock.instant())
+
+    @Transactional
+    fun expire(workspaceId: UUID): Boolean {
+        val now = clock.instant()
+        val workspace = repository.findById(workspaceId, lock = true) ?: return false
+        if (workspace.endedAt != null || workspace.expiresAt.isAfter(now)) return false
+        close(workspace, now)
+        return true
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun close(
+        workspace: DemoWorkspace,
+        now: Instant,
+    ) {
+        identities.end(workspace.customerId, workspace.merchantId, now)
+        stores.close(workspace.storeId, now)
+        sessions.logout(workspace.customerSessionId)
+        sessions.logout(workspace.merchantSessionId)
+        repository.end(workspace.id, now)
+        audits.appendAll(
+            listOf(
+                AppendAuditRecordCommand(
+                    actorId = "demo-workspace",
+                    actorType = AuditActorType.SYSTEM,
+                    category = AuditCategory.SECURITY_AND_PERMISSION,
+                    action = "DEMO_WORKSPACE_ENDED",
+                    targetType = "DEMO_WORKSPACE",
+                    targetId = workspace.id,
+                    occurredAt = now,
+                    reason = "방문자 전용 체험 공간 수명주기",
+                    correlationId = correlation.currentOrCreate(),
+                    sourceReference = "demo:${workspace.id}:DEMO_WORKSPACE_ENDED:$now:",
+                ),
+            ),
+        )
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() {
+                    metrics.counter("beanflow.demo.workspace", "outcome", "ended").increment()
+                }
+            },
+        )
+    }
+}
+
+@Service
 @ConditionalOnProperty(name = ["beanflow.demo.enabled"], havingValue = "true")
 internal class DemoWorkspaceService(
     private val repository: DemoWorkspaceRepository,
@@ -61,7 +121,7 @@ internal class DemoWorkspaceService(
     private val points: DemoPointProvisioning,
     private val orders: DemoOrderOperations,
     private val sessions: LoginSessionCoordinator,
-    private val lifecycle: BrowserSessionLifecycle,
+    private val workspaceLifecycle: DemoWorkspaceLifecycleService,
     private val audits: AuditRecordOperations,
     private val correlation: CorrelationIdSource,
     private val clock: Clock,
@@ -98,7 +158,7 @@ internal class DemoWorkspaceService(
             metrics.counter("beanflow.demo.workspace", "outcome", "quota").increment()
             throw DemoFailure(429, "DEMO_QUOTA_REACHED", "Demo workspace quota reached")
         }
-        if (previous != null && previous.endedAt == null) close(previous, now)
+        if (previous != null && previous.endedAt == null) workspaceLifecycle.close(previous, now)
         val id = UUID.randomUUID()
         val customerId = UUID.randomUUID()
         val merchantId = UUID.randomUUID()
@@ -192,20 +252,8 @@ internal class DemoWorkspaceService(
     ): DemoWorkspace? {
         val w = repository.latest(hash, true) ?: return null
         protectExistingSession(w, presented)
-        if (w.endedAt == null) close(w, clock.instant())
+        if (w.endedAt == null) workspaceLifecycle.close(w, clock.instant())
         return w
-    }
-
-    @Transactional(readOnly = true)
-    fun expiredWorkspaceIds(): List<UUID> = repository.expiredIds(clock.instant())
-
-    @Transactional
-    fun expire(workspaceId: UUID): Boolean {
-        val now = clock.instant()
-        val workspace = repository.findById(workspaceId, lock = true) ?: return false
-        if (workspace.endedAt != null || workspace.expiresAt.isAfter(now)) return false
-        close(workspace, now)
-        return true
     }
 
     @Transactional
@@ -260,19 +308,6 @@ internal class DemoWorkspaceService(
             if (it[0] != operation || it[1] != payload) throw DemoFailure(409, "IDEMPOTENCY_KEY_REUSED", "Command key has another payload")
             it[2]
         }
-
-    private fun close(
-        w: DemoWorkspace,
-        now: Instant,
-    ) {
-        identities.end(w.customerId, w.merchantId, now)
-        stores.close(w.storeId, now)
-        lifecycle.logout(w.customerSessionId)
-        lifecycle.logout(w.merchantSessionId)
-        repository.end(w.id, now)
-        audit(w, "DEMO_WORKSPACE_ENDED", now)
-        committedMetric("ended")
-    }
 
     private fun committedMetric(outcome: String) {
         TransactionSynchronizationManager.registerSynchronization(
@@ -331,9 +366,8 @@ internal class DemoWorkspaceService(
 }
 
 @Component
-@ConditionalOnProperty(name = ["beanflow.demo.enabled"], havingValue = "true")
 internal class DemoExpiryWorker(
-    private val service: DemoWorkspaceService,
+    private val lifecycle: DemoWorkspaceLifecycleService,
     private val metrics: MeterRegistry,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -341,9 +375,9 @@ internal class DemoExpiryWorker(
     @Scheduled(fixedDelay = 60000, initialDelayString = "\${beanflow.demo.expiry-initial-delay-ms:60000}")
     fun run() {
         try {
-            service.expiredWorkspaceIds().forEach { workspaceId ->
+            lifecycle.expiredWorkspaceIds().forEach { workspaceId ->
                 try {
-                    service.expire(workspaceId)
+                    lifecycle.expire(workspaceId)
                 } catch (failure: RuntimeException) {
                     logger.error("Visitor demo expiry failed; workspaceId={}", workspaceId, failure)
                     failureMetric()

@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.demo.internal
 
 import io.github.kdh949.beanflow.shared.api.BrowserActorType
 import io.github.kdh949.beanflow.shared.api.BrowserSessionCookies
+import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -32,6 +33,12 @@ internal data class DemoTrackRequest(
     val orderReference: String,
 )
 
+internal data class DemoErrorResponse(
+    val code: String,
+    val message: String,
+    val correlationId: String,
+)
+
 @RestController
 internal class DemoConfigController(
     private val settings: DemoSettings,
@@ -55,6 +62,7 @@ internal class DemoController(
     private val service: DemoWorkspaceService,
     private val cookies: BrowserSessionCookies,
     private val environment: Environment,
+    private val correlationIds: CorrelationIdSource,
 ) {
     private val random = SecureRandom()
 
@@ -144,14 +152,15 @@ internal class DemoController(
     }
 
     @ExceptionHandler(DemoFailure::class)
-    fun failure(error: DemoFailure): ResponseEntity<Map<String, String>> =
+    fun failure(error: DemoFailure): ResponseEntity<DemoErrorResponse> =
         ResponseEntity
             .status(error.status)
             .header(HttpHeaders.CACHE_CONTROL, "no-store")
             .body(
-                mapOf(
-                    "code" to error.code,
-                    "message" to (error.message ?: "Demo request failed"),
+                DemoErrorResponse(
+                    code = error.code,
+                    message = error.message ?: "Demo request failed",
+                    correlationId = correlationIds.currentOrCreate(),
                 ),
             )
 

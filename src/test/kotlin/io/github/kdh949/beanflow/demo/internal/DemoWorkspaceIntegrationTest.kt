@@ -65,6 +65,7 @@ internal class DemoWorkspaceIntegrationTest
         private val mapping: RequestMappingHandlerMapping,
         private val applicationContext: ApplicationContext,
         private val service: DemoWorkspaceService,
+        private val lifecycleService: DemoWorkspaceLifecycleService,
         private val expiryWorker: DemoExpiryWorker,
         private val jdbc: JdbcTemplate,
         private val mvc: MockMvc,
@@ -145,6 +146,13 @@ internal class DemoWorkspaceIntegrationTest
             assertThat(service.current(a.browserHash)?.order?.pickupWindowStart).isNull()
             assertThat(
                 jdbc.queryForObject(
+                    "SELECT listed_for_discovery FROM merchant_store_discovery_profile WHERE store_id = ?",
+                    Boolean::class.java,
+                    a.storeId,
+                ),
+            ).isFalse()
+            assertThat(
+                jdbc.queryForObject(
                     "SELECT payable_krw FROM ordering_order WHERE public_reference = ?",
                     Long::class.java,
                     a.orderReference,
@@ -195,7 +203,7 @@ internal class DemoWorkspaceIntegrationTest
             assertThatThrownBy { customer.load(w.customerId, 0) }.isInstanceOf(BrowserAuthenticationInvalid::class.java)
             assertThatThrownBy { merchant.load(w.merchantId, 0) }.isInstanceOf(BrowserAuthenticationInvalid::class.java)
             assertThat(service.current(w.browserHash)?.status).isEqualTo("EXPIRED")
-            service.expire(w.id)
+            lifecycleService.expire(w.id)
             assertThat(
                 jdbc.queryForObject(
                     "SELECT accepting_orders FROM merchant_store WHERE id = ?",
@@ -361,6 +369,18 @@ internal class DemoWorkspaceIntegrationTest
             val bootstrap = mvc.perform(get("/api/v1/demo/csrf").secure(true)).andExpect(status().isOk).andReturn()
             val browserCookies = bootstrap.response.cookies
             val token = mapper.readTree(bootstrap.response.contentAsString).path("token").asText()
+            mvc
+                .perform(
+                    post("/api/v1/demo/sessions")
+                        .secure(true)
+                        .cookie(*browserCookies)
+                        .header("X-BEANFLOW-CSRF", token)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mode\":\"UNKNOWN\"}"),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("DEMO_INVALID_REQUEST"))
+                .andExpect(jsonPath("$.correlationId").isNotEmpty)
             val result =
                 mvc
                     .perform(

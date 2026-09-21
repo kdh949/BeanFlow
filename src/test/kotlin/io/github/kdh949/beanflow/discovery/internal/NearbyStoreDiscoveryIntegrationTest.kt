@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.discovery.internal
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.discovery.api.SearchNearbyStoresCommand
+import io.github.kdh949.beanflow.merchant.api.StoreDiscoveryQueryOperations
 import io.github.kdh949.beanflow.shared.api.SignedCursorCodec
 import io.github.kdh949.beanflow.shared.api.SignedCursorScope
 import io.github.kdh949.beanflow.tamperSignedCursorSignature
@@ -57,6 +58,7 @@ internal class NearbyStoreDiscoveryIntegrationTest
         private val meterRegistry: MeterRegistry,
         private val signedCursorCodec: SignedCursorCodec,
         private val clock: Clock,
+        private val discoveryQueries: StoreDiscoveryQueryOperations,
     ) {
         @BeforeEach
         fun cleanDatabase() {
@@ -101,6 +103,24 @@ internal class NearbyStoreDiscoveryIntegrationTest
                 .andExpect(jsonPath("$.items[0].distanceMicrometers").doesNotExist())
                 .andExpect(jsonPath("$.items[0].location").doesNotExist())
                 .andExpect(jsonPath("$.page.nextCursor").doesNotExist())
+        }
+
+        @Test
+        fun `nearby excludes stores that are not listed for discovery`() {
+            insertStore(store(1), "Ordinary cafe", longitude = 127.0, latitude = 37.5)
+            insertStore(store(2), "Visitor demo cafe", longitude = 127.001, latitude = 37.5)
+            jdbcTemplate.update(
+                "UPDATE merchant_store_discovery_profile SET listed_for_discovery = false WHERE store_id = ?",
+                store(2),
+            )
+
+            mockMvc
+                .perform(nearby(radiusMeters = "1000"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].storeId").value(store(1).toString()))
+            assertThat(discoveryQueries.findVisibleStores(listOf(store(1), store(2))).map { it.storeId })
+                .containsExactly(store(1))
         }
 
         @Test

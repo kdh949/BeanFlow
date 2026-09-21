@@ -1,3 +1,5 @@
+ALTER TABLE merchant_store_discovery_profile
+    ADD COLUMN listed_for_discovery boolean NOT NULL DEFAULT true;
 ALTER TABLE identity_customer_account ADD COLUMN demo_store_id uuid REFERENCES merchant_store(id),
     ADD COLUMN demo_expires_at timestamptz,
     ADD CONSTRAINT ck_customer_demo_scope CHECK ((demo_store_id IS NULL) = (demo_expires_at IS NULL));
