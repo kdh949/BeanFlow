@@ -155,8 +155,9 @@ internal class CustomerEventCampaignReadTransaction(
         val hasMore = records.size > limit
         val campaigns = records.take(limit)
         val boundary = campaigns.lastOrNull().takeIf { hasMore }
+        val storesById = stores.requireAll(campaigns.map(CustomerEventCampaignRecord::storeId))
         return CustomerEventCampaignViewPage(
-            campaigns.map { campaign -> CustomerEventCampaignView(campaign, stores.require(campaign.storeId).name) },
+            campaigns.map { campaign -> CustomerEventCampaignView(campaign, storesById.getValue(campaign.storeId).name) },
             boundary?.let { CustomerEventCampaignSort(it.claimEndsAt, it.campaignId) },
         )
     }

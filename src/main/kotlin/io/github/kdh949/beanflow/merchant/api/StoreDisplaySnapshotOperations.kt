@@ -21,6 +21,12 @@ interface StoreDisplaySnapshotOperations {
      */
     fun require(storeId: UUID): StoreDisplaySnapshot
 
+    /**
+     * Returns every requested verified store display snapshot keyed by store ID.
+     * Duplicate input IDs are queried once; any missing or invalid snapshot fails the caller transaction.
+     */
+    fun requireAll(storeIds: Collection<UUID>): Map<UUID, StoreDisplaySnapshot>
+
     /** Returns verified store display snapshots ordered by name and store ID after the optional keyset boundary. */
     fun list(
         afterName: String?,
