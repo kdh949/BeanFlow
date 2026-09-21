@@ -13,8 +13,11 @@ import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.authority.SimpleGrantedAuthority
@@ -24,13 +27,17 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Proxy
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.sql.Connection
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
+import javax.sql.DataSource
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, CustomerEventCampaignControllerTest.CountingDataSourceConfiguration::class)
 @AutoConfigureMockMvc
 @BeanflowIsolatedSpringContext("verifies customer event availability without external media calls inside the database transaction")
 @SpringBootTest
@@ -39,6 +46,7 @@ internal class CustomerEventCampaignControllerTest
     constructor(
         private val mockMvc: MockMvc,
         private val jdbc: JdbcTemplate,
+        private val statements: StatementCounter,
     ) {
         @MockitoBean
         private lateinit var storage: StorefrontImageStorageOperations
@@ -131,6 +139,55 @@ internal class CustomerEventCampaignControllerTest
             mockMvc.perform(get("/api/v1/me/events")).andExpect(status().isUnauthorized)
         }
 
+        @Test
+        fun `event list fails when a requested store display profile is missing`() {
+            val storeId = seedStore("빈플로우 누락 검증")
+            seedCampaign(storeId, "누락 검증 쿠폰", true, "PUBLISHED", now.minusSeconds(60), now.plusSeconds(3_600), 100, 0)
+            jdbc.update("DELETE FROM merchant_store_discovery_profile WHERE store_id = ?", storeId)
+
+            mockMvc
+                .perform(get("/api/v1/me/events").with(customerJwt()))
+                .andExpect(status().isServiceUnavailable)
+        }
+
+        @Test
+        fun `event list uses two statements regardless of the campaign page size`() {
+            `when`(storage.access(anyString())).thenReturn(StorefrontImageAccess(SIGNED_URL, now.plusSeconds(900)))
+            val empty = countStatements { readEvents(expectedItems = 0) }
+
+            val oneStore = seedStore("빈플로우 기준선")
+            seedCampaign(oneStore, "기준선 쿠폰", true, "PUBLISHED", now.minusSeconds(60), now.plusSeconds(3_600), 100, 0)
+            val one = countStatements { readEvents(expectedItems = 1) }
+
+            resetDatabase()
+            val repeatedStore = seedStore("빈플로우 중복 매장")
+            (1..100).forEach { index ->
+                seedCampaign(repeatedStore, "중복 매장 쿠폰 $index", true, "PUBLISHED", now.minusSeconds(60), now.plusSeconds(3_600), 100, 0)
+            }
+            val repeated = countStatements { readEvents(expectedItems = 100) }
+
+            resetDatabase()
+            (1..100).forEach { index ->
+                val storeId = seedStore("빈플로우 매장 $index")
+                seedCampaign(storeId, "대량 쿠폰 $index", true, "PUBLISHED", now.minusSeconds(60), now.plusSeconds(3_600), 100, 0)
+            }
+            val many = countStatements { readEvents(expectedItems = 100) }
+
+            assertThat(empty).isEqualTo(1)
+            assertThat(one).isEqualTo(2)
+            assertThat(repeated).isEqualTo(2)
+            assertThat(many).isEqualTo(2)
+        }
+
+        private fun countStatements(block: () -> Unit): Int = statements.measure(block)
+
+        private fun readEvents(expectedItems: Int) {
+            mockMvc
+                .perform(get("/api/v1/me/events?limit=100").with(customerJwt()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(expectedItems))
+        }
+
         private fun seedStore(name: String): UUID =
             UUID.randomUUID().also { storeId ->
                 jdbc.update("INSERT INTO merchant_store (id, accepting_orders, pickup_enabled, version) VALUES (?, true, true, 0)", storeId)
@@ -206,5 +263,69 @@ internal class CustomerEventCampaignControllerTest
         private companion object {
             const val HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
             const val SIGNED_URL = "https://media.beanflow.test/campaign-signed"
+        }
+
+        internal class StatementCounter {
+            private val currentCount = ThreadLocal<Int>()
+
+            fun measure(block: () -> Unit): Int {
+                check(currentCount.get() == null)
+                currentCount.set(0)
+                return try {
+                    block()
+                    checkNotNull(currentCount.get())
+                } finally {
+                    currentCount.remove()
+                }
+            }
+
+            fun increment() {
+                val count = currentCount.get() ?: return
+                currentCount.set(count + 1)
+            }
+        }
+
+        @TestConfiguration(proxyBeanMethods = false)
+        internal class CountingDataSourceConfiguration {
+            @Bean
+            fun statementCounter() = StatementCounter()
+
+            @Bean
+            fun countingDataSourceWrapper(counter: StatementCounter): BeanPostProcessor =
+                object : BeanPostProcessor {
+                    override fun postProcessAfterInitialization(
+                        bean: Any,
+                        beanName: String,
+                    ): Any = if (bean is DataSource) CountingDataSource(bean, counter) else bean
+                }
+        }
+
+        private class CountingDataSource(
+            private val delegate: DataSource,
+            private val counter: StatementCounter,
+        ) : DataSource by delegate {
+            override fun getConnection(): Connection = counting(delegate.connection)
+
+            override fun getConnection(
+                username: String?,
+                password: String?,
+            ): Connection = counting(delegate.getConnection(username, password))
+
+            private fun counting(connection: Connection): Connection =
+                Proxy.newProxyInstance(
+                    Connection::class.java.classLoader,
+                    arrayOf(Connection::class.java),
+                ) { _, method, args ->
+                    if (method.name in STATEMENT_METHODS) counter.increment()
+                    try {
+                        method.invoke(connection, *(args ?: emptyArray()))
+                    } catch (failure: InvocationTargetException) {
+                        throw failure.targetException
+                    }
+                } as Connection
+
+            private companion object {
+                val STATEMENT_METHODS = setOf("prepareStatement", "createStatement", "prepareCall")
+            }
         }
     }
