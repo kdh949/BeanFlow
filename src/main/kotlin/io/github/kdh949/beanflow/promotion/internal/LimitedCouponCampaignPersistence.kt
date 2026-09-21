@@ -251,14 +251,16 @@ internal class LimitedCouponCampaignPersistence(
             parameters += afterCampaignId
         }
         parameters += limit
-        return jdbc.query(
-            "$BASE_QUERY$paging ORDER BY limited.created_at DESC, campaign.id DESC LIMIT ?",
-            { row, _ ->
-                val campaignId = row.getObject("campaign_id", UUID::class.java)
-                row.toSnapshot(eligibleMenus(campaignId))
-            },
-            *parameters.toTypedArray(),
-        )
+        val campaigns =
+            jdbc.query(
+                "$BASE_QUERY$paging ORDER BY limited.created_at DESC, campaign.id DESC LIMIT ?",
+                { row, _ -> row.toSnapshot(emptyList()) },
+                *parameters.toTypedArray(),
+            )
+        val eligibleMenuIdsByCampaign = eligibleMenusByCampaignIds(campaigns.map(LimitedCouponCampaignSnapshot::campaignId))
+        return campaigns.map { campaign ->
+            campaign.copy(eligibleMenuIds = eligibleMenuIdsByCampaign[campaign.campaignId].orEmpty())
+        }
     }
 
     private fun eligibleMenus(campaignId: UUID): List<UUID> =
@@ -267,6 +269,34 @@ internal class LimitedCouponCampaignPersistence(
             { row, _ -> row.getObject("menu_id", UUID::class.java) },
             campaignId,
         )
+
+    private fun eligibleMenusByCampaignIds(campaignIds: Collection<UUID>): Map<UUID, List<UUID>> {
+        val requestedIds = campaignIds.toSet()
+        if (requestedIds.isEmpty()) return emptyMap()
+
+        return jdbc
+            .query(
+                { connection ->
+                    connection
+                        .prepareStatement(
+                            """
+                            SELECT campaign_id, menu_id
+                              FROM promotion_campaign_eligible_menu
+                             WHERE campaign_id = ANY(?::uuid[])
+                             ORDER BY campaign_id, menu_id
+                            """.trimIndent(),
+                        ).also { statement ->
+                            statement.setArray(1, connection.createArrayOf("uuid", requestedIds.toTypedArray()))
+                        }
+                },
+                { row, _ ->
+                    row.getObject("campaign_id", UUID::class.java) to row.getObject("menu_id", UUID::class.java)
+                },
+            ).groupBy(
+                keySelector = Pair<UUID, UUID>::first,
+                valueTransform = Pair<UUID, UUID>::second,
+            )
+    }
 
     private fun ResultSet.toSnapshot(eligibleMenuIds: List<UUID>) =
         LimitedCouponCampaignSnapshot(
