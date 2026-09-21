@@ -138,3 +138,4 @@
 | [ADR-135](ADR-135-store-hours-payment-gate-and-cutoff.md) | Accepted | Store 영업시간 결제 gate와 단조 cutoff |
 
 - [ADR-136: 담당 상담원의 직접 처리](ADR-136-support-direct-processing.md)
+- [ADR-137: 결제 멱등성 payment 조회 인덱스](ADR-137-payment-idempotency-payment-lookup-index.md)
