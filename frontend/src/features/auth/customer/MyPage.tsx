@@ -1,3 +1,4 @@
+import { useDemo } from "../../demo/DemoProvider";
 import { History, Heart, LifeBuoy, LogOut, ReceiptText, Sparkles, TicketCheck, TicketPercent } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -14,6 +15,7 @@ import { Button } from "../../../design-system";
 
 export function CustomerMyPage() {
   const session = useCustomerSession();
+  const demo = useDemo();
   const navigate = useNavigate();
   const [failure, setFailure] = useState<unknown>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -24,6 +26,7 @@ export function CustomerMyPage() {
     setSigningOut(true);
     setFailure(null);
     try {
+      if (demo?.session) { await demo.act("exit"); return; }
       await customerSession.logOut();
       navigate("/app/login", { replace: true });
     } catch (error) {

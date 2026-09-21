@@ -133,6 +133,7 @@
 | [ADR-129](ADR-129-support-console-query-completion.md) | Accepted | 상담 현황·주문 요약·통합 승인함의 조회 경계 |
 | [ADR-130](ADR-130-perf-selective-database-cutover.md) | Accepted | 기존 perf 데이터를 보존하는 새 DB 선별 이관 |
 | [ADR-131](ADR-131-store-rejection-settlement-exclusion-and-forward-recovery.md) | Accepted | 매장 거절 정산 제외와 기존 publication의 forward-only 복구 |
+| [ADR-132](ADR-132-visitor-demo-workspace.md) | Accepted | 방문자별 데모 공간과 상태 기반 안내 |
 | [ADR-133](ADR-133-immediate-checkout-and-store-preparation.md) | Accepted | 장바구니 즉시 결제와 수락 시 준비시간 |
 | [ADR-134](ADR-134-post-approval-benefit-use-and-recovery.md) | Accepted | 승인 후 혜택 원자 사용과 미성립 승인 복구 |
 | [ADR-135](ADR-135-store-hours-payment-gate-and-cutoff.md) | Accepted | Store 영업시간 결제 gate와 단조 cutoff |

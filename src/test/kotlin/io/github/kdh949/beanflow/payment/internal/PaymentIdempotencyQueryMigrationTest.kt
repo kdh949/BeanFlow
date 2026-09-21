@@ -61,7 +61,7 @@ internal class PaymentIdempotencyQueryMigrationTest : IsolatedPostgresSupport() 
                 "ON payment_idempotency_record (payment_id)",
         )
 
-        val result = flyway().migrate()
+        val result = flyway(target = MigrationVersion.fromVersion("92")).migrate()
 
         assertThat(result.migrationsExecuted).isEqualTo(1)
         assertThat(successfulV92Count()).isEqualTo(1)

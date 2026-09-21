@@ -255,6 +255,18 @@ internal class StoreSearchCandidateRepositoryIntegrationTest {
     }
 
     @Test
+    fun `stores excluded from discovery never appear even when openOnly is false`() {
+        val visible = indexStore(name = "BeanFlow 일반점")
+        val hidden = indexStore(name = "BeanFlow 체험점")
+        jdbc.update(
+            "UPDATE merchant_store_discovery_profile SET listed_for_discovery = false WHERE store_id = ?",
+            hidden,
+        )
+
+        assertThat(search("BeanFlow").map { it.storeId }).containsExactly(visible)
+    }
+
+    @Test
     fun `a store is findable by both its eupmyeondong and its ri`() {
         val store =
             indexStore(

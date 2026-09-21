@@ -1,5 +1,7 @@
 package io.github.kdh949.beanflow.shared.internal
 
+import io.github.kdh949.beanflow.shared.api.BrowserActorType
+import io.github.kdh949.beanflow.shared.api.BrowserSessionCookies
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.context.annotation.Bean
@@ -21,7 +23,7 @@ internal class BrowserSessionCookieConfiguration {
         }
 
     @Bean
-    fun httpSessionIdResolver(registry: AuthenticationPathRegistry): HttpSessionIdResolver =
+    fun httpSessionIdResolver(registry: AuthenticationPathRegistry): ActorPathHttpSessionIdResolver =
         ActorPathHttpSessionIdResolver(
             registry = registry,
             customer = cookieResolver("BEANFLOW_CUSTOMER_SESSION"),
@@ -46,7 +48,32 @@ internal class ActorPathHttpSessionIdResolver(
     private val registry: AuthenticationPathRegistry,
     private val customer: HttpSessionIdResolver,
     private val merchant: HttpSessionIdResolver,
-) : HttpSessionIdResolver {
+) : HttpSessionIdResolver,
+    BrowserSessionCookies {
+    private fun forActor(actor: BrowserActorType): HttpSessionIdResolver = if (actor == BrowserActorType.CUSTOMER) customer else merchant
+
+    override fun read(
+        actor: BrowserActorType,
+        request: HttpServletRequest,
+    ): String? = forActor(actor).resolveSessionIds(request).firstOrNull()
+
+    override fun issue(
+        actor: BrowserActorType,
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        sessionId: String,
+    ) {
+        forActor(actor).setSessionId(request, response, sessionId)
+    }
+
+    override fun clear(
+        actor: BrowserActorType,
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ) {
+        forActor(actor).expireSession(request, response)
+    }
+
     override fun resolveSessionIds(request: HttpServletRequest): List<String> = delegate(request)?.resolveSessionIds(request).orEmpty()
 
     override fun setSessionId(

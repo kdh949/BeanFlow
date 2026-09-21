@@ -33,6 +33,20 @@ tags:
   - name: Dispute
   - name: Support
 paths:
+  /demo/config:
+    $ref: "./demo.yaml#/paths/~1demo~1config"
+  /demo/csrf:
+    $ref: "./demo.yaml#/paths/~1demo~1csrf"
+  /demo/session:
+    $ref: "./demo.yaml#/paths/~1demo~1session"
+  /demo/sessions:
+    $ref: "./demo.yaml#/paths/~1demo~1sessions"
+  /demo/session/resume:
+    $ref: "./demo.yaml#/paths/~1demo~1session~1resume"
+  /demo/session/orders:
+    $ref: "./demo.yaml#/paths/~1demo~1session~1orders"
+  /demo/session/order:
+    $ref: "./demo.yaml#/paths/~1demo~1session~1order"
   /auth/customer/csrf:
     get:
       tags: [Identity]
@@ -10954,6 +10968,20 @@ components:
         type: string
         const: no-store
   schemas:
+    DemoConfig:
+      $ref: ./demo.yaml#/components/schemas/DemoConfig
+    DemoStartRequest:
+      $ref: ./demo.yaml#/components/schemas/DemoStartRequest
+    DemoTrackRequest:
+      $ref: ./demo.yaml#/components/schemas/DemoTrackRequest
+    DemoSession:
+      $ref: ./demo.yaml#/components/schemas/DemoSession
+    DemoOrder:
+      $ref: ./demo.yaml#/components/schemas/DemoOrder
+    DemoCsrfToken:
+      $ref: ./demo.yaml#/components/schemas/DemoCsrfToken
+    DemoError:
+      $ref: ./demo.yaml#/components/schemas/DemoError
     OperationsCustomerPointAccountResponse:
       type: object
       additionalProperties: false

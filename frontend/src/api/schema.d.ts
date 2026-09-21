@@ -4,6 +4,182 @@
  */
 
 export interface paths {
+    "/demo/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 데모 활성 상태 조회
+         * @description BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+         *     DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+         *     변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+         *     기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+         *     쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+         */
+        get: operations["demoConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/demo/csrf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 방문자 쿠키와 CSRF 초기화
+         * @description BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+         *     DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+         *     변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+         *     기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+         *     쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+         */
+        get: operations["demoCsrf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/demo/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 현재 체험 상태 조회
+         * @description BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+         *     DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+         *     변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+         *     기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+         *     쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+         */
+        get: operations["demoSession"];
+        put?: never;
+        post?: never;
+        /**
+         * 체험 접근 종료
+         * @description BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+         *     DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+         *     변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+         *     기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+         *     쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+         */
+        delete: operations["endDemoSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/demo/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 방문자별 체험 공간 발급
+         * @description BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+         *     DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+         *     변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+         *     기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+         *     쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+         */
+        post: operations["startDemoSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/demo/session/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 동일 체험 이어하기
+         * @description BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+         *     DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+         *     변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+         *     기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+         *     쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+         */
+        post: operations["resumeDemoSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/demo/session/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 종료된 체험 주문 다음 샘플 발급
+         * @description BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+         *     DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+         *     변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+         *     기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+         *     쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+         */
+        post: operations["createDemoSample"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/demo/session/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 같은 체험 고객과 매장의 주문 연결
+         * @description BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+         *     DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+         *     변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+         *     기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+         *     쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+         */
+        post: operations["trackDemoOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/operations/config": {
         parameters: {
             query?: never;
@@ -6075,6 +6251,54 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        DemoConfig: {
+            enabled: boolean;
+            /** @constant */
+            lifetimeSeconds: 1800;
+            testPaymentEnabled: boolean;
+        };
+        DemoStartRequest: {
+            /** @enum {string} */
+            mode: "GUIDED" | "DIRECT";
+        };
+        DemoTrackRequest: {
+            orderReference: string;
+        };
+        DemoSession: {
+            /** Format: uuid */
+            workspaceId: string;
+            /** @enum {string} */
+            status: "ACTIVE" | "EXPIRED" | "ENDED";
+            /** @enum {string} */
+            mode: "GUIDED" | "DIRECT";
+            /** Format: uuid */
+            storeId: string;
+            storeName: string;
+            /** Format: date-time */
+            expiresAt: string;
+            order: components["schemas"]["DemoOrder"] | null;
+        };
+        DemoOrder: {
+            orderReference: string;
+            /** @enum {string} */
+            status: "PENDING_PAYMENT" | "PAID" | "ACCEPTED" | "PREPARING" | "READY" | "COMPLETED" | "REJECTED" | "CANCELLED" | "EXPIRED";
+            pickupNumber: string;
+            /**
+             * Format: date-time
+             * @description 즉시 주문에는 별도 픽업 시간 선택이 없으므로 null입니다.
+             */
+            pickupWindowStart: string | null;
+            /** Format: date-time */
+            acceptanceDeadlineAt: string | null;
+        };
+        DemoCsrfToken: {
+            token: string;
+        };
+        DemoError: {
+            code: string;
+            message: string;
+            correlationId: string;
+        };
         OperationsCustomerPointAccountResponse: {
             customerId: components["schemas"]["Identifier"];
             accountId: components["schemas"]["Identifier"];
@@ -13701,6 +13925,20 @@ export interface components {
         };
     };
     responses: {
+        /**
+         * @description DEMO_SESSION_CONFLICT 기존 로그인 유지, DEMO_ALREADY_ACTIVE 이어하기 필요,
+         *     DEMO_ORDER_ACTIVE 현재 주문 처리 필요, DEMO_EXPIRED 만료, DEMO_QUOTA_REACHED 발급 제한,
+         *     DEMO_SAMPLE_LIMIT 샘플 5회 제한, IDEMPOTENCY_KEY_REUSED 요청 본문 불일치.
+         *     CSRF 실패와 소유자 API 실패는 해당 기존 HTTP 오류 계약을 따른다.
+         */
+        DemoFailure: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["DemoError"];
+            };
+        };
         /** @description A required dependency is unavailable; no fallback result was used */
         DependencyUnavailable: {
             headers: {
@@ -13989,6 +14227,296 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    demoConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 서버 확인 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoConfig"];
+                };
+            };
+            400: components["responses"]["DemoFailure"];
+            401: components["responses"]["DemoFailure"];
+            /** @description CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["DemoFailure"];
+            410: components["responses"]["DemoFailure"];
+            429: components["responses"]["DemoFailure"];
+            503: components["responses"]["DemoFailure"];
+        };
+    };
+    demoCsrf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 서버 확인 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoCsrfToken"];
+                };
+            };
+            400: components["responses"]["DemoFailure"];
+            401: components["responses"]["DemoFailure"];
+            /** @description CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["DemoFailure"];
+            410: components["responses"]["DemoFailure"];
+            429: components["responses"]["DemoFailure"];
+            503: components["responses"]["DemoFailure"];
+        };
+    };
+    demoSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 서버 확인 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoSession"];
+                };
+            };
+            /** @description 아직 체험 공간 없음 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["DemoFailure"];
+            401: components["responses"]["DemoFailure"];
+            /** @description CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["DemoFailure"];
+            410: components["responses"]["DemoFailure"];
+            429: components["responses"]["DemoFailure"];
+            503: components["responses"]["DemoFailure"];
+        };
+    };
+    endDemoSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-BEANFLOW-CSRF": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 서버 확인 결과 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["DemoFailure"];
+            401: components["responses"]["DemoFailure"];
+            /** @description CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["DemoFailure"];
+            410: components["responses"]["DemoFailure"];
+            429: components["responses"]["DemoFailure"];
+            503: components["responses"]["DemoFailure"];
+        };
+    };
+    startDemoSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-BEANFLOW-CSRF": string;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DemoStartRequest"];
+            };
+        };
+        responses: {
+            /** @description 서버 확인 결과 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoSession"];
+                };
+            };
+            400: components["responses"]["DemoFailure"];
+            401: components["responses"]["DemoFailure"];
+            /** @description CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["DemoFailure"];
+            410: components["responses"]["DemoFailure"];
+            429: components["responses"]["DemoFailure"];
+            503: components["responses"]["DemoFailure"];
+        };
+    };
+    resumeDemoSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-BEANFLOW-CSRF": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 서버 확인 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoSession"];
+                };
+            };
+            400: components["responses"]["DemoFailure"];
+            401: components["responses"]["DemoFailure"];
+            /** @description CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["DemoFailure"];
+            410: components["responses"]["DemoFailure"];
+            429: components["responses"]["DemoFailure"];
+            503: components["responses"]["DemoFailure"];
+        };
+    };
+    createDemoSample: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-BEANFLOW-CSRF": string;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 서버 확인 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoSession"];
+                };
+            };
+            400: components["responses"]["DemoFailure"];
+            401: components["responses"]["DemoFailure"];
+            /** @description CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["DemoFailure"];
+            410: components["responses"]["DemoFailure"];
+            429: components["responses"]["DemoFailure"];
+            503: components["responses"]["DemoFailure"];
+        };
+    };
+    trackDemoOrder: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-BEANFLOW-CSRF": string;
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DemoTrackRequest"];
+            };
+        };
+        responses: {
+            /** @description 서버 확인 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoSession"];
+                };
+            };
+            400: components["responses"]["DemoFailure"];
+            401: components["responses"]["DemoFailure"];
+            /** @description CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["DemoFailure"];
+            410: components["responses"]["DemoFailure"];
+            429: components["responses"]["DemoFailure"];
+            503: components["responses"]["DemoFailure"];
+        };
+    };
     getOperationsOidcConfiguration: {
         parameters: {
             query?: never;

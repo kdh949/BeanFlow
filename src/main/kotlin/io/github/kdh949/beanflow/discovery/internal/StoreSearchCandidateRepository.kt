@@ -143,6 +143,7 @@ internal class StoreSearchCandidateRepository(
                     JOIN merchant_store_discovery_profile profile ON profile.store_id = scored.store_id
                     JOIN merchant_store store ON store.id = scored.store_id
                    WHERE $radiusPredicate
+                     AND profile.listed_for_discovery
                      AND $openOnlyPredicate
                  )
             SELECT candidate.store_id, candidate.name, candidate.relevance_rank, candidate.distance_micrometers,

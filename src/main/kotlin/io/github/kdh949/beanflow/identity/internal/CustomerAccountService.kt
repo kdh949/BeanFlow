@@ -278,6 +278,7 @@ internal class CustomerAccountTransactions(
 @Component
 internal class CustomerBrowserActorLoader(
     private val accounts: CustomerAccountJpaRepository,
+    private val clock: Clock,
 ) : BrowserActorLoader {
     override val actorType: BrowserActorType = BrowserActorType.CUSTOMER
 
@@ -287,7 +288,9 @@ internal class CustomerBrowserActorLoader(
         credentialVersion: Long,
     ): CurrentActor {
         val account = accounts.findById(actorId).orElseThrow { BrowserAuthenticationInvalid("Customer session is no longer valid") }
-        if (account.state != CustomerAccountState.ACTIVE || account.credentialVersion != credentialVersion) {
+        if (account.state != CustomerAccountState.ACTIVE || account.credentialVersion != credentialVersion ||
+            account.demoExpiresAt?.let { !clock.instant().isBefore(it) } == true
+        ) {
             throw BrowserAuthenticationInvalid("Customer session is no longer valid")
         }
         return CustomerActor(account.id)

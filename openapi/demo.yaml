@@ -1,0 +1,305 @@
+openapi: 3.1.0
+info:
+  title: BeanFlow Visitor Demo
+  version: 1.0.0
+servers:
+  - url: /api/v1
+paths:
+  /demo/config:
+    get:
+      operationId: demoConfig
+      tags: [Demo]
+      summary: 데모 활성 상태 조회
+      security: []
+      description: |
+        BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+        DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+        변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+        기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+        쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+      responses:
+        '200':
+          description: 서버 확인 결과
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DemoConfig'}
+        '400': {$ref: '#/components/responses/DemoFailure'}
+        '401': {$ref: '#/components/responses/DemoFailure'}
+        '403': {description: CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절}
+        '409': {$ref: '#/components/responses/DemoFailure'}
+        '410': {$ref: '#/components/responses/DemoFailure'}
+        '429': {$ref: '#/components/responses/DemoFailure'}
+        '503': {$ref: '#/components/responses/DemoFailure'}
+  /demo/csrf:
+    get:
+      operationId: demoCsrf
+      tags: [Demo]
+      summary: 방문자 쿠키와 CSRF 초기화
+      security: []
+      description: |
+        BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+        DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+        변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+        기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+        쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+      responses:
+        '200':
+          description: 서버 확인 결과
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DemoCsrfToken'}
+        '400': {$ref: '#/components/responses/DemoFailure'}
+        '401': {$ref: '#/components/responses/DemoFailure'}
+        '403': {description: CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절}
+        '409': {$ref: '#/components/responses/DemoFailure'}
+        '410': {$ref: '#/components/responses/DemoFailure'}
+        '429': {$ref: '#/components/responses/DemoFailure'}
+        '503': {$ref: '#/components/responses/DemoFailure'}
+  /demo/session:
+    get:
+      operationId: demoSession
+      tags: [Demo]
+      summary: 현재 체험 상태 조회
+      security:
+        - demoBrowser: []
+      description: |
+        BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+        DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+        변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+        기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+        쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+      responses:
+        '200':
+          description: 서버 확인 결과
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DemoSession'}
+        '204': {description: 아직 체험 공간 없음}
+        '400': {$ref: '#/components/responses/DemoFailure'}
+        '401': {$ref: '#/components/responses/DemoFailure'}
+        '403': {description: CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절}
+        '409': {$ref: '#/components/responses/DemoFailure'}
+        '410': {$ref: '#/components/responses/DemoFailure'}
+        '429': {$ref: '#/components/responses/DemoFailure'}
+        '503': {$ref: '#/components/responses/DemoFailure'}
+    delete:
+      operationId: endDemoSession
+      tags: [Demo]
+      summary: 체험 접근 종료
+      security:
+        - demoBrowser: []
+      description: |
+        BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+        DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+        변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+        기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+        쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+      parameters:
+        - {in: header, name: X-BEANFLOW-CSRF, required: true, schema: {type: string}}
+      responses:
+        '204':
+          description: 서버 확인 결과
+        '400': {$ref: '#/components/responses/DemoFailure'}
+        '401': {$ref: '#/components/responses/DemoFailure'}
+        '403': {description: CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절}
+        '409': {$ref: '#/components/responses/DemoFailure'}
+        '410': {$ref: '#/components/responses/DemoFailure'}
+        '429': {$ref: '#/components/responses/DemoFailure'}
+        '503': {$ref: '#/components/responses/DemoFailure'}
+  /demo/sessions:
+    post:
+      operationId: startDemoSession
+      tags: [Demo]
+      summary: 방문자별 체험 공간 발급
+      security:
+        - demoBrowser: []
+      description: |
+        BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+        DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+        변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+        기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+        쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+      parameters:
+        - {in: header, name: X-BEANFLOW-CSRF, required: true, schema: {type: string}}
+        - {in: header, name: Idempotency-Key, required: true, schema: {type: string, pattern: "^[A-Za-z0-9_.:-]{8,128}$"}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DemoStartRequest'}
+      responses:
+        '201':
+          description: 서버 확인 결과
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DemoSession'}
+        '400': {$ref: '#/components/responses/DemoFailure'}
+        '401': {$ref: '#/components/responses/DemoFailure'}
+        '403': {description: CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절}
+        '409': {$ref: '#/components/responses/DemoFailure'}
+        '410': {$ref: '#/components/responses/DemoFailure'}
+        '429': {$ref: '#/components/responses/DemoFailure'}
+        '503': {$ref: '#/components/responses/DemoFailure'}
+  /demo/session/resume:
+    post:
+      operationId: resumeDemoSession
+      tags: [Demo]
+      summary: 동일 체험 이어하기
+      security:
+        - demoBrowser: []
+      description: |
+        BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+        DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+        변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+        기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+        쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+      parameters:
+        - {in: header, name: X-BEANFLOW-CSRF, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: 서버 확인 결과
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DemoSession'}
+        '400': {$ref: '#/components/responses/DemoFailure'}
+        '401': {$ref: '#/components/responses/DemoFailure'}
+        '403': {description: CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절}
+        '409': {$ref: '#/components/responses/DemoFailure'}
+        '410': {$ref: '#/components/responses/DemoFailure'}
+        '429': {$ref: '#/components/responses/DemoFailure'}
+        '503': {$ref: '#/components/responses/DemoFailure'}
+  /demo/session/orders:
+    post:
+      operationId: createDemoSample
+      tags: [Demo]
+      summary: 종료된 체험 주문 다음 샘플 발급
+      security:
+        - demoBrowser: []
+      description: |
+        BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+        DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+        변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+        기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+        쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+      parameters:
+        - {in: header, name: X-BEANFLOW-CSRF, required: true, schema: {type: string}}
+        - {in: header, name: Idempotency-Key, required: true, schema: {type: string, pattern: "^[A-Za-z0-9_.:-]{8,128}$"}}
+      responses:
+        '200':
+          description: 서버 확인 결과
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DemoSession'}
+        '400': {$ref: '#/components/responses/DemoFailure'}
+        '401': {$ref: '#/components/responses/DemoFailure'}
+        '403': {description: CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절}
+        '409': {$ref: '#/components/responses/DemoFailure'}
+        '410': {$ref: '#/components/responses/DemoFailure'}
+        '429': {$ref: '#/components/responses/DemoFailure'}
+        '503': {$ref: '#/components/responses/DemoFailure'}
+  /demo/session/order:
+    post:
+      operationId: trackDemoOrder
+      tags: [Demo]
+      summary: 같은 체험 고객과 매장의 주문 연결
+      security:
+        - demoBrowser: []
+      description: |
+        BR-58 방문자 데모 계약. enabled 기본값 false, local + (local-demo 또는 toss-sandbox) 전용.
+        DIRECT 발급은 toss-sandbox에서만 가능. 공간 수명 30분, 접수 제한은 기존 정책 3분.
+        변경 요청은 BEANFLOW_DEMO_XSRF 쿠키와 일치하는 X-BEANFLOW-CSRF 헤더가 필요하다.
+        기존 고객/점주 세션을 덮어쓰지 않으며 다른 방문자 주문에 접근할 수 없다.
+        쿠키는 Secure, SameSite=Lax이며 세션/방문자 쿠키는 HttpOnly이다. 응답은 no-store.
+      parameters:
+        - {in: header, name: X-BEANFLOW-CSRF, required: true, schema: {type: string}}
+        - {in: header, name: Idempotency-Key, required: true, schema: {type: string, pattern: "^[A-Za-z0-9_.:-]{8,128}$"}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DemoTrackRequest'}
+      responses:
+        '200':
+          description: 서버 확인 결과
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DemoSession'}
+        '400': {$ref: '#/components/responses/DemoFailure'}
+        '401': {$ref: '#/components/responses/DemoFailure'}
+        '403': {description: CSRF 검증 실패 또는 기존 소유자 접근 정책에 따른 거절}
+        '409': {$ref: '#/components/responses/DemoFailure'}
+        '410': {$ref: '#/components/responses/DemoFailure'}
+        '429': {$ref: '#/components/responses/DemoFailure'}
+        '503': {$ref: '#/components/responses/DemoFailure'}
+components:
+  securitySchemes:
+    demoBrowser:
+      type: apiKey
+      in: cookie
+      name: BEANFLOW_DEMO
+  responses:
+    DemoFailure:
+      description: |
+        DEMO_SESSION_CONFLICT 기존 로그인 유지, DEMO_ALREADY_ACTIVE 이어하기 필요,
+        DEMO_ORDER_ACTIVE 현재 주문 처리 필요, DEMO_EXPIRED 만료, DEMO_QUOTA_REACHED 발급 제한,
+        DEMO_SAMPLE_LIMIT 샘플 5회 제한, IDEMPOTENCY_KEY_REUSED 요청 본문 불일치.
+        CSRF 실패와 소유자 API 실패는 해당 기존 HTTP 오류 계약을 따른다.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/DemoError'}
+  schemas:
+    DemoConfig:
+      type: object
+      required: [enabled, lifetimeSeconds, testPaymentEnabled]
+      properties:
+        enabled: {type: boolean}
+        lifetimeSeconds: {type: integer, const: 1800}
+        testPaymentEnabled: {type: boolean}
+    DemoStartRequest:
+      type: object
+      required: [mode]
+      properties:
+        mode: {type: string, enum: [GUIDED, DIRECT]}
+    DemoTrackRequest:
+      type: object
+      required: [orderReference]
+      properties:
+        orderReference: {type: string, maxLength: 12}
+    DemoSession:
+      type: object
+      required: [workspaceId, status, mode, storeId, storeName, expiresAt, order]
+      properties:
+        workspaceId: {type: string, format: uuid}
+        status: {type: string, enum: [ACTIVE, EXPIRED, ENDED]}
+        mode: {type: string, enum: [GUIDED, DIRECT]}
+        storeId: {type: string, format: uuid}
+        storeName: {type: string}
+        expiresAt: {type: string, format: date-time}
+        order:
+          oneOf:
+            - {$ref: '#/components/schemas/DemoOrder'}
+            - {type: 'null'}
+    DemoOrder:
+      type: object
+      required: [orderReference, status, pickupNumber, pickupWindowStart, acceptanceDeadlineAt]
+      properties:
+        orderReference: {type: string}
+        status: {type: string, enum: [PENDING_PAYMENT, PAID, ACCEPTED, PREPARING, READY, COMPLETED, REJECTED, CANCELLED, EXPIRED]}
+        pickupNumber: {type: string}
+        pickupWindowStart:
+          type: [string, 'null']
+          format: date-time
+          description: 즉시 주문에는 별도 픽업 시간 선택이 없으므로 null입니다.
+        acceptanceDeadlineAt: {type: [string, 'null'], format: date-time}
+    DemoCsrfToken:
+      type: object
+      required: [token]
+      properties:
+        token: {type: string}
+    DemoError:
+      type: object
+      required: [code, message, correlationId]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        correlationId: {type: string, minLength: 1, maxLength: 160}

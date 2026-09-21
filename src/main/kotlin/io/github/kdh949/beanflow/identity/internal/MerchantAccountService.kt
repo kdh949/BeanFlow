@@ -377,7 +377,8 @@ internal class MerchantBrowserActorLoader(
                 BrowserAuthenticationInvalid("Merchant session is no longer valid")
             }
         val now = clock.instant()
-        if (account.credentialVersion != credentialVersion ||
+        if (account.demoExpiresAt?.let { !now.isBefore(it) } == true ||
+            account.credentialVersion != credentialVersion ||
             account.state == MerchantAccountState.EXPIRED ||
             account.lockedUntil?.let(now::isBefore) == true ||
             (account.state == MerchantAccountState.INITIAL_PASSWORD && !account.temporaryPasswordUsable(now))
