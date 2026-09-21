@@ -152,7 +152,7 @@ internal class CustomerEventCampaignControllerTest
 
         @Test
         fun `event list uses two statements regardless of the campaign page size`() {
-            `when`(storage.access(anyString())).thenReturn(StorefrontImageAccess(SIGNED_URL, now.plusSeconds(900)))
+            stubStorageAccess()
             val empty = countStatements { readEvents(expectedItems = 0) }
 
             val oneStore = seedStore("빈플로우 기준선")
@@ -160,6 +160,7 @@ internal class CustomerEventCampaignControllerTest
             val one = countStatements { readEvents(expectedItems = 1) }
 
             resetDatabase()
+            stubStorageAccess()
             val repeatedStore = seedStore("빈플로우 중복 매장")
             (1..100).forEach { index ->
                 seedCampaign(repeatedStore, "중복 매장 쿠폰 $index", true, "PUBLISHED", now.minusSeconds(60), now.plusSeconds(3_600), 100, 0)
@@ -167,6 +168,7 @@ internal class CustomerEventCampaignControllerTest
             val repeated = countStatements { readEvents(expectedItems = 100) }
 
             resetDatabase()
+            stubStorageAccess()
             (1..100).forEach { index ->
                 val storeId = seedStore("빈플로우 매장 $index")
                 seedCampaign(storeId, "대량 쿠폰 $index", true, "PUBLISHED", now.minusSeconds(60), now.plusSeconds(3_600), 100, 0)
@@ -180,6 +182,10 @@ internal class CustomerEventCampaignControllerTest
         }
 
         private fun countStatements(block: () -> Unit): Int = statements.measure(block)
+
+        private fun stubStorageAccess() {
+            `when`(storage.access(anyString())).thenReturn(StorefrontImageAccess(SIGNED_URL, now.plusSeconds(900)))
+        }
 
         private fun readEvents(expectedItems: Int) {
             mockMvc
