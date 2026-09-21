@@ -4,7 +4,10 @@ package io.github.kdh949.beanflow.payment.internal
 
 import io.github.kdh949.beanflow.IsolatedPostgresSupport
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.flywaydb.core.Flyway
+import org.flywaydb.core.api.FlywayException
+import org.flywaydb.core.api.MigrationVersion
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
@@ -29,14 +32,53 @@ internal class PaymentIdempotencyQueryMigrationTest : IsolatedPostgresSupport() 
 
     @Test
     fun `V92 creates the payment idempotency payment index`() {
-        val definition =
-            jdbcTemplate.queryForObject(
-                "SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' " +
-                    "AND indexname = 'idx_payment_idempotency_payment_id'",
-                String::class.java,
+        val index =
+            jdbcTemplate.queryForMap(
+                """
+                SELECT pg_get_indexdef(index_state.indexrelid) AS definition,
+                       index_state.indisvalid AS valid,
+                       index_state.indisready AS ready
+                  FROM pg_index index_state
+                 WHERE index_state.indexrelid =
+                       to_regclass('public.idx_payment_idempotency_payment_id')
+                """.trimIndent(),
             )
 
-        assertThat(definition).contains("payment_idempotency_record", "(payment_id)")
+        assertThat(index["definition"])
+            .isEqualTo(
+                "CREATE INDEX idx_payment_idempotency_payment_id " +
+                    "ON public.payment_idempotency_record USING btree (payment_id)",
+            )
+        assertThat(index["valid"]).isEqualTo(true)
+        assertThat(index["ready"]).isEqualTo(true)
+    }
+
+    @Test
+    fun `V92 accepts an equivalent pre-created index and records the migration`() {
+        migrateToBeforeV92()
+        jdbcTemplate.execute(
+            "CREATE INDEX idx_payment_idempotency_payment_id " +
+                "ON payment_idempotency_record (payment_id)",
+        )
+
+        val result = flyway().migrate()
+
+        assertThat(result.migrationsExecuted).isEqualTo(1)
+        assertThat(successfulV92Count()).isEqualTo(1)
+    }
+
+    @Test
+    fun `V92 rejects a same-named index with a different definition`() {
+        migrateToBeforeV92()
+        jdbcTemplate.execute(
+            "CREATE INDEX idx_payment_idempotency_payment_id " +
+                "ON payment_idempotency_record (order_id)",
+        )
+
+        assertThatThrownBy { flyway().migrate() }
+            .isInstanceOf(FlywayException::class.java)
+            .hasStackTraceContaining("does not match required definition")
+        assertThat(successfulV92Count()).isZero()
     }
 
     @Test
@@ -119,11 +161,31 @@ internal class PaymentIdempotencyQueryMigrationTest : IsolatedPostgresSupport() 
                 TARGET_PAYMENT_ID,
             ).joinToString("\n")
 
-    private fun flyway(cleanDisabled: Boolean = true): Flyway =
-        Flyway
-            .configure()
-            .dataSource(dataSource)
-            .locations("classpath:db/migration")
-            .cleanDisabled(cleanDisabled)
-            .load()
+    private fun migrateToBeforeV92() {
+        flyway(cleanDisabled = false).clean()
+        flyway(target = MigrationVersion.fromVersion("91")).migrate()
+    }
+
+    private fun successfulV92Count(): Int =
+        jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM flyway_schema_history WHERE version = '92' AND success",
+            Int::class.java,
+        ) ?: 0
+
+    private fun flyway(
+        cleanDisabled: Boolean = true,
+        target: MigrationVersion? = null,
+    ): Flyway {
+        val configuration =
+            Flyway
+                .configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .cleanDisabled(cleanDisabled)
+
+        if (target != null) {
+            configuration.target(target)
+        }
+        return configuration.load()
+    }
 }

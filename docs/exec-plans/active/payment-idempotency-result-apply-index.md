@@ -29,6 +29,12 @@ CPU 기여를 확인한다.
 - [x] 2026-09-21 V92와 동일한 DDL만 스테이징에 적용하고 index 정의/크기/health 확인.
 - [x] 2026-09-21 동일 조건 개선군 측정, recovery/invariant와 Grafana 전후 캡처 완료.
 - [x] 2026-09-21 결과 문서화와 final diff 검토. PR은 migration lane gate 때문에 Draft 유지.
+- [x] 2026-09-21 PR #189가 병합된 최신 main을 통합하고 #190의 별도 V92 충돌을 확인해 #198을 실제 Draft로
+  되돌림.
+- [x] 2026-09-21 리뷰 후 V92에 5초 lock/60초 statement timeout과 exact index definition 검증을 추가하고,
+  올바른 선적용 index 허용·잘못된 동일 이름 index 거부 회귀 테스트를 추가함.
+- [x] 2026-09-21 최신 main 기준 V92 migration·Payment confirmation·Flyway smoke·spotless, 테스트 제외
+  전체 build와 문서 검증(18 tests, 136 ADRs, 385 Markdown, 111 ExecPlans) 통과.
 
 ## Scope and Guardrails
 
@@ -43,9 +49,11 @@ CPU 기여를 확인한다.
 
 ## Migration Lane
 
-`origin/main`의 마지막 migration은 V91이다. 열린 PR #189/#190은 V87/V88을 포함하지만 둘 다 main과
-충돌하고 main inventory보다 낮다. 이 plan은 그 branch를 변경·merge·재번호화하지 않고 V92만 소유한다.
-repository-wide release 순서의 불일치는 숨기지 않으며 PR은 해당 gate가 해소될 때까지 Draft로 둔다.
+`origin/main`의 마지막 migration은 V91이고 PR #189의 V87은 이미 병합됐다. PR #190은 최신 main을
+통합하면서 demo migration을 별도 V92로 재번호해 #198과 version collision 상태다. #198은 먼저 시작돼
+스테이징 A/B와 정식 migration이 V92에 고정됐으므로 Draft에서 V92 lane을 유지한다. 이 PR의 리뷰·CI와
+병합이 끝난 뒤 #190이 최신 main을 통합하고 아직 미적용인 demo migration을 V93으로 옮긴다. 두 V92가
+동시에 main에 들어가거나 V93이 V92보다 먼저 release되는 순서는 허용하지 않는다.
 
 ## Validation Plan
 
@@ -64,6 +72,8 @@ repository-wide release 순서의 불일치는 숨기지 않으며 PR은 해당 
 | 2026-09-20 | Draft PR과 V92 release gate | 오래된 열린 migration PR의 불일치를 숨기거나 임의 해결하지 않음 |
 | 2026-09-20 | 스테이징에 동일 DDL만 선적용 | V91 등 다른 변수를 섞지 않고 기존 데이터 A/B를 유지 |
 | 2026-09-21 | 12/s A/B를 query/component 원인 확정에 사용 | 단일 변수로 SQL·CPU·Hikari가 함께 이동했지만 capacity 경계는 별도 검증 대상 |
+| 2026-09-21 | V92에 bounded transactional build와 exact definition 검증 | lock 대기와 이름-only 선적용 수용을 fail-closed 처리 |
+| 2026-09-21 | #198 V92 선행, #190 V93 후행 | #198의 기존 스테이징 증거를 보존하고 Flyway out-of-order release 방지 |
 
 ## Outcomes & Retrospective
 
@@ -83,5 +93,9 @@ dropped/failure 0, 14개 invariant 위반 0, active recovery 0을 충족했다. 
 판정은 이 lookup의 **Confirmed improvement**다. 실제 staging plan도 named Index Scan을 사용했고 SQL, CPU와
 pool tail이 단일 변수에 함께 반응했으므로 미인덱스 조회가 CPU 포화의 물질적 기여 원인임을 확정한다.
 다만 15/s 반복과 18/s 경계는 이 plan에서 실행하지 않았으므로 전체 CPU 포화 해결이나 capacity boundary
-이동은 주장하지 않는다. PR #198의 전체 CI는 통과했다. PR은 V87/V88 migration lane 정리가 끝날 때까지
-Draft로 두며, 스테이징의 수동 선적용은 Flyway history에 V92를 삽입하지 않았다.
+이동은 주장하지 않는다. 기존 PR #198 CI는 통과했다. 리뷰 보완 뒤에는 최신 main 기준 CI를 다시 실행한다.
+PR은 #190의 V92가 V93으로 이동할 때까지 Draft로 두며, 스테이징의 수동 선적용은 Flyway history에 V92를
+삽입하지 않았다. 정식 V92는 선적용 index의 definition/valid 상태를 검증한 뒤에만 migration history에
+성공을 기록한다. 리뷰 보완의 focused regression, Flyway smoke, Payment confirmation, spotless와
+테스트 제외 build, 문서 검증은 최신 main 통합 상태에서 통과했다. 전체 원격 test shard와 CodeQL은 push
+후 다시 확인한다.
