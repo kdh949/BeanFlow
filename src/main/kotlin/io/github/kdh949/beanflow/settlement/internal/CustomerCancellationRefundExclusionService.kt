@@ -90,7 +90,11 @@ internal class CustomerCancellationRefundExclusionService(
                 targetId = event.refundId,
                 sourceReference = event.refundSource,
             )
-        if (!auditRecordQueries.exists(auditKey)) {
+        val existingAudit = auditRecordQueries.find(auditKey)
+        if (existingAudit != null && existingAudit.reason != AUDIT_REASON) {
+            conflict("AUDIT_REASON", "Customer-cancellation exclusion Audit reason conflicts with Order cause")
+        }
+        if (existingAudit == null) {
             auditRecords.appendAll(
                 listOf(
                     AppendAuditRecordCommand(
@@ -228,7 +232,7 @@ internal class CustomerCancellationRefundExclusionService(
 
 @Component
 internal class PaymentRefundedSettlementListener(
-    private val exclusions: CustomerCancellationRefundExclusionService,
+    private val exclusions: PreAcceptanceRefundExclusionRouter,
     private val adjustments: SettlementRefundAdjustmentService,
     private val clock: Clock,
 ) {

@@ -960,6 +960,25 @@
   publication을 완료하지 않는다. 운영 조회는 Order·Refund·Audit 세 원천을 조합해
   “주문 미완료로 정산 제외”를 표시하며 0원 Adjustment나 별도 제외 원장을 만들지
   않는다.
+- **Pre-acceptance Store Rejection Amendment (2026-09-14):** 수락되지 않은 `PAID`
+  주문이 매장 직접 거절 또는 수락 timeout으로 `REJECTED`되고 전액 Refund가 성공하면
+  고객 취소 경로를 재사용하지 않고 원인별 `NOT_APPLICABLE`로 정산을 끝낸다.
+  SettlementItem과 SettlementAdjustment는 만들지 않는다. Ordering은 자유 형식
+  `rejectionReason`과 분리된 폐쇄형 `STORE_REJECTION | ACCEPTANCE_TIMEOUT` 원인과
+  `OrderRejectedV1` actor/source/terminal version을 같은 종료 transaction의 immutable
+  evidence로 저장·공개한다. `IMMEDIATE` 주문의 유효 수락 deadline이 영업 마감으로 단축되어
+  자유 사유가 `STORE_CLOSED`인 경우도 system timeout actor와 `ACCEPTANCE_TIMEOUT`으로 기록한다.
+  Settlement는 Order `REJECTED`, 원인과 actor의 일치,
+  `STORE_ORDER_REJECTED` Refund `SUCCEEDED`, 전액·source·version 일치와 SettlementItem
+  부재를 모두 확인한 뒤 source당 하나의 `SETTLEMENT_REFUND_EXCLUDED` AuditRecord를
+  남긴다. Audit reason은 매장 직접 거절이면
+  `ORDER_NOT_COMPLETED_STORE_REJECTION`, timeout이면
+  `ORDER_NOT_COMPLETED_ACCEPTANCE_TIMEOUT`이다. 누락·불일치 원인을 자유 text나 현재
+  상태로 추정하지 않고 `SETTLEMENT_SOURCE_CONFLICT`와 `MANUAL_REVIEW`를 유지한다.
+  `PaymentRefundedV1` payload와 version은 변경하지 않으며 기존 publication은 수정·삭제·
+  강제 완료하지 않는다. 검증된 기존 source만 dry-run 뒤 `1 → 10 → 100 → remainder`
+  bounded replay 대상으로 삼고, 중복 Audit, Item/Adjustment 또는 새 conflict가 하나라도
+  나타나면 중단한다.
 - **Pre-completion Refund Amendment (2026-08-02):** 완료 전 품목 환불은 미수락 종료와
   다르므로 `NOT_APPLICABLE`로 종결하지 않는다. `PaymentRefundedV1`의 immutable refund
   effect를 source-aware pending input으로 보존하고, Order가 나중에 `COMPLETED`되면 그
@@ -972,6 +991,8 @@
 - **Required Tests:**
   - 결제일과 완료일이 다른 주문의 귀속
   - 완료되지 않은 주문 제외
+  - 매장 직접 거절과 수락 timeout의 원인별 정산 제외 및 고객 취소 회귀 부재
+  - 기존 publication의 source/version 불일치와 누락 evidence의 fail-closed 처리
   - 자정 경계의 완료 주문
   - 중복 완료 이벤트의 정산 항목 중복 방지
   - 완료 전 부분 환불과 완료 event의 순서가 바뀌어도 동일한 정산 결과

@@ -3,7 +3,7 @@
 > **Status:** `ACTIVE`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
-> **Writes-Migration:** `false`
+> **Writes-Migration:** `true`
 > **Depends-On:** `docs/exec-plans/completed/performance-observability-and-load-test-foundation.md`, `docs/exec-plans/completed/perf-selective-database-cutover.md`
 > **Completed-At:** `—`
 
@@ -156,7 +156,8 @@ Notification owner와 실제 등록 listener를 M1에서 목록화한다.
 [실패 의미](../../architecture/failure-semantics.md),
 [ADR-006](../../adr/ADR-006-external-payment-transaction-boundary.md),
 [ADR-007](../../adr/ADR-007-payment-idempotency-reconciliation.md),
-[ADR-121](../../adr/ADR-121-performance-observability-and-trace-profile-correlation.md)다.
+[ADR-121](../../adr/ADR-121-performance-observability-and-trace-profile-correlation.md),
+[ADR-131](../../adr/ADR-131-store-rejection-settlement-exclusion-and-forward-recovery.md)이다.
 이관의 원본 보존·대상 구분은 본 문서와 [이관 Runbook](../../operations/perf-selective-db-cutover-runbook.md)을 따른다.
 ADR-130의 결정과 현재 실행 대상이 충돌하면 실행 전에 차이를 기록하고 결정 문서를 먼저 갱신한다.
 
@@ -174,6 +175,9 @@ ADR-130의 결정과 현재 실행 대상이 충돌하면 실행 전에 차이�
 9. 고객 session 동시 한도 5개, 점주 3개를 넘기는 반복 로그인으로 기존 session을 폐기하지 않는다.
    `INITIAL_PASSWORD` 점주를 자동 비밀번호 변경으로 우회하지 않는다.
 10. 합성 데이터에도 실제 제약과 감사 규칙을 유지한다. 현행 Ordering에는 제거된 재고 owner를 새로 가정하지 않는다.
+11. 미수락 `PAID` 주문의 매장 거절과 수락 timeout은 폐쇄형 Order cause/actor/event/version evidence로
+    분류하고, Settlement는 exact source만 `NOT_APPLICABLE`로 제외한다. 자유 사유와 현재 상태로 누락
+    evidence를 추론하지 않는다.
 
 ## Architecture and Transaction Boundaries
 
@@ -244,7 +248,10 @@ M2의 변경 전 legacy suite에는 자동 abort가 없으므로 실행자가 �
 
 ### 데이터 소유와 준비 순서
 
-M0에서 현재 DB와 보존 원본을 분리한다. 이 계획은 Flyway 변경이나 원본 재이관을 요구하지 않는다.
+M0에서 현재 DB와 보존 원본을 분리한다. 기존 성능 도구 범위는 원본 재이관을 요구하지 않는다.
+다만 ADR-131의 정산 계약 복구는 V87로 exact legacy rejection evidence만 forward-only로 물질화하며
+publication payload/state/history를 바꾸지 않는다. 불일치 row는 nullable evidence로 남고 Settlement가
+fail-closed한다.
 최근 이관 기록의 220 고객/161 점주/161 매장/2,721 메뉴/미래 슬롯 수는 과거 snapshot이다.
 현재 유효 계정·소속·메뉴·슬롯 수를 다시 읽고 **합성 데이터임이 확인된 allowlist**만 사용한다.
 UUID 모양이나 이름의 접두사만으로 합성 계정이라고 판단하지 않는다.
@@ -336,6 +343,9 @@ DB 직접 UPDATE, 권한 임의 부여, 원본 정책 bootstrap 재실행으로 
 소스 기준은 [runtime OpenAPI](../../../openapi/beanflow-v1-runtime.yaml)다.
 이 문서가 참조하는 [공통 계약](../../../openapi/beanflow-v1.yaml) fragment와 controller/DTO를 함께 읽는다.
 공통 계약에만 있는 endpoint를 구현된 API로 추정하지 않는다.
+
+ADR-131은 `PaymentRefundedV1` payload와 version을 변경하지 않는다. Ordering public evidence와
+Settlement의 state-aware consumer 분기만 확장하며, 기존 publication은 수정하거나 강제 완료하지 않는다.
 
 ### 정상 흐름의 정확한 요청 순서
 
@@ -918,6 +928,9 @@ scheduled 업무가 아직 미래라면 "지금 due work 0"만으로 전체 reco
   resubmission 처리량, repository와 동일한 backoff/lease claimability, 다중 host stale rule을 보정.
 - [x] 2026-09-13: 전체 `./gradlew check`의 실행계획 단언 1건 실패를 격리 재실행해 통과 확인하고,
   전체 suite Failed와 격리 Passed를 별도 기록.
+- [x] 2026-09-14: BR-16과 ADR-131로 매장 거절 정산 제외, exact legacy evidence와 forward-only 복구 경계 확정.
+- [x] 2026-09-14: Ordering rejection evidence, store-rejection Settlement exclusion과 V87 backfill 구현.
+- [x] 2026-09-21: 최신 main 충돌 해결 뒤 migration·문서·전체 로컬 검증 통과. 원격 PR CI는 push 뒤 별도 확인.
 - [ ] 2026-09-13: 새 revision 배포 및 실제 Grafana의 O1~O6 수집·표시, trace-log-profile 연결과 overhead smoke.
 - [ ] M0: 실제 배포/DB/Provider/관측성 확인과 target/DB helper 보완.
 - [ ] M1: 합성 fixture·예산·cohort 정합성/회복 검증기 구현.
@@ -959,6 +972,7 @@ scheduled 업무가 아직 미래라면 "지금 due work 0"만으로 전체 reco
 | 2026-09-13 | 정상 완료/활성 recovery/미구현 downstream을 분리 | 현재 구현 범위와 성능 주장 한계 일치 |
 | 2026-09-13 | O1~O6는 닫힌 label과 bounded collector로 구현하고 live gate를 별도 유지 | cardinality·민감정보·collector 부하를 제한하면서 정적/실환경 증거를 혼동하지 않음 |
 | 2026-09-13 | backlog에 business state와 claimability를 함께 보존 | UNKNOWN 진단 정보를 잃지 않으면서 실제 실행 가능한 due만 분리 |
+| 2026-09-14 | ADR-131의 폐쇄형 거절 원인과 V1 forward-only consumer/recovery 선택 | 기존 2,315개 publication과 실패 이력을 보존하면서 exact evidence만 안전하게 재처리 |
 
 ## Outcomes & Retrospective
 
@@ -981,6 +995,10 @@ Grafana 표시는 미완료이며, 따라서 M0의 O1~O3 live gate는 통과로 
   이는 복원 전 역사적 결과이며 현재 gate로 사용하지 않는다.
 - ADR-130과 연결 문서 복원 후 `bash scripts/verify-docs.sh`: Passed. 검증기 18개와 전체 문서 링크 검사를
   예외 없이 통과했다.
+- ADR-131과 최신 main 통합 후 `bash scripts/verify-docs.sh`: Passed. 검증기 18개, OpenAPI semantic 검사,
+  정책 57개, ADR 135개, Markdown 382개와 ExecPlan 110개를 검증했다.
+- ADR-131 관련 Ordering/Settlement/Flyway/Modulith 선별 테스트: Passed (`BUILD SUCCESSFUL in 2m 24s`).
+- 최신 main 통합 후 전체 `./gradlew check --no-daemon`: Passed (`BUILD SUCCESSFUL in 1h 5m 47s`).
 - 전체 `./gradlew check`: Failed (`1,755` tests, `1` failed, `2` skipped). 실패한
   `StoreCatalogQueryMigrationTest`는 PostgreSQL 실행계획 index 선택 단언이며 `--rerun-tasks` 격리
   재실행은 Passed다. 관측성 대상 테스트 통과와 전체 suite 실패를 혼동하지 않는다.
@@ -1014,3 +1032,4 @@ Grafana 표시는 미완료이며, 따라서 M0의 O1~O3 live gate는 통과로 
   O6의 발생기·자원 관측과 관측 범위 밖 원인의 미확정 기록은 유지.
 - 2026-09-13: 후속 범위 축소로 발생기 자원·네트워크 관측과 k6 전송 단계 시간·dropped/VU의 Grafana 연결도 제외.
   O6·조사 절차·보고서 포화 항목을 앱 서버 관측으로 정리하고 k6 원본 결과·실행 유효성 검증은 유지.
+- 2026-09-14: ADR-131의 매장 거절 정산 제외와 V87 forward-only evidence backfill, bounded recovery 경계 추가.
