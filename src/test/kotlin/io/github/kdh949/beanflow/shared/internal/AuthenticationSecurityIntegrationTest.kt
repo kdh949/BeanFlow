@@ -33,7 +33,6 @@ import org.springframework.security.web.SecurityFilterChain
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.transaction.PlatformTransactionManager
@@ -71,17 +70,24 @@ internal class AuthenticationSecurityIntegrationTest(
         val appender = ListAppender<ILoggingEvent>().apply { start() }
         logger.addAppender(appender)
         try {
-            mockMvc
-                .perform(get("/api/v1/me/orders").header("X-Correlation-Id", "security-support-code"))
-                .andExpect(status().isUnauthorized)
-                .andExpect(header().string("X-Correlation-Id", "security-support-code"))
-                .andExpect(jsonPath("$.correlationId").value("security-support-code"))
-            val fields =
-                appender.list
-                    .single()
-                    .keyValuePairs
-                    .associate { it.key to it.value }
-            assertThat(fields).containsEntry("correlationId", "security-support-code").containsEntry("status", 401)
+            val codes =
+                (1..2).map {
+                    val result =
+                        mockMvc
+                            .perform(get("/api/v1/me/orders").header("X-Correlation-Id", "security-support-code"))
+                            .andExpect(status().isUnauthorized)
+                            .andReturn()
+                    val code = result.response.getHeader("X-Correlation-Id")!!
+                    assertThat(UUID.fromString(code).toString()).isEqualTo(code)
+                    assertThat(code).isNotEqualTo("security-support-code")
+                    jsonPath("$.correlationId").value(code).match(result)
+                    code
+                }
+            assertThat(codes).doesNotHaveDuplicates()
+            val fields = appender.list.map { event -> event.keyValuePairs.associate { it.key to it.value } }
+            assertThat(fields.map { it["correlationId"] }).containsExactlyElementsOf(codes)
+            assertThat(fields).allSatisfy { assertThat(it).containsEntry("status", 401) }
+            assertThat(appender.list.joinToString { it.formattedMessage + it.keyValuePairs }).doesNotContain("security-support-code")
         } finally {
             logger.detachAppender(appender)
             appender.stop()

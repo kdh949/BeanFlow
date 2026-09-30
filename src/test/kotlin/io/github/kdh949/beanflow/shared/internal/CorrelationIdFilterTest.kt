@@ -47,17 +47,19 @@ internal class CorrelationIdFilterTest {
             }
         val response = MockHttpServletResponse()
         filter.doFilter(request, response) { _, _ ->
-            assertThat(MDC.get("correlationId")).isEqualTo("support-code")
+            assertThat(MDC.get("correlationId")).isEqualTo(identifier.toString())
             response.status = 401
         }
-        assertThat(response.getHeader("X-Correlation-Id")).isEqualTo("support-code")
+        assertThat(response.getHeader("X-Correlation-Id")).isEqualTo(identifier.toString())
         val fields =
             appender.list
                 .single()
                 .keyValuePairs
                 .associate { it.key to it.value }
-        assertThat(fields).containsEntry("correlationId", "support-code").containsEntry("route", "UNMAPPED").containsEntry("status", 401)
-        assertThat(fields.toString()).doesNotContain("private-token", "private-customer")
+        assertThat(
+            fields,
+        ).containsEntry("correlationId", identifier.toString()).containsEntry("route", "UNMAPPED").containsEntry("status", 401)
+        assertThat(fields.toString()).doesNotContain("private-token", "private-customer", "support-code")
         assertThat(MDC.get("correlationId")).isNull()
     }
 
@@ -77,6 +79,47 @@ internal class CorrelationIdFilterTest {
         assertThat(fields.toString()).doesNotContain("private-token")
         assertThat(appender.list.single().throwableProxy).isNull()
         assertThat(MDC.get("correlationId")).isNull()
+    }
+
+    @Test
+    fun `client controlled correlation headers never become support codes or trace fields`() {
+        val inputs = listOf("37.123456789:127.987654321", "test-api-key.internal:42", "d94baf36-7c08-4ab1-b16f-54edfd4d9c35")
+        var sequence = 0L
+        val serverFilter = CorrelationIdFilter(IdentifierSource { UUID(0, ++sequence) })
+        val codes = mutableListOf<String>()
+        val exporter = InMemorySpanExporter.create()
+        SdkTracerProvider.builder().addSpanProcessor(SimpleSpanProcessor.create(exporter)).build().use { provider ->
+            inputs.forEach { input ->
+                repeat(2) {
+                    val request = MockHttpServletRequest("GET", "/api/v1/me/orders").apply { addHeader("X-Correlation-Id", input) }
+                    val response = MockHttpServletResponse()
+                    val span = provider.get("support-code-test").spanBuilder("request").startSpan()
+                    span.makeCurrent().use {
+                        serverFilter.doFilter(request, response) { _, _ ->
+                            assertThat(MDC.get("correlationId")).isEqualTo(response.getHeader("X-Correlation-Id"))
+                            response.status = 503
+                        }
+                    }
+                    span.end()
+                    val code = response.getHeader("X-Correlation-Id")!!
+                    assertThat(code).isNotEqualTo(input)
+                    codes += code
+                    assertThat(MDC.get("correlationId")).isNull()
+                }
+            }
+            assertThat(
+                exporter.finishedSpanItems.map {
+                    it.attributes.get(
+                        io.opentelemetry.api.common.AttributeKey
+                            .stringKey("beanflow.correlation_id"),
+                    )
+                },
+            ).containsExactlyElementsOf(codes)
+        }
+        assertThat(codes).hasSize(6).doesNotHaveDuplicates()
+        assertThat(appender.list.map { event -> event.keyValuePairs.associate { it.key to it.value }["correlationId"] })
+            .containsExactlyElementsOf(codes)
+        assertThat(appender.list.joinToString { it.formattedMessage + it.keyValuePairs }).doesNotContain(*inputs.toTypedArray())
     }
 
     @Test

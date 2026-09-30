@@ -20,7 +20,8 @@ Nginx는 별도 request_id만 기록하고 CorrelationIdFilter는 MDC 생성·�
 
 ## Definitions
 
-문의 코드는 오류 응답 correlationId이며 X-Correlation-Id와 같다. route는 MVC path template다.
+문의 코드는 서버가 요청마다 생성하는 UUID이며 오류 응답 correlationId와 응답 X-Correlation-Id가 같다.
+외부 X-Correlation-Id는 사용·기록하지 않는다. route는 MVC path template다.
 SQLSTATE는 DB가 반환하는 5자리 오류 분류이며 SQL이나 오류 원문과 다르다.
 
 ## Scope
@@ -111,6 +112,8 @@ in-process compiler로 검증한다.
 ## Decision Log
 
 - 2026-09-30: 원문 Throwable 대신 bounded 진단 metadata를 사용한다. ADR-121에 기록.
+- 2026-09-30: 문의 코드는 외부 header를 수용하지 않고 요청별 서버 UUID로 생성한다.
+  길이/문자 검증은 PII/secret 비노출과 요청 구분을 보장하지 못하므로 ADR-121을 갱신한다.
 
 ## Outcomes & Retrospective
 
@@ -127,6 +130,17 @@ JVM 검증은 임시 GRADLE_USER_HOME, JDK 21, `-Pkotlin.compiler.execution.stra
 Not run: 전체 JVM/프론트엔드 UI suite, 운영 배포와 실제 수집 로그 조회.
 거래 데이터·정책을 수정하거나 현재 장애를 복구했다고 주장하지 않는다.
 
+### PR 리뷰 후속 검증 (2026-09-30)
+
+외부 header의 합성 좌표 값이 실패 로그와 문의 코드에 복사되는 회귀 테스트 실패를 먼저 확인했다.
+필터의 입력 header 조회를 제거한 뒤 좌표·token·UUID 형태 입력과 반복 요청의 서버 생성 코드,
+응답/MDC/log/trace 일치, 503 진단의 외부 값 비노출과 실제 Security 401 경로를 검증했다.
+
+Passed: 같은 JVM 검증 대상 28 tests (CorrelationIdFilterTest 5, 나머지 기존 23),
+spotlessCheck, bootJar, 실제 Nginx proxy/header/log/privacy 검증, 문서/OpenAPI와 diff check.
+전체 suite, 운영 배포와 실제 Loki/trace 수집 경로 검증은 Not run이다.
+
 ## Revision Notes
 
 - 2026-09-30: 초기 계획.
+- 2026-09-30: PR 리뷰에 따라 서버 전용 문의 코드 생성 정책과 회귀 검증 반영.

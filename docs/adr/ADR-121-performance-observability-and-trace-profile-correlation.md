@@ -50,8 +50,11 @@ BeanFlow에는 HTTP Actuator health와 다수의 Micrometer domain metric이 있
 
 #### HTTP 실패 문의 코드 amendment (2026-09-30)
 
-- 제품 HTTP 요청의 `X-Correlation-Id`, 오류 응답 `correlationId`, 실패 로그와 활성 trace의
-  `beanflow.correlation_id`를 같은 값으로 연결한다. correlation ID는 검색 field이며 metric 또는
+- 서버는 제품 HTTP 요청마다 새 UUID 문의 코드를 생성한다. 클라이언트가 보낸 `X-Correlation-Id`는
+  형식에 관계없이 사용·복사·기록하지 않는다. 외부 값의 길이/문자 검증만으로 개인정보·secret
+  비노출이나 요청 구분을 보장할 수 없기 때문이다.
+- 응답 `X-Correlation-Id`, 오류 응답 `correlationId`, 실패 로그와 활성 trace의
+  `beanflow.correlation_id`를 서버 생성 값으로 연결한다. correlation ID는 검색 field이며 metric 또는
   Loki index label로 승격하지 않는다.
 - 공통 필터는 4xx/5xx 응답과 처리 중 전파된 예외를 `http_request_failed`로 기록한다. method는
   닫힌 집합, route는 MVC template 또는 `UNMAPPED`만 사용한다. 4xx는 INFO, 5xx는 ERROR다.

@@ -1,6 +1,8 @@
 # HTTP 실패 문의 코드 조회
 
-화면의 문의 코드는 오류 응답 `correlationId`와 `X-Correlation-Id` header 값이다.
+화면의 문의 코드는 서버가 요청마다 새로 생성하는 UUID이며 오류 응답 `correlationId`와
+응답 `X-Correlation-Id` header 값이다. 클라이언트가 보낸 동명 header는 사용·기록하지 않는다.
+동일 요청을 재시도해도 새 문의 코드를 받으며, 이 값은 거래 멱등 키가 아니다.
 로그는 [ADR-121](../adr/ADR-121-performance-observability-and-trace-profile-correlation.md)의
 HTTP failure amendment를 따른다.
 

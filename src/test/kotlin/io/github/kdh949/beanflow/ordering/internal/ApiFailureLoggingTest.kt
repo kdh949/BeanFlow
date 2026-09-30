@@ -71,8 +71,11 @@ internal class ApiFailureLoggingTest {
     @Test
     fun `wrapped database failure links response logs and template without leaking SQL or input`() {
         mvc
-            .perform(get("/diagnostics/private-order/database").queryParam("ticket", SECRET).header("Authorization", SECRET))
-            .andExpect(status().isServiceUnavailable)
+            .perform(
+                get(
+                    "/diagnostics/private-order/database",
+                ).queryParam("ticket", SECRET).header("Authorization", SECRET).header("X-Correlation-Id", CLIENT_REFERENCE),
+            ).andExpect(status().isServiceUnavailable)
             .andExpect(header().string("X-Correlation-Id", REFERENCE))
             .andExpect(jsonPath("$.correlationId").value(REFERENCE))
             .andExpect(jsonPath("$.message").value("Customer order read dependency is unavailable"))
@@ -91,7 +94,7 @@ internal class ApiFailureLoggingTest {
             assertThat(event.throwableProxy).isNull()
             assertThat(
                 event.formattedMessage + fields(event) + event.mdcPropertyMap,
-            ).doesNotContain(SECRET, "private-order", "SELECT", "ticket")
+            ).doesNotContain(SECRET, "private-order", "SELECT", "ticket", CLIENT_REFERENCE)
         }
         assertThat(MDC.get("correlationId")).isNull()
     }
@@ -172,6 +175,7 @@ internal class ApiFailureLoggingTest {
     }
 
     private companion object {
+        const val CLIENT_REFERENCE = "37.123456789:127.987654321"
         const val SECRET = "secret-authkey-raw-customer-data"
         const val REFERENCE = "7ecac34c-e7f6-4723-a72f-c5895c0ff4af"
     }

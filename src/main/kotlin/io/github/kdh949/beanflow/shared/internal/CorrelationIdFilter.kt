@@ -23,11 +23,7 @@ internal class CorrelationIdFilter(
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
-        val requested = request.getHeader(HEADER)
-        val correlationId =
-            requested
-                ?.takeIf { it.length in 1..128 && it.all(::isSafeCharacter) }
-                ?: identifierSource.next().toString()
+        val correlationId = identifierSource.next().toString()
         val previous = MDC.get(MDC_KEY)
         MDC.put(MDC_KEY, correlationId)
         response.setHeader(HEADER, correlationId)
@@ -66,8 +62,6 @@ internal class CorrelationIdFilter(
             }
         }
     }
-
-    private fun isSafeCharacter(character: Char): Boolean = character.isLetterOrDigit() || character in "-_.:"
 
     private companion object {
         const val HEADER = "X-Correlation-Id"
