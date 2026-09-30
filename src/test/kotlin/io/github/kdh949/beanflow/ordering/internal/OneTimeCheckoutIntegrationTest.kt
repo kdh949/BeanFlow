@@ -66,6 +66,83 @@ internal class OneTimeCheckoutIntegrationTest
             testClock.reset()
         }
 
+        @ParameterizedTest
+        @CsvSource("-1,true", "0,false", "1,false")
+        fun `immediate pending order remains readable and cancellable across its payment cutoff`(
+            secondsFromCutoff: Long,
+            canPay: Boolean,
+        ) {
+            testClock.set(Instant.parse("2026-09-30T03:00:00Z"))
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture, priceKrw = 10_000)
+            OrderCreationDatabaseFixture.insertOperatingHours(jdbcTemplate, fixture.storeId)
+            val couponId = OrderCreationDatabaseFixture.insertFixedCoupon(jdbcTemplate, fixture, 2_000)
+            OrderCreationDatabaseFixture.insertPoints(jdbcTemplate, fixture.customerId, 500)
+            val command = fixture.command(couponIssuanceId = couponId, pointsToUseKrw = 500).copy(pickupSlotId = null)
+            val created = createOrderUseCase.create("immediate-query-create", orderQuoteUseCase.attachCurrentQuote(command))
+            assertThat(created.status).withFailMessage(created.body).isEqualTo(201)
+            val orderId = value<UUID>("SELECT id FROM ordering_order")
+            val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
+            val cutoff = value<Timestamp>("SELECT ordering_window_closes_at FROM ordering_order WHERE id = ?", orderId).toInstant()
+            testClock.set(cutoff.plusSeconds(secondsFromCutoff))
+            val actor = jwt().jwt { it.subject(fixture.customerId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_CUSTOMER"))
+
+            mockMvc
+                .perform(get("/api/v1/me/orders").param("status", "ACTIVE").with(actor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].orderReference").value(reference))
+                .andExpect(jsonPath("$.items[0].status").value("PENDING_PAYMENT"))
+                .andExpect(jsonPath("$.items[0].totalAmountKrw").value(7_500))
+                .andExpect(jsonPath("$.items[0].allowedActions[0]").value("CANCEL"))
+            mockMvc
+                .perform(get("/api/v1/me/orders/$reference").with(actor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.checkoutMode").value("IMMEDIATE"))
+                .andExpect(jsonPath("$.paymentDeadlineAt").value(cutoff.toString()))
+                .andExpect(jsonPath("$.reservationExpiresAt").doesNotExist())
+                .andExpect(jsonPath("$.allowedActions[0]").value("CANCEL"))
+            mockMvc
+                .perform(get("/api/v1/me/orders/$reference/checkout").with(actor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.canPay").value(canPay))
+                .andExpect(jsonPath("$.order.checkoutMode").value("IMMEDIATE"))
+                .andExpect(jsonPath("$.order.paymentDeadlineAt").value(cutoff.toString()))
+                .andExpect(jsonPath("$.order.reservationExpiresAt").doesNotExist())
+                .andExpect(jsonPath("$.paymentId").doesNotExist())
+                .andExpect(jsonPath("$.readyAttempt").doesNotExist())
+
+            if (!canPay) {
+                mockMvc
+                    .perform(
+                        post("/api/v1/me/orders/$reference/payment-attempts")
+                            .with(actor)
+                            .with(csrf())
+                            .header("Idempotency-Key", "immediate-query-closed-payment"),
+                    ).andExpect(status().isConflict)
+                    .andExpect(jsonPath("$.code").value("ORDER_STATE_CONFLICT"))
+            }
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("PENDING_PAYMENT")
+            assertThat(value<Long>("SELECT count(*) FROM payment_payment")).isZero()
+            assertThat(value<Long>("SELECT count(*) FROM fulfillment_pickup_reservation WHERE order_id = ?", orderId)).isZero()
+            assertThat(value<Long>("SELECT count(*) FROM promotion_coupon_reservation WHERE order_id = ?", orderId)).isZero()
+            assertThat(value<Long>("SELECT count(*) FROM loyalty_point_reservation WHERE order_id = ?", orderId)).isZero()
+            assertNoProviderCalls()
+
+            mockMvc
+                .perform(
+                    post("/api/v1/me/orders/$reference/cancellations")
+                        .with(actor)
+                        .with(csrf())
+                        .header("Idempotency-Key", "immediate-query-cancel")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""{"reasonCode":"CHANGED_MIND"}"""),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.orderState").value("CANCELLED"))
+            assertThat(value<Long>("SELECT count(*) FROM payment_payment")).isZero()
+            assertNoProviderCalls()
+        }
+
         @Test
         fun `public checkout resolves owned order and resumes the same ready attempt without another payment`() {
             val fixture = OrderCreationFixture()

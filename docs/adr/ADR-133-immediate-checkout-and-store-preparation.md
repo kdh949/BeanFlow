@@ -51,6 +51,20 @@ reconciliation과 공개 주문번호를 재사용한다. 준비 예상과 실�
 - 준비시간 누락·0·음수·121, 같은/다른 멱등 입력, UUID API와 ETA 경과 후 실제 상태를 검증한다.
 - legacy 주문의 슬롯·공개번호·실제 완료 event와 정산 회귀를 검증한다.
 
+### 고객 주문 조회 정합성 보정 (2026-09-30)
+
+`IMMEDIATE PENDING_PAYMENT`의 `reservationExpiresAt=null`은 정상 초안이다. 고객 목록·상세와
+public checkout의 `allowedActions`는 주문 모드와 영업 cutoff를 전달받아 기존 취소 명령과 같은
+규칙으로 계산한다. 즉시 주문은 cutoff가 있어야 하지만 영업 마감 전·정각·이후에도 결제 대기 상태라면
+`CANCEL`을 반환한다. 마감은 신규 결제의 gate이며 초안 취소를 차단하거나 예약 만료로 바꾸지 않는다.
+`LEGACY_RESERVED`의 예약 만료 경계와 `PAID`의 수락 deadline 경계는 유지한다.
+지원하지 않는 모드, 필요한 예약 만료시각 또는 영업 cutoff 누락은 명시적 dependency failure다.
+공개 API, DB 스키마와 취소·결제 명령을 변경하거나 초안에 예약 만료시각을 보정하지 않는다.
+
+검증은 즉시 주문의 목록·상세·checkout 조회, 마감 이후 결제 차단과 취소, 조회의 Payment·예약 무부수효과,
+기존 주문 회귀를 대상으로 한다. 2026-09-30 관련 86 tests와 구조·포맷·빌드 검증을 통과했으며,
+명령과 결과는 [즉시 결제 ExecPlan](../exec-plans/active/immediate-checkout-store-preparation.md)에 기록한다.
+
 ## Metrics
 
 checkout 시작 대비 `PAID` 확정·이탈, 중복 Payment, cart 보존, 준비 ETA 대비 actual readyAt를 관측한다.

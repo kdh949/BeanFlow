@@ -297,6 +297,9 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
 
 ## Progress
 
+- [x] 2026-09-30 고객 조회 보정: IMMEDIATE 초안의 정상 null lease를 오류로 처리하는 `allowedActions`를
+  모드별 취소 규칙에 맞췄다. 관련 86 tests와 구조·포맷·빌드·문서 검증을 통과했다.
+
 - [x] 2026-09-16 origin fetch, root/branch/HEAD/dirty/worktree와 첨부 기준 조상 관계 확인.
 - [x] AGENTS, frontend 지침, policy, failure semantics, decision rules, DoD, PLANS와 관련 ADR 확인.
 - [x] 첨부 confirmed→README→plan→task→decision→verification과 evidence/manifest 대조.
@@ -322,6 +325,11 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
   이번 요청 범위의 Stacked PR은 Draft로 유지한다.
 
 ## Surprises & Discoveries
+
+- 2026-09-30 조회의 취소 가능 여부 계산은 아직 모든 `PENDING_PAYMENT`에 예약 만료시각을 요구했다.
+  IMMEDIATE 초안의 목록·상세·public checkout이 같은 경로에서 503으로 실패했다. 회귀 테스트의
+  마감 전·정각·이후 세 경우 모두 수정 전 503을 재현했다. 기존 취소 명령은 IMMEDIATE 초안에
+  cutoff 존재를 요구하지만 마감으로 취소를 차단하지 않으므로 조회 행동도 같은 규칙을 유지한다.
 
 - origin/main은 첨부 기준 이후 Order/quote/transition에 성능 계측과 고객 탐색 개선을 포함하므로 첨부 함수
   본문을 덮어쓰면 안 된다.
@@ -362,8 +370,39 @@ catalog, OpenAPI 원본, error catalog, owner/operations runbook과 이 ExecPlan
 | 2026-09-16 | schedule을 신규 결제 gate로 사용 | 사용자 확정 영업시간 계약과 원래 영업 구간 보존 |
 | 2026-09-16 | provider callback preflight와 Tx C availability 재검증 병행 | 마감/OFF 뒤 불필요한 confirm을 막고 동시 변경은 승인 반환으로 수렴 |
 | 2026-09-16 | discovery 즉시 주문 가용성에서 legacy slot batch 제거 | 슬롯 0개 매장의 탐색→결제 진입을 허용하고 영업시간 미설정은 fail-closed로 유지 |
+| 2026-09-30 | 고객 조회 행동에 명시적 checkout mode와 cutoff 전달 | 정상 IMMEDIATE null lease를 허용하고 기존 취소 명령·마감 결제 gate와 일치시킴 |
 
 ## Outcomes
+
+### 2026-09-30 고객 주문 조회 보정
+
+- 수정 전 추가한 `OneTimeCheckoutIntegrationTest`의 마감 전·정각·이후 세 parameter case가
+  조회 `200` 기대에 실제 `503`으로 실패했다. 수정 후 세 조회 API와 마감 후 결제 차단·취소,
+  Payment·혜택 예약·Provider 호출 무부수효과를 검증했다.
+- 다음 command는 7개 class의 86 tests, failures/errors/skips 0으로 Passed
+  (`BUILD SUCCESSFUL in 1m 24s`). 기존 예약 만료·소유권·SQL 수·멱등성·실패 경로도 포함한다.
+
+```bash
+./gradlew spotlessApply spotlessCheck test \
+  --tests '*CustomerOrderPresentationPolicyTest' \
+  --tests '*CustomerOrderReadTransactionTest' \
+  --tests '*CustomerOrderQueryIntegrationTest' \
+  --tests '*OneTimeCheckoutIntegrationTest' \
+  --tests '*CustomerCancellationCommandIntegrationTest' \
+  --tests '*ModularityTests' \
+  --tests '*SupportArchitectureTest' --console=plain
+```
+
+- `./gradlew build -x test verifyCiTestShards --console=plain`: Passed (`BUILD SUCCESSFUL in 4s`),
+  335 test classes가 3개 shard에 정확히 한 번씩 포함됨을 확인했다.
+- `scripts/verify-docs.sh`: Passed (18 tests, OpenAPI YAML/semantic 검증, 58 policies, 137 ADRs,
+  389 Markdown, 112 ExecPlans). `git diff --check`: Passed.
+- 공개 API·DB schema·transaction과 결제·취소 명령은 변경하지 않았다. 전체 backend suite는 이번 보정에서
+  Not run이며 PR 전체 CI는 별도 확인 대상이다. 운영 DB write, 실제 Provider 호출, 배포는 Not run이다.
+- 이 보정은 로컬 조회 정합성 회귀이며 기존 전체 release gate를 완료하거나 이 ExecPlan의 ACTIVE 상태를
+  바꾸지 않는다.
+
+### 기존 즉시 결제 구현 검증
 
 - M0 문서 검증: `scripts/verify-docs.sh` Passed (18 tests, 57 policies, 133 ADRs, 377 Markdown, 108 ExecPlans).
 - M1 경계/스키마: availability 5 tests, V89/전체 Flyway 4 tests, Order domain/entity 19 tests Passed.
@@ -418,4 +457,5 @@ ordering이 해제되기 전 stack은 Draft로 유지한다.
 
 ## Revision Notes
 
+- 2026-09-30: 고객 조회 모드별 행동 계산 보정과 예약 없는 초안의 조회·취소·마감 회귀 검증 추가.
 - 2026-09-16: 현재 origin/main, 열린 migration PR, 최신 ADR-123과 실제 Storybook catalog를 기준으로 최초 작성.
