@@ -55,14 +55,19 @@ reconciliation과 공개 주문번호를 재사용한다. 준비 예상과 실�
 
 `IMMEDIATE PENDING_PAYMENT`의 `reservationExpiresAt=null`은 정상 초안이다. 고객 목록·상세와
 public checkout의 `allowedActions`는 주문 모드와 영업 cutoff를 전달받아 기존 취소 명령과 같은
-규칙으로 계산한다. 즉시 주문은 cutoff가 있어야 하지만 영업 마감 전·정각·이후에도 결제 대기 상태라면
-`CANCEL`을 반환한다. 마감은 신규 결제의 gate이며 초안 취소를 차단하거나 예약 만료로 바꾸지 않는다.
+규칙으로 계산한다. 즉시 주문은 cutoff가 있어야 하며 영업 마감 전·정각·이후에도 만료 처리가 아직
+적용되지 않아 `PENDING_PAYMENT`로 남아 있다면 `CANCEL`을 반환한다. 마감 정각부터 신규 결제는
+차단되며 기존 store-close worker는 초안을 `EXPIRED`로 전이한다. 취소와 만료 처리는 같은 주문 잠금으로
+직렬화된다. 취소가 먼저 적용되면 `CANCELLED`가 되고, 만료가 먼저 적용되면 신규 취소는
+`409 ORDER_STATE_CONFLICT`로 실패한다. 조회의 `CANCEL`은 이후 취소 요청의 성공을 보장하지 않는다.
 `LEGACY_RESERVED`의 예약 만료 경계와 `PAID`의 수락 deadline 경계는 유지한다.
 지원하지 않는 모드, 필요한 예약 만료시각 또는 영업 cutoff 누락은 명시적 dependency failure다.
 공개 API, DB 스키마와 취소·결제 명령을 변경하거나 초안에 예약 만료시각을 보정하지 않는다.
 
-검증은 즉시 주문의 목록·상세·checkout 조회, 마감 이후 결제 차단과 취소, 조회의 Payment·예약 무부수효과,
-기존 주문 회귀를 대상으로 한다. 2026-09-30 관련 86 tests와 구조·포맷·빌드 검증을 통과했으며,
+검증은 즉시 주문의 목록·상세·checkout 조회, 만료 처리 전 마감 이후 결제 차단과 취소,
+만료 처리 후 조회 성공·취소 차단, 조회의 Payment·예약 무부수효과,
+기존 주문 회귀를 대상으로 한다. 2026-09-30 최초 보정의 관련 86 tests와 구조·포맷·빌드 검증을 통과했다.
+리뷰 후 만료 처리 전·후 조건을 구분한 checkout·조회 정책 49 tests와 포맷·문서 검증도 통과했으며,
 명령과 결과는 [즉시 결제 ExecPlan](../exec-plans/active/immediate-checkout-store-preparation.md)에 기록한다.
 
 ## Metrics

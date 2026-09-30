@@ -10,10 +10,13 @@ import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.hamcrest.Matchers.hasItem
+import org.hamcrest.Matchers.not
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -68,7 +71,7 @@ internal class OneTimeCheckoutIntegrationTest
 
         @ParameterizedTest
         @CsvSource("-1,true", "0,false", "1,false")
-        fun `immediate pending order remains readable and cancellable across its payment cutoff`(
+        fun `immediate pending draft remains readable and cancellable before store close expiry is processed`(
             secondsFromCutoff: Long,
             canPay: Boolean,
         ) {
@@ -85,6 +88,7 @@ internal class OneTimeCheckoutIntegrationTest
             val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
             val cutoff = value<Timestamp>("SELECT ordering_window_closes_at FROM ordering_order WHERE id = ?", orderId).toInstant()
             testClock.set(cutoff.plusSeconds(secondsFromCutoff))
+            // The scheduled worker is delayed; expiry has not been applied to this PENDING_PAYMENT draft.
             val actor = jwt().jwt { it.subject(fixture.customerId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_CUSTOMER"))
 
             mockMvc
@@ -641,14 +645,16 @@ internal class OneTimeCheckoutIntegrationTest
                 .isEqualTo("READY")
         }
 
-        @Test
-        fun `immediate unpaid draft expires at the immutable store close cutoff`() {
+        @ParameterizedTest
+        @ValueSource(longs = [0, 1])
+        fun `immediate unpaid draft expires at the immutable store close cutoff`(secondsFromCutoff: Long) {
             testClock.set(Instant.parse("2026-08-12T03:00:00Z"))
             val fixture = OrderCreationFixture()
             val orderId = pendingImmediateOrder(fixture, "immediate-store-close-draft")
             val reference = value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId)
 
-            testClock.set(Instant.parse("2026-08-12T09:00:00Z"))
+            val cutoff = value<Timestamp>("SELECT ordering_window_closes_at FROM ordering_order WHERE id = ?", orderId).toInstant()
+            testClock.set(cutoff.plusSeconds(secondsFromCutoff))
             acceptanceDeadlineWorker.runOnce()
 
             assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("EXPIRED")
@@ -660,6 +666,41 @@ internal class OneTimeCheckoutIntegrationTest
                 ),
             ).isOne()
             assertThat(publicCheckout.get(fixture.customerId, reference).canPay).isFalse()
+            val actor = jwt().jwt { it.subject(fixture.customerId.toString()) }.authorities(SimpleGrantedAuthority("ROLE_CUSTOMER"))
+            mockMvc
+                .perform(get("/api/v1/me/orders").param("status", "ACTIVE").with(actor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items").isEmpty)
+            mockMvc
+                .perform(get("/api/v1/me/orders").param("status", "PAST").with(actor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].orderReference").value(reference))
+                .andExpect(jsonPath("$.items[0].status").value("EXPIRED"))
+                .andExpect(jsonPath("$.items[0].allowedActions").value(not(hasItem("CANCEL"))))
+            mockMvc
+                .perform(get("/api/v1/me/orders/$reference").with(actor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.status").value("EXPIRED"))
+                .andExpect(jsonPath("$.allowedActions").value(not(hasItem("CANCEL"))))
+            mockMvc
+                .perform(get("/api/v1/me/orders/$reference/checkout").with(actor))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.order.status").value("EXPIRED"))
+                .andExpect(jsonPath("$.order.allowedActions").value(not(hasItem("CANCEL"))))
+                .andExpect(jsonPath("$.canPay").value(false))
+            mockMvc
+                .perform(
+                    post("/api/v1/me/orders/$reference/cancellations")
+                        .with(actor)
+                        .with(csrf())
+                        .header("Idempotency-Key", "immediate-expired-cancel")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""{"reasonCode":"CHANGED_MIND"}"""),
+                ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("ORDER_STATE_CONFLICT"))
+            assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId)).isEqualTo("EXPIRED")
+            assertNoProviderCalls()
         }
 
         @Test
