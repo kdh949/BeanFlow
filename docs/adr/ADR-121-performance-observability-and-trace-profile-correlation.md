@@ -48,6 +48,23 @@ BeanFlow에는 HTTP Actuator health와 다수의 Micrometer domain metric이 있
 - perf `test_id`와 `scenario`는 검증된 bounded 값만 trace/log field로 기록하며 애플리케이션 metric
   label에는 넣지 않는다.
 
+#### HTTP 실패 문의 코드 amendment (2026-09-30)
+
+- 제품 HTTP 요청의 `X-Correlation-Id`, 오류 응답 `correlationId`, 실패 로그와 활성 trace의
+  `beanflow.correlation_id`를 같은 값으로 연결한다. correlation ID는 검색 field이며 metric 또는
+  Loki index label로 승격하지 않는다.
+- 공통 필터는 4xx/5xx 응답과 처리 중 전파된 예외를 `http_request_failed`로 기록한다. method는
+  닫힌 집합, route는 MVC template 또는 `UNMAPPED`만 사용한다. 4xx는 INFO, 5xx는 ERROR다.
+- API 예외 처리기는 5xx에 한해 `api_dependency_failed` 진단을 추가한다. stable error code,
+  제한된 예외 class chain, class/method/file/line stack frame과 검증된 5자리 SQLSTATE만 기록한다.
+  원문 exception message, SQL, query parameter, body, cookie, authorization과 suppressed exception은
+  기록하지 않는다. 최대 8개 cause와 cause별 12개 frame으로 진단 크기를 제한한다.
+- Nginx 접근 로그는 backend가 반환한 `X-Correlation-Id`를 `correlation_id`로 기록하고 기존
+  `request_id`와 연결한다. upstream에 도달하지 못한 실패는 correlation ID가 없을 수 있으므로
+  `request_id`와 상태를 사용한다. 접근 로그에 raw URI, IP, user agent와 사용자 이름을 넣지 않는다.
+- 로그 추가는 오류 응답·거래 rollback·재시도 의미를 바꾸지 않는다. 응답 문의 코드와 실제 수집
+  로그의 연결은 배포 후 별도로 검증한다.
+
 ### 4. 성능 runtime을 기존 제품 runtime과 분리한다
 
 - `perf` profile은 `local`, `toss-perf`, `vault-enforced`를 묶고 `prod`, `portfolio`, `test`,

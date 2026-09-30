@@ -1,5 +1,8 @@
 package io.github.kdh949.beanflow.shared.internal
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountEntity
@@ -16,6 +19,7 @@ import io.github.kdh949.beanflow.shared.api.MerchantActor
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
@@ -29,6 +33,7 @@ import org.springframework.security.web.SecurityFilterChain
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.transaction.PlatformTransactionManager
@@ -59,6 +64,29 @@ internal class AuthenticationSecurityIntegrationTest(
     @Autowired private val clock: Clock,
 ) {
     private val transactions = TransactionTemplate(transactionManager)
+
+    @Test
+    fun `security rejection shares its support code with response header and failure log`() {
+        val logger = LoggerFactory.getLogger(CorrelationIdFilter::class.java) as Logger
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        logger.addAppender(appender)
+        try {
+            mockMvc
+                .perform(get("/api/v1/me/orders").header("X-Correlation-Id", "security-support-code"))
+                .andExpect(status().isUnauthorized)
+                .andExpect(header().string("X-Correlation-Id", "security-support-code"))
+                .andExpect(jsonPath("$.correlationId").value("security-support-code"))
+            val fields =
+                appender.list
+                    .single()
+                    .keyValuePairs
+                    .associate { it.key to it.value }
+            assertThat(fields).containsEntry("correlationId", "security-support-code").containsEntry("status", 401)
+        } finally {
+            logger.detachAppender(appender)
+            appender.stop()
+        }
+    }
 
     @Test
     fun `exactly four security filter chains are registered`() {
