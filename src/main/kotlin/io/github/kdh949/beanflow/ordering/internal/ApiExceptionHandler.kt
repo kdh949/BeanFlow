@@ -4,6 +4,7 @@ import io.github.kdh949.beanflow.shared.api.CorrelationIdSource
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import jakarta.validation.ConstraintViolationException
+import org.slf4j.LoggerFactory
 import org.springframework.core.convert.ConversionFailedException
 import org.springframework.dao.DataAccessException
 import org.springframework.http.HttpHeaders
@@ -17,6 +18,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.HandlerMethodValidationException
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.multipart.MaxUploadSizeExceededException
+import java.sql.SQLException
+import java.util.Collections
+import java.util.IdentityHashMap
 
 @RestControllerAdvice
 internal class ApiExceptionHandler(
@@ -24,6 +28,9 @@ internal class ApiExceptionHandler(
 ) {
     @ExceptionHandler(DomainFailure::class)
     fun domainFailure(failure: DomainFailure): ResponseEntity<ErrorResponse> {
+        val correlationId = correlationIdSource.currentOrCreate()
+        val status = statusOf(failure.code)
+        if (status.is5xxServerError) logDependencyFailure(failure, failure.code, correlationId)
         val headers = HttpHeaders()
         if (failure.code == FailureCode.SUPPORT_VERIFICATION_RETIRED) headers.cacheControl = "no-store"
         failure.retryAfterSeconds?.let { headers.set(HttpHeaders.RETRY_AFTER, it.toString()) }
@@ -31,11 +38,11 @@ internal class ApiExceptionHandler(
             ErrorResponse(
                 code = failure.code.name,
                 message = failure.message,
-                correlationId = correlationIdSource.currentOrCreate(),
+                correlationId = correlationId,
                 targetReference = failure.targetReference,
             ),
             headers,
-            statusOf(failure.code),
+            status,
         )
     }
 
@@ -113,14 +120,58 @@ internal class ApiExceptionHandler(
     }
 
     @ExceptionHandler(DataAccessException::class)
-    fun persistenceFailure(): ResponseEntity<ErrorResponse> =
-        ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(
+    fun persistenceFailure(failure: DataAccessException): ResponseEntity<ErrorResponse> {
+        val correlationId = correlationIdSource.currentOrCreate()
+        logDependencyFailure(failure, FailureCode.DEPENDENCY_UNAVAILABLE, correlationId)
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(
             ErrorResponse(
                 code = FailureCode.DEPENDENCY_UNAVAILABLE.name,
                 message = "A required persistence dependency is unavailable",
-                correlationId = correlationIdSource.currentOrCreate(),
+                correlationId = correlationId,
             ),
         )
+    }
+
+    private fun logDependencyFailure(
+        failure: RuntimeException,
+        code: FailureCode,
+        correlationId: String,
+    ) {
+        val seen = Collections.newSetFromMap(IdentityHashMap<Throwable, Boolean>())
+        val causes = mutableListOf<Throwable>()
+        var current: Throwable? = failure
+        while (current != null && causes.size < 8 && seen.add(current)) {
+            causes += current
+            current = current.cause
+        }
+        // Throwable messages may contain SQL, credentials or customer input. Record only metadata.
+        val types = causes.map { it.javaClass.name }
+        val frames = causes.map { cause -> cause.stackTrace.take(12).map { it.toString() } }
+        val sqlState = causes.filterIsInstance<SQLException>().firstNotNullOfOrNull { it.sqlState?.takeIf(SQL_STATE::matches) }
+        val truncated = current != null
+        logger
+            .atError()
+            .addKeyValue("correlationId", correlationId)
+            .addKeyValue("error_code", code.name)
+            .addKeyValue("exception_types", types)
+            .addKeyValue("exception_frames", frames)
+            .addKeyValue("exception_chain_truncated", truncated)
+            .addKeyValue("sql_state", sqlState)
+            .log(
+                "api_dependency_failed correlationId={} error_code={} exception_types={} sql_state={} exception_chain_truncated={} exception_frames={}",
+                correlationId,
+                code.name,
+                types,
+                sqlState,
+                truncated,
+                frames,
+            )
+    }
+
+    private companion object {
+        val SQL_STATE = Regex("[A-Z0-9]{5}")
+        val logger = LoggerFactory.getLogger(ApiExceptionHandler::class.java)
+    }
 
     private fun statusOf(code: FailureCode): HttpStatus =
         when (code) {
