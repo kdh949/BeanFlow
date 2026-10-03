@@ -41,3 +41,33 @@ export const OlderMessages: Story = { ...PublicReply, parameters: { ...PublicRep
 export const FailedRefresh: Story = { ...PublicReply, play: async ({ canvas, msw }) => { await canvas.findByText("상담원 답변"); msw.use(http.get("/api/v1/me/support-inquiries/:inquiryId", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE", correlationId: "INQUIRY-REFRESH" }, { status: 503 }))); await userEvent.click(canvas.getByRole("button", { name: "문의 새로고침" })); await expect(await canvas.findByText("문의 코드 INQUIRY-REFRESH")).toBeVisible(); await expect(canvas.queryByLabelText("추가 문의 내용")).not.toBeInTheDocument(); } };
 export const ForeignOrder: Story = { render: () => <CustomerInquiryCreatePage />, parameters: { routing: { initialEntry: "/app/support/new?orderReference=BF-7K3M-9Q2P", path: "/app/support/new" }, msw: { handlers: [customerActor, http.get("/api/v1/me/orders/:orderReference", () => HttpResponse.json({ code: "RESOURCE_NOT_FOUND", correlationId: "ORDER-NOT-OWNED" }, { status: 404 }))] } }, play: async ({ canvas }) => { await expect(await canvas.findByText("문의 코드 ORDER-NOT-OWNED")).toBeVisible(); await expect(canvas.queryByRole("button", { name: "문의 접수" })).not.toBeInTheDocument(); } };
 export const LongContent: Story = { ...PublicReply, parameters: { ...PublicReply.parameters, viewport: { defaultViewport: "mobile1" }, msw: { handlers: [customerActor, http.get("/api/v1/me/support-inquiries/:inquiryId", () => HttpResponse.json({ ...detail, inquiry: { ...inquiry, title: "주문 처리와 결제 취소에 대한 확인 요청입니다. ".repeat(3) }, messages: [{ ...detail.messages[0], content: "주문 상태와 환불 상태를 확인하는 중이며 확인한 내용을 이 문의에 안내하겠습니다. ".repeat(12) }] }))] } } };
+
+/** Server field feedback stays next to its input and clears when that input changes. */
+export const InvalidTitle: Story = {
+  render: () => <CustomerInquiryCreatePage />,
+  parameters: { msw: { handlers: [customerActor, http.post("/api/v1/me/support-inquiries", () => HttpResponse.json({ code: "INVALID_REQUEST", correlationId: "INQUIRY-FIELD", details: [{ field: "title", reason: "INVALID_VALUE" }] }, { status: 400 }))] } },
+  play: async ({ canvas }) => {
+    await userEvent.type(await canvas.findByLabelText("문의 제목"), "확인할 제목");
+    await userEvent.type(canvas.getByLabelText("문의 내용"), "2026-10-03 주문 상태 확인");
+    await userEvent.click(canvas.getByRole("button", { name: "문의 접수" }));
+    await expect(await canvas.findByText(/제목은 100자 이내/)).toBeVisible();
+    await expect(canvas.getByLabelText("문의 제목")).toHaveAttribute("aria-invalid", "true");
+    await expect(canvas.getByLabelText("문의 내용")).not.toHaveAttribute("aria-invalid", "true");
+    await userEvent.type(canvas.getByLabelText("문의 제목"), " 수정");
+    await expect(canvas.getByLabelText("문의 제목")).not.toHaveAttribute("aria-invalid", "true");
+    await expect(canvas.getByText("문의 코드 INQUIRY-FIELD")).toBeVisible();
+  },
+};
+
+export const InvalidReply: Story = {
+  ...PublicReply,
+  parameters: { ...PublicReply.parameters, msw: { handlers: [customerActor, read, http.post("/api/v1/me/support-inquiries/:inquiryId/messages", () => HttpResponse.json({ code: "INVALID_REQUEST", details: [{ field: "content", reason: "INVALID_VALUE" }] }, { status: 400 }))] } },
+  play: async ({ canvas }) => {
+    await userEvent.type(await canvas.findByLabelText("추가 문의 내용"), "내용 확인");
+    await userEvent.click(canvas.getByRole("button", { name: "추가 문의 보내기" }));
+    await expect(await canvas.findByText(/내용은 2,000자 이내/)).toBeVisible();
+    await expect(canvas.getByLabelText("추가 문의 내용")).toHaveValue("내용 확인");
+    await userEvent.type(canvas.getByLabelText("추가 문의 내용"), " 수정");
+    await expect(canvas.getByLabelText("추가 문의 내용")).not.toHaveAttribute("aria-invalid", "true");
+  },
+};

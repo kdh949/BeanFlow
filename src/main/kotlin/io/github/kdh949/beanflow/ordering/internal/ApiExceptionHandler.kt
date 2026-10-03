@@ -33,6 +33,7 @@ internal class ApiExceptionHandler(
                 message = failure.message,
                 correlationId = correlationIdSource.currentOrCreate(),
                 targetReference = failure.targetReference,
+                details = failure.details.map { ErrorDetail(field = it.field, reason = it.reason) },
             ),
             headers,
             statusOf(failure.code),
