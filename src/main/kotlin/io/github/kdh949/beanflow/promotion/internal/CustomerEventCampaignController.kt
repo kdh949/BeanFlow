@@ -78,11 +78,14 @@ internal class CustomerEventCampaignQueryRepository(
         now: Instant,
         after: CustomerEventCampaignSort?,
         limit: Int,
+        storeId: UUID? = null,
     ): List<CustomerEventCampaignRecord> =
         try {
             val boundaryClause =
                 if (after == null) "" else "AND (limited.claim_ends_at, campaign.id) > (?, ?)"
+            val storeClause = if (storeId == null) "" else "AND campaign.store_id = ?"
             val parameters = mutableListOf<Any>(customerId, Timestamp.from(now), Timestamp.from(now))
+            if (storeId != null) parameters.add(storeId)
             if (after != null) {
                 parameters.add(Timestamp.from(after.claimEndsAt))
                 parameters.add(after.campaignId)
@@ -109,6 +112,7 @@ internal class CustomerEventCampaignQueryRepository(
                    AND limited.claim_starts_at <= ?
                    AND limited.claim_ends_at > ?
                    AND counter.issued_count < counter.total_quota
+                   $storeClause
                    $boundaryClause
                  ORDER BY limited.claim_ends_at, campaign.id
                  LIMIT ?
@@ -150,8 +154,9 @@ internal class CustomerEventCampaignReadTransaction(
         now: Instant,
         after: CustomerEventCampaignSort?,
         limit: Int,
+        storeId: UUID? = null,
     ): CustomerEventCampaignViewPage {
-        val records = repository.listAvailable(customerId, now, after, limit + 1)
+        val records = repository.listAvailable(customerId, now, after, limit + 1, storeId)
         val hasMore = records.size > limit
         val campaigns = records.take(limit)
         val boundary = campaigns.lastOrNull().takeIf { hasMore }
@@ -178,12 +183,13 @@ internal class CustomerEventCampaignService(
         now: Instant,
         cursor: String?,
         limit: Int?,
+        storeId: UUID? = null,
     ): CustomerEventCampaignPage {
         val pageSize = limit ?: DEFAULT_PAGE_SIZE
         if (pageSize !in 1..MAX_PAGE_SIZE) invalid("limit must be between 1 and $MAX_PAGE_SIZE")
-        val scope = cursorScope(customerId)
+        val scope = cursorScope(customerId, storeId)
         val after = cursor?.let { cursors.verify(it, scope).sort }
-        val page = transactions.list(customerId, now, after, pageSize)
+        val page = transactions.list(customerId, now, after, pageSize, storeId)
         val responses =
             page.campaigns.map { view ->
                 val access = storage.access(view.campaign.bannerThumbnailKey)
@@ -193,10 +199,13 @@ internal class CustomerEventCampaignService(
         return CustomerEventCampaignPage(responses, nextCursor)
     }
 
-    private fun cursorScope(customerId: UUID): SignedCursorScope<CustomerEventCampaignSort> =
+    private fun cursorScope(
+        customerId: UUID,
+        storeId: UUID?,
+    ): SignedCursorScope<CustomerEventCampaignSort> =
         SignedCursorScope(
             endpoint = CURSOR_ENDPOINT,
-            filterHash = sha256("$CURSOR_ENDPOINT|$customerId"),
+            filterHash = sha256("$CURSOR_ENDPOINT|$customerId" + (storeId?.let { "|store:$it" } ?: "")),
             sortAdapter =
                 object : CursorSortAdapter<CustomerEventCampaignSort> {
                     override fun encode(sort: CustomerEventCampaignSort) = listOf(sort.claimEndsAt.toString(), sort.campaignId.toString())
@@ -312,8 +321,9 @@ internal class CustomerEventCampaignController(
         actor: CustomerActor,
         @RequestParam(required = false) cursor: String?,
         @RequestParam(required = false) limit: Int?,
+        @RequestParam(required = false) storeId: UUID?,
     ): CustomerEventCampaignPageResponse {
-        val page = service.list(actor.actorId, clock.instant(), cursor, limit)
+        val page = service.list(actor.actorId, clock.instant(), cursor, limit, storeId)
         return CustomerEventCampaignPageResponse(page.campaigns, CustomerEventCampaignPageInfoResponse(page.nextCursor))
     }
 

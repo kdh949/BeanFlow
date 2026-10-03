@@ -2,7 +2,10 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { EventCampaignPage } from "./EventCampaignPage";
-import { couponWalletPath } from "../../features/customer/couponNavigation";
+import { couponEventPath, couponWalletPath } from "../../features/customer/couponNavigation";
+
+import { couponSelection } from "../../features/customer/couponSelection";
+import { ButtonLink } from "../../design-system";
 
 const campaign = (index: number, title: string, color: string, accent: string) => ({
   campaignId: `8a8999bf-3432-4a5d-b599-43bbc3ddc2e${index}`,
@@ -32,6 +35,7 @@ const meta = {
   component: EventCampaignPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: { description: { component: "게시 중이고 다운로드 가능한 선착순 쿠폰 배너를 고객 앱 프레임 안에 세로로 보여주는 이벤트 화면입니다." }, story: { inline: false, height: "920px" } },
     routing: { path: "/app/events", initialEntry: "/app/events", surface: "refresh-customer" },
     msw: { handlers: [
@@ -115,3 +119,56 @@ function bannerData(color: string, accent: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 450"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="${color}"/><stop offset="1" stop-color="${accent}"/></linearGradient></defs><rect width="1200" height="450" rx="36" fill="url(#g)"/><circle cx="980" cy="210" r="170" fill="white" opacity=".22"/><circle cx="1050" cy="110" r="54" fill="white" opacity=".3"/><path d="M835 145h190v155c0 48-39 87-87 87h-16c-48 0-87-39-87-87z" fill="white" opacity=".9"/><path d="M1025 190h38c61 0 61 90 0 90h-38" fill="none" stroke="white" stroke-width="28" opacity=".9"/><path d="M895 90c-35 42 24 55-6 96M955 78c-35 42 24 55-6 96" fill="none" stroke="white" stroke-width="16" stroke-linecap="round" opacity=".75"/></svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
+
+/** The wallet origin survives claim; browsing never claims or selects a coupon. */
+export const StoreEvents: Story = {
+  parameters: {
+    routing: { path: "/app/events", initialEntry: couponEventPath(events[0]!.store.storeId, "/app/cart") },
+    msw: { handlers: [http.get("/api/v1/me/events", ({ request }) => {
+      expect(new URL(request.url).searchParams.get("storeId")).toBe(events[0]!.store.storeId);
+      return HttpResponse.json({ items: [events[0]], page: { nextCursor: null } });
+    })] },
+  },
+  beforeEach: () => couponSelection.clear(),
+  play: async ({ canvas, msw }) => {
+    let claims = 0;
+    msw.use(http.post("/api/v1/me/events/:campaignId/claims", () => { claims += 1; return HttpResponse.json({ couponIssuanceId: "claim-id" }, { status: 201 }); }));
+    await expect(await canvas.findByRole("heading", { name: events[0]!.title })).toBeVisible();
+    await expect(claims).toBe(0);
+    await userEvent.click(canvas.getByRole("button", { name: "쿠폰 받기" }));
+    await expect(await canvas.findByRole("link", { name: "쿠폰함 보기" })).toHaveAttribute("href", couponWalletPath(events[0]!.store.storeId, "/app/cart"));
+    await expect(claims).toBe(1);
+    await expect(couponSelection.get()).toBeNull();
+  },
+};
+
+export const EmptyStoreEvents: Story = {
+  ...StoreEvents,
+  parameters: { ...StoreEvents.parameters, msw: { handlers: [http.get("/api/v1/me/events", () => HttpResponse.json({ items: [], page: { nextCursor: null } }))] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("이 매장의 진행 중인 이벤트가 없어요")).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "쿠폰함으로 돌아가기" })).toHaveAttribute("href", couponWalletPath(events[0]!.store.storeId, "/app/cart"));
+  },
+};
+
+/** Changing the query resets accumulated pages and never sends another store's cursor. */
+export const StoreFilterChanges: Story = {
+  ...StoreEvents,
+  render: () => <><ButtonLink to={couponEventPath(events[1]!.store.storeId, "/app/cart")}>다른 매장 이벤트</ButtonLink><EventCampaignPage /></>,
+  parameters: { ...StoreEvents.parameters, msw: { handlers: [http.get("/api/v1/me/events", ({ request }) => {
+    const query = new URL(request.url).searchParams;
+    if (query.get("storeId") === events[1]!.store.storeId) {
+      expect(query.get("cursor")).toBeNull();
+      return HttpResponse.json({ items: [events[1]], page: { nextCursor: null } });
+    }
+    return HttpResponse.json({ items: query.has("cursor") ? [{ ...events[0], campaignId: "another-first-store-event", title: "다음 페이지 쿠폰" }] : [events[0]], page: { nextCursor: query.has("cursor") ? null : "first-store-cursor" } });
+  })] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: "이벤트 더 보기" }));
+    await expect(await canvas.findByRole("heading", { name: "다음 페이지 쿠폰" })).toBeVisible();
+    await userEvent.click(canvas.getByRole("link", { name: "다른 매장 이벤트" }));
+    await expect(await canvas.findByRole("heading", { name: events[1]!.title })).toBeVisible();
+    await expect(canvas.queryByRole("heading", { name: events[0]!.title })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("heading", { name: "다음 페이지 쿠폰" })).not.toBeInTheDocument();
+  },
+};

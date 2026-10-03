@@ -10,7 +10,7 @@ import { Button, ButtonLink } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
 import { shortDateTime, won } from "../../lib/format";
 import { couponSelection, useCouponSelection } from "./couponSelection";
-import { couponReturnTarget } from "./couponNavigation";
+import { couponEventPath, couponReturnTarget } from "./couponNavigation";
 
 type WalletPage = components["schemas"]["CustomerCouponWalletPage"];
 type WalletItem = components["schemas"]["CustomerCouponWalletItem"];
@@ -88,8 +88,8 @@ export function CouponWalletPage() {
       {wallet.page.items.length === 0 ? (
         <EmptyState
           title="사용할 수 있는 쿠폰이 없어요"
-          description="새 쿠폰이 발급되면 이 매장에서 사용할 수 있는지 여기에 표시됩니다."
-          action={<ButtonLink to={`/app/stores/${storeId}`}>메뉴 보기</ButtonLink>}
+          description="이 매장의 진행 중인 쿠폰 이벤트를 확인해 보세요. 쿠폰을 받은 뒤 여기에서 선택할 수 있어요."
+          action={<ButtonLink to={couponEventPath(storeId, returnTarget.to)}>이 매장 쿠폰 이벤트</ButtonLink>}
         />
       ) : (
         <section className="coupon-list" aria-label="보유 쿠폰">

@@ -3,7 +3,7 @@ import { expect, userEvent } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { apiError, ids, pending, storeIdentityHandlers } from "../../../.storybook/fixtures";
 import { couponSelection } from "./couponSelection";
-import { couponWalletPath } from "./couponNavigation";
+import { couponEventPath, couponWalletPath } from "./couponNavigation";
 import { CouponWalletPage } from "./CouponWalletPage";
 
 const couponItems = [
@@ -29,6 +29,7 @@ const meta = {
   component: CouponWalletPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: {
         component: "매장 문맥으로 활성 쿠폰을 조회하고, 서버 재검증 전까지 하나를 메모리에서 선택하는 고객 화면입니다.",
@@ -73,6 +74,8 @@ export const Empty: Story = {
   },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("사용할 수 있는 쿠폰이 없어요")).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "이 매장 쿠폰 이벤트" })).toHaveAttribute("href", couponEventPath(ids.store, "/app/cart"));
+    await expect(couponSelection.get()).toBeNull();
   },
 };
 

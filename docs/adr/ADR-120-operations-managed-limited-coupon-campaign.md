@@ -55,6 +55,13 @@ presign 또는 필수 pointer integrity 실패는 고객 이벤트 목록 전체
 - claim은 201 또는 `CAMPAIGN_QUOTA_EXHAUSTED`, `COUPON_ALREADY_ISSUED`,
   `CAMPAIGN_NOT_ISSUABLE`, `IDEMPOTENCY_KEY_REUSED`, dependency 503을 반환한다.
 
+## Store-scoped discovery amendment (2026-10-03)
+
+`GET /me/events`는 선택적 UUID `storeId`를 받는다. Promotion query가 정렬과 LIMIT 전에 매장 조건을 적용한다.
+서명 커서는 endpoint/customer/store 필터에 귀속하며 다른 매장 또는 전체 목록으로 재사용하면 INVALID_REQUEST다.
+필터 없는 기존 커서 scope와 조회 의미는 보존한다. 매장 쿠폰함은 해당 이벤트로 연결하고 원래 안전한 앱 복귀 경로를 보존한다.
+발급 성공 후 쿠폰함 링크를 제공하되 자동 발급·선택·적용은 하지 않는다. claim 권한·멱등성·트랜잭션은 바꾸지 않는다.
+
 ## Alternatives Considered
 
 - 엄격한 FIFO queue: 인프라·순번 persistence·복구 모델이 추가되고 사용자가 선택한 DB 접근 순서보다 복잡하다.
