@@ -7,6 +7,7 @@ const meta = {
   component: CustomerHelpPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: { description: { component: "결제·환불 문의에 필요한 안전한 정보와 다음 행동을 안내하는 route입니다." } },
     routing: { path: "/app/help", initialEntry: "/app/help" },
   },

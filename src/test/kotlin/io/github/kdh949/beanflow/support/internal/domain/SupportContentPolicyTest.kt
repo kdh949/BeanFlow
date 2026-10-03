@@ -34,4 +34,29 @@ class SupportContentPolicyTest {
         assertThat(SupportContentPolicy.interactionSummary("  CUSTOMER_CONTACTED_US  "))
             .isEqualTo("CUSTOMER_CONTACTED_US")
     }
+
+    @Test
+    fun `valid calendar dates remain intact while invalid and adjacent numbers are rejected`() {
+        listOf("2026-10-03 결제 문의", "2024-02-29", "날짜(2026-10-03) 확인", "2026-10-03 접수 후 2026-10-04 확인", "2026-10-03 2026-01-06").forEach {
+            assertThat(SupportContentPolicy.note(it)).isEqualTo(it)
+        }
+        listOf("2026-02-29", "2026-13-03", "2026-10-32", "12026-10-03", "2026-10-031", "1-2026-10-03", "2026-10-03-1").forEach {
+            assertThatThrownBy { SupportContentPolicy.note(it) }.isInstanceOf(IllegalArgumentException::class.java)
+        }
+    }
+
+    @Test
+    fun `dates do not exempt other sensitive values in the original text`() {
+        listOf("010-1234-5678", "person@example.test", "password=secret-value", "4111 1111 1111 1111").forEach {
+            assertThatThrownBy { SupportContentPolicy.note("2026-10-03 $it") }
+                .isInstanceOf(IllegalArgumentException::class.java)
+                .hasMessage("Support content is not permitted")
+        }
+    }
+
+    @Test
+    fun `card checks retain their boundary when a date follows the card`() {
+        assertThatThrownBy { SupportContentPolicy.note("4111 1111 1111 1111 2026-10-03") }
+            .isInstanceOf(IllegalArgumentException::class.java)
+    }
 }

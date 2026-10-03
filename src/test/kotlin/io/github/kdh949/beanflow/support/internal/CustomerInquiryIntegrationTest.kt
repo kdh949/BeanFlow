@@ -300,6 +300,87 @@ internal class CustomerInquiryIntegrationTest
             assertThat(service.customerDetail(customer, id, null).inquiry.state).isEqualTo(CustomerInquiryState.RECEIVED)
         }
 
+        @Test fun `valid date intake preserves content and replays once`() {
+            fun submit() =
+                service.create(
+                    customer,
+                    "date-inquiry",
+                    "2026-10-03 문의",
+                    CustomerInquiryCategory.OTHER,
+                    "2024-02-29 결제 확인\n2026-10-03 상태 문의",
+                    null,
+                    "inquiry-test",
+                )
+            val first = submit()
+            assertThat(submit()).isEqualTo(first)
+            assertThat(
+                service
+                    .customerDetail(customer, first.inquiryId, null)
+                    .messages
+                    .single()
+                    .content,
+            ).isEqualTo("2024-02-29 결제 확인\n2026-10-03 상태 문의")
+            assertThat(count("support_customer_inquiry")).isEqualTo(1)
+            assertThat(count("support_customer_inquiry_message")).isEqualTo(1)
+        }
+
+        @Test fun `invalid inquiry fields expose only safe field details and create no records`() {
+            listOf("title", "content").forEach { field ->
+                val title = if (field == "title") "password=secret-value" else "날짜 문의"
+                val content = if (field == "content") "2026-10-03 password=secret-value" else "내용 확인"
+                mvc
+                    .perform(
+                        post("/api/v1/me/support-inquiries")
+                            .with(customerJwt(customer))
+                            .with(csrf().asHeader())
+                            .header("Idempotency-Key", "invalid-$field")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""{"title":"$title","category":"OTHER","content":"$content"}"""),
+                    ).andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                    .andExpect(jsonPath("$.details[0].field").value(field))
+                    .andExpect(jsonPath("$.details[0].reason").value("INVALID_VALUE"))
+                    .andDo { assertThat(it.response.contentAsString).doesNotContain("secret-value", "password=") }
+            }
+            assertThat(count("support_customer_inquiry")).isZero()
+            assertThat(count("support_customer_inquiry_message")).isZero()
+            assertThat(count("operations_audit_record")).isZero()
+        }
+
+        @Test fun `invalid customer and staff reply exposes content detail without writing`() {
+            val id = create().inquiryId
+            service.claim(agent, id, "claim-invalid-reply", 0, "inquiry-test")
+            val staff = service.supportDetail(agent, id, null)
+            val messages = count("support_customer_inquiry_message")
+            val commands = count("support_customer_inquiry_command")
+            val audits = count("operations_audit_record")
+            listOf(false, true).forEach { isStaff ->
+                val path = if (isStaff) "/api/v1/support/inquiries/$id/messages" else "/api/v1/me/support-inquiries/$id/messages"
+                val body =
+                    if (isStaff) {
+                        """{"expectedVersion":1,"expectedCaseVersion":${staff.caseVersion},"content":"password=secret-value"}"""
+                    } else {
+                        """{"expectedVersion":1,"content":"password=secret-value"}"""
+                    }
+                val auth = if (isStaff) jwt().jwt { it.subject(agent.toString()) } else customerJwt(customer)
+                mvc
+                    .perform(
+                        post(path)
+                            .with(auth)
+                            .with(csrf().asHeader())
+                            .header("Idempotency-Key", "invalid-reply-$isStaff")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body),
+                    ).andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.details[0].field").value("content"))
+                    .andExpect(jsonPath("$.details[0].reason").value("INVALID_VALUE"))
+                    .andDo { assertThat(it.response.contentAsString).doesNotContain("secret-value", "password=") }
+            }
+            assertThat(count("support_customer_inquiry_message")).isEqualTo(messages)
+            assertThat(count("support_customer_inquiry_command")).isEqualTo(commands)
+            assertThat(count("operations_audit_record")).isEqualTo(audits)
+        }
+
         @Test fun `sensitive input strict request schema and unauthenticated calls are rejected`() {
             fails(FailureCode.INVALID_REQUEST) {
                 service.create(

@@ -522,4 +522,5 @@
 
 /* Public inquiry text is primary reading content on customer and support surfaces. */
 .inquiry-heading { overflow-wrap: anywhere; }
+.inquiry-title-link { display: block; padding-block: var(--sp-3); overflow-wrap: anywhere; }
 .management-card > .inquiry-message-content { color: var(--text-body); font-size: var(--fs-body); line-height: var(--lh-body); white-space: pre-wrap; overflow-wrap: anywhere; }
