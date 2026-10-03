@@ -2,7 +2,7 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.eventing.api.EventEnvelope
 import io.github.kdh949.beanflow.eventing.api.OrderAcceptedV1
-import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
+import io.github.kdh949.beanflow.eventing.api.OrderReadyV2
 import io.github.kdh949.beanflow.identity.api.StoreAccessOperations
 import io.github.kdh949.beanflow.identity.api.StoreActor
 import io.github.kdh949.beanflow.identity.api.StoreActorRole
@@ -315,14 +315,20 @@ internal class StoreOrderTransitionService(
         correlationId: String,
         causationId: String,
     ) {
+        val lines = orderLineRepository.findAllByOrderIdOrderByLineSequence(order.id)
+        if (lines.isEmpty()) throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Ready notification order snapshot is unavailable")
         val eventId = identifierSource.next()
         eventPublisher.publishEvent(
-            OrderReadyV1(
-                envelope(eventId, "OrderReadyV1", order, now, correlationId, causationId),
+            OrderReadyV2(
+                envelope(eventId, "OrderReadyV2", order, now, correlationId, causationId).copy(payloadVersion = 2),
                 order.id,
                 order.customerId,
                 order.storeId,
                 now,
+                order.publicReference,
+                order.storeNameSnapshot,
+                lines.first().menuName,
+                lines.size - 1,
             ),
         )
     }
