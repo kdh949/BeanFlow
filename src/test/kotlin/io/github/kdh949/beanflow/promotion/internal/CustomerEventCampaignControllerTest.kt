@@ -127,8 +127,103 @@ internal class CustomerEventCampaignControllerTest
         }
 
         @Test
+        fun `store filter applies before pagination and binds every cursor to its customer and store`() {
+            val store = seedStore("선택 매장")
+            val other = seedStore("다른 매장")
+            repeat(3) { seedCampaign(other, "다른 매장 $it", true, "PUBLISHED", now.minusSeconds(60), now.plusSeconds(1800), 100, 0) }
+            val expected =
+                (1..3)
+                    .map {
+                        seedCampaign(store, "선택 매장 $it", true, "PUBLISHED", now.minusSeconds(60), now.plusSeconds(3600), 100, 0)
+                    }.toSet()
+            `when`(storage.access(anyString())).thenReturn(StorefrontImageAccess(SIGNED_URL, now.plusSeconds(900)))
+            val mapper =
+                tools.jackson.databind.json.JsonMapper
+                    .builder()
+                    .build()
+            val first =
+                mockMvc
+                    .perform(
+                        get("/api/v1/me/events")
+                            .param("storeId", store.toString())
+                            .param("limit", "2")
+                            .with(customerJwt()),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(2))
+                    .andExpect(jsonPath("$.items[0].store.storeId").value(store.toString()))
+                    .andExpect(jsonPath("$.items[1].store.storeId").value(store.toString()))
+                    .andReturn()
+            val firstJson = mapper.readTree(first.response.contentAsString)
+            val cursor = firstJson.get("page").get("nextCursor").stringValue()
+            val second =
+                mockMvc
+                    .perform(
+                        get("/api/v1/me/events")
+                            .param("storeId", store.toString())
+                            .param("limit", "2")
+                            .param("cursor", cursor)
+                            .with(customerJwt()),
+                    ).andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(1))
+                    .andExpect(jsonPath("$.page.nextCursor").isEmpty)
+                    .andReturn()
+            val secondJson = mapper.readTree(second.response.contentAsString)
+            val actual =
+                (firstJson.get("items").toList() + secondJson.get("items").toList())
+                    .map { UUID.fromString(it.get("campaignId").stringValue()) }
+            assertThat(actual).doesNotHaveDuplicates()
+            assertThat(actual.toSet()).isEqualTo(expected)
+            mockMvc
+                .perform(
+                    get("/api/v1/me/events")
+                        .param("storeId", other.toString())
+                        .param("cursor", cursor)
+                        .with(customerJwt()),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            mockMvc
+                .perform(
+                    get("/api/v1/me/events")
+                        .param("cursor", cursor)
+                        .with(customerJwt()),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    get("/api/v1/me/events")
+                        .param("storeId", store.toString())
+                        .param("cursor", cursor)
+                        .with(customerJwt(UUID.randomUUID())),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    get("/api/v1/me/events")
+                        .param("storeId", store.toString())
+                        .param("cursor", "tampered-$cursor")
+                        .with(customerJwt()),
+                ).andExpect(status().isBadRequest)
+            mockMvc
+                .perform(
+                    get("/api/v1/me/events")
+                        .param("storeId", UUID.randomUUID().toString())
+                        .with(customerJwt()),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(0))
+            mockMvc
+                .perform(
+                    get("/api/v1/me/events")
+                        .param("storeId", "not-a-uuid")
+                        .with(customerJwt()),
+                ).andExpect(status().isBadRequest)
+        }
+
+        @Test
         fun `event list requires a customer actor`() {
             mockMvc.perform(get("/api/v1/me/events")).andExpect(status().isUnauthorized)
+            mockMvc
+                .perform(
+                    get("/api/v1/me/events")
+                        .param("storeId", UUID.randomUUID().toString()),
+                ).andExpect(status().isUnauthorized)
         }
 
         private fun seedStore(name: String): UUID =
@@ -198,9 +293,9 @@ internal class CustomerEventCampaignControllerTest
                 )
             }
 
-        private fun customerJwt() =
+        private fun customerJwt(actorId: UUID = customerId) =
             jwt()
-                .jwt { it.subject(customerId.toString()).claim("roles", listOf("CUSTOMER")) }
+                .jwt { it.subject(actorId.toString()).claim("roles", listOf("CUSTOMER")) }
                 .authorities(SimpleGrantedAuthority("ROLE_CUSTOMER"))
 
         private companion object {

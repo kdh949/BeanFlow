@@ -1,9 +1,10 @@
 import { TicketPercent } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
-import { couponWalletPath } from "../../features/customer/couponNavigation";
+import { couponReturnTarget, couponWalletPath } from "../../features/customer/couponNavigation";
 import { Button, ButtonLink } from "../../design-system";
 import { won } from "../../lib/format";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar } from "./RefreshShared";
@@ -12,6 +13,15 @@ type EventCampaign = components["schemas"]["CustomerEventCampaign"];
 type EventCampaignPageResponse = components["schemas"]["CustomerEventCampaignPage"];
 
 export function EventCampaignPage() {
+  const [query] = useSearchParams();
+  const storeId = query.get("storeId") || undefined;
+  const returnTo = query.get("returnTo");
+  return <EventCampaignResults key={storeId ?? "all"} storeId={storeId} returnTo={returnTo} />;
+}
+
+function EventCampaignResults({ storeId, returnTo }: { storeId?: string; returnTo: string | null }) {
+  const walletReturn = storeId ? couponReturnTarget(returnTo, storeId, "매장").to : "/app/events";
+  const walletPath = storeId ? couponWalletPath(storeId, walletReturn) : undefined;
   const [page, setPage] = useState<EventCampaignPageResponse | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -20,26 +30,27 @@ export function EventCampaignPage() {
     else setPage(null);
     setError(null);
     try {
-      const next = unwrap(await customerApi.GET("/me/events", { params: { query: { cursor, limit: 20 } } }));
+      const next = unwrap(await customerApi.GET("/me/events", { params: { query: { cursor, limit: 20, storeId } } }));
       setPage((current) => append && current ? { items: [...current.items, ...next.items], page: next.page } : next);
     } catch (failure) {
       setError(failure);
     } finally {
       setLoadingMore(false);
     }
-  }, []);
+  }, [storeId]);
 
   useEffect(() => { void load(); }, [load]);
 
   return (
     <div className="bfr-page bfr-events bfr-has-page-topbar">
-      <RefreshMobileTopbar title="이벤트" backTo="/app" />
+      <RefreshMobileTopbar title={storeId ? "매장 쿠폰 이벤트" : "이벤트"} backTo={walletPath ?? "/app"} />
+      {walletPath ? <ButtonLink variant="ghost" to={walletPath}>쿠폰함으로 돌아가기</ButtonLink> : null}
       {!page && !error ? <RefreshLoading label="진행 중인 이벤트를 불러오는 중" /> : null}
       {!page && error ? <RefreshError error={error} retry={() => void load()} /> : null}
-      {page?.items.length === 0 ? <RefreshEmpty title="진행 중인 이벤트가 없어요" description="새로운 쿠폰 이벤트가 열리면 여기에 알려드릴게요." /> : null}
+      {page?.items.length === 0 ? <RefreshEmpty title={storeId ? "이 매장의 진행 중인 이벤트가 없어요" : "진행 중인 이벤트가 없어요"} description="새로운 쿠폰 이벤트가 열리면 여기에 알려드릴게요." /> : null}
       {page?.items.length ? (
         <section className="bfr-event-list" aria-label="진행 중인 쿠폰 이벤트">
-          {page.items.map((event) => <EventCard key={event.campaignId} event={event} />)}
+          {page.items.map((event) => <EventCard key={event.campaignId} event={event} returnTo={storeId ? walletReturn : "/app/events"} />)}
           {error ? <RefreshError error={error} retry={() => void load(page.page.nextCursor ?? undefined, true)} /> : null}
           {page.page.nextCursor ? (
             <Button block variant="secondary" loading={loadingMore} onClick={() => void load(page.page.nextCursor ?? undefined, true)}>
@@ -52,7 +63,7 @@ export function EventCampaignPage() {
   );
 }
 
-function EventCard({ event }: { event: EventCampaign }) {
+function EventCard({ event, returnTo }: { event: EventCampaign; returnTo: string }) {
   const [claimed, setClaimed] = useState(event.claimed);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -99,7 +110,7 @@ function EventCard({ event }: { event: EventCampaign }) {
         <p>{event.summary}</p>
         <div className="bfr-event-benefit"><strong>{benefitLabel(event)}</strong><small><TicketPercent size={14} aria-hidden="true" />선착순 {event.remainingCount.toLocaleString("ko-KR")}명</small></div>
         <div className="bfr-event-actions">
-          {claimed ? <ButtonLink size="sm" variant="secondary" to={couponWalletPath(event.store.storeId, "/app/events")}>쿠폰함 보기</ButtonLink> : <Button size="sm" variant="brand" loading={submitting} onClick={() => void claim()}>쿠폰 받기</Button>}
+          {claimed ? <ButtonLink size="sm" variant="secondary" to={couponWalletPath(event.store.storeId, returnTo)}>쿠폰함 보기</ButtonLink> : <Button size="sm" variant="brand" loading={submitting} onClick={() => void claim()}>쿠폰 받기</Button>}
         </div>
         {notice ? <p className="bfr-event-notice" role="status" aria-live="polite">{notice}</p> : null}
       </div>
