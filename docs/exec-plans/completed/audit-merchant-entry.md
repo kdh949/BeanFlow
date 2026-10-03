@@ -1,11 +1,11 @@
 # 매장 인증 실패에서 업무 경로로 복귀
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
-> **Depends-On:** `—`
-> **Completed-At:** `—`
+> **Depends-On:** —
+> **Completed-At:** `2026-10-03`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -82,8 +82,8 @@ frontend: npm run typecheck; npm test; npm run check:design; npm run build-story
 - [x] 원본 dirty 작업 트리를 보존하고 독립 브랜치 생성
 - [x] BeanFlow Storybook 6011 MCP로 컴포넌트 계약 확인
 - [x] OWN-01 구현: 회귀 23개, typecheck, Storybook 권한/장애 2개(a11y 포함) 통과
-- [ ] OWN-02 구현 및 검증
-- [ ] 필수 검증 및 독립 PR
+- [x] OWN-02 구현: 자격증명·요청 제한·의존성 장애 Storybook 3개(a11y 포함) 통과
+- [x] 필수 로컬 검증과 diff 검토 완료; 독립 PR 제출 단계
 
 ## Surprises & Discoveries
 
@@ -95,7 +95,11 @@ frontend: npm run typecheck; npm test; npm run check:design; npm run build-story
 
 ## Outcomes & Retrospective
 
-진행 중. 운영 배포 검증은 Not run. 자동 병합/배포 범위 아님.
+- Passed: typecheck; npm test (38 files/274 unit tests, presentation 10, product copy 11); check:design; build-storybook; docs smoke (125 docs, 15 stateful docs, 47 surfaces); product build; Sites 4 tests; verify-docs; diff --check.
+- Passed: Storybook MCP focused 10 stories with a11y after restart. Full MCP run executed all 121 files/792 tests successfully per server runner log, then the server hit its Node heap limit before returning the aggregate MCP response. Full aggregate response is unavailable; no failed test was hidden. Focused rerun restored successful MCP responses.
+- Passed: Chrome 1440/1024 permission recovery, 1024 login dependency error; no clipped controls/copy observed. Keyboard focus asserted by the permission story. Login and initial-password return paths asserted by route tests.
+- Production login and deployed behavior: Not run. Visual snapshot regression baseline: Not configured. Product build reports the existing >500kB chunk warning.
+- No API/DB/provider/transaction change. No automatic merge/deploy.
 
 ## Revision Notes
 

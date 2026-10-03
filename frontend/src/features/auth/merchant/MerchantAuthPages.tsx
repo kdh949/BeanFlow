@@ -1,7 +1,8 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { ApiRequestError } from "../../../api/client";
-import { Button, PageHeading, TextField } from "../../../design-system";
+import { Button, FeedbackState, PageHeading, TextField } from "../../../design-system";
+import { ErrorState } from "../../../presentation/shared";
 import { merchantSession, sanitizeStoreReturnPath, useMerchantSession } from "./merchantSession";
 
 const PASSWORD_MIN_LENGTH = 15;
@@ -43,7 +44,7 @@ export function MerchantLoginPage() {
     }
   }
 
-  const code = codeOf(failure);
+  const credentialsRejected = codeOf(failure) === "AUTHENTICATION_FAILED";
   return (
     <div className="console-auth">
       <PageHeading title="매장 로그인" />
@@ -57,8 +58,8 @@ export function MerchantLoginPage() {
           autoCapitalize="none"
           spellCheck={false}
           required
-          invalid={failure !== null}
-          aria-describedby={failure ? "merchant-login-error" : undefined}
+          invalid={credentialsRejected}
+          aria-describedby={credentialsRejected ? "merchant-login-error" : undefined}
           onValueChange={setLoginId}
         />
         <TextField
@@ -69,24 +70,27 @@ export function MerchantLoginPage() {
           value={password}
           autoComplete="current-password"
           required
-          invalid={failure !== null}
-          aria-describedby={failure ? "merchant-login-error" : undefined}
+          invalid={credentialsRejected}
+          aria-describedby={credentialsRejected ? "merchant-login-error" : undefined}
           onValueChange={setPassword}
         />
         {failure ? (
-          <p className="form-error" id="merchant-login-error" role="alert">
-            {code === "AUTHENTICATION_RATE_LIMITED"
-              ? "로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요."
-              : code === "AUTHENTICATION_FAILED"
-                ? "아이디 또는 비밀번호를 확인해 주세요."
-                : "로그인을 완료하지 못했습니다. 잠시 뒤 다시 시도해 주세요."}
-          </p>
+          <div id="merchant-login-error">
+            {credentialsRejected ? (
+              <FeedbackState
+                kind="error"
+                title="로그인 정보를 확인해 주세요"
+                description="아이디 또는 비밀번호를 확인해 주세요."
+                reference={failure instanceof ApiRequestError ? failure.correlationId : undefined}
+              />
+            ) : <ErrorState error={failure} />}
+          </div>
         ) : null}
         <Button size="xl" block type="submit" loading={submitting} disabled={!loginId.trim() || !password}>
           {submitting ? "로그인 중" : "로그인"}
         </Button>
       </form>
-      <p className="auth-switch">계정 발급이나 비밀번호 초기화가 필요하면 운영팀에 문의해 주세요.</p>
+      <p className="auth-switch">계정 발급이나 비밀번호 초기화가 필요하면 계정을 발급한 운영자에게 문의해 주세요. 오류가 계속되면 문의 코드를 함께 전달해 주세요.</p>
     </div>
   );
 }
