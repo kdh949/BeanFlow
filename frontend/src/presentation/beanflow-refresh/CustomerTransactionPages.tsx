@@ -220,6 +220,7 @@ function RefreshReorderAction({ order }: { order: CustomerOrderDetail }) {
 }
 
 function OrderPreparationEstimate({ order }: { order: CustomerOrderDetail }) {
+  if (!["PAID", "ACCEPTED", "PREPARING", "READY"].includes(order.status)) return null;
   if (order.lifecycle?.estimatedReadyAt) {
     return <p><Clock3 size={13} />준비 예상 {shortDateTime.format(new Date(order.lifecycle.estimatedReadyAt))}{order.lifecycle.preparationMinutes ? ` · ${order.lifecycle.preparationMinutes}분` : ""}</p>;
   }

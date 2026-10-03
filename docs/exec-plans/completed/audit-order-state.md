@@ -1,11 +1,11 @@
 # 장바구니 편집과 주문 상태 일치
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-10-03`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -82,8 +82,8 @@ frontend typecheck/test/check:design/build-storybook/build/test:sites, Storybook
 
 - [x] MCP 문서와 원인 확인
 - [x] 장바구니 구현/검증
-- [ ] 종료 주문 안내와 최종 검증
-- [ ] 독립 PR
+- [x] 종료 주문 안내와 최종 검증
+- [x] 독립 PR 제출 준비
 
 ## Surprises & Discoveries
 
@@ -95,7 +95,11 @@ frontend typecheck/test/check:design/build-storybook/build/test:sites, Storybook
 
 ## Outcomes & Retrospective
 
-Pending.
+Passed: typecheck, npm test (38 files / 271 unit tests; presentation 10; product copy 11), check:design, build-storybook, build, Sites 4, docs/OpenAPI validation. Final focused MCP 4 stories passed; preceding focused run also covered point/removal and Toss checkout. Chrome 390px/320px confirmed cart edit controls disabled and responsive wrapping.
+
+Added six cart race tests and eight order-state cases. Reviewer-found late stale response overwrite was fixed; known terminal stale responses cannot replace a newer quote. Successful order responses are still processed. Existing READY pickup-window display remains. Same-tab revision protection only; cross-tab storage synchronization is not claimed.
+
+Full aggregate MCP run: Not run here after the reproducible heap failure on earlier PRs; changed stories were tested through MCP and remote full frontend CI remains Pending. Production/payment-provider verification: Not run. Existing bundle size warning remains. Visual baseline: Not configured.
 
 ## Revision Notes
 
