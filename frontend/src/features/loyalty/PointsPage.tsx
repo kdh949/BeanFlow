@@ -1,17 +1,18 @@
 import { CalendarClock, Sparkles } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
+import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiRequestError, unwrap } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
 import { EmptyState, LoadingState } from "../../design-system";
 import { PageHeading } from "../../design-system";
-import { shortDateTime } from "../../lib/format";
+import { fullDateTime, shortDateTime } from "../../lib/format";
 import { useResource } from "../shared/useResource";
 import { Button } from "../../design-system";
 import { ErrorState } from "../../presentation/shared";
 
 type CustomerPointSummary = components["schemas"]["CustomerPointSummary"];
-type PointTransactionPage = components["schemas"]["PointTransactionPage"];
+type PointTransactionPage = components["schemas"]["CustomerPointTransactionPage"];
 type PointTransaction = PointTransactionPage["items"][number];
 
 const TYPE_LABELS: Record<string, string> = {
@@ -60,6 +61,10 @@ function PointsFailure({ error, retry }: { error: unknown; retry: () => void }) 
 }
 
 function PointsSummary({ summary }: { summary: CustomerPointSummary }) {
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
+  const nearest = summary.expiring[0]; // API orders exact expiry instants ascending.
+  const visible = expanded ? summary.expiring : summary.expiring.slice(0, 3);
   return (
     <>
       <section className="surface-card points-balance">
@@ -72,17 +77,25 @@ function PointsSummary({ summary }: { summary: CustomerPointSummary }) {
 
       <section className="surface-card points-expiring">
         <div className="card-kicker"><CalendarClock size={17} /> 만료 예정</div>
-        {summary.expiring.length === 0 ? (
+        {!nearest ? (
           <p>곧 만료되는 포인트가 없어요.</p>
         ) : (
-          <dl>
-            {summary.expiring.map((expiring) => (
-              <div key={expiring.expiresAt}>
-                <dt>{shortDateTime.format(new Date(expiring.expiresAt))}</dt>
-                <dd>{expiring.amountKrw.toLocaleString("ko-KR")}P</dd>
-              </div>
-            ))}
-          </dl>
+          <>
+            <p>조회된 목록에서 가장 가까운 만료: {fullDateTime.format(new Date(nearest.expiresAt))} · {nearest.amountKrw.toLocaleString("ko-KR")}P</p>
+            <dl id={listId}>
+              {visible.map((expiring) => (
+                <div key={expiring.expiresAt}>
+                  <dt><time dateTime={expiring.expiresAt}>{fullDateTime.format(new Date(expiring.expiresAt))}</time></dt>
+                  <dd>{expiring.amountKrw.toLocaleString("ko-KR")}P</dd>
+                </div>
+              ))}
+            </dl>
+            {summary.expiring.length > 3 ? (
+              <Button variant="ghost" size="sm" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(!expanded)}>
+                {expanded ? "만료 예정 접기" : `조회된 만료 예정 ${summary.expiring.length}건 모두 보기`}
+              </Button>
+            ) : null}
+          </>
         )}
         {summary.expiringHasMore ? (
           <p className="inline-note" role="status">이후에 만료되는 포인트가 더 있어요. 포인트 내역에서 전체 적립·사용 이력을 확인하세요.</p>
@@ -140,6 +153,12 @@ function PointRow({ transaction }: { transaction: PointTransaction }) {
       <div>
         <strong>{TYPE_LABELS[transaction.type] ?? transaction.type}</strong>
         <span>{shortDateTime.format(new Date(transaction.occurredAt))}</span>
+        {transaction.type === "ACCRUAL" && transaction.orderContext ? (
+          <>
+            <span>{transaction.orderContext.storeName} · {transaction.orderContext.firstMenuName}</span>
+            <Link to={`/app/orders/${transaction.orderContext.publicReference}`}>주문 {transaction.orderContext.publicReference} 보기</Link>
+          </>
+        ) : null}
       </div>
       <b className={positive ? "is-credit" : ""}>
         {positive ? "+" : ""}{transaction.amountKrw.toLocaleString("ko-KR")}P
