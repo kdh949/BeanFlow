@@ -70,11 +70,18 @@ function validateConfiguration(configuration: OperationsOidcConfiguration) {
   }
 }
 
-function safeReturnPath(): string {
-  const candidate = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  return candidate.startsWith("/ops") && !candidate.startsWith("/ops/auth/callback") && !candidate.startsWith("//")
-    ? candidate
-    : "/ops";
+/** Only same-origin Operations/Support work routes may survive the OIDC round trip. */
+export function sanitizeOperationsReturnPath(candidate: string | null): string {
+  if (!candidate || !/^\/(?:ops|support)(?:[/?#]|$)/.test(candidate) || /[\\\u0000-\u0020]/.test(candidate)) return "/ops";
+  try {
+    const url = new URL(candidate, window.location.origin);
+    const path = decodeURIComponent(url.pathname);
+    if (url.origin !== window.location.origin || !/^\/(?:ops|support)(?:\/|$)/.test(path)) return "/ops";
+    if (/^\/ops\/auth\/callback(?:\/|$)/.test(path) || /[\\\u0000-\u0020]/.test(path)) return "/ops";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "/ops";
+  }
 }
 
 const tokenListeners = new Set<() => void>();
@@ -113,6 +120,22 @@ export function createOperationsAuthSession(overrides: Partial<OperationsAuthDep
   let keycloak: KeycloakAdapter | null = null;
   let initializePromise: Promise<OperationsAuthState> | null = null;
   let expiryTimer: number | null = null;
+  let returnDestination: string | null = null;
+
+  function rememberReturnPath() {
+    if (window.location.pathname === "/ops/auth/callback") return;
+    returnDestination = null;
+    sessionStorage.setItem(RETURN_PATH_KEY, sanitizeOperationsReturnPath(`${window.location.pathname}${window.location.search}${window.location.hash}`));
+  }
+
+  function consumeReturnPath() {
+    if (returnDestination === null) {
+      const candidate = sessionStorage.getItem(RETURN_PATH_KEY);
+      sessionStorage.removeItem(RETURN_PATH_KEY);
+      returnDestination = sanitizeOperationsReturnPath(candidate);
+    }
+    return returnDestination;
+  }
 
   function publish(next: OperationsAuthState) {
     state = next;
@@ -154,6 +177,7 @@ export function createOperationsAuthSession(overrides: Partial<OperationsAuthDep
     publish({ status: "loading" });
     initializePromise = (async () => {
       try {
+        rememberReturnPath();
         configuration = await dependencies.loadConfiguration();
         validateConfiguration(configuration);
         keycloak = dependencies.createKeycloak({
@@ -169,10 +193,15 @@ export function createOperationsAuthSession(overrides: Partial<OperationsAuthDep
           redirectUri: configuration.redirectUri,
           scope: configuration.scopes.join(" "),
         });
+        if (window.location.pathname === "/ops/auth/callback") consumeReturnPath();
         acceptToken(keycloak);
       } catch (error) {
         authToken.clear();
-        publish({ status: "unavailable", error });
+        returnDestination = null;
+        let failure = error;
+        try { sessionStorage.removeItem(RETURN_PATH_KEY); }
+        catch (storageError) { failure = storageError; }
+        publish({ status: "unavailable", error: failure });
       } finally {
         initializePromise = null;
       }
@@ -200,25 +229,26 @@ export function createOperationsAuthSession(overrides: Partial<OperationsAuthDep
     async logIn() {
       if (state.status === "idle" || state.status === "unavailable") await this.retry();
       if (!keycloak || !configuration) throw new Error("운영자 로그인 설정을 사용할 수 없습니다.");
-      sessionStorage.setItem(RETURN_PATH_KEY, safeReturnPath());
+      if (window.location.pathname === "/ops/auth/callback") {
+        // check-sso can return without an authenticated SSO session. A new login
+        // is another document round trip, so reissue its one-time destination.
+        sessionStorage.setItem(RETURN_PATH_KEY, returnDestination ?? "/ops");
+      } else rememberReturnPath();
       await keycloak.login({ redirectUri: configuration.redirectUri, scope: configuration.scopes.join(" ") });
     },
     async logOut() {
+      returnDestination = null;
+      sessionStorage.removeItem(RETURN_PATH_KEY);
       if (!keycloak || !configuration) {
         clear();
         return;
       }
       const redirectUri = configuration.postLogoutRedirectUri;
       clear();
-      sessionStorage.removeItem(RETURN_PATH_KEY);
       await keycloak.logout({ redirectUri });
     },
     clear,
-    consumeReturnPath() {
-      const candidate = sessionStorage.getItem(RETURN_PATH_KEY);
-      sessionStorage.removeItem(RETURN_PATH_KEY);
-      return candidate?.startsWith("/ops") && !candidate.startsWith("//") ? candidate : "/ops";
-    },
+    consumeReturnPath,
   };
 }
 
