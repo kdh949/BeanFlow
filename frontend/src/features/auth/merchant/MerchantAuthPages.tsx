@@ -27,7 +27,7 @@ export function MerchantLoginPage() {
     if (session.status === "loading") void merchantSession.refresh();
   }, [session.status]);
 
-  if (session.status === "initialPassword") return <Navigate replace to="/store/password" />;
+  if (session.status === "initialPassword") return <Navigate replace to={`/store/password?next=${encodeURIComponent(returnPath)}`} />;
   if (session.status === "authenticated") return <Navigate replace to={returnPath} />;
 
   async function submit(event: FormEvent) {
@@ -97,6 +97,8 @@ export function MerchantLoginPage() {
  */
 export function MerchantPasswordChangePage() {
   const session = useMerchantSession();
+  const [searchParams] = useSearchParams();
+  const returnPath = sanitizeStoreReturnPath(searchParams.get("next"));
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [failure, setFailure] = useState<unknown>(null);
@@ -106,8 +108,8 @@ export function MerchantPasswordChangePage() {
     if (session.status === "loading") void merchantSession.refresh();
   }, [session.status]);
 
-  if (session.status === "unauthenticated") return <Navigate replace to="/store/login" />;
-  if (session.status === "authenticated") return <Navigate replace to="/store" />;
+  if (session.status === "unauthenticated") return <Navigate replace to={`/store/login?next=${encodeURIComponent(returnPath)}`} />;
+  if (session.status === "authenticated") return <Navigate replace to={returnPath} />;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
