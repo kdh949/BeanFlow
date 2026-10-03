@@ -2,7 +2,11 @@ package io.github.kdh949.beanflow.notification.internal
 
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
+import io.github.kdh949.beanflow.eventing.api.EventEnvelope
+import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
+import io.github.kdh949.beanflow.eventing.api.OrderReadyV2
 import io.github.kdh949.beanflow.notification.api.RequestCustomerCancellationAcceptedNotificationCommand
+import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.tamperSignedCursorSignature
 import io.micrometer.core.instrument.MeterRegistry
 import org.assertj.core.api.Assertions.assertThat
@@ -70,6 +74,51 @@ internal class NotificationInboxIntegrationTest
 
         @AfterEach
         fun removeFailureTriggers() = dropFailureTriggers()
+
+        @Test
+        fun `ready v2 snapshots link one inbox and replay while v1 retains its original copy`() {
+            val customer = UUID.randomUUID()
+            val order = UUID.randomUUID()
+            val event =
+                OrderReadyV2(
+                    EventEnvelope(UUID.randomUUID(), "OrderReadyV2", order, 2, NOW, 2, "test", "test"),
+                    order,
+                    customer,
+                    UUID.randomUUID(),
+                    NOW,
+                    "BF-7K3M-9Q2P",
+                    "주문 당시 매장",
+                    "오트 라떼",
+                    2,
+                )
+            deliveryService.requestReady(event)
+            deliveryService.requestReady(event)
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM notification_delivery", Long::class.java)).isOne()
+            mockMvc
+                .perform(get("/api/v1/me/notifications").with(customerJwt(customer)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].body").value("주문 당시 매장 · 오트 라떼 외 2개 항목 준비를 마쳤습니다. 주문 번호 BF-7K3M-9Q2P"))
+                .andExpect(jsonPath("$.items[0].target.type").value("ORDER"))
+                .andExpect(jsonPath("$.items[0].target.reference").value("BF-7K3M-9Q2P"))
+                .andDo { assertThat(it.response.contentAsString).doesNotContain(order.toString(), "providerIdempotencyKey") }
+            assertThatThrownBy { deliveryService.requestReady(event.copy(storeName = "변경된 snapshot")) }
+                .isInstanceOf(DomainFailure::class.java)
+            val legacy =
+                OrderReadyV1(
+                    event.envelope.copy(eventId = UUID.randomUUID(), eventType = "OrderReadyV1", payloadVersion = 1),
+                    order,
+                    customer,
+                    event.storeId,
+                    NOW,
+                )
+            deliveryService.requestReady(legacy)
+            deliveryService.requestReady(legacy)
+            assertThat(
+                jdbcTemplate.queryForObject("SELECT body FROM notification_inbox_item WHERE target_type = 'NONE'", String::class.java),
+            ).isEqualTo("매장에서 주문 준비를 마쳤습니다.")
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM notification_inbox_item", Long::class.java)).isEqualTo(2)
+        }
 
         @Test
         fun `summary and list expose only the session customer inbox`() {

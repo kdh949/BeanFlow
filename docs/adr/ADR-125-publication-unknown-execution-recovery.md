@@ -37,6 +37,13 @@ Modulith 2.1 JPA의 NULL 상태 비교와 publication ID만 사용하는 결과 
 7. 감사 실패는 Case/요청 전이를 rollback한다. API는 현재 권한, 사유, expected Case version, 멱등 키를 유지한다.
    저장된 접수 응답 replay는 상태 변경이나 추가 실행 예산을 만들지 않는다.
 
+## Ready V2 replay extension (2026-10-03)
+
+OrderReadyV2의 `beanflow.notification.order-ready.v2` listener를 검증된 UNKNOWN 재실행 대상으로
+추가한다. V1 default listener ID를 바꾸지 않는다. 같은 event/recipient/channel source unique와
+snapshot 비교를 유지하며 동시 owner transaction 및 commit 후 ACK 유실의 실제 registry 재실행을 검증한다.
+외부 채널 발송은 여전히 delivery worker 책임이며 publication 완료로 발송 성공을 추론하지 않는다.
+
 ## Alternatives Considered
 
 시간 초과 후 FAILED 강제 변경이나 전체 listener 재실행은 중복 부수효과를 만들 수 있다.

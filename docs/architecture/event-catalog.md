@@ -27,7 +27,8 @@
 | OrderRejectedV1 | Ordering | Payment, Fulfillment, Promotion, Loyalty, Notification | event ID + owner source reference | Order |
 | StoreAcceptanceWarningRequestedV1 | Ordering | Notification | order/deadline unique | Order |
 | OrderAcceptedV1 | Ordering | Analytics | order version | Order |
-| OrderReadyV1 | Ordering | Notification | event+recipient+logical channel unique | Order |
+| OrderReadyV1 | Ordering (legacy replay) | Notification | event+recipient+logical channel unique | Order |
+| OrderReadyV2 | Ordering | Notification | event+recipient+logical channel unique; public reference/display snapshot | Order |
 | OrderCompletedV2 | Ordering | Loyalty, Settlement, Analytics | completion source + payload version per consumer | Order |
 | PaymentRefundUnknown | Payment | Operations | refund/provider request unique | Refund |
 | PaymentRefundedV1 | Payment | Loyalty, Settlement, Analytics | refund success source + payload version; Settlement의 미완료 고객 취소는 Audit 후 NOT_APPLICABLE | Refund |

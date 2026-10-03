@@ -141,6 +141,14 @@ CREATE TABLE notification_customer_preference (
 - 목록 정렬·cursor tuple은 `(created_at DESC, id DESC)`이고 customer scope와 filter를 ADR-070 방식으로
   서명한다. InboxItem은 DTO Projection으로 읽고 Delivery를 조인하지 않는다.
 
+### 준비 완료 V2 표시 snapshot (2026-10-03)
+
+새 READY 전이는 OrderReadyV2만 발행한다. 공개 주문 번호, 주문 당시 매장명, 첫 메뉴명과
+나머지 주문 항목 수를 포함하고 Notification은 이 snapshot으로 본문과 ORDER target을 저장한다.
+현재 Ordering/카탈로그 조회로 보정하지 않는다. 잘못된 snapshot은 명시적 처리 실패로 남긴다.
+V1 event/listener/copy/NONE target은 재처리를 위해 보존하며 이전 알림을 재발송하거나 소급 변경하지 않는다.
+UNKNOWN 수동 재실행은 ADR-125의 V2 exact binding 검증을 따른다.
+
 ### 보존
 
 InboxItem은 [BR-37](../product/business-policy-decisions.md)에 따라 분류와 무관하게 생성 후 90일
