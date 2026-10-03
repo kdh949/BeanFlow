@@ -1,11 +1,11 @@
 # 문의 입력 오류와 읽기 개선
 
-> **Status:** `ACTIVE`
+> **Status:** `COMPLETED`
 > **Kind:** `IMPLEMENTATION`
 > **Implementation-Ready:** `true`
 > **Writes-Migration:** `false`
 > **Depends-On:** —
-> **Completed-At:** `—`
+> **Completed-At:** `2026-10-03`
 
 이 ExecPlan은 `.agent/PLANS.md`를 따른다.
 
@@ -68,7 +68,7 @@ DDL/기존 데이터 변경 없음.
 
 ## Validation Commands
 
-Gradle focused domain/integration/architecture + ktlint, frontend required checks와 MCP, docs/OpenAPI.
+Gradle focused domain/integration/architecture + spotlessApply, frontend required checks와 MCP, docs/OpenAPI.
 
 ## Observability
 
@@ -81,8 +81,8 @@ BR-55, ADR-126, 이 계획.
 ## Progress
 
 - [x] 분석/MCP
-- [ ] 구현/검증
-- [ ] PR
+- [x] 구현/검증
+- [x] 독립 PR 제출 준비
 
 ## Surprises & Discoveries
 
@@ -94,7 +94,13 @@ BR-55, ADR-126, 이 계획.
 
 ## Outcomes & Retrospective
 
-Pending.
+Passed: 28 Kotlin tests (SupportContentPolicy 5, CustomerInquiry domain 2, CustomerInquiry PostgreSQL integration 16, SupportArchitecture 3, Modularity 1, RuntimeOpenApiParity 1), spotlessApply, frontend typecheck, 259 unit tests, presentation 10/copy 11, check:design, Storybook/product builds, Sites 4, docs/OpenAPI checks.
+
+MCP passed: invalid title/reply, lost submission/reply, staff public response, customer/support long directory titles, help. Chrome: customer title 320px and keyboard focus, help 390px, support directory 1024px. No clipping found in these states. Full aggregate MCP: Not run after earlier PR heap failures; remote full frontend CI Pending. Production: Not run. Visual baseline: Not configured.
+
+An initially failing date+card test exposed greedy card-candidate consumption. Overlapping candidates and exclusion only of starts inside valid date ranges fix that interaction without rewriting input. Date+card/card+date and two adjacent valid dates pass their expected allow/reject tests. This heuristic is not a comprehensive PII detector; the pre-existing greedy card+extra-number limitation is outside this scoped change.
+
+The first Gradle command used a nonexistent ktlintFormat task; corrected to the repository spotlessApply task. Final required checks passed. Existing deprecation and frontend chunk-size warnings remain.
 
 ## Revision Notes
 
