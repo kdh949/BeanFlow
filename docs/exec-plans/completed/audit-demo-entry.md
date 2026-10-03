@@ -99,4 +99,3 @@ Passed: pinned Nginx 1.30.4 runtime에서 두 설정 모두 /demo·/demo/ 200/no
 ## Revision Notes
 
 2026-10-03: 실행 계획 작성.
-
