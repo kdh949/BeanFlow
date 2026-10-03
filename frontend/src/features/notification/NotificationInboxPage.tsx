@@ -122,11 +122,12 @@ function NotificationRow({ item, reading, onRead }: {
       </div>
       <div className="notification-row-copy">
         <div className="notification-row-meta">
-          <span>{classificationLabel}</span>
+          <span>{classificationLabel}{unread ? " · 읽지 않음" : ""}</span>
           <time dateTime={item.createdAt}>{shortDateTime.format(new Date(item.createdAt))}</time>
         </div>
         <strong>{item.title}</strong>
         <p>{item.body}</p>
+        {item.classification === "TRANSACTIONAL" && item.target.type === "NONE" ? <p>이 알림에는 주문 연결 정보가 없어요. 주문 내역에서 확인해 주세요.</p> : null}
         <div className="notification-row-actions">
           {unread ? (
             <Button variant="ghost" size="sm" loading={reading} onClick={onRead}>
@@ -137,7 +138,7 @@ function NotificationRow({ item, reading, onRead }: {
             <Link to={`/app/orders/${item.target.reference}`}>
               주문 보기 <ChevronRight size={15} aria-hidden="true" />
             </Link>
-          ) : null}
+          ) : item.classification === "TRANSACTIONAL" && item.target.type === "NONE" ? <Link to="/app/orders">주문 내역 보기 <ChevronRight size={15} aria-hidden="true" /></Link> : null}
         </div>
       </div>
     </li>
