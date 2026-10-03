@@ -1318,6 +1318,10 @@
 - **ADR Required:** Yes — PostGIS와 위치정보 보존
 - **Revisit Conditions:** 위치 기반 개인화에 대한 명시적 동의와 보존 정책이 도입될 때
 
+### BR-28 브라우저 검색 복귀 범위 (2026-10-03)
+
+매장 검색의 query/sort/openOnly는 URL에서 복원한다. 정밀 좌표·읽은 페이지 수·scroll은 현재 브라우저 실행의 메모리 방문 기록 최대 20개만 사용하고 로그아웃 시 제거한다. history state에는 opaque 방문 ID만 둔다. 좌표·서버 결과·cursor를 URL, localStorage, sessionStorage나 history state에 저장하지 않는다. 새로고침 또는 방문 기록 소실 후 위치는 다시 요청한다. 복귀 결과는 첫 페이지부터 fresh cursor로 재조회하며 실패를 예전 결과로 숨기지 않는다.
+
 ## BR-29 결제수단 저장 정보
 
 - **Status:** Accepted for MVP
@@ -2524,6 +2528,10 @@
   Provider, menu category 검색 또는 측정된 projection 병목이 제품 요구가 될 때
 
 ---
+
+### BR-50 신규 탐색 표시 정합성 (2026-10-03)
+
+홈·검색·최근·즐겨찾기 카드와 상세·장바구니는 정책상 주문받기만으로 현재 주문 가능을 표시하지 않는다. orderingAvailable과 pickupAvailable 및 OPEN 영업 상태를 함께 확인한다. 신규 탐색에서 legacy nextPickupWindow 부재를 예약 불가로 표현하지 않고 실제 즉시 주문 가능/주문 중지/영업시간 외/운영시간 미설정을 구분한다. 예상 준비시간을 임의로 만들지 않는다.
 
 ## BR-51 고객 알림 분류와 마케팅 기본 수신 거부
 

@@ -86,3 +86,24 @@ export const OrderableFilter: Story = {
     await expect(canvas.getByRole("combobox", { name: "검색 정렬" })).toHaveValue("relevance");
   },
 };
+
+/** Shared URLs retain conditions; precise coordinates remain in memory only. */
+export const SharedDistanceSearchNeedsLocation: Story = {
+  parameters: { routing: { path: "/app/stores", initialEntry: "/app/stores?query=시청&sort=distance&openOnly=true", surface: "refresh-customer" } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText(/위치를 다시 확인/)).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "주문 가능한 매장만" })).toHaveAttribute("aria-pressed", "true");
+    await expect(canvas.getByRole("searchbox")).toHaveValue("시청");
+  },
+};
+
+/** Closed hours cannot be shown as immediate ordering availability. */
+export const ClosedStore: Story = {
+  parameters: { msw: { handlers: [...signedInHandlers, http.get("/api/v1/stores/search", () => HttpResponse.json({ items: [{ ...customerStore, orderingAvailable: true, pickupAvailable: false, customerDisplay: { ...customerStore.customerDisplay, operatingStatus: "CLOSED" } }], page: {}, distanceAvailable: false }))] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("시청점")).toBeVisible();
+    await expect(canvas.queryByText("주문 가능")).not.toBeInTheDocument();
+    await expect(canvas.queryByText("예약 가능한 픽업 시간 없음")).not.toBeInTheDocument();
+    await expect(canvas.getAllByText("영업시간 아님").length).toBeGreaterThan(0);
+  },
+};
