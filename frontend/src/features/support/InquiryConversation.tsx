@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { Button, ButtonLink, EmptyState, InlineNotice, TextAreaField } from "../../design-system";
 import { ErrorState, StatusText } from "../../presentation/shared";
@@ -37,7 +38,7 @@ export function InquiryConversation({ detail, staff = false, canReply, send, ref
 }
 
 export function InquiryList({ items, staff = false }: { items: InquirySummary[]; staff?: boolean }) {
-  return items.length ? <div className="management-workspace">{items.map(item => <article className="surface-card management-card" key={item.inquiryId}><p><StatusText state={item.state} label={inquiryStateLabels[item.state]} /> · {inquiryCategoryLabels[item.category]}</p><ButtonLink variant="ghost" to={`${staff ? "/support/inquiries" : "/app/support"}/${item.inquiryId}`}>{item.title}</ButtonLink><p>{fullDateTime.format(new Date(item.createdAt))}</p></article>)}</div> : <EmptyState title={staff ? "대기 중인 문의가 없습니다" : "접수한 문의가 없습니다"} description={staff ? "다른 접수 범위를 선택하거나 새로고침해 주세요." : "궁금한 점을 남기면 이곳에서 답변을 확인할 수 있습니다."} />;
+  return items.length ? <div className="management-workspace">{items.map(item => <article className="surface-card management-card" key={item.inquiryId}><p><StatusText state={item.state} label={inquiryStateLabels[item.state]} /> · {inquiryCategoryLabels[item.category]}</p><Link className="text-link inquiry-title-link" to={`${staff ? "/support/inquiries" : "/app/support"}/${item.inquiryId}`}>{item.title}</Link><p>{fullDateTime.format(new Date(item.createdAt))}</p></article>)}</div> : <EmptyState title={staff ? "대기 중인 문의가 없습니다" : "접수한 문의가 없습니다"} description={staff ? "다른 접수 범위를 선택하거나 새로고침해 주세요." : "궁금한 점을 남기면 이곳에서 답변을 확인할 수 있습니다."} />;
 }
 export function InquiryPager({ cursors, next, setCursors, disabled = false }: { cursors: (string | undefined)[]; next: string | null; setCursors: (values: (string | undefined)[]) => void; disabled?: boolean }) {
   return <div className="button-row"><Button variant="secondary" disabled={disabled || cursors.length === 1} onClick={() => setCursors(cursors.slice(0, -1))}>이전 목록</Button><Button variant="secondary" disabled={disabled || !next} onClick={() => { if (next) setCursors([...cursors, next]); }}>다음 목록</Button></div>;

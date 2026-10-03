@@ -71,3 +71,15 @@ export const InvalidReply: Story = {
     await expect(canvas.getByLabelText("추가 문의 내용")).not.toHaveAttribute("aria-invalid", "true");
   },
 };
+
+/** Full inquiry titles remain readable and keyboard navigable in narrow directories. */
+export const LongDirectoryTitle: Story = {
+  parameters: { routing: { path: "/app/support", initialEntry: "/app/support", surface: "refresh-customer" }, msw: { handlers: [customerActor, http.get("/api/v1/me/support-inquiries", () => HttpResponse.json({ items: [{ ...inquiry, title: "주문 처리와 결제 취소에 대한 확인 요청입니다. ".repeat(3) }], nextCursor: null }))] } },
+  play: async ({ canvas }) => {
+    const link = await canvas.findByRole("link", { name: /주문 처리와 결제 취소/ });
+    await expect(link).toHaveAttribute("href", `/app/support/${id}`);
+    link.focus();
+    await expect(link).toHaveFocus();
+    await expect(link.scrollWidth).toBeLessThanOrEqual(link.clientWidth);
+  },
+};
