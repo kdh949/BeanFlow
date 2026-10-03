@@ -32,6 +32,7 @@ const meta = {
   component: MerchantLoginPage,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: {
         component:
@@ -64,7 +65,7 @@ export const RejectedCredentials: Story = {
       handlers: [
         ...unauthenticated,
         http.post("/api/v1/auth/merchant/sessions", () =>
-          HttpResponse.json({ code: "AUTHENTICATION_FAILED", message: "인증에 실패했습니다." }, { status: 401 })),
+          HttpResponse.json({ code: "AUTHENTICATION_FAILED", message: "인증에 실패했습니다.", correlationId: "REQ-MERCHANT-AUTH" }, { status: 401 })),
       ],
     },
   },
@@ -73,6 +74,9 @@ export const RejectedCredentials: Story = {
     await userEvent.type(canvas.getByLabelText("비밀번호"), "wrong-password-value");
     await userEvent.click(canvas.getByRole("button", { name: "로그인" }));
     await expect(await canvas.findByRole("alert")).toHaveTextContent("아이디 또는 비밀번호를 확인해 주세요.");
+    await expect(canvas.getByLabelText("아이디")).toHaveAttribute("aria-invalid", "true");
+    await expect(canvas.getByLabelText("비밀번호")).toHaveAttribute("aria-invalid", "true");
+    await expect(canvas.getByText("문의 코드 REQ-MERCHANT-AUTH")).toBeVisible();
   },
 };
 
@@ -111,3 +115,29 @@ export const RejectedNewPassword: Story = {
     await expect(await canvas.findByRole("alert")).toHaveTextContent("비밀번호 규칙을 확인해 주세요.");
   },
 };
+
+
+function loginFailure(code: string, status: number, title: string): Story {
+  return {
+    tags: ["!autodocs"],
+    parameters: { msw: { handlers: [...unauthenticated,
+      http.post("/api/v1/auth/merchant/sessions", () => HttpResponse.json({ code, message: "서버 내부 원문", correlationId: "REQ-MERCHANT-RETRY" }, { status })),
+    ] } },
+    play: async ({ canvas }) => {
+      await userEvent.type(await canvas.findByLabelText("아이디"), "test.owner");
+      await userEvent.type(canvas.getByLabelText("비밀번호"), "TestPasswordValue!");
+      await userEvent.click(canvas.getByRole("button", { name: "로그인" }));
+      await expect(await canvas.findByRole("alert")).toHaveTextContent(title);
+      await expect(canvas.getByLabelText("아이디")).not.toHaveAttribute("aria-invalid", "true");
+      await expect(canvas.getByLabelText("비밀번호")).not.toHaveAttribute("aria-invalid", "true");
+      await expect(canvas.getByText("문의 코드 REQ-MERCHANT-RETRY")).toBeVisible();
+      await expect(canvas.queryByText("서버 내부 원문")).toBeNull();
+      await expect(canvas.getByRole("button", { name: "로그인" })).toBeEnabled();
+    },
+  };
+}
+
+/** A request limit cannot be fixed by changing the password. */
+export const RateLimited: Story = loginFailure("AUTHENTICATION_RATE_LIMITED", 429, "요청이 너무 많습니다");
+/** Dependency outages must not mark valid credentials as incorrect. */
+export const DependencyUnavailable: Story = loginFailure("DEPENDENCY_UNAVAILABLE", 503, "서비스 연결을 확인하고 있습니다");

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
-import { LoadingState } from "../../../design-system";
+import { ButtonLink, LoadingState } from "../../../design-system";
+import { ConsoleFrame } from "../../../presentation/ConsoleFrame";
 import { ErrorState } from "../../../presentation/shared";
 import { merchantSession, useMerchantSession } from "./merchantSession";
 
@@ -20,23 +21,27 @@ export function MerchantSessionGate() {
 
   if (session.status === "loading") return <LoadingState label="로그인 상태를 확인하는 중" />;
 
+  const returnPath = `${location.pathname}${location.search}${location.hash}`;
+
   if (session.status === "unauthenticated") {
-    const returnPath = `${location.pathname}${location.search}`;
     return <Navigate replace to={`/store/login?next=${encodeURIComponent(returnPath)}`} />;
   }
 
   if (session.status === "initialPassword") {
-    return <Navigate replace to="/store/password" />;
+    return <Navigate replace to={`/store/password?next=${encodeURIComponent(returnPath)}`} />;
   }
 
   if (session.status === "forbidden") {
     return (
-      <div className="state-page">
-        <ErrorState error={session.error} />
-        <p className="state-page-note">
-          현재 로그인으로는 매장 콘솔을 이용할 수 없습니다. 점주 계정으로 다시 로그인해 주세요.
-        </p>
-      </div>
+      <ConsoleFrame kind="store" access="unavailable" actorLabel="매장 권한 확인 필요" onLogOut={() => merchantSession.logOut()}>
+        <div className="state-page">
+          <ErrorState error={session.error} />
+          <p className="state-page-note">
+            현재 로그인으로는 매장 콘솔을 이용할 수 없습니다. 점주 계정으로 다시 로그인해 주세요.
+          </p>
+          <ButtonLink to={`/store/login?next=${encodeURIComponent(returnPath)}`}>매장 계정으로 로그인</ButtonLink>
+        </div>
+      </ConsoleFrame>
     );
   }
 
