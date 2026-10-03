@@ -653,7 +653,7 @@ paths:
           description: Actor-scoped signed point ledger page
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PointTransactionPage" }
+              schema: { $ref: "#/components/schemas/CustomerPointTransactionPage" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "503": { $ref: "#/components/responses/DependencyUnavailable" }
@@ -17972,6 +17972,39 @@ components:
         currency:
           $ref: '#/components/schemas/Currency'
           description: 금액 필드에 적용되는 통화입니다.
+    CustomerPointOrderContext:
+      type: object
+      additionalProperties: false
+      description: 고객 소유 주문의 생성 당시 표시 정보입니다. 현재 매장과 메뉴를 조회해 대체하지 않습니다.
+      required: [publicReference, storeName, firstMenuName]
+      properties:
+        publicReference:
+          type: string
+          pattern: '^BF-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
+        storeName: { type: string, minLength: 1, maxLength: 200 }
+        firstMenuName: { type: string, minLength: 1, maxLength: 200 }
+    CustomerPointTransaction:
+      type: object
+      additionalProperties: false
+      description: 기존 포인트 거래 필드와 주문 ACCRUAL의 선택적 고객 소유 주문 맥락입니다. 과거/비주문 기록에는 orderContext가 없습니다.
+      required: [transactionId, type, amountKrw, occurredAt, sourceReference]
+      properties:
+        transactionId: { $ref: '#/components/schemas/PointTransaction/properties/transactionId' }
+        type: { $ref: '#/components/schemas/PointTransaction/properties/type' }
+        amountKrw: { $ref: '#/components/schemas/PointTransaction/properties/amountKrw' }
+        occurredAt: { $ref: '#/components/schemas/PointTransaction/properties/occurredAt' }
+        sourceReference: { $ref: '#/components/schemas/PointTransaction/properties/sourceReference' }
+        orderContext: { $ref: '#/components/schemas/CustomerPointOrderContext' }
+    CustomerPointTransactionPage:
+      type: object
+      additionalProperties: false
+      description: 고객 범위의 기존 정렬과 서명 cursor를 보존하는 포인트 거래 페이지입니다. 주문 binding이 있으나 맥락 조회가 실패하면503입니다.
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CustomerPointTransaction' }
+        page: { $ref: '#/components/schemas/PageInfo' }
     PointTransactionPage:
       type: object
       additionalProperties: false

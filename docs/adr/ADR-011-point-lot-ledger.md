@@ -160,3 +160,16 @@ Audit와 `PointsAdjustedV1` outbox를 원자 저장한다. PostgreSQL fixture가
 - [ADR-065](ADR-065-refund-earned-point-recovery-ledger.md)
 - [ADR-066](ADR-066-audited-loyalty-point-adjustment.md)
 - [ADR-073](ADR-073-order-point-accrual-snapshot.md)
+
+## 고객 적립 주문 맥락 조회 (2026-10-03)
+
+고객 `/me/point-transactions`만 선택적 `orderContext`를 제공한다. Loyalty는 반환 페이지의
+ACCRUAL transaction과 같은 계정의 PointLot을 식별자로 결합하고 `accrualOrderId`를 사용한다.
+Ordering은 shared의 좁은 고객 범위 batch query 계약을 구현하여 공개 주문 번호, 주문 당시 매장명과
+첫 주문 항목의 메뉴명만 반환한다. Loyalty→Ordering 직접 모듈 의존이나 Aggregate 관계는 추가하지 않는다.
+기존 sourceReference는 변경하거나 해석하지 않는다. 원장 순서·cursor·금액 및 운영 응답은 유지한다.
+주문 binding이 없는 과거/비주문 적립은 맥락을 생략한다. binding이 있으나 소유 주문이나 표시 snapshot을
+조회할 수 없으면 명시적 dependency 실패이며 빈 맥락으로 위장하지 않는다. 현재 카탈로그를 조회하지 않는다.
+이 읽기는 원장·잔액·회수·정산을 변경하지 않으며 DDL과 과거 데이터 보정은 없다.
+만료 UI는 연도를 포함한 서울 시각과 조회된 목록의 가장 가까운 만료 건을 표시하고, 반환된 20개 시각
+구간의 합계를 전체 포인트로 설명하지 않는다. 긴 목록은 첫 3개 뒤 펼칠 수 있고 서버의 truncation 안내를 유지한다.
