@@ -22,6 +22,7 @@ const meta = {
   component: OperationsSessionGate,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: {
         component:
@@ -77,5 +78,20 @@ export const PermissionDenied: Story = {
   },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("업무 접근 권한이 없습니다")).toBeVisible();
+  },
+};
+
+export const RefreshUnavailable: Story = {
+  args: {
+    session: session({
+      status: "unavailable",
+      error: new ApiRequestError(503, "OPERATIONS_TOKEN_REFRESH_UNAVAILABLE", "조직 로그인 연결 실패"),
+    }),
+  },
+  play: async ({ canvas, args }) => {
+    await expect(await canvas.findByText("조직 로그인 연결을 확인할 수 없습니다")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: /다시 시도/ }));
+    await expect(args.session?.retry).toHaveBeenCalled();
+    await expect(canvas.queryByRole("button", { name: "조직 계정으로 로그인" })).not.toBeInTheDocument();
   },
 };

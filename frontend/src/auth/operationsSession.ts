@@ -16,11 +16,13 @@ type KeycloakAdapter = {
   authenticated?: boolean;
   token?: string;
   tokenParsed?: { exp?: number; preferred_username?: string; name?: string };
+  timeSkew?: number | null;
   onTokenExpired?: () => void;
   init(options: KeycloakInitOptions): Promise<boolean>;
   login(options?: { redirectUri?: string; scope?: string }): Promise<void>;
   logout(options?: { redirectUri?: string }): Promise<void>;
   clearToken(): void;
+  updateToken(minValidity: number): Promise<boolean>;
 };
 
 type OperationsAuthDependencies = {
@@ -113,6 +115,8 @@ export function createOperationsAuthSession(overrides: Partial<OperationsAuthDep
   let keycloak: KeycloakAdapter | null = null;
   let initializePromise: Promise<OperationsAuthState> | null = null;
   let expiryTimer: number | null = null;
+  let generation = 0;
+  let refreshPromise: Promise<void> | null = null;
 
   function publish(next: OperationsAuthState) {
     state = next;
@@ -125,7 +129,10 @@ export function createOperationsAuthSession(overrides: Partial<OperationsAuthDep
   }
 
   function clear() {
+    generation += 1;
+    refreshPromise = null;
     clearExpiryTimer();
+    if (keycloak) keycloak.onTokenExpired = undefined;
     keycloak?.clearToken();
     authToken.clear();
     publish({ status: "unauthenticated" });
@@ -137,15 +144,64 @@ export function createOperationsAuthSession(overrides: Partial<OperationsAuthDep
       return;
     }
     authToken.set(adapter.token);
-    const expiresAt = adapter.tokenParsed?.exp ?? null;
-    adapter.onTokenExpired = clear;
+    const expiresAt = adapter.tokenParsed?.exp === undefined
+      ? null
+      : adapter.tokenParsed.exp + (adapter.timeSkew ?? 0);
+    const tokenGeneration = generation;
+    adapter.onTokenExpired = () => void refreshAfterExpiry(adapter, tokenGeneration);
     clearExpiryTimer();
     if (expiresAt !== null) {
       const remainingMs = Math.max(0, expiresAt * 1000 - Date.now());
-      expiryTimer = window.setTimeout(clear, remainingMs);
+      expiryTimer = window.setTimeout(() => void refreshAfterExpiry(adapter, tokenGeneration), remainingMs);
     }
     const displayName = adapter.tokenParsed?.preferred_username ?? adapter.tokenParsed?.name;
     publish({ status: "authenticated", expiresAt, ...(displayName ? { displayName } : {}) });
+  }
+
+  async function refreshAfterExpiry(adapter: KeycloakAdapter, tokenGeneration: number) {
+    if (adapter !== keycloak || tokenGeneration !== generation || state.status !== "authenticated") return;
+    if (adapter.tokenParsed?.exp !== undefined
+      && (adapter.tokenParsed.exp + (adapter.timeSkew ?? 0)) * 1000 > Date.now()) return;
+    try {
+      await refreshAccessToken(-1);
+    } catch {
+      // refreshAccessToken already removed credentials and published the explicit failure state.
+    }
+  }
+
+  function refreshAccessToken(minValidity = 30): Promise<void> {
+    if (refreshPromise) return refreshPromise;
+    if (state.status === "unavailable") return Promise.reject(state.error);
+    if (!keycloak || state.status !== "authenticated") return Promise.resolve();
+    const adapter = keycloak;
+    const refreshGeneration = generation;
+    const pending = Promise.resolve().then(async () => {
+      try {
+        await adapter.updateToken(minValidity);
+        if (adapter !== keycloak || refreshGeneration !== generation) {
+          adapter.clearToken();
+          throw new ApiRequestError(401, "UNAUTHORIZED", "로그인 상태가 변경되었습니다. 다시 로그인해 주세요.");
+        }
+        if (!adapter.authenticated || !adapter.token || (adapter.tokenParsed?.exp !== undefined
+          && (adapter.tokenParsed.exp + (adapter.timeSkew ?? 0)) * 1000 <= Date.now())) {
+          throw new ApiRequestError(401, "UNAUTHORIZED", "로그인이 만료되었습니다. 다시 로그인해 주세요.");
+        }
+        acceptToken(adapter);
+      } catch (failure) {
+        if (adapter !== keycloak || refreshGeneration !== generation) throw failure;
+        const signedOut = !adapter.authenticated || (failure instanceof ApiRequestError && failure.status === 401);
+        const error = signedOut
+          ? new ApiRequestError(401, "UNAUTHORIZED", "로그인이 만료되었습니다. 다시 로그인해 주세요.")
+          : new ApiRequestError(503, "OPERATIONS_TOKEN_REFRESH_UNAVAILABLE", "조직 로그인 연결을 확인할 수 없습니다.");
+        clear();
+        if (!signedOut) publish({ status: "unavailable", error });
+        throw error;
+      } finally {
+        if (refreshPromise === pending) refreshPromise = null;
+      }
+    });
+    refreshPromise = pending;
+    return pending;
   }
 
   async function initialize(): Promise<OperationsAuthState> {
@@ -189,7 +245,7 @@ export function createOperationsAuthSession(overrides: Partial<OperationsAuthDep
     },
     initialize,
     async retry() {
-      clearExpiryTimer();
+      clear();
       keycloak = null;
       configuration = null;
       initializePromise = null;
@@ -214,6 +270,10 @@ export function createOperationsAuthSession(overrides: Partial<OperationsAuthDep
       await keycloak.logout({ redirectUri });
     },
     clear,
+    refreshAccessToken,
+    rejectToken(token: string | null) {
+      if (token && token === authToken.get()) clear();
+    },
     consumeReturnPath() {
       const candidate = sessionStorage.getItem(RETURN_PATH_KEY);
       sessionStorage.removeItem(RETURN_PATH_KEY);

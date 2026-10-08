@@ -44,6 +44,11 @@ data class ProvisionedMerchantCredential(
     val memberships: List<ProvisionedMerchantMembership>,
 )
 
+data class ReleasedMerchantLock(
+    val account: ProvisionedMerchantCredential,
+    val releasedIpRestrictionCount: Int,
+)
+
 /** Operations-owned password policy port implemented by Identity outside a database transaction. */
 interface MerchantCredentialSecurityPort {
     fun canonicalizeLoginId(rawLoginId: String): String
@@ -60,7 +65,7 @@ interface MerchantCredentialProvisioningPort {
     fun releaseLock(
         accountId: UUID,
         now: Instant,
-    ): ProvisionedMerchantCredential
+    ): ReleasedMerchantLock
 
     fun findExact(loginId: String): ProvisionedMerchantCredential?
 }

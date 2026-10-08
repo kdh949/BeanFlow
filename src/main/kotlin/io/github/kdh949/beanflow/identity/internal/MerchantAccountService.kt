@@ -208,18 +208,23 @@ internal class MerchantAccountTransactions(
 ) {
     @Transactional
     fun completeLogin(command: PreparedMerchantLogin): MerchantLoginCompletion {
-        if (!command.passwordMatched) return completeFailure(command)
+        val account =
+            command.snapshot?.let { snapshot ->
+                accounts.findLockedById(snapshot.id)?.also {
+                    if (!it.matches(snapshot)) throw MerchantCredentialChanged()
+                } ?: throw MerchantCredentialChanged()
+            }
+        if (!command.passwordMatched) return completeFailure(command, account)
 
         val lockedAttempts = attempts.lockExisting(LoginAttemptActorType.MERCHANT, command.loginIdHmac, command.ipHmac)
         lockedAttempts.rows[LoginAttemptScope.IP]?.blockedUntil?.takeIf(command.now::isBefore)?.let {
+            if (account != null) attempts.recordMerchantSource(command.loginIdHmac, command.ipHmac, command.now)
             return MerchantLoginCompletion.Rejected(it)
         }
         lockedAttempts.rows[LoginAttemptScope.LOGIN_ID]?.blockedUntil?.takeIf(command.now::isBefore)?.let {
             return MerchantLoginCompletion.Rejected()
         }
-        val snapshot = command.snapshot ?: return completeFailure(command)
-        val account = accounts.findLockedById(snapshot.id) ?: throw MerchantCredentialChanged()
-        if (!account.matches(snapshot)) throw MerchantCredentialChanged()
+        if (account == null) return completeFailure(command, null)
         if (account.state == MerchantAccountState.INITIAL_PASSWORD && !account.temporaryPasswordUsable(command.now)) {
             account.materializeTemporaryPasswordExpiry(command.now)
             return MerchantLoginCompletion.Rejected()
@@ -291,15 +296,13 @@ internal class MerchantAccountTransactions(
     @Transactional
     fun logout(sessionId: String) = sessionLifecycle.logout(sessionId)
 
-    private fun completeFailure(command: PreparedMerchantLogin): MerchantLoginCompletion {
+    private fun completeFailure(
+        command: PreparedMerchantLogin,
+        account: MerchantAccountEntity?,
+    ): MerchantLoginCompletion {
         val attemptLock = attempts.beginFailure(LoginAttemptActorType.MERCHANT, command.loginIdHmac, command.ipHmac, command.now)
-        val account =
-            command.snapshot?.let { snapshot ->
-                accounts.findLockedById(snapshot.id)?.also {
-                    if (!it.matches(snapshot)) throw MerchantCredentialChanged()
-                } ?: throw MerchantCredentialChanged()
-            }
         val outcome = attempts.applyFailure(attemptLock, command.now)
+        if (account != null) attempts.recordMerchantSource(command.loginIdHmac, command.ipHmac, command.now)
         if (outcome.loginId.failureCount == LoginAttemptScope.LOGIN_ID.limit && outcome.authenticationBlocked(command.now)) {
             if (account != null && account.lockedUntil?.let(command.now::isBefore) != true) {
                 account.lock(checkNotNull(outcome.loginId.blockedUntil), command.now)
