@@ -59,8 +59,9 @@ export function OperationsSessionGate({
         if (!disposed) setActor(current);
       } catch (error) {
         if (disposed) return;
-        if (error instanceof ApiRequestError && error.status === 401) session.clear();
-        else setActorError(error);
+        // The API client invalidates only the credential that received 401. An older
+        // request must not clear a newer login or a successfully refreshed token.
+        setActorError(error);
       } finally {
         if (!disposed) setCheckingActor(false);
       }

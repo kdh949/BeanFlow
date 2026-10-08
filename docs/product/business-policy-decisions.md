@@ -1729,7 +1729,7 @@
   `EXPIRED` lifecycle을 바꾸지 않고 `lockedUntil`을 시간 제한 overlay로 적용한다. 따라서 만료 뒤
   정상 로그인은 잠기기 전 lifecycle을 그대로 사용한다. 어느 경우에도 이전 Session의 version은
   되살리지 않는다. 성공 로그인은 그 계정의 실패 창만 초기화한다. 운영자 조기 해제는
-  `lockedUntil`만 지우며 AuditRecord를 함께 커밋한다.
+  `lockedUntil`과 같은 LOGIN_ID 실패 창을 지우며 AuditRecord를 함께 커밋한다.
 - **IP Limit:** actor 종류별 source IP에서 15분 안에 실패 30건이면 그 IP의 해당 로그인 endpoint를
   15분 차단하고 `429 AUTHENTICATION_RATE_LIMITED`와 `Retry-After`를 반환한다. 성공 로그인 하나로 IP
   실패 창을 초기화하지 않는다. 신뢰 proxy 목록 밖의 forwarding header는 IP 판정에 사용하지 않는다.
@@ -1739,12 +1739,22 @@
   비어 있거나 malformed chain은 `400 INVALID_REQUEST`로 거부하며, 모든 hop이 trusted이면 direct peer로
   보수적으로 귀결한다. trusted proxy deployment는 관측한 peer를 chain 끝에 append하거나 header 전체를
   overwrite해야 하며, application은 leftmost 값을 단독으로 신뢰하지 않는다.
+- **Merchant Early Release Amendment (2026-10-01):** 운영자 점주 잠금 해제는 계정·LOGIN_ID와
+  해당 점주가 현재 IP 실패 창 또는 차단 기간에 로그인 시도한 IP 제한을 한 transaction에서 함께
+  해제한다. 실패한 로그인과 올바른 비밀번호의 IP 차단 응답에서 LOGIN_ID HMAC과 IP HMAC의 연결을
+  기록한다. 연결 시각이 IP의 현재 `window_start`보다 오래된 기록은 해제 근거로 쓰지 않는다.
+  공유 IP의 다른 점주에도 해제 효과가 있지만 고객 actor의 제한과 연결되지 않은 IP는 유지한다.
+  감사에는 해제한 IP 제한 수만 추가하고 IP 원문·HMAC은 남기지 않는다. 정상 로그인과 비밀번호
+  초기화는 IP 제한을 해제하지 않는다. 연결 정보가 없는 기존 제한은 추정해 해제하지 않으며,
+  새 로그인 시도로 연결한 후 조기 해제하거나 원래 기한에 만료한다. [ADR-139](../adr/ADR-139-merchant-account-and-ip-lock-release.md)
+  가 이전 계정·LOGIN_ID만의 조기 해제 결정을 대체한다.
 - **Merchant Temporary Password:** 점주 임시 비밀번호는 발급 시각부터 24시간 유효하다. 운영자는
   만료 전후 재발급할 수 있으며 재발급 transaction은 새 Hash·만료 시각·`credentialVersion`과
   `AuditRecord`를 함께 커밋한다.
 - **Attempt Data:** 사용자명과 IP 원문은 attempt table에 저장하지 않는다. actor 종류, scope 종류와
   별도 설정한 keyed HMAC-SHA-256만 저장한다. HMAC key가 없거나 유효하지 않으면 기동 실패다. attempt
-  row는 마지막 갱신 24시간 뒤 `(updated_at, id)` 순서의 bounded worker가 삭제한다. 정리 실패는 인증을
+  row는 마지막 갱신 24시간 뒤 `(updated_at, id)` 순서의 bounded worker가 삭제한다. 점주 ID·IP 연결도
+  마지막 시도 24시간 뒤 bounded worker로 삭제하며 IP 제한 행 삭제 시 함께 삭제한다. 정리 실패는 인증을
   우회하지 않으며 retry·metric·log로 남긴다.
 - **Rationale:** MFA와 비밀번호 재설정이 없는 P0에서 짧은 비밀번호와 무제한 추측을 허용하지 않되,
   영구 잠금으로 공격자가 계정을 계속 사용할 수 없게 만드는 DoS를 피한다.
@@ -1758,6 +1768,9 @@
   - attacker-supplied prefix가 있는 forwarding chain, 다중 trusted proxy hop, IPv4/IPv6 혼합,
     trusted peer의 malformed chain과 untrusted direct peer의 spoofed forwarding header
   - 성공 로그인 후 계정 창 초기화와 IP 창 비초기화
+  - 점주 조기 해제의 연결된 현재 IP 제한 정리, 공유 IP 영향, 고객·무관한 IP·이전 창 보존
+  - 올바른 비밀번호의 IP 차단 시도 연결, 감사 실패 전체 rollback과 replay의 재차단 무변경
+  - 점주 로그인·해제의 동시 실행과 연결 기록 24시간 bounded retention
   - 임시 비밀번호 발급 후 24시간 -1ns/at/+1ns와 재발급 감사 원자성
   - Unicode·공백·15/128 code point·512 byte 경계와 비밀번호 비정규화
   - `INITIAL_PASSWORD`와 `ACTIVE`에서 현재·새 비밀번호가 같은 경우의 정책 거부와 account state,
@@ -1963,9 +1976,17 @@
   반환하며 secret이나 관리 endpoint를 반환하지 않는다. issuer/client/callback 설정이 누락·불일치하면
   애플리케이션 기동 또는 로그인 시작을 명시적으로 실패시킨다. Keycloak callback allowlist는 정확한
   production origin/path만 허용하고 wildcard origin을 사용하지 않는다.
-- **Expiry and Logout:** access token 만료 또는 401이면 메모리 credential을 지우고 보호 화면을
-  중단한 뒤 Keycloak SSO 재인증으로 보낸다. 이전 API를 익명·stale cache로 계속 사용하지 않는다.
-  로그아웃은 로컬 메모리·일회성 state를 지우고 Keycloak의 검증된 end-session 흐름으로 이동한다.
+- **Expiry and Logout (2026-10-01 amendment):** Operations와 Support는 access token 만료 시점과
+  보호 API 요청 전에 Keycloak adapter의 메모리 refresh token으로 access token을 갱신한다. 요청 전
+  최소 유효 시간은 30초이며 동시 호출은 한 번의 갱신을 공유한다. 열린 콘솔의 만료 갱신은 Keycloak
+  세션 활동이므로 SSO idle을 연장할 수 있지만 IdP의 session max와 refresh 거부를 우회하지 않는다.
+  갱신이 거부되어 adapter 인증이 종료되거나 현재 credential의 API 응답이 401이면 credential을 지우고
+  보호 화면을 중단한 뒤 SSO 재인증을 요구한다. 갱신 통신·의존성 실패는 credential을 지우고 명시적
+  unavailable 화면을 표시한다. 이전 token·익명 요청·stale API 결과로 대체하지 않고 업무 요청을
+  자동 재전송하지 않는다. 로그아웃은 메모리·일회성 state를 지우고 검증된 end-session으로 이동하며
+  늦게 도착한 이전 갱신 결과는 인증을 복원하지 못한다.
+  기존 P0의 만료 즉시 재인증 정책은 짧은 access token 수명이 업무 세션 수명으로 작동하는 문제를
+  해소하기 위해 [ADR-138](../adr/ADR-138-operations-memory-token-refresh.md)로 대체한다.
 - **Rationale:** 운영자 신원과 기존 JWT Resource Server·permission grant 경계를 유지하면서 사람이
   토큰을 복사하지 않는 표준 브라우저 로그인 흐름을 제공하기 위함이다.
 - **Affected Contexts:** Operations Console, Security, Operations, Support
@@ -1974,10 +1995,11 @@
   - state·nonce 불일치, code 재사용, callback error와 open redirect 거부
   - PKCE `S256` 사용과 client secret·implicit/password flow 부재
   - callback 성공·실패 후 일회성 storage 삭제와 token 영구 storage 0건
-  - token issuer·audience·expiry 검증 및 만료 뒤 보호 화면·API 중단
+  - token issuer·audience·expiry 검증, 메모리 갱신 성공 후 업무 유지 및 갱신 실패 뒤 보호 화면·API 중단
+  - 동시 갱신 공유, clock skew, 로그아웃·재초기화 뒤 늦은 갱신 결과 폐기, 업무 요청 자동 재전송 부재
   - Keycloak logout 뒤 이전 token 재사용 거부와 Token Editor 부재
   - runtime config 누락·callback mismatch가 fake config나 local token fallback이 아닌 명시적 실패
-- **ADR Required:** Yes — [ADR-092](../adr/ADR-092-hybrid-authentication.md)
+- **ADR Required:** Yes — [ADR-138](../adr/ADR-138-operations-memory-token-refresh.md)
 - **Revisit Conditions:** backend-for-frontend, 운영자 Session, native client, refresh token rotation 또는
   조직 SSO 정책 변경이 요구될 때
 

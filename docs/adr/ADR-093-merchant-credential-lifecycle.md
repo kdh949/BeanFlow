@@ -1,6 +1,6 @@
 # ADR-093: 점주 계정 자격증명 lifecycle과 최초 비밀번호 강제 변경
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-139](ADR-139-merchant-account-and-ip-lock-release.md) for early lock release; lifecycle decisions retained
 - **Date:** 2026-08-11
 - **Implementation owner:** [Merchant account and initial password](../exec-plans/completed/productization-40-merchant-account-and-initial-password.md)
 
@@ -67,6 +67,9 @@
   계속한다. 운영자는 만료 전에 조기 해제할 수 있다. 조기 해제와 비밀번호 초기화는 account의
   `lockedUntil`과 같은 점주 LOGIN_ID attempt 차단을 한 transaction에서 함께 지우며 감사 기록을
   남긴다.
+- **2026-10-01 early-release amendment:** [ADR-139](ADR-139-merchant-account-and-ip-lock-release.md)가
+  조기 해제를 해당 점주의 현재 창에 연결된 IP 제한까지 확장한다. 비밀번호 초기화 범위와
+  lifecycle·credentialVersion·Session 규칙은 유지한다.
 - 계정 생성, 비밀번호 초기화, 잠금 해제는 모두 `AuditRecord`를 남긴다
   ([ADR-022](ADR-022-audit-record.md)). 감사에는 대상 계정 ID, 실행 운영자, 사유가 들어가고
   비밀번호 값과 Hash는 들어가지 않는다.
