@@ -55,6 +55,8 @@ snapshot, Payment lookup과 환불 recovery를 재사용한다.
 
 - quote/Tx A/인증 대기 중 reservation row·reserved balance 변화가 0인지 검증한다.
 - 동일 Coupon/Point 경합에서 경제적 성공 한 건과 나머지 승인 건의 void/refund 수렴을 검증한다.
+- Coupon issuance 잠금을 기다리는 동안 만료 시각에 도달하거나 지난 경우 사용을 거절하고 owner write가
+  남지 않는지 검증한다. 유효한 사용은 잠금 획득 후의 서버 시각을 기록하고 만료 후 동일 source replay도 유지한다.
 - coupon 사용 후 points 부족, snapshot insert 실패와 Payment/PAID 실패가 전체 rollback되는지 검증한다.
 - 중복 approval, 이미 PAID인 승자와 Tx D 경합, PG 성공 후 서버 종료/DB 실패, 장기 UNKNOWN을 검증한다.
 - 0원 정상/경합/영업시간 밖 경로와 기존 완료·부분환불·정산 tie-out을 검증한다.
