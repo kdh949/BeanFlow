@@ -1,11 +1,10 @@
 # BeanFlow Capability Map
 
-이 표는 현재 `main` source의 owner와 구현 증거를 요약한다. Runtime HTTP API 열은
-[Runtime OpenAPI](../../openapi/beanflow-v1-runtime.yaml)와
-`RuntimeOpenApiParityTest`가 검증하는 source mapping이며 실제 배포 증거가 아니다. Event 열에서
-`target`은 [Event Catalog](event-catalog.md)에만 있고 consumer 구현 증거가 없는 관계를 뜻한다.
+모듈별 데이터, 기능, API와 관련 코드를 한곳에 정리했다. HTTP API 전체 목록은
+[Runtime OpenAPI](../../openapi/beanflow-v1-runtime.yaml)에서 볼 수 있다.
+이벤트의 `target`은 [Event Catalog](event-catalog.md)의 후속 연결 대상을 표시한다.
 
-| Bounded Context | 현재 소유 Aggregate/Read Model | 구현된 command/query | Runtime HTTP API | producer/consumer event | 주요 failure/recovery state | 완료 evidence | Active next work | 명시적 non-goal |
+| 모듈 | 관리하는 데이터 | 제공 기능 | HTTP API | 발행·수신 이벤트 | 오류·재처리 상태 | 코드·테스트 | 다음 작업 | 제외 범위 |
 |---|---|---|---|---|---|---|---|---|
 | Identity | Store membership/access projection | Store actor membership·role 검증 | 없음 | 없음 | access denied, dependency unavailable | [StoreAccessService](../../src/main/kotlin/io/github/kdh949/beanflow/identity/internal/StoreAccessService.kt), [ModularityTests](../../src/test/kotlin/io/github/kdh949/beanflow/architecture/ModularityTests.kt) | 없음 | JWT만으로 object ownership을 대체하지 않음 |
 | Merchant | Store, 1:1 StoreDiscoveryProfile, Menu/MenuOption, MenuConfiguration, StoreSettlementTerms, StorePolicyScope | menu quote, store existence/policy scope, versioned settlement terms, pickup-capable nearby profile projection, 메뉴·옵션 catalogue projection | 없음 | 없음 | menu/config unavailable, settlement input unavailable, profile coverage startup failure | [Merchant API](../../src/main/kotlin/io/github/kdh949/beanflow/merchant/api/MerchantApi.kt), [StoreDiscoveryQueryOperations](../../src/main/kotlin/io/github/kdh949/beanflow/merchant/api/StoreDiscoveryQueryOperations.kt), [StoreDiscoveryProfileMigrationTest](../../src/test/kotlin/io/github/kdh949/beanflow/merchant/internal/StoreDiscoveryProfileMigrationTest.kt), [StoreMenuQueryOperations](../../src/main/kotlin/io/github/kdh949/beanflow/merchant/api/StoreMenuQueryOperations.kt), [V18](../../src/main/resources/db/migration/V18__create_store_settlement_terms.sql), [V33](../../src/main/resources/db/migration/V33__create_merchant_store_discovery_profile.sql), [V34](../../src/main/resources/db/migration/V34__verify_store_discovery_profile_coverage.sql), [V35](../../src/main/resources/db/migration/V35__add_store_catalog_query_indexes.sql), [Catalogue plan evidence](../quality/store-catalog-query-performance-evidence.md) | 없음 | Controller가 Merchant Entity/Repository를 직접 노출하지 않음, Store 쓰기 Entity에 검색 필드 추가 금지 |
@@ -22,17 +21,11 @@
 | Analytics | 아직 없음 | 아직 없음 | 없음 | target consumers: completed/refund/point/settlement events; producer 없음 | 계획상 freshness `FAILED/UNKNOWN`, `BACKFILL_REQUIRED`, `MANUAL_REVIEW` | producer 계약은 [ADR-068](../adr/ADR-068-immutable-integration-event-snapshots.md)과 event contract tests에 존재 | [Refund and Late-event Projection](../exec-plans/active/analytics-refund-and-late-event-projection.md) | public dashboard/API, warehouse, stale/0 healthy fallback |
 | Operations | AuditRecord, OperatorPermissionGrant, benefit policy heads, OrderCompensationCase/Step, ReprocessingCase, repair/reconciliation work, OperationsSupportInvestigation | audited policy/grant change, compensation query/recovery, setup repair/refund reconciliation, exact-revision Support investigation decision and required owner callback | existing Operations APIs plus `POST /operations/investigations/{investigationId}/decisions` | consumes unknown/failure/dispute events; owns persistent publication recovery cases | retry/failed/unknown/reconciling/manual review, two-person repair, investigation approved/denied/returned/escalated/expired/stale | [OperationsSupportInvestigationService](../../src/main/kotlin/io/github/kdh949/beanflow/operations/internal/OperationsSupportInvestigationService.kt), [OperationsSupportInvestigationIntegrationTest](../../src/test/kotlin/io/github/kdh949/beanflow/operations/internal/OperationsSupportInvestigationIntegrationTest.kt), [V44](../../src/main/resources/db/migration/V44__create_support_action_approval_and_investigation.sql) | Analytics backfill/freshness operations; S90/S100 typed investigation open callers | coarse JWT role fallback, reviewer dual role, Support table direct write, unaudited privileged mutation |
 
-## Inventory totals and gaps
+## 구현 현황과 다음 작업
 
-Delivery has no canonical fulfillment runtime operation. Support has S20–S100 Case/search/privacy-access/timeline/evaluation/approval/order-change/resolution/goodwill/profile-change capabilities;
-the remaining Support stages are still planned in the [API inventory](../api/support-api-surface.md),
-[ADR-081](../adr/ADR-081-support-context-case-and-query-boundary.md) and
-[ADR-088](../adr/ADR-088-canonical-delivery-provider-boundary.md). A future-stage inventory row is not implementation
-evidence.
+Delivery에는 아직 정식 fulfillment runtime 기능이 없다. Support에는 S20–S100의 Case·검색·개인정보 접근·타임라인·평가·승인·주문 변경·처리·보상·프로필 변경 기능이 있다.
+Support의 후속 작업은 [API 목록](../api/support-api-surface.md), [ADR-081](../adr/ADR-081-support-context-case-and-query-boundary.md), [ADR-088](../adr/ADR-088-canonical-delivery-provider-boundary.md)에 정리했다.
 
-- Runtime: 107 paths, 111 operations. Spring MVC와의 exact parity는
-  `RuntimeOpenApiParityTest`가 검증한다.
-- Accepted target: 107 paths, 111 operations and 244 schemas.
-- Target-only operations: none. The separate inventory's S100 profile rows are implemented; later
-  Support/Delivery/LegalHold operations remain DRAFT.
-- 실제 non-local deployment, SLA, production traffic과 Provider 장애 주입은 이 표의 증거가 아니다.
+- 현재 Runtime OpenAPI: 107개 경로, 111개 operation. `RuntimeOpenApiParityTest`에서 Spring MVC mapping과 비교한다.
+- Accepted 설계 문서: 107개 경로, 111개 operation, 244개 schema.
+- 설계 문서에만 있는 operation은 없다. S100 프로필 기능은 구현됐으며 Support·Delivery·LegalHold의 후속 operation은 DRAFT 상태다.

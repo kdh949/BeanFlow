@@ -2,7 +2,7 @@
 
 ## Principle
 
-BeanFlow는 실패한 의존성이나 작업을 암묵적 fallback으로 숨기지 않는다. 모든 실패는 API 오류, 도메인 상태, health 상태, metric, retry 상태 또는 운영자 case 중 하나 이상으로 관측 가능해야 한다.
+DB·PG·알림 등의 처리 중 오류가 발생하면 API 오류와 작업 상태에 기록한다. 비동기 작업은 재시도 이력, 지표와 운영자 처리 항목에서 원인을 볼 수 있게 한다.
 
 ## Failure classes
 
@@ -18,7 +18,7 @@ Examples:
 Behavior:
 
 - 애플리케이션 시작 실패
-- secret을 노출하지 않는 실행 가능한 오류 메시지
+- 비밀값을 제외하고 원인과 조치 방법을 안내하는 오류 메시지
 - 부분 구성 상태로 서비스 시작 금지
 
 ### Request-critical dependency
@@ -143,7 +143,7 @@ Behavior:
 - retry count와 last failure 노출
 - 원본 거래 성공을 부수효과 성공으로 간주하지 않음
 
-#### Source-aware event convergence
+#### 중복·지연 이벤트 처리
 
 - 같은 owner source reference의 중복·지연 event는 기존 진행 또는 완료 상태를
   반환하고 새 부수효과와 attempt를 만들지 않는다.
@@ -167,7 +167,7 @@ Behavior:
   처리를 중단하지 않는다.
 - publication completion attempt와 owner business attempt를 분리해 기록한다.
 
-#### Paid customer cancellation commit gate
+#### 결제된 주문 취소의 commit 조건
 
 - `202`를 반환하기 전에 Order 취소, 취소 멱등 응답, 주문 보상 Case, 필요한 Refund
   `REQUESTED`, 취소 접수 NotificationDelivery `PENDING`, AuditRecord와 세 owner
@@ -215,7 +215,7 @@ Behavior:
 
 ### Optional capability
 
-fallback은 제품이 명시적으로 degraded mode를 지원할 때만 허용한다.
+Degraded mode를 제공하는 기능은 fallback을 활성화할 조건과 사용자에게 보여줄 상태를 별도로 정한다.
 
 필수 조건:
 
@@ -226,7 +226,7 @@ fallback은 제품이 명시적으로 degraded mode를 지원할 때만 허용�
 - 활성화·복구 자동 테스트
 - Accepted ADR
 
-## Forbidden patterns
+## 금지하는 처리
 
 - catch-all exception 후 성공 응답
 - 실패를 `0`, 빈 목록, null 또는 stale cache로 정상처럼 반환
@@ -239,7 +239,7 @@ fallback은 제품이 명시적으로 degraded mode를 지원할 때만 허용�
 - 알림 실패 때문에 주문 완료를 롤백
 - 캐시 장애를 cache miss와 동일하게 취급하고 관측하지 않음
 
-## BeanFlow examples
+## 상황별 오류 처리
 
 | Situation | Required behavior | Forbidden behavior |
 |---|---|---|
@@ -256,7 +256,7 @@ fallback은 제품이 명시적으로 degraded mode를 지원할 때만 허용�
 | Production profile with mock PG | startup failure | mock으로 계속 실행 |
 | 감사형 point adjustment debit 부족 | 409, Account/Lot/원장/Audit rollback | 부분 차감·음수 잔액·pending 생성 |
 
-## Test requirements
+## 오류 시나리오 테스트
 
 Customer Support adds these explicit outcomes: Audit failure returns no raw PII/high-risk success;
 verification timeout is pending/unknown; partial approval cannot execute; pickup reschedule failure preserves
@@ -264,16 +264,16 @@ the old slot; post-acceptance partial effects stay partial; unknown compensation
 fallback; Delivery timeout blocks silent cross-provider failover; deletion component failure stays partial and
 backup restore reapplies deletion decisions.
 
-새 failure path는 다음을 검토한다.
+새 오류 처리에는 다음 테스트를 추가한다.
 
 - 실패가 사용자에게 어떤 상태·오류로 보이는가
 - DB에 어떤 상태가 남는가
 - 재시도가 같은 부작용을 만들지 않는가
-- 운영자가 어떻게 발견하고 복구하는가
+- 운영 화면에 오류를 어떻게 표시하고 재처리하는가
 - metric, log와 correlation이 존재하는가
-- fallback이 활성화되지 않았음을 어떻게 검증하는가
+- 자동 fallback이 실행되지 않는지 테스트
 
-### Publication 결과 불명 수동 복구
+### Publication 결과를 알 수 없을 때 수동 처리
 
 - 수동 claim 후 결과가 확인되지 않으면 마지막 실제 실행 시작(시작 전에는 claim) 시각으로 조사한다.
   초기 5분 경과는 MANUAL_REVIEW/UNKNOWN 전이 조건이며 확정 실패나 이전 실행 종료의 증거가 아니다.

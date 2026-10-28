@@ -1,126 +1,63 @@
-# Core Architecture Decision Summary
+# BeanFlow 주요 설계 결정
 
-이 문서는 BeanFlow의 핵심 Accepted ADR 열 개를 현재 source 증거와 함께 요약하는 입구다.
-원 ADR의 전체 맥락·amendment·규범을 대체하지 않으며, 충돌 시 링크한 ADR이 우선한다.
+주문·결제·포인트·정산을 구현하면서 선택한 설계와 이유를 정리했습니다. 자세한 정책과 변경 이력은 각 ADR에서 볼 수 있습니다.
 
 ## [ADR-001 Modular Monolith](../adr/ADR-001-modular-monolith.md)
 
-**문제:** 거래 Context를 처음부터 서비스로 분리하면 네트워크 실패와 운영 비용이 제품 검증보다
-앞서지만, 계층형 단일 모놀리스는 소유권을 흐린다. **결정:** Spring Modulith 단일 배포 단위 안에서
-공개 Application API, event와 구조 테스트로 논리 경계를 강제한다. **포기한 대안:** 초기
-microservices와 경계 없는 layered monolith를 모두 포기했다.
+처음부터 서비스를 나누면 모듈 사이의 네트워크 호출과 배포 관리가 늘어납니다. BeanFlow는 Spring Modulith를 이용해 하나의 애플리케이션으로 실행하고, 도메인별 공개 Application API와 이벤트로 모듈 간 접근을 관리합니다.
 
-**현재 증거:** [ModularityTests](../../src/test/kotlin/io/github/kdh949/beanflow/architecture/ModularityTests.kt)와
-[Context Map](context-map.md)이 모듈 의존성을 검증한다. **비용/한계:** 한 프로세스 장애가 전체에
-영향을 주며 실제 분산 실패를 아직 검증하지 않았다. **Revisit condition:** 독립 배포·확장·장애
-격리가 관측 가능한 요구가 될 때 물리 분리를 다시 평가한다.
+[모듈 의존성 테스트](../../src/test/kotlin/io/github/kdh949/beanflow/architecture/ModularityTests.kt)와 [Context Map](context-map.md)을 함께 관리합니다. 독립적인 배포나 장애 격리가 필요해지면 서비스 분리를 다시 검토할 계획입니다.
 
 ## [ADR-002 Bounded Context Boundaries](../adr/ADR-002-bounded-context-boundaries.md)
 
-**문제:** 주문 생명주기를 공유해도 가격, 결제, 혜택과 정산의 데이터 소유권·일관성 요구는 다르다.
-**결정:** Identity부터 Operations까지 14개 논리 Context를 두고, 초기 물리 모듈 통합 여부와 무관하게
-소유권을 유지한다. **포기한 대안:** 주문 중심 거대 도메인과 모든 후보의 즉시 서비스화를 포기했다.
+주문, 결제, 혜택, 정산은 하나의 거래에 참여하지만 각자 관리해야 할 데이터가 다릅니다. Identity부터 Operations까지 14개 Bounded Context로 나누고 데이터 변경은 담당 모듈에서 처리합니다. 처음에는 일부 기능을 한 모듈에서 실행하더라도 데이터 소유 관계는 유지합니다.
 
-**현재 증거:** [Context Map](context-map.md), [Capability Map](capability-map.md)과
-[ModularityTests](../../src/test/kotlin/io/github/kdh949/beanflow/architecture/ModularityTests.kt)가 owner와
-public boundary를 기록·검증한다. **비용/한계:** 작은 Context에도 번역 API와 event 계약이 필요하다.
-**Revisit condition:** 용어 충돌, 독립 팀 또는 배포 요구가 실제로 확인될 때 경계를 조정한다.
+[Context Map](context-map.md), [Capability Map](capability-map.md), [모듈 의존성 테스트](../../src/test/kotlin/io/github/kdh949/beanflow/architecture/ModularityTests.kt)에서 구성을 볼 수 있습니다. 모듈 사이에 API·이벤트를 추가로 관리해야 하는 비용이 있습니다.
 
 ## [ADR-003 Aggregate Reference by ID](../adr/ADR-003-aggregate-reference-by-id.md)
 
-**문제:** Context 전반의 JPA 객체 연관·cascade는 loading 범위와 transaction owner를 숨긴다.
-**결정:** 다른 Aggregate는 ID로 참조하고 같은 Aggregate 안에서 생명주기를 공유하는 Entity만 객체
-연관을 사용하며 필요한 DB FK는 유지한다. **포기한 대안:** 전면 JPA association과 FK까지 제거한
-ID-only storage를 포기했다.
+다른 Aggregate를 JPA 객체로 직접 연결하면 조회 시점과 함께 수정되는 데이터 범위를 파악하기 어려워집니다. Aggregate 사이에는 ID를 저장하고, 같은 Aggregate 안에서만 객체 관계를 사용합니다. DB의 FK 제약은 유지합니다.
 
-**현재 증거:** [Aggregate Invariants](aggregate-invariants.md),
-[Transaction Boundaries](transaction-boundaries.md)와
-[OrderingPersistence](../../src/main/kotlin/io/github/kdh949/beanflow/ordering/internal/OrderingPersistence.kt)가
-ID·FK 기반 경계를 보여 준다. **비용/한계:** 조회 조합과 DTO projection을 명시해야 해 탐색 편의가
-줄어든다. **Revisit condition:** 동일 transaction과 lifecycle을 지속적으로 공유한다는 증거가 생길 때다.
+조회에 필요한 데이터는 Query Repository나 DTO Projection으로 조합합니다. [Aggregate Invariants](aggregate-invariants.md), [Transaction Boundaries](transaction-boundaries.md), [OrderingPersistence](../../src/main/kotlin/io/github/kdh949/beanflow/ordering/internal/OrderingPersistence.kt)에 구현 방식을 정리했습니다.
 
 ## [ADR-004 Order Price Snapshot](../adr/ADR-004-order-price-snapshot.md)
 
-**문제:** 현재 Menu·가격을 과거 Order에 다시 join하면 메뉴 변경 뒤 환불·정산 결과가 바뀐다.
-**결정:** OrderLine에 menu ID와 주문 시점 이름, 옵션, 단가, 수량과 혜택 배분을 snapshot한다.
-**포기한 대안:** 현재 Menu 조회와 가격만 보존하는 축소 snapshot을 포기했다.
+고객이 주문한 뒤 메뉴 가격이 바뀌어도 환불과 정산은 주문 당시 금액으로 계산해야 합니다. OrderLine에는 메뉴 ID와 당시 상품명·옵션·단가·수량·혜택 배분을 함께 저장합니다.
 
-**현재 증거:** [CreateOrderServiceTest](../../src/test/kotlin/io/github/kdh949/beanflow/ordering/internal/CreateOrderServiceTest.kt),
-[Aggregate Invariants](aggregate-invariants.md)와 V3/V15/V20 migration이 금액·allocation snapshot을
-보호한다. **비용/한계:** 중복 데이터와 schema evolution 비용이 있다. **Revisit condition:** 규제·감사로
-추가 표시·계산 속성을 장기 보존해야 할 때 snapshot 계약을 versioning한다.
+[CreateOrderServiceTest](../../src/test/kotlin/io/github/kdh949/beanflow/ordering/internal/CreateOrderServiceTest.kt), [Aggregate Invariants](aggregate-invariants.md), Flyway V3·V15·V20에서 관련 처리를 볼 수 있습니다. 스냅샷 때문에 데이터가 중복되고, 필드가 바뀌면 migration도 필요합니다.
 
 ## [ADR-006 External Payment Transaction Boundary](../adr/ADR-006-external-payment-transaction-boundary.md)
 
-**문제:** PG latency 동안 DB connection과 lock을 유지하면 pool 고갈과 장기 transaction이 발생한다.
-**결정:** Tx1에서 Payment/멱등 준비 상태를 commit하고 transaction 밖에서 Provider를 호출한 뒤 Tx2에서
-결과, Order와 reservation owner 확정을 원자 commit한다. **포기한 대안:** transaction 내부 PG 호출과
-초기 완전 비동기 승인을 포기했다.
+PG 응답을 기다리는 동안 DB 연결과 lock을 점유하면 주문 요청이 몰릴 때 connection pool에 부담이 생깁니다. 첫 트랜잭션에서 결제 요청과 멱등성 정보를 저장하고, PG를 호출한 뒤 두 번째 트랜잭션에서 승인 결과와 주문·예약 변경을 저장합니다.
 
-**현재 증거:** [PaymentConfirmationIntegrationTest](../../src/test/kotlin/io/github/kdh949/beanflow/ordering/internal/PaymentConfirmationIntegrationTest.kt)와
-[Transaction Boundaries](transaction-boundaries.md)가 Tx1/Provider/Tx2와 rollback을 검증한다.
-**비용/한계:** 중간 `UNKNOWN`과 reconciliation이 필수다. **Revisit condition:** Provider가 callback 등
-더 강한 원자성·확정 보장을 제공할 때다.
+PG에서 승인이 완료됐지만 DB 저장에 실패하는 상황은 `UNKNOWN`과 reconciliation으로 처리합니다. [결제 승인 통합 테스트](../../src/test/kotlin/io/github/kdh949/beanflow/ordering/internal/PaymentConfirmationIntegrationTest.kt)와 [Transaction Boundaries](transaction-boundaries.md)에 구현 내용이 있습니다.
 
 ## [ADR-007 Payment Idempotency and Reconciliation](../adr/ADR-007-payment-idempotency-reconciliation.md)
 
-**문제:** client retry, response loss와 server crash는 중복 승인과 결과 불명을 만든다. **결정:**
-actor+operation+key scope, payload hash, unique constraint와 저장 결과를 사용하고 timeout은 `UNKNOWN`으로
-보존한다. 승인 요청을 재전송하지 않고 bounded lookup 뒤에도 불명이면 `MANUAL_REVIEW`와 case를 만든다.
-**포기한 대안:** client 중복 방지나 payment key uniqueness만 믿는 방식을 포기했다.
+결제 요청은 네트워크 오류나 재시도로 여러 번 들어올 수 있습니다. 사용자·작업 종류·멱등성 키를 묶고 요청 내용의 해시와 결과를 저장합니다. DB unique constraint로 중복 처리를 막습니다.
 
-**현재 증거:** [PaymentConfirmationIntegrationTest](../../src/test/kotlin/io/github/kdh949/beanflow/ordering/internal/PaymentConfirmationIntegrationTest.kt),
-[Failure Semantics](failure-semantics.md)와 V6 migration이 replay·unknown·late approval recovery를
-검증한다. **비용/한계:** durable work, retention과 복잡한 state machine이 필요하다. **Revisit condition:**
-Provider idempotency 보장과 key/result 보존 기간이 계약으로 확정될 때다.
+응답 유실 후에는 같은 승인 요청을 다시 보내는 대신 PG 조회로 상태를 가져옵니다. 정해진 횟수만큼 조회해도 결과를 알 수 없으면 `MANUAL_REVIEW`로 넘깁니다. [결제 승인 통합 테스트](../../src/test/kotlin/io/github/kdh949/beanflow/ordering/internal/PaymentConfirmationIntegrationTest.kt), [Failure Semantics](failure-semantics.md), Flyway V6에 구현 사항을 연결했습니다.
 
 ## [ADR-008 Settlement Adjustment Ledger](../adr/ADR-008-settlement-adjustment-ledger.md)
 
-**문제:** 확정 정산을 환불·이의제기 후 덮어쓰면 audit와 과거 재현이 깨진다. **결정:** confirmed
-Batch/Item은 immutable로 유지하고 후속 변경은 append-only `SettlementAdjustment`로 기록해 다음
-Batch에 상계한다. 수락 전 고객 취소는 Item을 만들지 않고 `NOT_APPLICABLE` Audit로 증명한다.
-**포기한 대안:** 과거 Batch 재계산·덮어쓰기와 전체 Batch 취소/재생성을 포기했다.
+정산이 확정된 후 환불이나 이의제기가 발생할 수 있습니다. 확정된 Batch·Item을 유지하고 이후 변경은 `SettlementAdjustment`에 추가해 다음 정산에서 상계합니다. 매장 수락 전 취소처럼 정산 항목이 생성되지 않은 환불은 Audit에 `NOT_APPLICABLE`로 남깁니다.
 
-**현재 증거:** [Settlement Refund Adjustment Integration Test](../../src/test/kotlin/io/github/kdh949/beanflow/settlement/internal/SettlementRefundAdjustmentIntegrationTest.kt),
-[Settlement Lifecycle Evidence](../quality/settlement-lifecycle-release-evidence.md)와 V21/V28~V30 migration이
-불변·중복 방지·carry를 검증한다. **비용/한계:** 현재 금액은 원장 합산이 필요하고 음수 이월 정책이
-복잡하다. **Revisit condition:** 실제 지급·채권 또는 외부 회계 연동 요구가 생길 때다.
+[정산 환불 조정 통합 테스트](../../src/test/kotlin/io/github/kdh949/beanflow/settlement/internal/SettlementRefundAdjustmentIntegrationTest.kt), [정산 처리 기록](../quality/settlement-lifecycle-release-evidence.md), Flyway V21·V28~V30과 연결됩니다. 현재 금액을 조회할 때는 관련 조정 내역과 음수 이월을 함께 계산합니다.
 
 ## [ADR-009 Explicit Failure Semantics](../adr/ADR-009-explicit-failure-semantics.md)
 
-**문제:** 예외를 삼키거나 빈 값·local fallback으로 대체하면 거래 실패가 성공처럼 보인다.
-**결정:** 필수 설정은 startup fail-fast, 요청 실패는 명시적 status/error, 비동기 실패는 durable
-retry/failed/unknown/manual state로 남기며 fallback은 별도 ADR과 observability가 있어야 한다.
-**포기한 대안:** best-effort silent fallback과 모든 부수효과 실패 시 원 거래 rollback을 포기했다.
+필수 Port나 설정이 누락되면 애플리케이션 시작 단계에서 오류를 반환합니다. 요청 처리 실패는 API 상태·오류 코드로 전달하고, 비동기 작업은 재시도·실패·결과 불명·수동 처리 상태로 기록합니다.
 
-**현재 증거:** [Failure Semantics](failure-semantics.md), failure-path integration tests와
-[Definition of Done](../testing/definition-of-done.md)이 no-fallback rule을 강제한다. **비용/한계:** 사용자에게
-503/지연 상태가 더 자주 보이고 운영 case·metric 구현 비용이 든다. **Revisit condition:** degraded mode가
-명시적인 제품 기능으로 설계될 때다.
+[Failure Semantics](failure-semantics.md), 실패 시나리오 통합 테스트와 [Definition of Done](../testing/definition-of-done.md)에서 관련 규칙을 관리합니다. 필수 기능이 실패했을 때 대체 데이터로 성공 응답을 만드는 대신 사용자에게 처리 상태를 보여줍니다.
 
 ## [ADR-011 PointLot and Ledger](../adr/ADR-011-point-lot-ledger.md)
 
-**문제:** 단일 balance로는 선소멸, issuer, 만료, 부분 환불 복원과 비용 부담을 재현할 수 없다.
-**결정:** issuer·expiry별 `PointLot`, append-only signed `PointTransaction`, reservation allocation과
-검증 가능한 Account summary를 함께 유지한다. 사용은 만료가 빠른 Lot부터 하며 recovery pending과
-감사형 adjustment도 별도 source·transaction으로 tie-out한다. **포기한 대안:** balance-only와 매 조회 시
-원장 전체 합산을 포기했다.
+포인트는 발급처와 유효기간이 다를 수 있고, 부분 환불 시 원래 사용한 포인트를 다시 돌려줘야 합니다. `PointLot`으로 발급처·유효기간을 관리하고, 사용·적립·조정을 append-only `PointTransaction`에 기록합니다. 사용 시에는 만료가 빠른 Lot부터 차감합니다.
 
-**현재 증거:** [Point Adjustment Integration Test](../../src/test/kotlin/io/github/kdh949/beanflow/loyalty/internal/PointAdjustmentIntegrationTest.kt),
-[Loyalty Adjustment Evidence](../quality/loyalty-point-adjustment-release-evidence.md)와 V2/V14~V17/V31이
-lot·ledger·summary invariant를 검증한다. **비용/한계:** 여러 Lot lock과 reconciliation이 필요하다.
-**Revisit condition:** 포인트 통합·선물·양도 요구가 생길 때다.
+잔액 조회용 Account summary와 예약·배분 내역을 함께 관리하며, [포인트 조정 통합 테스트](../../src/test/kotlin/io/github/kdh949/beanflow/loyalty/internal/PointAdjustmentIntegrationTest.kt), [포인트 처리 기록](../quality/loyalty-point-adjustment-release-evidence.md), Flyway V2·V14~V17·V31에서 관련 내용을 볼 수 있습니다.
 
 ## [ADR-068 Immutable Integration Event Snapshots](../adr/ADR-068-immutable-integration-event-snapshots.md)
 
-**문제:** consumer가 현재 Aggregate·정책을 다시 읽으면 늦은 event가 과거 정산·Analytics 결과를
-현재 값으로 바꾼다. **결정:** producer transaction이 결과 시점의 immutable financial snapshot과
-versioned logical source를 persistent publication에 함께 commit하며 V1 의미 변경은 새 version과
-cutover gate로 처리한다. **포기한 대안:** live owner 조회, locator-only projection과 V1 field in-place
-추가를 포기했다.
+오래된 이벤트를 나중에 처리할 때 현재 가격이나 정책을 다시 읽으면 주문 당시의 금액과 달라질 수 있습니다. 이벤트를 생성하는 트랜잭션에서 해당 시점의 금액·정책 snapshot과 source version을 함께 저장합니다. 이벤트 구조를 바꿀 때는 새 version과 전환 절차를 사용합니다.
 
-**현재 증거:** [Event Catalog](event-catalog.md),
-[PaymentRefunded Contract Test](../../src/test/kotlin/io/github/kdh949/beanflow/eventing/internal/PaymentRefundedEventContractTest.kt)와
-Plan 15/16/20 및 point-adjustment evidence가 payload·replay·atomicity를 검증한다. **비용/한계:** payload
-version, source uniqueness, cutover inventory와 consumer checkpoint 관리가 필요하다. **Revisit condition:**
-retention이 보장된 immutable owner projection, 외부 broker 또는 구 version 병행 보존 요구가 생길 때다.
+[Event Catalog](event-catalog.md), [PaymentRefunded Contract Test](../../src/test/kotlin/io/github/kdh949/beanflow/eventing/internal/PaymentRefundedEventContractTest.kt), Plan 15·16·20과 포인트 조정 기록을 참고할 수 있습니다. 변경 시에는 이벤트를 소비하는 모듈의 version과 checkpoint도 함께 관리합니다.

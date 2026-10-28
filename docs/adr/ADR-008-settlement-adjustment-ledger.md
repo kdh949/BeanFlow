@@ -9,12 +9,10 @@
 
 ## Decision
 
-확정 Batch와 Item은 불변으로 유지하고 이후 변경은 SettlementAdjustment로 기록하여 다음 정산에 상계한다.
+확정된 Batch·Item은 그대로 두고 환불·이의제기 후 변경된 금액은 SettlementAdjustment에 기록해 다음 정산에서 상계한다.
 
-ADR-048에 따라 매장 수락 전 고객 취소는 `COMPLETED`되지 않아 SettlementItem이
-없으므로 “확정 이후 변경”에 해당하지 않는다. 그 성공 Refund에는 0원 또는 음수
-SettlementAdjustment를 만들지 않고 append-only AuditRecord로
-`NOT_APPLICABLE` 판정을 증명한다.
+매장 수락 전에 고객이 주문을 취소하면 SettlementItem이 생성되지 않는다(ADR-048).
+해당 환불은 정산 조정 대신 append-only AuditRecord에 `NOT_APPLICABLE`로 기록한다.
 
 ## Alternatives Considered
 
@@ -24,7 +22,7 @@ SettlementAdjustment를 만들지 않고 append-only AuditRecord로
 
 ## Rationale
 
-감사 가능성, 재처리와 과거 시점 재현성을 확보한다.
+확정 정산을 그대로 남기고 이후 조정 내역을 추가하므로, 과거 정산 금액과 변경 사유를 함께 조회할 수 있다.
 
 ## Consequences
 
@@ -36,11 +34,11 @@ SettlementAdjustment를 만들지 않고 append-only AuditRecord로
 - 확정 후 부분·전액 환불
 - 중복 Adjustment 방지
 - 다음 배치 상계 tie-out
-- **Plan 20 evidence (2026-08-03):** V21과 Settlement consumer는 `COMPLETED` source만 immutable
+- **2026-08-03 정산 입력 처리:** V21과 Settlement consumer는 `COMPLETED` source만 immutable
   Item으로 만들고, 고객 취소 Refund에는 Item/Adjustment 없이 실제 Order/Refund evidence와
   source-unique `SETTLEMENT_REFUND_EXCLUDED` Audit만 남긴다. existing Item, source mismatch와
   Audit rollback은 성공 처리되지 않는 통합 테스트로 검증했다.
-- **Settlement lifecycle evidence (2026-08-03):** V28~V29와 Settlement Application Service는
+- **2026-08-03 정산 처리:** V28~V29와 Settlement Application Service는
   confirmed Item/Batch에만 append-only Adjustment를 허용하고 source/reason unique와 mutation
   trigger로 중복·변경을 막는다. completed Refund와 accepted Dispute는 각각 stable source로
   하나의 Adjustment, Audit와 persistent event에 수렴한다. 계산 시각 기반 ingestion
@@ -50,8 +48,7 @@ SettlementAdjustment를 만들지 않고 append-only AuditRecord로
 
 ## Metrics
 
-- **Measured (2026-08-03, single local run):** PostgreSQL 17.6, 1,000 Item, chunk 500에서
-  calculation 36.054ms, confirmation 17.260ms였다. 기준선·SLA가 없는 진단 값이며 개선율 주장이 아니다.
+- **Measured (2026-08-03, single local run):** PostgreSQL 17.6에서 정산 항목 1,000개를 500개씩 처리한 단일 로컬 측정 결과는 계산 36.054ms, 확정 17.260ms이다.
 
 ## Revisit Conditions
 

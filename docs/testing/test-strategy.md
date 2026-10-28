@@ -1,6 +1,6 @@
 # Test Strategy
 
-| Layer | Purpose | Primary risks |
+| 테스트 종류 | 다루는 기능 | 주요 오류 |
 |---|---|---|
 | Domain Unit | 상태 전이, 금액·정책 | 잘못된 상태, 금액 불일치 |
 | Application | 유스케이스·Port 순서 | 트랜잭션 경계, 보상 누락 |
@@ -13,7 +13,7 @@
 | Load | 지연·처리량·resource | pool 고갈, lock wait, GC |
 | Time | 만료·영업시간·batch | 경계 시각 오류 |
 
-## Environment
+## 테스트 환경
 
 - Repository와 통합 테스트는 PostgreSQL Testcontainers를 기본으로 한다.
 - 위치 기능은 PostGIS 이미지 또는 확장을 실제로 사용한다.
@@ -24,7 +24,7 @@
   영원히 걸리지 않을 수 있다. `Instant.now()`가 macOS에서는 microsecond, Linux에서는 nanosecond라
   이 결함은 개발 머신에서 드러나지 않는다. `FixedTestClockPrecisionTest`가 두 test clock을 고정한다.
 
-## Risk-first examples
+## 오류·동시 요청 테스트 예시
 
 - 같은 Idempotency-Key 100개 동시 요청 → 승인 부작용 한 번
 - PG 성공 후 DB write 실패 → UNKNOWN/복구 case, 재승인 없음
@@ -39,7 +39,7 @@
 - PointAccount support read → `POINT_ACCOUNT_READ` row lock/active grant, normalized access reason,
   projection과 exactly-one target Audit이 같은 transaction에 commit; audit/projection failure에는 body 없음
 
-## Toss one-time Payment Window release suite
+## Toss 일회성 결제 테스트
 
 - Migration/DB: nullable legacy `payment_method_id` 경계, one-time attempt의 positive KRW,
   provider order/paymentKey/idempotency uniqueness, 상태별 required/null CHECK와 prepare immutable trigger
@@ -59,12 +59,11 @@
   제공 디자인과 구현을 같은 comparison image로 확인하고 `design-qa.md`를 통과
 - Secrets/fallback: production dependency audit, tracked secret scan, product bundle의 fixture/fake success/secret 부재,
   production profile에서 scripted/sandbox adapter 자동 선택 금지
-- Real sandbox: test client/secret key가 있을 때만 실제 auth/confirm/query/cancel을 실행한다. 키가 없으면
-  구현·local scripted 증거로 대체하지 않고 `Not run — missing credentials`로 기록한다.
+- Real sandbox: Toss 테스트 키로 auth/confirm/query/cancel을 호출한다. 키가 없는 실행은 `Not run — missing credentials`로 기록한다.
 
-## Customer cancellation release suite
+## 고객 주문 취소 테스트
 
-고객 취소 구현은 다음 묶음을 release-blocking suite로 실행한다.
+고객 주문 취소를 변경하면 다음 테스트를 모두 실행한다.
 
 - Domain: 허용/비허용 Order 상태, 정확한 두 deadline 경계, cancellation field CHECK,
   reason code/detail 정규화
@@ -106,7 +105,7 @@
 - Pre-release gate: compensation legacy row, V1 publication 또는 external consumer가
   하나라도 있으면 clean cutover 차단
 
-## Settlement lifecycle release suite
+## 정산 처리 테스트
 
 - Domain/DB: Batch `OPEN → CALCULATED → CONFIRMED`, summary·carry tie-out, confirmed mutation
   금지, Adjustment append-only/source unique, Dispute active partial unique와 실제 새 evidence 1회
@@ -123,12 +122,11 @@
   민감 field 부재, 실제 target listener completion, Spring Modulith dependency direction
 - Performance evidence: PostgreSQL 17.6 고정 1,000 Item fixture에서 500-row
   `EXPLAIN (ANALYZE, BUFFERS)`, calculation/confirmation duration과 제어된 row-lock wait를 기록한다.
-  단일 로컬 값은 SLA나 개선율로 사용하지 않는다.
+  측정값은 실행 환경과 데이터 규모를 함께 기록한다.
 
-성능 수치는 구현 후 같은 PostgreSQL fixture, 동일 batch와 동시성 조건에서 기준선과
-함께 측정한다. 측정 없이 scanner, lock 또는 payload 성능 개선을 주장하지 않는다.
+성능은 동일한 PostgreSQL 데이터·배치·동시성 조건에서 변경 전후를 비교한다.
 
-## PointAccount read suite
+## 포인트 계정 조회 테스트
 
 - API/security: customer ownership 200/403/404, unauthenticated 401, operator role+active
   `POINT_ACCOUNT_READ` grant+reason만 200, invalid reason/cursor/limit 400
@@ -138,7 +136,7 @@
   only `actor_type` and closed `outcome` tags
 - Persistence/performance: PostgreSQL 17.6 V32 migration and [fixed 5,000-row query-plan evidence](../quality/point-account-read-performance-evidence.md)
 
-## Nearby store Discovery suite
+## 주변 매장 검색 테스트
 
 - Contract validation: latitude/longitude `[-90,90]`/`[-180,180]` 경계와 finite plain decimal,
   missing parameter, radius `1/10000/10001/0`, limit `omitted/1/100/101/0`, cursor `empty/2048/2049`.
@@ -164,7 +162,7 @@
 - Persistence/performance: PostgreSQL 17/PostGIS 3.5 Testcontainers와
   [고정 5,000-row query-plan evidence](../quality/nearby-store-discovery-performance-evidence.md).
 
-## Store catalogue read suite
+## 매장 메뉴·픽업 슬롯 조회 테스트
 
 - Menu projection: available/unavailable 메뉴와 옵션 조합이 실제 owner flag로 나오고, 판매 불가
   항목을 `available: true`로 만들지 않는다. 다른 store의 메뉴·옵션은 절대 섞이지 않는다.
@@ -180,11 +178,9 @@
 - Measurement: `scripts/perf/nearby-store-search.sh`가 고정 조건으로 두 규모 dataset을 재현하고
   실행계획과 latency 분포를 기록한다. 일반 suite에서는 `BEANFLOW_BENCHMARK` 없이 실행되지 않는다.
 
-## Query tests
+## SQL 조회 테스트
 
-Customer Support and Delivery implementation stages use the consolidated
-[planned Support Test Strategy](support-test-strategy.md). It contains future coverage only; no Support test or load
-evidence exists until an owning Stage records named tests and exact results.
+고객지원·배달 기능 테스트는 [Support Test Strategy](support-test-strategy.md)에 정리했다.
 
 N+1은 FetchType 이름만으로 판단하지 않는다.
 

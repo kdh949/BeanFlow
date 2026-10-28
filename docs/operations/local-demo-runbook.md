@@ -1,27 +1,24 @@
-# Local Demo Runbook
+# 로컬 데모 실행 방법
 
-`scripts/demo/`의 네 script로 BeanFlow API와 React frontend를 로컬에서 기동하고, 결정적 fixture를
-넣고, 고객 → 일회성 결제 checkpoint와 고객 → 공개 주문번호 매장 처리 → 포인트 적립 → 공개 환불 →
-확정 정산·부분 환불 조정·owner 이의제기 전체 흐름을
-실제 HTTP로 확인하는 방법과 실패 진단을 다룬다.
+`scripts/demo/`의 네 스크립트로 PostgreSQL, API, 프런트엔드를 실행하고 샘플 데이터를 준비한다.
+고객 주문부터 매장 처리, 포인트 적립, 환불, 정산과 이의제기까지 HTTP smoke test로 실행할 수 있다.
 
-이 환경은 **데모와 로컬 확인 전용**이다. 실제 배포, 운영 규모, SLA를 증명하지 않는다.
 관련 결정: [ExecPlan](../exec-plans/completed/local-demo-environment-and-smoke.md),
 [ADR-021](../adr/ADR-021-payment-method-tokenization.md),
 [BR-28](../product/business-policy-decisions.md).
 
-## 1. 무엇을 우회하지 않는가
+## 1. 데모 환경의 동작
 
-데모라는 이유로 완화한 것이 없다는 점이 이 환경의 전제다.
+데모 환경에서도 계정 인증, 권한 검사와 주문·결제 규칙을 적용한다.
 
 | 항목 | 데모에서의 동작 |
 |---|---|
-| 인증 | 고객은 실제 가입 계정의 ID/PW와 PostgreSQL Session·CSRF Cookie를 사용한다. Plan 30 checkpoint는 Merchant endpoint를 호출하지 않고, Plan 40의 전체 smoke는 실제 점주 계정과 Merchant Session을 사용한다. 운영자는 실행 시 생성한 RSA 키쌍의 JWK set으로 JWT를 검증한다. `permitAll`이나 decoder 대체는 없다 |
-| 인가 | 역할·매장 소속과 actor별 Chain 검사가 그대로 동작한다. smoke가 무인증 401·고객 경로 Bearer 403·타 매장 owner 403을 확인한다 |
-| 도메인 불변식 | 예약 lease, capacity, 멱등성, 상태 전이 모두 production 코드 경로다 |
-| 필수 정책 | GLOBAL 일반 적립 정책은 production과 같은 감사형 bootstrap CLI가 OIDC workload identity 검증을 통과해 만든다. seed는 정책이 없으면 실패하고 default를 만들지 않는다 |
-| 결제 | `local` scripted adapter가 일회성 paymentKey suffix로 confirm/query 결과를 정한다. 외부 sandbox를 호출하지 않으며 PAN·CVC·유효기간은 어디에도 없다 |
-| 실패 | 모든 대기는 deadline이 있는 bounded poll이고, 초과는 실패다. smoke는 첫 실패에서 0이 아닌 exit code로 끝난다 |
+| 인증 | 고객은 ID/PW·PostgreSQL Session·CSRF Cookie를, 점주는 발급받은 계정과 Merchant Session을 사용한다. 운영자 JWT는 실행 시 만든 RSA JWK set으로 검증한다 |
+| 권한 | 인증 없이 호출하면 401, 고객 API에 Bearer token을 보내거나 다른 매장에 접근하면 403을 반환한다 |
+| 주문 규칙 | 예약 lease·capacity·멱등성·상태 전이에 실제 애플리케이션 로직을 사용한다 |
+| 포인트 정책 | 감사형 bootstrap CLI가 OIDC workload identity로 GLOBAL 적립 정책을 준비한다. 정책이 빠져 있으면 seed 실행이 실패한다 |
+| 결제 | `local` scripted adapter가 paymentKey suffix에 따라 승인·조회 결과를 반환한다. 카드번호·CVC·유효기간은 저장하지 않는다 |
+| 실행 결과 | 각 단계에 대기시간 제한을 두고 오류가 발생하면 smoke script가 0이 아닌 exit code로 종료된다 |
 
 `local-demo`는 `prod`와 함께 활성화될 수 없다. 동시에 켜면 startup이 실패한다
 (`LocalDemoSafetyConfigurationTest`).
@@ -29,20 +26,18 @@
 ## 2. 사전 요구사항
 
 - Java 21, Node.js/npm, Docker daemon, `curl`, `python3`, `lsof`, `ps`
-- Docker daemon, `curl`, `python3`, `lsof`, `ps`는 필수다. 포트·compose project·container 이름은
-  checkout 절대 경로의 안정된 hash로 유도한다. 두 checkout은 서로 다른 리소스 블록을 사용하고,
-  선택된 포트를 unowned process가 사용 중이면 `start.sh`가 중단한다.
+- 포트, Compose project, container 이름은 checkout의 절대경로 해시를 이용해 자동으로 정한다. 다른 checkout과 리소스가 겹치지 않도록 구성하며 포트를 이미 사용 중이면 `start.sh`가 중단된다.
 
 ## 3. 실행
 
 ```bash
 bash scripts/demo/start.sh
 bash scripts/demo/seed.sh
-bash scripts/demo/smoke.sh --customer-checkpoint  # Plan 30: 승인 결제 조회까지
-bash scripts/demo/smoke.sh                        # Plan 40: Merchant 포함 전체 흐름
+bash scripts/demo/smoke.sh --customer-checkpoint  # 고객 주문·결제 API
+bash scripts/demo/smoke.sh                        # 매장 처리·환불까지
 ```
 
-`start.sh`는 다섯 단계를 순서대로 수행하고 각 단계를 출력한다.
+`start.sh`는 여섯 단계를 순서대로 수행하고 각 단계를 출력한다.
 
 1. PostgreSQL 17 / PostGIS 3.5 컨테이너 기동과 준비 대기
 2. ephemeral identity server 기동과 JWK set endpoint 준비 대기
@@ -51,41 +46,27 @@ bash scripts/demo/smoke.sh                        # Plan 40: Merchant 포함 전
 5. Runtime OpenAPI client를 생성하고 React frontend 기동
 6. API health와 frontend 응답 확인
 
-`seed.sh`는 고정 UUID CustomerAccount, 점주 MerchantAccount 두 개와 0원 PointAccount를 포함한 fixture를 단일 transaction으로
-쓴다. 재실행하면 삽입 0건이고 같은 fixture가 유지된다. `smoke.sh --customer-checkpoint`는
-`demo.customer` 계정으로 고객 CSRF token과 Session Cookie를 발급받은 뒤 runtime OpenAPI에 선언된
-고객 operation만 호출한다. 주문 준비·callback exact replay·위변조 거부와 승인 결제 상태 조회까지
-성공한 뒤 Merchant endpoint를 호출하지 않고 종료한다.
+`seed.sh`는 고정 UUID 고객 계정, 점주 계정 두 개, 0원 포인트 계정을 한 트랜잭션에서 생성한다. 같은 스크립트를 다시 실행하면 데이터를 추가하지 않는다.
 
-인자 없는 `smoke.sh`는 같은 고객 checkpoint에 이어 `demo.merchant`의 임시 비밀번호 로그인,
-`INITIAL_PASSWORD` gate, 비밀번호 변경과 Session 회전을 먼저 검증한 뒤 매장 완료, 부분/전액 remaining 환불과 두 번째
-결제의 `UNKNOWN → APPROVED` query 복구까지 확인하는 기본 전체 흐름이다. 매장 처리와 환불은 internal UUID가 아니라
-`BF-XXXX-XXXX` 공개 주문번호와 Stage 6/8 public API로 수행한다. 첫 주문은 10,000 KRW이고
-완료 뒤 해당 order의 `ACCRUAL` 원장 source와 100 KRW balance delta를 deadline 안에 검증한다. 이 전체
-흐름은 실제 Merchant 계정과 Merchant Session만 사용한다. Plan 30 branch에서 legacy 점주 JWT로 2xx를
-만들거나 customer checkpoint를 전체 smoke 성공으로 부르지 않는다.
+`smoke.sh --customer-checkpoint`는 `demo.customer`로 로그인하고 CSRF token·Session Cookie를 발급받아 주문 준비, callback 재요청, 위변조 요청 거부, 승인된 결제 조회를 실행한다. 매장 API는 이 단계에서 호출하지 않는다.
 
-전체 smoke는 fixture의 과거 확정 batch를 public settlement API로 조회해 5,000 KRW 부분 환불 조정이
-반영됐음을 확인하고, 해당 batch의 item에 owner Session으로 `FILED` dispute를 접수·조회한다. 이 데이터는
+인자 없는 `smoke.sh`는 고객 API 실행 뒤 `demo.merchant`의 임시 비밀번호 로그인, `INITIAL_PASSWORD` 상태, 비밀번호 변경과 Session 갱신을 진행한다. 이어 매장 주문 완료, 부분·전액 환불, 두 번째 결제의 `UNKNOWN → APPROVED` 조회를 실행한다.
+
+매장 처리와 환불은 `BF-XXXX-XXXX` 공개 주문번호와 Stage 6/8 public API를 사용한다. 첫 주문은 10,000 KRW이며 완료 후 `ACCRUAL` 포인트 원장과 잔액 100 KRW 증가를 조회한다. 점주 작업은 Merchant Session으로 실행한다.
+
+전체 smoke에서는 과거 확정 Batch의 5,000 KRW 부분 환불 조정을 조회한 뒤, 해당 정산 항목에 `FILED` 이의제기를 접수·조회한다. 이 데이터는
 live 주문과 분리된 immutable history다. seed는 현재 GLOBAL accrual policy와 settlement terms를 snapshot으로
 참조하므로, policy나 terms가 없을 때 임의 기본값을 만들지 않고 transaction 전체를 rollback한다.
 
-고객 UI는 `start.sh`가 현재 checkout에 할당해 출력한 `frontend` URL의 `/app` 경로다. 매장 콘솔은
-같은 base URL의 `/store`, 운영 콘솔은 `/ops`다. 고정 포트를 가정하지 않는다. API smoke의 고객
-흐름에는 token 입력이 없으며 `demo.customer`와 local-only 합성 비밀번호로 Session을 만든다. 고객 Web은
-`/app/login`에서 같은 계정으로 로그인한다. 화면에는 token·UUID 입력이 없고 보호 route는 `GET /me`가
-200일 때만 열린다. 401은 로그인으로, 403은 다른 actor 안내로, 503은 인증 의존성 실패로 각각 표시되므로
-Session 저장소 장애를 로그아웃으로 읽지 않는다. 로그아웃은 이 브라우저의 고객 장바구니와 미해결 요청
-키만 지우고 운영 콘솔 token은 남긴다.
-운영 화면은 `.demo-runtime/demo-identity.env`의 `PLATFORM_OPERATOR_TOKEN`을 사용한다. Merchant Chain은
-점주 JWT를 받지 않으며 productization-40 이후 매장 화면과 전체 smoke는 Merchant Session을 사용한다.
-JWT와 Session 값을 source, log나 문서에 복사하지 않는다.
+고객 앱은 `start.sh` 로그에 표시된 주소의 `/app`, 매장 콘솔은 `/store`, 운영 콘솔은 `/ops`에서 연다. 고객은 `/app/login`에서 `demo.customer` 계정과 로컬 테스트 비밀번호로 로그인한다.
 
-bootstrap CLI가 `POLICY_ALREADY_INITIALIZED`라는 정확한 terminal result를 내면, 이전 demo DB가
-남아 deterministic fixture가 성립하지 않는 상태다. `start.sh`는 임의의 `already` 로그를 성공으로
-취급하지 않고 `stop.sh --reset`을 안내하며 실패한다.
+보호된 화면은 `GET /me`가 200을 반환할 때 열리며 401은 로그인, 403은 권한 오류, 503은 인증 서비스 오류로 표시한다. 로그아웃할 때는 고객 장바구니와 미완료 요청 키를 지우고 운영 콘솔 token은 유지한다.
 
-## 4. 키 자료와 secret
+운영 화면에는 `.demo-runtime/demo-identity.env`의 `PLATFORM_OPERATOR_TOKEN`, 점주 화면에는 Merchant Session을 사용한다. JWT·Session 값은 저장소 파일과 로그에 기록하지 않는다.
+
+기존 데모 DB에 적립 정책이 이미 있다면 bootstrap CLI가 `POLICY_ALREADY_INITIALIZED`를 반환한다. 이때 `start.sh`는 `stop.sh --reset`으로 초기화하도록 안내한다.
+
+## 4. 인증 키와 secret 파일
 
 실행 시 생성한 자료는 전부 `.demo-runtime/`에만 존재하며 `.gitignore`로 차단돼 있다.
 
@@ -95,13 +76,11 @@ bootstrap CLI가 `POLICY_ALREADY_INITIALIZED`라는 정확한 terminal result를
 | `demo-identity.env` | 운영자 API JWT와 cursor HMAC secret. 고객·점주 JWT는 생성하지 않음 |
 | `workload-token.txt`, `jwks.json` | bootstrap CLI가 검증하는 신원 파일. `0400`으로 기록된다 |
 
-`OidcWorkloadIdentityVerifier`는 **쓰기 권한이 있는 신원 파일을 거부한다.** 이 파일들이
-`0400`인 것은 우회가 아니라 검증을 통과하기 위한 조건이다. 권한을 완화하면 bootstrap이 실패한다.
+신원 파일은 `0400` 권한으로 저장한다. 쓰기 권한이 있으면 `OidcWorkloadIdentityVerifier` 검증에 실패해 초기 설정을 진행할 수 없다.
 
-tracked file에 private key, JWT, demo secret이 들어가지 않는 것은
-`LocalDemoRepositorySafetyTest`가 `git ls-files` 전체를 스캔해 확인한다.
+`LocalDemoRepositorySafetyTest`는 `git ls-files`에 포함된 파일에서 private key·JWT·데모 secret을 검색한다.
 
-## 5. fixture에 들어 있는 것과 없는 것
+## 5. 샘플 데이터
 
 | 있는 것 | 없는 것 |
 |---|---|
@@ -111,9 +90,7 @@ tracked file에 private key, JWT, demo secret이 들어가지 않는 것은
 | 과거 완료 주문 2건, 승인 결제, 5,000 KRW 부분 환불, immutable 정산 item·confirmed batch 2건·환불 조정 1건 | paymentKey, provider secret, PAN/CVC 또는 실제 고객 결제 자료 |
 | — | 매장 검색 색인(`discovery_store_search_term`) — seed는 색인을 만들지 않는다 |
 
-seed가 매장을 직접 SQL로 넣으므로 검색 색인을 채우는 event가 발생하지 않는다. 그래서 고객 화면의
-매장 찾기는 어떤 검색어에도 200과 빈 목록을 받고 "검색 결과가 없어요"를 표시한다. 이는 화면 결함이
-아니라 fixture 범위다. 결과가 있는 검색을 보려면 운영자에게 `STORE_BRAND_MANAGE` 권한을 부여한 뒤
+seed는 매장을 SQL로 저장하기 때문에 매장 검색 색인이 생성되지 않는다. 고객 화면의 매장 검색 결과는 빈 목록으로 표시된다. 결과가 있는 검색을 보려면 운영자에게 `STORE_BRAND_MANAGE` 권한을 부여한 뒤
 `POST /api/v1/operations/search-index/rebuild`를 호출해야 하고, 그 권한 부여는 seed 범위 밖이다.
 홈의 추천 매장과 매장 상세는 색인 없이도 동작하므로 주문 흐름 확인에는 영향이 없다.
 
@@ -131,9 +108,9 @@ bash scripts/demo/stop.sh --reset    # 데모 DB와 실행 시 키 자료까지 
 2. 삭제 대상 runtime 디렉터리 경로가 정확히 `${DEMO_ROOT}/.demo-runtime`이어야 한다.
 3. 컨테이너의 Docker compose ownership label이 현재 checkout에서 유도한 project와 일치해야 한다.
 
-임의 DB에 `DROP`을 실행하지 않으며 다른 compose stack을 건드리지 않는다.
+`--reset`은 현재 데모 DB와 Compose 자원에만 적용된다.
 
-identity server, application과 frontend는 start 때 별도 session/process group leader로 기동한다. PID record에는
+identity server, 애플리케이션, 프런트엔드는 각각 별도의 process group으로 시작한다. PID record에는
 PID·PGID·실행 nonce·repository root가 함께 들어가며, `stop.sh`는 `ps`의 process group, command-line
 nonce, `lsof` cwd를 모두 다시 확인한 경우에만 그 group을 signal한다. stale 또는 다른 checkout의 record는
 삭제만 하고 process에는 signal하지 않으며 전역 `pkill`은 사용하지 않는다.
@@ -152,7 +129,7 @@ non-zero로 끝나며 key material을 보존한다.
 | 증상 | 원인 | 조치 |
 |---|---|---|
 | `Policy bootstrap failed` | workload identity 검증 실패 또는 정책 입력 오류 | `.demo-runtime/policy-bootstrap.log`를 본다. 신원 파일 권한이 `0400`인지 확인한다. 정책을 수동 INSERT하지 않는다 |
-| `Timed out after Ns waiting for ...` | 해당 단계가 deadline 안에 준비되지 않았다 | `.demo-runtime/app.log`, `frontend.log` 또는 `identity.log`를 본다. deadline 초과는 실패이며 느린 성공이 아니다 |
+| `Timed out after Ns waiting for ...` | 해당 단계가 deadline 안에 준비되지 않았다 | `.demo-runtime/app.log`, `frontend.log` 또는 `identity.log`를 본다. 대기 시간을 넘긴 단계의 로그를 확인한다 |
 | `Seed failed. The transaction rolled back` | fixture 쓰기 중 오류 | `.demo-runtime/seed.log`를 본다. 부분 fixture는 남지 않으므로 원인 수정 후 그대로 재실행한다 |
 | `Customer Session login expected 200` | 고객 seed 누락, 비밀번호 정책·계정 상태 또는 Session 저장 실패 | `seed.log`의 `LOCAL_DEMO_SEED_CUSTOMER_LOGIN_ID`와 `app.log`의 correlation ID를 확인한다. 고객 JWT로 우회하지 않는다 |
 | 기본 smoke의 점주 로그인·전환이 401/403 | seed 누락, 24시간 임시 비밀번호 만료, 초기 비밀번호가 이미 변경됐거나 다른 매장 membership | deterministic 전체 smoke는 `stop.sh --reset` 뒤 start·seed부터 다시 실행한다. JWT/fake Session으로 우회하지 않는다 |
@@ -164,9 +141,3 @@ non-zero로 끝나며 key material을 보존한다.
 | `Port ... is already in use by an unowned process` | 해당 checkout의 결정적 포트 블록을 다른 process가 사용 중 | 해당 process를 확인·정리하거나 다른 checkout에서 실행한다. demo는 기존 process를 kill하지 않는다 |
 | 재컴파일이 `build/classes/kotlin/test` 잠금으로 실패 | identity server JVM이 test classpath를 잡고 있다 | `stop.sh`를 먼저 실행한 뒤 컴파일한다 |
 | Flyway `checksum mismatch` | 기존 데모 DB가 이전 migration 내용으로 만들어졌다 | `stop.sh --reset` 후 `start.sh`를 다시 실행한다 |
-
-## 8. 이 환경이 증명하지 않는 것
-
-- 실제 Toss PG·외부 JWK·알림 provider 연동
-- non-local 배포, 운영 규모, 성능 또는 SLA
-- 운영 scheduler가 실제 production 시간에 batch를 생성·지급하는 조건, Toss provider 또는 외부 운영 절차
