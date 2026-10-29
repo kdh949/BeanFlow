@@ -4,6 +4,11 @@
 
 고객이 주문하고 결제하면 매장에서 접수·제조·픽업을 관리합니다. 결제 응답이 끊긴 주문의 상태 조회, 매장 거절이나 고객 취소 후 환불과 쿠폰·포인트 반환까지 구현했습니다.
 
+**대표 구현**
+
+- **결제 응답 유실·중복 승인 처리:** PG 호출을 DB 트랜잭션 밖에서 실행하고, 응답이 끊기면 `UNKNOWN`으로 기록해 승인 상태를 조회합니다. [결제 흐름](docs/architecture/payment.md) · [구현 PR #8](https://github.com/kdh949/BeanFlow/pull/8)
+- **고객 이벤트 조회 개선:** 서로 다른 매장의 이벤트 100개를 조회하는 PostgreSQL 통합 테스트에서 SQL 실행 횟수를 **101회 → 2회**로 줄였습니다. [조회 개선과 측정 조건](docs/quality/customer-event-store-batch-read.md) · [PR #200](https://github.com/kdh949/BeanFlow/pull/200)
+
 **Kotlin · Java 21 · Spring Boot · Spring Modulith · JPA · PostgreSQL · React/TypeScript**
 
 [데모 실행 방법](docs/operations/visitor-demo-runbook.md) · [아키텍처](#아키텍처) · [설계 결정](docs/architecture/decision-summary.md) · [OpenAPI](openapi/beanflow-v1-runtime.yaml)
@@ -157,6 +162,7 @@ PostgreSQL 통합 테스트는 Docker와 Testcontainers를 사용합니다.
 
 ## 문서
 
+- [고객 이벤트 조회 개선과 측정 조건](docs/quality/customer-event-store-batch-read.md)
 - [전체 기능 목록](docs/architecture/capability-map.md)
 - [아키텍처와 주요 설계](docs/architecture/decision-summary.md)
 - [주문·결제·환불의 실패 처리](docs/architecture/failure-semantics.md)

@@ -1,6 +1,6 @@
 # 로컬 데모 실행 방법
 
-`scripts/demo/`의 네 스크립트로 PostgreSQL, API, 프런트엔드를 실행하고 샘플 데이터를 준비한다.
+`scripts/demo/`의 네 스크립트로 PostgreSQL/PostGIS, API, 프런트엔드를 실행하고 샘플 데이터를 준비한다.
 고객 주문부터 매장 처리, 포인트 적립, 환불, 정산과 이의제기까지 HTTP smoke test로 실행할 수 있다.
 
 관련 결정: [ExecPlan](../exec-plans/completed/local-demo-environment-and-smoke.md),
@@ -27,6 +27,8 @@
 
 - Java 21, Node.js/npm, Docker daemon, `curl`, `python3`, `lsof`, `ps`
 - 포트, Compose project, container 이름은 checkout의 절대경로 해시를 이용해 자동으로 정한다. 다른 checkout과 리소스가 겹치지 않도록 구성하며 포트를 이미 사용 중이면 `start.sh`가 중단된다.
+
+[데모 Compose](../../docker-compose.demo.yml)는 `postgis/postgis:17-3.5` 이미지를 사용한다. [V33 매장 위치 마이그레이션](../../src/main/resources/db/migration/V33__create_merchant_store_discovery_profile.sql)에서 PostGIS 확장을 생성한다.
 
 ## 3. 실행
 
