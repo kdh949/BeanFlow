@@ -6,7 +6,7 @@
 
 **Kotlin · Java 21 · Spring Boot · Spring Modulith · JPA · PostgreSQL · React/TypeScript**
 
-[데모 실행 방법](docs/operations/visitor-demo-runbook.md) · [아키텍처](docs/architecture/architecture-overview.md) · [설계 결정](docs/architecture/decision-summary.md) · [OpenAPI](openapi/beanflow-v1-runtime.yaml)
+[데모 실행 방법](docs/operations/visitor-demo-runbook.md) · [아키텍처](#아키텍처) · [설계 결정](docs/architecture/decision-summary.md) · [OpenAPI](openapi/beanflow-v1-runtime.yaml)
 
 ## 화면 둘러보기
 
@@ -28,6 +28,42 @@
 - **매장 처리:** 주문 수락·거절·제조·완료 상태를 관리합니다. 매장 거절 시 환불과 쿠폰·포인트 반환을 처리합니다.
 - **포인트·정산:** 포인트 적립·사용, 부분 환불 금액 배분, 정산 내역과 조정 기록을 관리합니다.
 - **사용자 화면:** 고객 앱, 매장·운영 콘솔과 별도의 방문자 주문 체험 화면을 제공합니다.
+
+## 아키텍처
+
+```mermaid
+flowchart LR
+    n_web["Web Client<br/>React · TypeScript"]:::client
+    n_waf["Sophos WAF<br/>HTTPS 진입"]:::edge
+    n_nginx["Nginx<br/>API · Auth 프록시"]:::edge
+    n_api["BeanFlow API<br/>Spring Modulith<br/>Kotlin · Spring Boot"]:::app
+    n_db[("PostgreSQL · PostGIS<br/>주문 · 매장 · 결제 데이터")]:::data
+    n_pg["PG<br/>Sandbox 결제"]:::external
+    n_minio["MinIO / AIStor<br/>이미지 저장"]:::external
+    n_vault["Vault Transit<br/>개인정보 암호화"]:::external
+    n_keycloak["Keycloak<br/>운영자 OIDC"]:::external
+
+    n_web -->|"HTTPS"| n_waf
+    n_waf -->|"HTTP"| n_nginx
+    n_nginx -->|"/api"| n_api
+    n_nginx -->|"허용된 /auth 경로"| n_keycloak
+    n_api -->|"JDBC"| n_db
+    n_api -->|"승인 · 조회<br/>· 취소"| n_pg
+    n_api -->|"S3 API"| n_minio
+    n_api -->|"로컬 Proxy 경유"| n_vault
+    n_api -->|"JWK 조회"| n_keycloak
+
+    classDef client fill:#eff6ff,stroke:#60a5fa,color:#17233b
+    classDef edge fill:#f8fafc,stroke:#94a3b8,color:#17233b
+    classDef app fill:#f0fdfa,stroke:#2bbbad,color:#17233b
+    classDef data fill:#fff7ed,stroke:#fdba74,color:#17233b
+    classDef external fill:#f5f3ff,stroke:#bda4ee,color:#17233b
+    classDef decision fill:#f0fdfa,stroke:#2bbbad,color:#17233b
+```
+
+고객·점주·운영 화면의 요청은 WAF와 Nginx를 거쳐 BeanFlow API로 전달됩니다. 거래·위치 정보는 PostgreSQL·PostGIS에, 이미지는 객체 저장소에 보관합니다. 고객·점주는 세션으로 로그인하고 운영자는 Keycloak을 사용합니다.
+
+[전체 구조](docs/architecture/overview.md) · [결제 승인과 결과 조회](docs/architecture/payment.md) · [주문 접수부터 픽업·정산까지](docs/architecture/order.md) · [주문 취소·환불과 정산 조정](docs/architecture/refund.md)
 
 ## 1. 결제 응답 유실과 중복 승인 처리
 
