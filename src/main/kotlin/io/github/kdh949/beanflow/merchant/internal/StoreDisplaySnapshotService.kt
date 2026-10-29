@@ -47,6 +47,54 @@ internal class StoreDisplaySnapshotService(
     }
 
     @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
+    override fun requireAll(storeIds: Collection<UUID>): Map<UUID, StoreDisplaySnapshot> {
+        val requestedIds = storeIds.toSet()
+        if (requestedIds.isEmpty()) return emptyMap()
+
+        return try {
+            val snapshots =
+                jdbcTemplate.query(
+                    { connection ->
+                        connection
+                            .prepareStatement(
+                                """
+                                SELECT profile.store_id, profile.name, store.version AS store_version
+                                  FROM merchant_store_discovery_profile profile
+                                  JOIN merchant_store store ON store.id = profile.store_id
+                                 WHERE profile.store_id = ANY(?::uuid[])
+                                """.trimIndent(),
+                            ).also { statement ->
+                                statement.setArray(1, connection.createArrayOf("uuid", requestedIds.toTypedArray()))
+                            }
+                    },
+                    { resultSet, _ ->
+                        StoreDisplaySnapshot(
+                            storeId = resultSet.getObject("store_id", UUID::class.java),
+                            name = resultSet.getString("name"),
+                            storeVersion = resultSet.getLong("store_version"),
+                        )
+                    },
+                )
+            val snapshotsById = snapshots.associateBy(StoreDisplaySnapshot::storeId)
+            if (snapshots.size != snapshotsById.size || snapshotsById.keys != requestedIds) {
+                unavailable("Verified store display profile is missing")
+            }
+            snapshots.onEach { snapshot ->
+                val normalizedName = snapshot.name.trim()
+                if (normalizedName.isEmpty() || normalizedName.length > 200 || normalizedName != snapshot.name) {
+                    unavailable("Verified store display profile is invalid")
+                }
+            }
+            snapshotsById
+        } catch (failure: DataAccessException) {
+            throw DomainFailure(
+                FailureCode.DEPENDENCY_UNAVAILABLE,
+                "Verified store display profiles are unavailable",
+            ).also { it.initCause(failure) }
+        }
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.MANDATORY)
     override fun list(
         afterName: String?,
         afterStoreId: UUID?,
