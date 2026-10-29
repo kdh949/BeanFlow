@@ -16,8 +16,11 @@ import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
@@ -32,10 +35,15 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import tools.jackson.databind.json.JsonMapper
+import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Proxy
+import java.sql.Connection
+import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
+import javax.sql.DataSource
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, OperatorCouponCampaignControllerTest.CountingDataSourceConfiguration::class)
 @AutoConfigureMockMvc
 @BeanflowIsolatedSpringContext("verifies campaign commands and media pointer commits across transaction boundaries")
 @SpringBootTest
@@ -45,6 +53,7 @@ internal class OperatorCouponCampaignControllerTest
         private val mockMvc: MockMvc,
         private val jdbc: JdbcTemplate,
         private val meterRegistry: MeterRegistry,
+        private val statements: StatementCounter,
     ) {
         @MockitoBean
         private lateinit var storage: StorefrontImageStorageOperations
@@ -205,6 +214,37 @@ internal class OperatorCouponCampaignControllerTest
                 jdbc.queryForObject("SELECT active FROM promotion_campaign WHERE id = ?", Boolean::class.java, UUID.fromString(campaignId)),
             ).isFalse()
             assertThat(auditActions()).containsExactly("COUPON_CAMPAIGN_DRAFT_CREATED")
+        }
+
+        @Test
+        fun `campaign list uses four statements regardless of the page size`() {
+            val oneStore = seedStore("빈플로우 기준선")
+            val oneMenu = seedMenu(oneStore, "기준선 메뉴")
+            seedCampaign(oneStore, oneMenu, 1)
+            val one = statements.measure { readCampaigns(expectedItems = 1) }
+
+            reset()
+            (1..101).forEach { index ->
+                val storeId = seedStore("빈플로우 운영 매장 $index")
+                val menuId = seedMenu(storeId, "운영 메뉴 $index")
+                seedCampaign(storeId, menuId, index)
+            }
+            val many = statements.measure { readCampaigns(expectedItems = 100, hasMore = true) }
+
+            assertThat(one).isEqualTo(4)
+            assertThat(many).isEqualTo(4)
+        }
+
+        @Test
+        fun `campaign list fails when a requested store display profile is missing`() {
+            val storeId = seedStore("빈플로우 운영 누락")
+            val menuId = seedMenu(storeId, "운영 누락 메뉴")
+            seedCampaign(storeId, menuId, 1)
+            jdbc.update("DELETE FROM merchant_store_discovery_profile WHERE store_id = ?", storeId)
+
+            mockMvc
+                .perform(get("$BASE/coupon-campaigns").with(operatorJwt()))
+                .andExpect(status().isServiceUnavailable)
         }
 
         @Test
@@ -431,6 +471,64 @@ internal class OperatorCouponCampaignControllerTest
                 )
             }
 
+        private fun seedCampaign(
+            storeId: UUID,
+            menuId: UUID,
+            index: Int,
+        ): UUID =
+            UUID.randomUUID().also { campaignId ->
+                jdbc.update(
+                    """
+                    INSERT INTO promotion_campaign (
+                        id, store_id, active, discount_type, fixed_amount_krw, rate_bps,
+                        minimum_eligible_subtotal_krw, maximum_discount_krw, all_menus_eligible,
+                        cost_bearer, platform_share_bps, store_share_bps, version
+                    ) VALUES (?, ?, false, 'FIXED_KRW', 1000, null, 5000, null, false, 'PLATFORM', 10000, 0, 0)
+                    """.trimIndent(),
+                    campaignId,
+                    storeId,
+                )
+                jdbc.update(
+                    "INSERT INTO promotion_campaign_eligible_menu (id, campaign_id, menu_id) VALUES (?, ?, ?)",
+                    UUID.randomUUID(),
+                    campaignId,
+                    menuId,
+                )
+                val createdAt = Instant.parse("2026-09-01T00:00:00Z").plusSeconds(index.toLong())
+                jdbc.update(
+                    """
+                    INSERT INTO promotion_limited_campaign (
+                        campaign_id, state, title, summary, banner_alt_text,
+                        claim_starts_at, claim_ends_at, coupon_expires_at,
+                        created_at, updated_at, version
+                    ) VALUES (?, 'DRAFT', ?, '운영 목록 성능 검증', '운영 목록 쿠폰 배너', ?, ?, ?, ?, ?, 0)
+                    """.trimIndent(),
+                    campaignId,
+                    "운영 쿠폰 $index",
+                    Timestamp.from(createdAt),
+                    Timestamp.from(createdAt.plusSeconds(86_400)),
+                    Timestamp.from(createdAt.plusSeconds(172_800)),
+                    Timestamp.from(createdAt),
+                    Timestamp.from(createdAt),
+                )
+                jdbc.update(
+                    "INSERT INTO promotion_limited_campaign_counter (campaign_id, total_quota, issued_count) VALUES (?, 100, 0)",
+                    campaignId,
+                )
+            }
+
+        private fun readCampaigns(
+            expectedItems: Int,
+            hasMore: Boolean = false,
+        ) {
+            val actions =
+                mockMvc
+                    .perform(get("$BASE/coupon-campaigns?limit=100").with(operatorJwt()))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.items.length()").value(expectedItems))
+            if (hasMore) actions.andExpect(jsonPath("$.page.nextCursor").isString)
+        }
+
         private fun grant(permission: String) {
             jdbc.update(
                 """
@@ -459,5 +557,69 @@ internal class OperatorCouponCampaignControllerTest
             val ACCESS_EXPIRES_AT: Instant = Instant.parse("2026-09-02T12:15:00Z")
             val NORMALIZED = NormalizedStorefrontImageUpload(byteArrayOf(1), byteArrayOf(1), "image/jpeg", "jpg", HASH)
             val PREPARED = PreparedStorefrontImage("campaigns/id/$HASH/original.jpg", "campaigns/id/$HASH/thumbnail.jpg", HASH)
+        }
+
+        internal class StatementCounter {
+            private val currentCount = ThreadLocal<Int>()
+
+            fun measure(block: () -> Unit): Int {
+                check(currentCount.get() == null)
+                currentCount.set(0)
+                return try {
+                    block()
+                    checkNotNull(currentCount.get())
+                } finally {
+                    currentCount.remove()
+                }
+            }
+
+            fun increment() {
+                val count = currentCount.get() ?: return
+                currentCount.set(count + 1)
+            }
+        }
+
+        @TestConfiguration(proxyBeanMethods = false)
+        internal class CountingDataSourceConfiguration {
+            @Bean
+            fun statementCounter() = StatementCounter()
+
+            @Bean
+            fun countingDataSourceWrapper(counter: StatementCounter): BeanPostProcessor =
+                object : BeanPostProcessor {
+                    override fun postProcessAfterInitialization(
+                        bean: Any,
+                        beanName: String,
+                    ): Any = if (bean is DataSource) CountingDataSource(bean, counter) else bean
+                }
+        }
+
+        private class CountingDataSource(
+            private val delegate: DataSource,
+            private val counter: StatementCounter,
+        ) : DataSource by delegate {
+            override fun getConnection(): Connection = counting(delegate.connection)
+
+            override fun getConnection(
+                username: String?,
+                password: String?,
+            ): Connection = counting(delegate.getConnection(username, password))
+
+            private fun counting(connection: Connection): Connection =
+                Proxy.newProxyInstance(
+                    Connection::class.java.classLoader,
+                    arrayOf(Connection::class.java),
+                ) { _, method, args ->
+                    if (method.name in STATEMENT_METHODS) counter.increment()
+                    try {
+                        method.invoke(connection, *(args ?: emptyArray()))
+                    } catch (failure: InvocationTargetException) {
+                        throw failure.targetException
+                    }
+                } as Connection
+
+            private companion object {
+                val STATEMENT_METHODS = setOf("prepareStatement", "createStatement", "prepareCall")
+            }
         }
     }
