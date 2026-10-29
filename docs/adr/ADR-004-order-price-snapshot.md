@@ -11,16 +11,12 @@
 
 OrderLine에 menuId와 함께 주문 당시 메뉴명, 옵션명, 단가, 수량과 혜택 배분을 저장한다.
 
-2026-08-09 fast-reorder amendment:
+2026-08-09 빠른 재주문 변경 사항:
 
-- 새 OrderLine은 표시·거래 재현용 옵션명과 별도로 선택된 option ID를 ID 오름차순의
-  중복 없는 immutable snapshot으로 보존한다. 옵션 없는 선택은 빈 집합이고 snapshot
-  부재와 구분한다.
-- 기존 OrderLine에 검증된 option ID snapshot이 없으면 이름, 현재 Merchant 상태 또는
-  현재 메뉴에서 option ID를 추론하거나 backfill하지 않는다. 해당 line을
-  source로 한 빠른 재주문은 명시적으로 실패한다.
-- note는 현재 주문 생성·OrderLine 계약에 없으며 빠른 재주문 source snapshot에
-  추가하거나 복사하지 않는다.
+- OrderLine에는 표시용 옵션명과 함께 선택한 option ID를 중복 없이 ID 오름차순으로 저장한다.
+  옵션을 선택하지 않은 경우에는 빈 집합으로 저장해, 과거 주문에 option ID 기록이 없는 경우와 구분한다.
+- 과거 주문에 option ID가 없다면 빠른 재주문을 차단한다. 옵션명이나 현재 메뉴 정보로 ID를 임의 생성하지 않는다.
+- 현재 OrderLine에 없는 note는 빠른 재주문의 입력 데이터에도 포함하지 않는다.
 
 ## Alternatives Considered
 
@@ -30,25 +26,20 @@ OrderLine에 menuId와 함께 주문 당시 메뉴명, 옵션명, 단가, 수량
 
 ## Rationale
 
-과거 거래 재현성과 외부 Aggregate 독립성을 보장한다.
+주문 당시 가격과 옵션을 OrderLine만으로 조회할 수 있어, 이후 메뉴 정보가 변경돼도 과거 거래 금액을 재계산할 수 있다.
 
 ## Consequences
 
 - 중복 데이터가 증가한다.
-- 스냅샷 schema evolution이 필요하다.
-- 기존 row의 option ID snapshot 부재를 표현하고 새 row에는 정규화 snapshot을 쓰는
-  migration과 저장 경계가 필요하다.
+- 스냅샷 필드가 바뀌면 스키마 변경 작업이 필요하다.
+- 과거 주문의 option ID 미기록 상태를 유지하면서 신규 주문에는 정렬된 option ID를 저장하도록 migration이 필요하다.
 
 ## Verification
 
 - 메뉴 변경 후 과거 주문 조회·환불 테스트
 - 금액 tie-out
 - option ID 정렬·중복 거부와 옵션 없는 빈 snapshot
-- legacy snapshot 부재의 재주문 실패와 이름·현재값 추론 부재
-
-## Metrics
-
-측정 전에는 목표·가정과 실제 결과를 분리한다. 실제 측정 결과가 생기면 조건과 함께 추가한다.
+- option ID가 없는 과거 주문의 재주문 차단
 
 ## Revisit Conditions
 

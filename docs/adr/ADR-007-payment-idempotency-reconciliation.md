@@ -9,21 +9,20 @@
 
 ## Decision
 
-actor+operation+Idempotency-Key 범위, payload hash, Unique Constraint와 결과 저장을 사용한다. timeout은 UNKNOWN으로 보존하고 Provider 조회 reconciliation을 실행한다.
+사용자·작업 종류·멱등성 키로 요청을 구분하고, 요청 내용의 해시와 처리 결과를 저장한다. DB 고유 제약으로 중복을 막고, timeout은 `UNKNOWN`으로 기록해 PG 조회로 결과를 확인한다.
 
-2026-07-29 amendment:
+2026-07-29 결제 승인 변경 사항:
 
-- Provider 승인 idempotency key는 안정적인 Payment ID에서 파생한다.
+- PG 승인 요청의 idempotency key는 Payment ID로 생성한다.
 - `UNKNOWN`은 승인 요청을 다시 보내지 않고 10초, 30초, 2분, 5분, 15분에 상태를
   조회한다.
-- 다섯 번째 조회 후에도 불명이면 `MANUAL_REVIEW`와 ReprocessingCase를 한 번
-  생성한다.
-- 조회 worker는 짧은 transaction에서 due work를 claim하고 외부 조회는 transaction
-  밖에서 실행한다. 만료된 claim은 재획득할 수 있다.
+- 5회 조회가 끝나도 결과를 알 수 없으면 `MANUAL_REVIEW`로 전환하고 ReprocessingCase를 한 번 생성한다.
+- 조회 Worker는 실행할 작업을 짧은 트랜잭션에서 가져온 뒤 트랜잭션 밖에서 PG를 호출한다.
+  claim 기한이 지나면 다른 Worker가 해당 작업을 다시 가져올 수 있다.
 - 늦은 승인은 Order를 복구하지 않고 void를 먼저 시도한다. void 결과가 불명이면
   상태를 다시 조회하고 승인 금액이 남아 있음이 확인된 뒤에만 refund를 실행한다.
 
-2026-08-09 PaymentMethod registration amendment:
+2026-08-09 PaymentMethod 등록 변경 사항:
 
 - 등록은 `actorId + REGISTER_PAYMENT_METHOD_V1 + Idempotency-Key` scope의 사전등록 모델이다.
 - Tx R1은 intended PaymentMethod, `authKey` SHA-256, alias, CSPRNG provider reference와 work를
@@ -35,7 +34,7 @@ actor+operation+Idempotency-Key 범위, payload hash, Unique Constraint와 결�
 - registration 설정·인증 결함이 side effect 부재를 확인한 경우만 같은 key가 설정 수정 뒤 새
   claim을 획득할 수 있다. deactivation 설정 결함은 DELETE 재호출 없이 manual review다.
 
-2026-08-09 PaymentMethod deactivation amendment:
+2026-08-09 PaymentMethod 폐기 변경 사항:
 
 - 폐기는 `actorId + DEACTIVATE_PAYMENT_METHOD_V1 + Idempotency-Key` scope이며 canonical
   payload는 소유권 검증 뒤의 `paymentMethodId`다. 같은 key/target은 최초 terminal 또는 현재
@@ -55,12 +54,12 @@ actor+operation+Idempotency-Key 범위, payload hash, Unique Constraint와 결�
 
 ## Rationale
 
-중복 승인과 결과 불명 상태를 모두 다룬다.
+같은 요청이 반복돼도 승인 요청과 저장 결과를 재사용하고, 응답 유실은 PG 조회로 처리한다.
 
 ## Consequences
 
 - 멱등 레코드 보존·정리와 운영 job이 추가된다.
-- 상태 머신이 복잡해진다.
+- 승인·조회·재시도·수동 처리 상태를 추가로 관리해야 한다.
 
 ## Verification
 
@@ -70,10 +69,6 @@ actor+operation+Idempotency-Key 범위, payload hash, Unique Constraint와 결�
 - UNKNOWN 복구
 - PaymentMethod 폐기 same-key replay와 cross-target conflict
 - Provider DELETE claim 뒤 재호출 부재와 webhook/manual-review 수렴
-
-## Metrics
-
-측정 전에는 목표·가정과 실제 결과를 분리한다. 실제 측정 결과가 생기면 조건과 함께 추가한다.
 
 ## Revisit Conditions
 

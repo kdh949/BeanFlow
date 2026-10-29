@@ -2,7 +2,7 @@
 
 ## Architectural style
 
-BeanFlow는 DDD 기반 Modular Monolith로 시작한다.
+BeanFlow는 Spring Modulith를 사용한 모듈러 모놀리스로, 도메인별 코드를 나누고 하나의 애플리케이션으로 실행한다.
 
 ```text
 Customer / Store / Operations API
@@ -14,7 +14,7 @@ Customer / Store / Operations API
  PostgreSQL / PostGIS / External Adapters
 ```
 
-초기에는 하나의 배포 단위를 유지하지만 다음을 강제한다.
+모듈마다 다음 규칙을 적용한다.
 
 - 모듈별 데이터 소유권
 - 공개 Application API와 이벤트
@@ -38,7 +38,7 @@ Customer / Store / Operations API
 - Analytics
 - Operations
 
-Bounded Context 수는 배포 서비스 수와 같지 않다.
+도메인은 여러 Bounded Context로 나누지만 애플리케이션은 한 번에 배포한다.
 
 ## Synchronous versus event communication
 
@@ -51,13 +51,13 @@ Bounded Context 수는 배포 서비스 수와 같지 않다.
 
 이벤트:
 
-- 이미 확정된 사실에 대한 후속 처리
+- 완료된 주문·결제 이후의 처리
 - 포인트 적립
 - 정산 항목 생성
 - 알림 요청
 - 분석 Read Model 갱신
 
-이벤트를 사용하면 중복, 순서 역전, 재시도와 replay를 명시한다.
+이벤트 중복, 처리 순서 변경, 재시도와 실패한 작업의 재실행 방법을 이벤트별로 정한다.
 
 ## Persistence
 
@@ -65,17 +65,16 @@ Bounded Context 수는 배포 서비스 수와 같지 않다.
 - 위치 검색은 PostGIS `geography(Point, 4326)`와 GiST 인덱스를 검토한다.
 - H2를 PostgreSQL 대체재로 사용하지 않는다.
 - 같은 Aggregate 내부 생명주기에만 JPA 객체 연관관계를 적극 검토한다.
-- 대량 목록·집계는 JPA Aggregate 로딩이 아닌 Projection 또는 Query Repository를 사용한다.
+- 목록과 집계 조회는 JPA Aggregate 전체 로딩 대신 Projection 또는 Query Repository를 사용한다.
 
 ## External systems
 
 - PG, 알림, 시간, UUID와 이벤트 발행을 Port로 추상화한다.
 - mock/fake Adapter는 test 또는 명시적 local profile에서만 활성화한다.
 - 외부 HTTP를 호출하는 sandbox Adapter도 명시적 sandbox profile과 `!prod`에서만 활성화하고
-  test credential prefix를 검증한다. scripted local, external sandbox와 향후 live Adapter를 같은
-  fallback 축으로 취급하지 않는다.
-- 필요한 Port가 없거나 adapter 조건이 겹치면 시작을 실패시킨다. `@ConditionalOnMissingBean`
-  scripted/fake/no-op fallback은 두지 않는다.
+  테스트 키 접두사를 검사한다. local scripted adapter, 외부 sandbox, live adapter는 각기 다른 profile에서 실행한다.
+- 필수 Port가 없거나 adapter가 중복 선택되면 애플리케이션 시작 단계에서 오류를 반환한다.
+  `@ConditionalOnMissingBean`을 이용한 scripted/fake/no-op 자동 대체는 사용하지 않는다.
 - 외부 호출을 장시간 DB 트랜잭션 안에서 수행하지 않는다.
 - timeout은 실패와 구분된 unknown 상태가 필요할 수 있다.
 
@@ -89,4 +88,4 @@ Bounded Context 수는 배포 서비스 수와 같지 않다.
 - Notification 소비량 또는 Provider 장애가 독립 운영을 요구
 - 이벤트 replay와 여러 독립 소비자가 필요
 
-물리적 분리는 측정과 운영 요구에 따른 결정이며 초기 목표가 아니다.
+현재는 한 애플리케이션으로 배포하며, 모듈별 독립 배포가 필요해지면 분리를 검토한다.

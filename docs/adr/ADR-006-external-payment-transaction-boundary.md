@@ -5,29 +5,28 @@
 
 ## Context
 
-외부 Provider latency 동안 DB connection과 lock을 유지하면 pool 고갈과 긴 트랜잭션이 발생한다.
+PG 응답을 기다리는 동안 DB 연결과 잠금을 유지하면 연결 풀이 고갈되고 트랜잭션이 길어진다.
 
 ## Decision
 
 Payment READY/APPROVING과 결제 멱등 레코드를 Tx1에서 커밋하고 PG를 호출한 뒤
 별도 Tx2에서 결과를 기록한다.
 
-2026-07-29 payment-confirmation 구현에서는 Ordering Application Service가 Tx2를
-조정한다. 승인 결과, Order `PAID`, 슬롯·쿠폰·포인트 확정과 AuditRecord를
-하나의 로컬 PostgreSQL transaction으로 커밋한다. Provider latency 동안에는 DB
-transaction 또는 connection을 유지하지 않는다.
+2026-07-29 결제 승인 구현부터 Ordering Application Service가 Tx2를 처리한다.
+승인 결과, Order `PAID`, 슬롯·쿠폰·포인트 확정과 AuditRecord를 하나의 PostgreSQL
+트랜잭션에 저장한다. PG 응답을 기다리는 동안에는 DB 트랜잭션과 연결을 유지하지 않는다.
 
-Payment 승인 fact의 after-commit 발행은 Tx2가 이미 확정한 예약을 다시 변경하는
-수단이 아니라 Settlement 등 후속 소비자를 위한 사실 전달로 한정한다.
+Tx2가 끝난 뒤 Payment 승인 이벤트를 발행한다. Settlement 같은 후속 처리에서 사용하며,
+Tx2에 저장한 예약 상태는 이벤트 소비 과정에서 다시 변경하지 않는다.
 
-2026-08-09 PaymentMethod lifecycle amendment:
+2026-08-09 PaymentMethod 등록·폐기 변경 사항:
 
 - Payment 승인 Tx1은 검증·잠근 ACTIVE PaymentMethod에서 비공개 immutable
   `PaymentProviderRequestSnapshot`을 Payment·멱등 레코드와 함께 저장한다.
-- Tx1 commit 뒤 Provider approve/lookup/recovery는 current PaymentMethod가 아니라 snapshot을
-  사용한다. 뒤에 deactivation이 commit돼도 이미 시작된 Payment fact를 소급 취소하지 않는다.
+- Tx1 이후 PG 승인·조회·복구에는 저장된 snapshot을 사용한다. 이후 PaymentMethod가 폐기돼도
+  이미 시작된 결제의 승인 이력은 유지한다.
 - deactivation Tx D1이 먼저 commit하면 새 Payment Tx1은 snapshot과 Payment를 만들지 않는다.
-- snapshot 또는 binding 누락을 current PaymentMethod 읽기나 default 결제수단으로 보정하지 않는다.
+- snapshot이나 binding이 없으면 오류 처리한다. 현재 PaymentMethod를 다시 조회하거나 기본 결제수단을 적용하지 않는다.
 
 ## Alternatives Considered
 
@@ -37,12 +36,12 @@ Payment 승인 fact의 after-commit 발행은 Tx2가 이미 확정한 예약을 
 
 ## Rationale
 
-DB 자원을 보호하면서 외부 성공·내부 기록 실패를 명시적으로 복구한다.
+PG 응답을 기다리는 동안 DB 연결과 lock을 반환하고, PG 승인 뒤 DB 저장에 실패한 결제는 별도 조회와 재처리로 처리한다.
 
 ## Consequences
 
 - 중간 UNKNOWN 상태와 reconciliation이 필요하다.
-- 단일 ACID 트랜잭션처럼 보이지 않는다.
+- PG 호출 이후 DB 저장 전까지의 상태를 별도 기록하고 조회·재처리해야 한다.
 - Ordering coordinator가 Payment와 네 reservation owner의 공개 Application API에
   동기 의존한다.
 
@@ -51,10 +50,6 @@ DB 자원을 보호하면서 외부 성공·내부 기록 실패를 명시적으
 - Provider timeout
 - PG 성공 후 DB write 실패
 - Hikari pending/active 측정
-
-## Metrics
-
-측정 전에는 목표·가정과 실제 결과를 분리한다. 실제 측정 결과가 생기면 조건과 함께 추가한다.
 
 ## Revisit Conditions
 

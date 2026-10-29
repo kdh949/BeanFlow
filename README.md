@@ -1,257 +1,170 @@
 # BeanFlow
 
-BeanFlow는 다점포 카페의 선주문부터 결제, 픽업, 포인트, 정산, 환불 조정과 이의제기까지 이어지는 거래 생명주기를 다루는 플랫폼이다.
+**카페 주문·결제·픽업·포인트·환불·정산 플랫폼 | 개인 프로젝트**
 
-카페 선주문은 단순한 주문 CRUD가 아니다. 짧은 시간 안에 메뉴 가격, 픽업 수용량, 쿠폰, 포인트, 외부 결제와 정산이 서로 다른 실패 모델 속에서도 일관성을 유지해야 한다.
+고객이 주문하고 결제하면 매장에서 접수·제조·픽업을 관리합니다. 결제 응답이 끊긴 주문의 상태 조회, 매장 거절이나 고객 취소 후 환불과 쿠폰·포인트 반환까지 구현했습니다.
 
-BeanFlow는 다음 원칙을 중심으로 이 문제를 해결한다.
+**대표 구현**
 
-- 명시적인 Bounded Context와 Aggregate 경계
-- 주문 당시 가격·정책 스냅샷
-- 멱등 결제와 결과 불명 상태의 reconciliation
-- 확정 정산을 덮어쓰지 않는 조정 원장
-- 중복 이벤트와 재처리를 가정한 소비자
-- 실패를 숨기지 않는 상태·오류·관측 체계
-- 실제 PostgreSQL을 사용한 통합·동시성·실행계획 검증
+- **결제 응답 유실·중복 승인 처리:** PG 호출을 DB 트랜잭션 밖에서 실행하고, 응답이 끊기면 `UNKNOWN`으로 기록해 승인 상태를 조회합니다. [결제 흐름](docs/architecture/payment.md) · [구현 PR #8](https://github.com/kdh949/BeanFlow/pull/8)
+- **고객 이벤트 조회 개선:** 서로 다른 매장의 이벤트 100개를 조회하는 PostgreSQL 통합 테스트에서 SQL 실행 횟수를 **101회 → 2회**로 줄였습니다. [조회 개선과 측정 조건](docs/quality/customer-event-store-batch-read.md) · [PR #200](https://github.com/kdh949/BeanFlow/pull/200)
 
-## 문서
+**Kotlin · Java 21 · Spring Boot · Spring Modulith · JPA · PostgreSQL · React/TypeScript**
 
-- [제품 개요](docs/product/product-overview.md)
-- [비즈니스 정책](docs/product/business-policy-decisions.md)
-- [End-to-End 흐름](docs/product/end-to-end-flow.md)
-- [아키텍처 개요](docs/architecture/architecture-overview.md)
-- [핵심 결정 요약](docs/architecture/decision-summary.md)
-- [Capability Map](docs/architecture/capability-map.md)
-- [실패 의미론](docs/architecture/failure-semantics.md)
-- [의사결정 기록 규칙](docs/decisions/README.md)
-- [테스트 전략](docs/testing/test-strategy.md)
+[데모 실행 방법](docs/operations/visitor-demo-runbook.md) · [아키텍처](#아키텍처) · [설계 결정](docs/architecture/decision-summary.md) · [OpenAPI](openapi/beanflow-v1-runtime.yaml)
 
-## 현재 상태
+## 화면 둘러보기
 
-현재 source에서 구현되고 테스트된 주요 capability:
+| 고객 홈 | 매장 검색 | 메뉴 선택 |
+| --- | --- | --- |
+| <img src="assets/customer-home.png" alt="고객 홈 — 주문 상태와 추천 매장" width="240"> | <img src="assets/customer-store-search.png" alt="매장 검색 — 검색 결과와 주문 가능 여부" width="240"> | <img src="assets/customer-menu.png" alt="메뉴 선택 — 판매 구성·수량 선택과 장바구니 담기" width="240"> |
 
-- 주문 시점 메뉴·옵션·가격 snapshot과 쿠폰 후 포인트 배분
-- 픽업 슬롯·쿠폰·포인트 원자 예약과 5분 lease 만료
-- 주문 생성 멱등성, 감사 기록과 `BENEFIT_ONLY` 결제
-- Toss V2 Standard 일회성 결제창 준비·callback 승인·상태 조회
-- 외부 결제 승인 Tx1/Provider/Tx2 분리
-- 명시 거절 취소·예약 해제, `UNKNOWN` 조회 reconciliation
-- 늦은 승인 void/refund 복구와 5회 후 `MANUAL_REVIEW`
-- 매장 수락·거절·준비·완료 전이와 2분 경고·3분 timeout
-- 거절 후 영속 publication, 전액 환불, 자원 복원과 알림 복구
-- 고객의 `PENDING_PAYMENT`/미수락 `PAID` 주문 취소와 멱등 응답 재생
-- 부분 환불 allocation, 환불 후 쿠폰·사용 포인트 복원과 적립 포인트 회수
-- 일반 적립 정책의 감사형 조회·변경과 주문 시점 정책 snapshot
-- 감사형 운영자 포인트 증감 조정
-- 정산 Batch/Item 조회, append-only 정산 조정과 이의제기 접수·판정
-- 고객 취소 환불 reconciliation과 보상 상태의 역할별 조회
-- 인근 매장 검색과 매장 메뉴·픽업 슬롯 조회
-- PointAccount summary·transaction 조회
-- Public/Operations/Merchant/Customer 4개 인증 Chain, PostgreSQL browser Session과 actor별 CSRF
-- SupportCase 접수·담당·상태 전이, 제한형 메모·접촉 기록과 ID-only 대상 연결
-- React/TypeScript 고객·매장·운영 콘솔과 Runtime OpenAPI 생성 client
-- 로컬 데모 환경과 고객→결제→매장→포인트→부분/전액 환불 smoke flow
+고객은 홈에서 주문 상태를 확인하고, 매장을 찾아 메뉴와 수량을 선택해 장바구니에 담습니다.
 
-현재 source에 없는 capability:
+![매장 주문 보드 — 접수 대기·제조 중·준비 완료](assets/merchant-order-board.jpg)
 
-- Analytics refund/late-event projection과 외부 dashboard API
+매장 주문 보드에서 들어온 주문을 수락하거나 거절하고, 제조 중·준비 완료 상태를 관리합니다.
 
-검증 예정:
+## 주요 기능
 
-- 지연 Provider 환경의 부하·장애 주입 측정
+- **계정·인증:** 고객 회원가입·로그인·로그아웃, 점주 계정 로그인과 첫 비밀번호 변경을 지원합니다. 고객과 점주는 각각 세션 쿠키를 사용합니다.
+- **고객 주문:** 주문 당시 메뉴·옵션·가격·할인 내역을 저장하고, 쿠폰·포인트를 적용해 주문합니다.
+- **결제:** Toss Payments 테스트 환경 연동, 중복 승인 방지, 승인 결과 조회, 결제 취소를 구현했습니다.
+- **매장 처리:** 주문 수락·거절·제조·완료 상태를 관리합니다. 매장 거절 시 환불과 쿠폰·포인트 반환을 처리합니다.
+- **포인트·정산:** 포인트 적립·사용, 부분 환불 금액 배분, 정산 내역과 조정 기록을 관리합니다.
+- **사용자 화면:** 고객 앱, 매장·운영 콘솔과 별도의 방문자 주문 체험 화면을 제공합니다.
 
-고객 취소 command/recovery orchestration과 PointAccount read는 완료됐다. 개인 서버용 non-local
-배포 패키지는 있지만 실제 서버 배포 결과, 운영 규모, SLA와 프로덕션 안정성은 증명하지 않았다.
+## 아키텍처
 
-## 실행 방법
+```mermaid
+flowchart LR
+    n_web["Web Client<br/>React · TypeScript"]:::client
+    n_waf["Sophos WAF<br/>HTTPS 진입"]:::edge
+    n_nginx["Nginx<br/>API · Auth 프록시"]:::edge
+    n_api["BeanFlow API<br/>Spring Modulith<br/>Kotlin · Spring Boot"]:::app
+    n_db[("PostgreSQL · PostGIS<br/>주문 · 매장 · 결제 데이터")]:::data
+    n_pg["PG<br/>Sandbox 결제"]:::external
+    n_minio["MinIO / AIStor<br/>이미지 저장"]:::external
+    n_vault["Vault Transit<br/>개인정보 암호화"]:::external
+    n_keycloak["Keycloak<br/>운영자 OIDC"]:::external
 
-### 필수 환경
+    n_web -->|"HTTPS"| n_waf
+    n_waf -->|"HTTP"| n_nginx
+    n_nginx -->|"/api"| n_api
+    n_nginx -->|"허용된 /auth 경로"| n_keycloak
+    n_api -->|"JDBC"| n_db
+    n_api -->|"승인 · 조회<br/>· 취소"| n_pg
+    n_api -->|"S3 API"| n_minio
+    n_api -->|"로컬 Proxy 경유"| n_vault
+    n_api -->|"JWK 조회"| n_keycloak
 
-- Java 21
-- Docker daemon
-- 로컬 실행용 PostgreSQL
-- JWT 검증에 사용할 JWK Set endpoint
-
-Gradle은 별도 설치하지 않고 저장소의 Wrapper(`./gradlew`)를 사용한다. 첫 실행에는
-Gradle 의존성과 Testcontainers 이미지 다운로드를 위한 네트워크 연결이 필요할 수 있다.
-
-### 로컬 데모 환경
-
-데모 script는 PostGIS, ephemeral JWK set endpoint, 필수 정책 bootstrap, Spring API와 React frontend를
-기동한다. 다만 인증 전환 중간 상태인 현재 branch에서는 고객·점주 보호 경로가 Session-only이고 계정·
-로그인 endpoint는 후속 Plan 30/40 소유이므로 고객→매장 전체 smoke는 의도적으로 401에서 중단된다.
-기존 고객·점주 JWT나 fake Session으로 이를 우회하지 않는다. Operations JWT 경로와 공개 경로는 계속
-검증할 수 있다.
-
-```bash
-bash scripts/demo/start.sh && bash scripts/demo/seed.sh && bash scripts/demo/smoke.sh
+    classDef client fill:#eff6ff,stroke:#60a5fa,color:#17233b
+    classDef edge fill:#f8fafc,stroke:#94a3b8,color:#17233b
+    classDef app fill:#f0fdfa,stroke:#2bbbad,color:#17233b
+    classDef data fill:#fff7ed,stroke:#fdba74,color:#17233b
+    classDef external fill:#f5f3ff,stroke:#bda4ee,color:#17233b
+    classDef decision fill:#f0fdfa,stroke:#2bbbad,color:#17233b
 ```
 
-정지와 초기화는 `bash scripts/demo/stop.sh [--reset]`이다. 인증을 끄거나 validation을
-완화하지 않으며, 실행 시 생성한 키 자료는 gitignore된 `.demo-runtime/`에만 존재한다.
-절차와 진단은 [Local Demo Runbook](docs/operations/local-demo-runbook.md)에 있다.
-기동 뒤 고객 UI는 `http://127.0.0.1:4173/app`, 매장 콘솔은 `/store`, 운영 콘솔은 `/ops`에서
-확인한다. 현재 고객·점주 화면의 legacy Token Editor는 Session 로그인을 제공하지 않으며, 제거와
-실제 로그인 연결은 후속 account/web Plan이 소유한다.
+고객·점주·운영 화면의 요청은 WAF와 Nginx를 거쳐 BeanFlow API로 전달됩니다. 거래·위치 정보는 PostgreSQL·PostGIS에, 이미지는 객체 저장소에 보관합니다. 고객·점주는 세션으로 로그인하고 운영자는 Keycloak을 사용합니다.
 
-### 개인 서버 포트폴리오 배포
+[전체 구조](docs/architecture/overview.md) · [결제 승인과 결과 조회](docs/architecture/payment.md) · [주문 접수부터 픽업·정산까지](docs/architecture/order.md) · [주문 취소·환불과 정산 조정](docs/architecture/refund.md)
 
-Sophos WAF 뒤 staging/production-like 배포는 [포트폴리오 서버 배포 Runbook](docs/operations/portfolio-deployment-runbook.md)을
-따른다. 두 환경 모두 `portfolio` profile과 Toss sandbox를 사용하며 상용 운영 환경이 아니다.
-외부 Vault·AIStor와 저장소 밖 secret이 준비되지 않으면 시작에 실패한다.
+## 1. 결제 응답 유실과 중복 승인 처리
 
-### 성능 관측성과 부하 테스트
+PG 승인 요청이 timeout으로 끝나면 결제 성공 여부를 바로 알 수 없습니다. DB 작업을 PG 호출 전후의 두 트랜잭션으로 나누고, 재요청에는 저장된 처리 결과를 반환하도록 구현했습니다.
 
-기존 중앙 Prometheus/Loki/Tempo/Pyroscope/Grafana와 연결하는 perf 전용 Compose overlay, k6 시나리오,
-제어된 DB lock 재현과 RCA dashboard는 [성능 관측성 Runbook](docs/operations/performance-observability-runbook.md)을
-따른다. 이 환경은 실제 운영 profile과 겹치면 시작을 거부하며 Toss는 deterministic contract driver,
-AIStor와 Vault는 전용 실제 자원을 사용한다. 정적 설정 통과와 실제 중앙 telemetry ingest/UI 증거는 별도다.
+1. 첫 DB 트랜잭션에 결제 요청과 멱등성 정보를 저장합니다.
+2. 트랜잭션을 종료한 뒤 PG 승인 API를 호출합니다.
+3. 승인 응답을 받으면 두 번째 트랜잭션에서 주문과 결제 상태를 갱신합니다.
+4. 응답이 끊기면 `UNKNOWN`으로 기록하고 PG 조회 API로 승인 상태를 조회합니다.
 
-아래 수동 절차는 데모 script 없이 직접 구성할 때 쓴다.
+같은 멱등성 키로 요청이 다시 들어오면 저장된 상태와 결과를 반환합니다. `UNKNOWN` 상태는 PG 승인 내역을 조회해 갱신하고, 결과가 끝내 확정되지 않으면 `MANUAL_REVIEW`로 남깁니다.
 
-### PostgreSQL 준비
+매장 거절이나 고객 취소로 발생한 환불·쿠폰·포인트 반환·알림은 작업별 처리 상태를 저장합니다. 실패한 작업만 다시 실행할 수 있습니다.
 
-아래 명령은 테스트와 같은 PostgreSQL 17.6을 로컬 `5432` 포트에 실행한다.
+**관련 코드**
 
-```bash
-docker run --name beanflow-postgres --rm -d \
-  -e POSTGRES_DB=beanflow \
-  -e POSTGRES_USER=beanflow \
-  -e POSTGRES_PASSWORD=beanflow \
-  -p 5432:5432 \
-  postgres:17.6
-```
+- [결제 승인 통합 테스트](src/test/kotlin/io/github/kdh949/beanflow/ordering/internal/PaymentConfirmationIntegrationTest.kt)
+- [PG 호출 전후 트랜잭션 분리 · ADR-006](docs/adr/ADR-006-external-payment-transaction-boundary.md)
+- [멱등성·승인 결과 조회 · ADR-007](docs/adr/ADR-007-payment-idempotency-reconciliation.md)
 
-이미 `5432` 포트를 사용 중이면 기존 PostgreSQL을 사용하거나 포트 매핑과
-`BEANFLOW_DB_URL`을 함께 변경한다.
+## 2. 결제 멱등성 조회 인덱스 추가
 
-### 애플리케이션 실행
+결제 결과를 반영할 때 `payment_idempotency_record` 테이블을 `payment_id`로 조회합니다. 기존에는 `payment_id` 인덱스가 없어 해당 조회에 `Seq Scan`이 사용됐습니다.
 
-BeanFlow는 필수 DB 또는 JWK 설정이 없으면 시작에 실패한다. JWK endpoint는 이 저장소에
-포함되어 있지 않으므로 로컬 OIDC/JWT 제공자의 실제 주소를 지정해야 한다.
+PostgreSQL에 25,000행의 테스트 데이터를 넣고 실행계획을 비교한 뒤 `payment_id` 인덱스를 추가했습니다.
 
-```bash
-export BEANFLOW_DB_URL='jdbc:postgresql://localhost:5432/beanflow'
-export BEANFLOW_DB_USERNAME='beanflow'
-export BEANFLOW_DB_PASSWORD='beanflow'
-export BEANFLOW_JWK_SET_URI='http://localhost:8081/.well-known/jwks.json'
-export BEANFLOW_OPERATIONS_OIDC_ISSUER_URI='https://id.example.com/realms/beanflow-operations'
-export BEANFLOW_OPERATIONS_OIDC_AUTHORIZATION_SERVER_URL='https://id.example.com'
-export BEANFLOW_OPERATIONS_OIDC_REALM='beanflow-operations'
-export BEANFLOW_OPERATIONS_OIDC_CLIENT_ID='beanflow-operations-web'
-export BEANFLOW_OPERATIONS_OIDC_REDIRECT_URI='http://localhost:5173/ops/auth/callback'
-export BEANFLOW_OPERATIONS_OIDC_POST_LOGOUT_REDIRECT_URI='http://localhost:5173/ops'
-export BEANFLOW_OPERATIONS_OIDC_SCOPES='openid,profile'
-export SPRING_PROFILES_ACTIVE='local'
+- **변경 전:** `Seq Scan`, 3.465ms
+- **변경 후:** `Index Scan`, 1.081ms
 
-./gradlew bootRun
-```
+스테이징에서는 Toss 테스트 드라이버로 **80 VU·초당 주문 시나리오 12회·3분**을 실행했습니다. 인덱스 적용 전후 대상 SQL 누적 실행시간은 **25.849초 → 0.0492초**였습니다.
 
-애플리케이션은 기본적으로 `http://localhost:8080`에서 시작한다. Flyway가 시작 시
-스키마를 생성·검증하며, 다음 요청으로 기동 상태를 확인할 수 있다.
+같은 테스트에서 전체 HTTP p95는 **216.42ms → 230.81ms**였습니다.
 
-```bash
-curl http://localhost:8080/actuator/health
-```
+**관련 코드**
 
-공개 endpoint를 제외한 Operations/Support 경로는 Bearer JWT가 필요하다. Customer/Merchant 경로는
-각 actor 전용 PostgreSQL Session Cookie를 사용하고 unsafe method에는 actor별 CSRF header가 필요하다.
-현재 source에는 Customer/Merchant 로그인 endpoint가 없으므로 해당 보호 경로는 후속 Plan 30/40 전까지
-401이다. JWK 설정은 Operations/Support Chain 때문에 계속 필수이며, Session 저장소는 Flyway V52가
-생성한 PostgreSQL `spring_session` 두 table을 사용한다. DB 조회 실패를 익명 요청으로 바꾸지 않고
-503으로 반환한다.
+- [실행계획과 스테이징 A/B 측정 기록](docs/quality/payment-idempotency-result-apply-index-evidence.md)
+- [인덱스 개선 PR #198](https://github.com/kdh949/BeanFlow/pull/198)
+- [Flyway V92 인덱스](src/main/resources/db/migration/V92__index_payment_idempotency_by_payment.sql)
+- [인덱스·실행계획 테스트](src/test/kotlin/io/github/kdh949/beanflow/payment/internal/PaymentIdempotencyQueryMigrationTest.kt)
 
-`local` profile에서만 scripted 결제 adapter가 활성화된다. 운영 profile에는 실제
-`PaymentGateway` 구성이 필요하며 fake/sandbox로 자동 대체되지 않는다. 실제 Toss 테스트 환경은
-API 개별 연동 키 쌍(`test_ck_`/`test_sk_`)과 전용 profile group으로 기동한다.
+## 3. 주문 가격과 정산 내역 보존
+
+주문을 마친 뒤 매장에서 메뉴 가격이나 옵션을 수정할 수 있습니다. 주문 항목에는 당시 상품명·옵션·단가·할인 배분을 함께 저장해, 이후 가격 변경이 과거 환불·정산 금액에 영향을 주지 않도록 했습니다.
+
+확정된 정산 내역도 그대로 보존합니다. 이후 환불이나 이의제기로 금액이 바뀌면 별도의 정산 조정 내역에 기록합니다.
+
+주문·결제·포인트·정산 코드는 Spring Modulith로 나눴고, 모듈 사이에서는 공개 API와 이벤트를 사용합니다.
+
+**관련 코드**
+
+- [주문 가격 스냅샷 · ADR-004](docs/adr/ADR-004-order-price-snapshot.md)
+- [정산 조정 내역 · ADR-008](docs/adr/ADR-008-settlement-adjustment-ledger.md)
+- [모듈 의존성 테스트](src/test/kotlin/io/github/kdh949/beanflow/architecture/ModularityTests.kt)
+
+## 실행과 테스트
+
+**로컬 실행**
+
+Java 21, Node.js/npm, Docker와 `curl`, Python 3, `lsof`, `ps`가 필요합니다. 아래 스크립트는 로컬 PostgreSQL/PostGIS, 데모 인증 서버, API와 프런트엔드를 기동하고 테스트 데이터를 준비합니다.
 
 ```bash
-export TOSS_CLIENT_KEY='test_ck_...'
-export TOSS_SECRET_KEY='test_sk_...'
-export BEANFLOW_FRONTEND_BASE_URL='http://127.0.0.1:4173'
-export SPRING_PROFILES_ACTIVE='toss-sandbox-runtime'
-
-./gradlew bootRun
+bash scripts/demo/start.sh
+bash scripts/demo/seed.sh
 ```
 
-`toss-sandbox-runtime`은 local 인프라 설정과 `toss-sandbox`를 합성하지만 scripted gateway는
-제외하고 Toss V2 confirm/query/cancel HTTP adapter 하나만 선택한다. Widget 키인
-`test_gck_`/`test_gsk_`, 누락·live 키와 `prod` 중첩은 시작 실패한다. 이 profile에서 기존
-PaymentMethod 등록·폐기는 명시적으로 `Misconfigured`이며 fake 성공으로 대체되지 않는다. 고객
-checkout은 PaymentMethod를 조회하지 않고 서버가 준비한 일회성 `CARD` Payment Window만 사용한다.
-PAN, CVC와 전체 유효기간은 저장하지 않는다.
+기동 로그에 표시된 주소에서 고객 앱(`/app`), 매장 콘솔(`/store`), 운영 콘솔(`/ops`)을 엽니다. 로컬 결제에는 scripted adapter를 사용합니다.
 
-### 현재 runtime API
+- Smoke test: `bash scripts/demo/smoke.sh`
+- 종료: `bash scripts/demo/stop.sh`
+- [로컬 실행 문서](docs/operations/local-demo-runbook.md)
 
-현재 source의 전체 `(path, HTTP method)` 목록은
-[Runtime OpenAPI](openapi/beanflow-v1-runtime.yaml)가 canonical이다. Spring
-`RequestMappingHandlerMapping`을 사용하는 `RuntimeOpenApiParityTest`가 모든 `/api/v1`
-Controller mapping과 이 계약의 operation 집합을 양방향으로 비교하므로 README에 endpoint
-목록을 중복 관리하지 않는다. 이 계약은 source 구현 증거이며 실제 배포 증거가 아니다.
+**테스트**
 
-### 목표 OpenAPI 계약
-
-[OpenAPI 문서](openapi/beanflow-v1.yaml)는 현재 runtime만의 목록이 아니라 Accepted 정책이
-지향하는 `/api/v1` 목표 계약이다. 문서에 endpoint가 존재한다고 runtime 구현 완료를
-뜻하지 않는다. 현재 구현 endpoint도 목표 shape와 다른 경우가 있으며, 예를 들어
-만료 혜택 정책 PATCH의 목표 계약은
-`/operations/policies/expired-benefit-restoration/{trigger}/{benefitType}`다.
-
-현재 구현된 controller mapping과 계약 테스트가 존재하는 shape는 Runtime OpenAPI에
-분리한다. operation을 추가·제거하면 Controller와 Runtime OpenAPI를 같은 변경에서
-갱신해야 하며 parity test가 drift를 차단한다.
-
-### 계약 inventory
-
-정확한 target/runtime path·operation 수는 `PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh`가
-계산하고 검증한다. 두 inventory는 선행 target Plan 때문에 같지 않을 수 있다. 이는 계약 항목 수이며
-처리량·지연·가용성 측정이 아니다. 지연 Provider 부하, 실제 배포 smoke test와 SLA는 `Not measured`다.
-
-로컬 PostgreSQL을 위의 일회성 컨테이너로 실행했다면 다음 명령으로 종료한다.
-
-```bash
-docker stop beanflow-postgres
-```
-
-## 테스트 방법
-
-전체 테스트는 PostgreSQL Testcontainers를 사용하므로 Docker daemon이 실행 중이어야
-한다. 별도의 테스트 DB나 `BEANFLOW_*` 환경 변수는 필요하지 않다.
+PostgreSQL 통합 테스트는 Docker와 Testcontainers를 사용합니다.
 
 ```bash
 ./gradlew test
-```
-
-특정 테스트 클래스만 실행할 수도 있다.
-
-```bash
-# Docker가 필요 없는 순수 도메인 테스트
-./gradlew test --tests 'io.github.kdh949.beanflow.ordering.OrderTest'
-
-# PostgreSQL Testcontainers를 사용하는 결제 통합 테스트
-./gradlew test --tests \
-  'io.github.kdh949.beanflow.ordering.internal.PaymentConfirmationIntegrationTest'
-```
-
-테스트 결과 HTML은 `build/reports/tests/test/index.html`에 생성된다.
-
-PR 전 로컬 검증은 CI와 같은 순서로 실행한다.
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r scripts/ci/requirements-docs.txt
-bash scripts/ci/test-ci-scripts.sh
-PATH="$PWD/.venv/bin:$PATH" bash scripts/verify-docs.sh
-git diff --check origin/main HEAD
-./gradlew spotlessCheck
 ./gradlew build --stacktrace
 ```
 
-| 명령 | 검증 내용 |
-| --- | --- |
-| `./gradlew test` | 단위·Application·Repository·API 계약·구조·동시성 테스트 |
-| `./gradlew spotlessCheck` | 변경된 Kotlin 소스의 ktlint/Spotless 규칙 |
-| `./gradlew build --stacktrace` | 컴파일, 전체 테스트와 빌드 |
-| `bash scripts/ci/test-ci-scripts.sh` | CI log capture와 PR 변경 분류 |
-| `bash scripts/verify-docs.sh` | 필수 문서, 내부 링크, 정책·ADR·OpenAPI 일관성 |
-| `git diff --check origin/main HEAD` | PR compare 범위의 trailing whitespace 등 diff 형식 오류 |
+**일반 로그인**
+
+고객은 `/app/signup`에서 회원가입하고 `/app/login`에서 로그인합니다. 점주는 발급받은 계정으로 `/store/login`에 접속한 뒤, 첫 로그인 때 `/store/password`에서 비밀번호를 변경합니다.
+
+- [고객 회원가입·로그인 API](src/main/kotlin/io/github/kdh949/beanflow/identity/internal/CustomerAccountController.kt)
+- [점주 로그인·비밀번호 변경 API](src/main/kotlin/io/github/kdh949/beanflow/identity/internal/MerchantAccountController.kt)
+
+**방문자 데모**
+
+`/demo`에서는 방문자용 고객·점주 계정과 샘플 매장을 이용해 주문부터 픽업까지 체험할 수 있습니다. `local,local-demo` 또는 `local,toss-sandbox` 설정에서 기능을 켭니다. 실행 방법은 [방문자 데모 문서](docs/operations/visitor-demo-runbook.md)에 정리했습니다.
+
+## 문서
+
+- [고객 이벤트 조회 개선과 측정 조건](docs/quality/customer-event-store-batch-read.md)
+- [전체 기능 목록](docs/architecture/capability-map.md)
+- [아키텍처와 주요 설계](docs/architecture/decision-summary.md)
+- [주문·결제·환불의 실패 처리](docs/architecture/failure-semantics.md)
+- [Runtime OpenAPI](openapi/beanflow-v1-runtime.yaml)
+- [테스트 구성](docs/testing/test-strategy.md)
