@@ -1,9 +1,24 @@
 package io.github.kdh949.beanflow.demo
 
+import com.drew.imaging.FileType
+import com.drew.imaging.FileTypeDetector
+import com.drew.imaging.ImageMetadataReader
+import com.drew.imaging.ImageProcessingException
+import com.drew.metadata.jpeg.JpegDirectory
+import com.drew.metadata.png.PngDirectory
+import com.drew.metadata.webp.WebpDirectory
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatIllegalStateException
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.awt.image.BufferedImage
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.nio.file.Path
+import java.util.Base64
 import java.util.concurrent.TimeUnit
+import javax.imageio.ImageIO
 import kotlin.io.path.readText
 
 /**
@@ -25,6 +40,71 @@ internal class LocalDemoRepositorySafetyTest {
             }
 
         assertThat(offenders).isEmpty()
+    }
+
+    @Test
+    fun `new image filenames are recognized by format without a path allowlist`(
+        @TempDir directory: Path,
+    ) {
+        val image = BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB)
+        for (format in listOf("png", "jpeg")) {
+            val output = ByteArrayOutputStream()
+            check(ImageIO.write(image, format, output))
+            val path = directory.resolve("new-screenshot.${format.uppercase()}")
+            path.toFile().writeBytes(output.toByteArray())
+            assertThat(readIfText(path)).isNull()
+        }
+        val webp = directory.resolve("new-screenshot.webp")
+        webp.toFile().writeBytes(Base64.getDecoder().decode("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA"))
+        assertThat(readIfText(webp)).isNull()
+    }
+
+    @Test
+    fun `image extensions do not hide text containing a secret`(
+        @TempDir directory: Path,
+    ) {
+        val path = directory.resolve("not-an-image.png")
+        val text = "BEANFLOW_DEMO_CURSOR_SECRET=" + "x".repeat(16)
+        path.toFile().writeText(text)
+
+        assertThat(readIfText(path)).isEqualTo(text)
+        assertThat(SECRET_PATTERNS.any { (_, pattern) -> pattern.containsMatchIn(readIfText(path)!!) }).isTrue()
+    }
+
+    @Test
+    fun `truncated image headers remain unexpected binaries`(
+        @TempDir directory: Path,
+    ) {
+        val headers =
+            mapOf(
+                "png" to byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0),
+                "jpg" to byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 0xe0.toByte(), 0, 2),
+                "webp" to "RIFF\u0004\u0000\u0000\u0000WEBP".toByteArray(),
+            )
+        for ((extension, bytes) in headers) {
+            val path = directory.resolve("truncated.$extension")
+            path.toFile().writeBytes(bytes)
+            assertThatIllegalStateException()
+                .isThrownBy { readIfText(path) }
+                .withMessageContaining(path.toString())
+        }
+    }
+
+    @Test
+    fun `image payloads require an image extension instead of a source path`(
+        @TempDir directory: Path,
+    ) {
+        val output = ByteArrayOutputStream()
+        check(ImageIO.write(BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB), "png", output))
+        val source = directory.resolve("source.kt")
+        source.toFile().writeBytes(output.toByteArray())
+        assertThatIllegalStateException()
+            .isThrownBy { readIfText(source) }
+            .withMessageContaining(source.toString())
+
+        val image = directory.resolve("legacy-screenshot.jpg")
+        image.toFile().writeBytes(output.toByteArray())
+        assertThat(readIfText(image)).isNull()
     }
 
     @Test
@@ -144,11 +224,66 @@ internal class LocalDemoRepositorySafetyTest {
         val file = path.toFile()
         if (!file.isFile || file.length() > MAX_SCANNED_BYTES) return null
         val bytes = file.readBytes()
+        if (isImage(path, bytes)) return null
         if (bytes.any { it == 0.toByte() }) {
-            check(path.toString() in ALLOWED_BINARY_FILES) { "Tracked text file contains a NUL byte: $path" }
+            check(path == Path.of("gradle/wrapper/gradle-wrapper.jar")) { "Tracked text file contains a NUL byte: $path" }
             return null
         }
         return String(bytes, Charsets.UTF_8)
+    }
+
+    private fun isImage(
+        path: Path,
+        bytes: ByteArray,
+    ): Boolean {
+        if (path.fileName
+                .toString()
+                .substringAfterLast('.')
+                .lowercase() !in IMAGE_EXTENSIONS
+        ) {
+            return false
+        }
+        return try {
+            val actualType = FileTypeDetector.detectFileType(ByteArrayInputStream(bytes))
+            if (actualType !in IMAGE_TYPES) return false
+            val metadata = ImageMetadataReader.readMetadata(ByteArrayInputStream(bytes), bytes.size.toLong(), actualType)
+            if (metadata.directories.any { it.hasErrors() }) return false
+            val (directory, widthTag, heightTag) =
+                when (actualType) {
+                    FileType.Png -> {
+                        Triple(
+                            metadata.getFirstDirectoryOfType(PngDirectory::class.java),
+                            PngDirectory.TAG_IMAGE_WIDTH,
+                            PngDirectory.TAG_IMAGE_HEIGHT,
+                        )
+                    }
+
+                    FileType.Jpeg -> {
+                        Triple(
+                            metadata.getFirstDirectoryOfType(JpegDirectory::class.java),
+                            JpegDirectory.TAG_IMAGE_WIDTH,
+                            JpegDirectory.TAG_IMAGE_HEIGHT,
+                        )
+                    }
+
+                    FileType.WebP -> {
+                        Triple(
+                            metadata.getFirstDirectoryOfType(WebpDirectory::class.java),
+                            WebpDirectory.TAG_IMAGE_WIDTH,
+                            WebpDirectory.TAG_IMAGE_HEIGHT,
+                        )
+                    }
+
+                    else -> {
+                        return false
+                    }
+                }
+            (directory?.getInteger(widthTag) ?: 0) > 0 && (directory?.getInteger(heightTag) ?: 0) > 0
+        } catch (_: ImageProcessingException) {
+            false
+        } catch (_: IOException) {
+            false
+        }
     }
 
     private data class SmokeCall(
@@ -166,51 +301,8 @@ internal class LocalDemoRepositorySafetyTest {
     private companion object {
         const val MAX_SCANNED_BYTES = 2L * 1024 * 1024
 
-        // Every intentionally tracked binary is explicit. Any other NUL-bearing tracked path is a
-        // source/configuration mistake rather than a reason to skip the secret scan.
-        val ALLOWED_BINARY_FILES =
-            setOf(
-                // Reviewed Grafana evidence shared by the performance PR series.
-                "docs/quality/assets/audit-append/audit-after-pool.png",
-                "docs/quality/assets/audit-append/audit-before-pool.png",
-                "docs/quality/assets/driver-retention/refund-after.png",
-                "docs/quality/assets/driver-retention/refund-before.png",
-                "docs/quality/assets/perf-diagnostic-panels/counter-after.png",
-                "docs/quality/assets/perf-diagnostic-panels/panels-after-axis.png",
-                "docs/quality/assets/perf-diagnostic-panels/panels-before-axis.png",
-                "docs/quality/assets/perf-diagnostic-panels/refund-after.png",
-                "docs/quality/assets/perf-refund-contract/refund-after.png",
-                "docs/quality/assets/perf-refund-contract/refund-before.png",
-                "docs/quality/assets/pickup-counter/counter-after.png",
-                "docs/quality/assets/pickup-counter/counter-before.png",
-                "docs/quality/assets/quote-stability/quote-after-failures.png",
-                "docs/quality/assets/quote-stability/quote-before-failures.png",
-                "frontend/public/brand/logo-full.png",
-                "frontend/public/brand/logo-mark.png",
-                "frontend/public/brand/logo-wordmark.png",
-                "frontend/public/demo/catalog/americano.webp",
-                "frontend/public/demo/catalog/bagel.webp",
-                "frontend/public/demo/catalog/cafe-latte.webp",
-                "frontend/public/demo/catalog/caramel-macchiato.webp",
-                "frontend/public/demo/catalog/macaron.webp",
-                "frontend/public/demo/catalog/sandwich.webp",
-                "frontend/public/demo/catalog/slice-cake.webp",
-                "frontend/public/demo/catalog/smoothie.webp",
-                "frontend/public/demo/catalog/store-01.webp",
-                "frontend/public/demo/catalog/store-02.webp",
-                "frontend/public/demo/catalog/store-03.webp",
-                "frontend/public/demo/catalog/store-04.webp",
-                "frontend/public/demo/catalog/store-05.webp",
-                "frontend/public/demo/catalog/store-06.webp",
-                "frontend/public/demo/catalog/store-07.webp",
-                "frontend/public/demo/catalog/store-08.webp",
-                "frontend/public/demo/catalog/store-09.webp",
-                "frontend/public/demo/catalog/store-10.webp",
-                "frontend/public/demo/catalog/store-11.webp",
-                "frontend/public/demo/catalog/store-12.webp",
-                "frontend/public/demo/catalog/yogurt.webp",
-                "gradle/wrapper/gradle-wrapper.jar",
-            )
+        val IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "webp")
+        val IMAGE_TYPES = setOf(FileType.Png, FileType.Jpeg, FileType.WebP)
 
         val CALL_PATTERN =
             Regex("""^\s*call\s+"[^"]*"\s+\d{3}\s+(GET|POST|PUT|PATCH|DELETE)\s+"([^"]+)"""", RegexOption.MULTILINE)
