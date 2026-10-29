@@ -71,6 +71,29 @@ internal class CustomerOrderQueryIntegrationTest
         fun removeFailureTrigger() = dropAuditFailureTrigger()
 
         @Test
+        fun `immediate pending list preserves the fixed three SQL queries without expiry writes`() {
+            val fixture = OrderCreationFixture()
+            OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)
+            OrderCreationDatabaseFixture.insertOperatingHours(jdbcTemplate, fixture.storeId)
+            val command = fixture.command().copy(pickupSlotId = null)
+            val created = createOrders.create("customer-query-immediate-count", orderQuoteUseCase.attachCurrentQuote(command))
+            assertThat(created.status).withFailMessage(created.body).isEqualTo(201)
+            val reference = json(created.body)["order"]["publicReference"].asText()
+
+            val before = listSqlCount()
+            mockMvc
+                .perform(get("/api/v1/me/orders").param("status", "ACTIVE").with(customerJwt(fixture.customerId)))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].orderReference").value(reference))
+                .andExpect(jsonPath("$.items[0].allowedActions[0]").value("CANCEL"))
+            assertThat(listSqlCount() - before).isEqualTo(3.0)
+            assertThat(states()).containsExactly("PENDING_PAYMENT")
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM payment_payment", Long::class.java)).isZero()
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM fulfillment_pickup_reservation", Long::class.java)).isZero()
+        }
+
+        @Test
         fun `customer list and detail use immutable display snapshots without internal identifiers`() {
             val fixture = OrderCreationFixture()
             OrderCreationDatabaseFixture.insertBase(jdbcTemplate, fixture)

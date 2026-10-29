@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
 import io.github.kdh949.beanflow.ordering.api.ReservationExpiryUseCase
+import io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.payment.api.CustomerCancellationPaymentOperations
 import io.github.kdh949.beanflow.payment.api.ProjectCustomerCancellationPaymentCommand
@@ -246,7 +247,9 @@ internal class CustomerOrderReadTransaction(
     private fun CustomerOrderHeaderProjection.actionFacts() =
         CustomerOrderActionFacts(
             state = parseState(state),
+            checkoutMode = parseCheckoutMode(checkoutMode),
             reservationExpiresAt = reservationExpiresAt,
+            orderingWindowClosesAt = orderingWindowClosesAt,
             acceptanceDeadlineAt = acceptanceDeadlineAt,
             cancellationCause = cancellationCause?.let(::parseCancellationCause),
         )
@@ -291,6 +294,13 @@ internal class CustomerOrderReadTransaction(
             OrderState.valueOf(raw)
         } catch (_: IllegalArgumentException) {
             dependency("Customer order state is unsupported")
+        }
+
+    private fun parseCheckoutMode(raw: String): CheckoutMode =
+        try {
+            CheckoutMode.valueOf(raw)
+        } catch (_: IllegalArgumentException) {
+            dependency("Customer order checkout mode is unsupported")
         }
 
     private fun parseCancellationCause(raw: String): OrderCancellationCause =

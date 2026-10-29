@@ -1,6 +1,7 @@
 package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.ordering.api.OrderCancellationCause
+import io.github.kdh949.beanflow.ordering.internal.domain.CheckoutMode
 import io.github.kdh949.beanflow.ordering.internal.domain.OrderState
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -19,7 +20,9 @@ internal enum class CustomerOrderAllowedAction {
 
 internal data class CustomerOrderActionFacts(
     val state: OrderState,
+    val checkoutMode: CheckoutMode,
     val reservationExpiresAt: Instant?,
+    val orderingWindowClosesAt: Instant?,
     val acceptanceDeadlineAt: Instant?,
     val cancellationCause: OrderCancellationCause?,
 )
@@ -82,9 +85,18 @@ internal object CustomerOrderPresentationPolicy {
     ): Boolean =
         when (facts.state) {
             OrderState.PENDING_PAYMENT -> {
-                now.isBefore(
-                    facts.reservationExpiresAt ?: dependency("Pending-payment order has no reservation deadline"),
-                )
+                when (facts.checkoutMode) {
+                    CheckoutMode.LEGACY_RESERVED -> {
+                        now.isBefore(
+                            facts.reservationExpiresAt ?: dependency("Pending-payment order has no reservation deadline"),
+                        )
+                    }
+
+                    CheckoutMode.IMMEDIATE -> {
+                        facts.orderingWindowClosesAt ?: dependency("Immediate order has no ordering cutoff")
+                        true
+                    }
+                }
             }
 
             OrderState.PAID -> {
