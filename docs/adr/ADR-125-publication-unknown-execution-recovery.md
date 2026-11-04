@@ -20,15 +20,17 @@ Modulith 2.1 JPA의 NULL 상태 비교와 publication ID만 사용하는 결과 
    NULL/FAILED를 명시적으로 처리하고 추가 claim 한 번의 시도 횟수와 claim 시각을 함께 commit한다.
 2. 실행 시작은 startedAt, dispatch 대기는 claimedAt을 사용한다. 마지막 실제 claim 뒤 초기 5분을
    넘기면 MANUAL_REVIEW와 EXECUTION_OUTCOME_UNKNOWN으로 조사하며 원본 상태는 보존한다.
-   5분은 실측 SLA가 아닌 운영 감지 초기값이다. DB 중심 listener와 수 초 단위 HTTP timeout 설정을
-   확인했지만 전체 처리 상한은 보장하지 않는다. 설정은 양수여야 하며 시간 경과 자체는 재실행 근거가 아니다.
+   5분은 운영자가 결과 불명 작업을 조사하기 위한 초기 감지 기준이다. DB 중심 listener와 수 초 단위
+   HTTP timeout 설정은 확인했으며, 전체 처리시간 상한은 별도 측정 대상이다. 설정값은 양수여야 한다.
+   감지 시간을 넘겨도 이전 작업이 실행 중일 수 있으므로, 경과 시간만으로 재실행하지 않는다.
 3. 결과 불명 재실행은 exact event type/listener allowlist로 제한한다. 초기 검증 대상은 OrderReadyV1의
    고객 알림 접수 listener다. 하나의 owner transaction과 logical source unique constraint로
    Inbox/Delivery 한 벌을 보존하며 Provider 발송은 별도 worker다. 실제 동시 호출/commit 후 ACK 유실
    테스트가 통과해야 허용한다. 나머지 등록 listener는 확정 실패 복구만 제공하며 불명 재실행은 거절한다.
 4. 수동 요청 원장에 Case version, claim/start 시각, 시도 결과와 불명 전환 시각을 저장한다.
    전용 registry decorator는 기존 Modulith dispatch를 유지하면서 실제 event 객체와 request ID를 연결해
-   callback에 전달한다. 이 메모리는 호출 식별자 전달용이며 상태/예산의 원천 또는 DB 장애 fallback이 아니다.
+   callback에 전달한다. 메모리에는 호출 식별자 연결만 두고, 처리 상태와 재시도 예산은 DB를 기준으로 관리한다.
+   DB 장애 시 메모리 값으로 처리를 이어가는 fallback은 두지 않는다.
 5. 결과는 publication lock 아래 자신의 request에 기록한다. 현재 publication attempts가 해당 시도의
    ordinal과 같은 경우에만 기존 repository의 결과 갱신을 호출한다. 오래된 성공/실패는 자기 요청에만
    남고 새 시도의 publication과 Case를 덮지 않는다. Case 전이도 저장된 Case version으로 보호한다.

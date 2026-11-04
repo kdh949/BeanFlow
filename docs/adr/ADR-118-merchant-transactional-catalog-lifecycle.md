@@ -105,7 +105,7 @@ authoring contract로 사용하지 않는다.
   Store-root protocol을 따라야 한다.
 - 이미지와 display-only metadata writer는 quote 거래 의미를 바꾸지 않으므로 이 protocol의 대상이 아니다.
 
-shared Order lock과 exclusive writer lock의 선형화 결과는 둘 중 하나다.
+주문은 shared lock, 거래 조건 변경은 exclusive lock을 사용한다. 어느 쪽이 먼저 락을 잡았는지에 따라 다음 두 순서로 처리된다.
 
 ```text
 writer가 먼저 commit

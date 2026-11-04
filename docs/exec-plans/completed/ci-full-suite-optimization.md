@@ -11,11 +11,11 @@
 
 ## Purpose / Big Picture
 
-BeanFlow의 backend PR은 267개 test class와 1,328개 test method를 실행하며, 최근
-GitHub-hosted runner의 required CI가 약 26~28분 걸린다. 이 계획은 전체 backend test coverage를
-유지하면서 변경 경로 분리, JVM 당 PostGIS server 공유, 실행 시간 기반 shard 배정으로
-required `build` gate를 17분 안에 종료한다. Storybook interaction은 required로 유지하고
-접근성 검사는 advisory로 분리해 알려진 위반을 후속 변경에서 처리할 수 있게 한다.
+계획 시작 당시 BeanFlow의 backend PR은 테스트 클래스 267개와 테스트 메서드 1,328개를 실행했고,
+GitHub-hosted runner에서 필수 CI 완료까지 약 26~28분이 걸렸다. 전체 백엔드 테스트를 유지하면서
+변경 경로별 검사 분리, JVM별 PostGIS 서버 공유와 실행시간에 따른 shard 배정으로 필수 `build`를
+17분 안에 완료하는 것이 목표다. Storybook interaction은 필수 검사로 유지하고,
+접근성 검사는 advisory로 분리해 알려진 위반을 후속 변경에서 처리한다.
 
 ## Current State
 
@@ -41,7 +41,7 @@ required `build` gate를 17분 안에 종료한다. Storybook interaction은 req
 
 - CI scope를 `docs | frontend | backend | full`로 분리
 - required `build` aggregate gate
-- JUnit XML과 class timing 증적
+- JUnit XML 테스트 결과와 클래스별 실행시간 기록
 - JVM 당 PostGIS server 하나와 class 당 독립 database
 - deterministic duration-weighted sharding, 필요 시 최대 6 runner
 
@@ -85,7 +85,7 @@ production transaction과 runtime bean graph는 변경하지 않는다.
 - scope에 필요 없는 job의 `skipped`만 성공으로 허용한다.
 - Storybook interaction failure는 required frontend failure다. a11y advisory step의 위반은 step outcome과
   artifact로 남기되 `continue-on-error`로 required frontend result를 실패시키지 않는다.
-- timing XML이 없거나 malformed면 timing step을 실패시켜 증적 누락을 숨기지 않는다.
+- 실행시간 XML 파일이 없거나 XML 문법·구조·필드값 검증에 실패하면 해당 수집 단계를 실패 처리한다.
 - shared server/database create/drop failure는 test failure로 전파하고 다른 DB로 대체하지 않는다.
 
 ## Data and Migration
@@ -230,8 +230,8 @@ hosted full suite를 required evidence로 삼는다.
   2026-08-18 결정으로 17분에 supersede됐다.
 - 2026-08-17: required context 이름 `build`를 유지하고 aggregate semantics로 바꾼 ruleset write를 피한다.
 - 2026-08-17: success artifact도 14일 보관하여 duration weight와 후속 회귀를 재현한다.
-- 2026-08-17: upstream frontend failure가 backend 증적 수집까지 막지 않도록 frontend를 독립 job으로
-  분리하되, `full` aggregate gate는 frontend failure를 그대로 실패로 유지한다.
+- 2026-08-17: frontend 검사 실패 뒤에도 backend 테스트 결과와 실행시간을 수집할 수 있도록 두 job을
+  독립적으로 실행한다. `full`의 최종 판정에는 frontend 실패도 반영한다.
 - 2026-08-17: Spring context 하나가 datasource 하나를 소유하므로 class별 DB를 보장하기 위해 test-only
   context cache key와 after-class cleanup listener를 사용한다. production bean graph에는 관여하지 않는다.
 - 2026-08-18: 계획상 최대인 6-shard에서 첫 candidate run이 15분을 넘었으므로 테스트 생략이나 추가 runner를
@@ -258,4 +258,4 @@ color-contrast 위반은 별도 advisory 실행과 14일 artifact로 관측되�
 
 - 2026-08-17: 최신 main 조사와 사용자가 확정한 coverage, 15분, 최대 6 runner, Draft PR 결정을 반영해 초안 작성.
 - 2026-08-18: 사용자 승인에 따라 시간 기준을 17분으로 개정하고 Storybook a11y를 advisory로 분리하는 완료 조건을 반영.
-- 2026-08-18: final candidate 동일 SHA 세 run의 시간·coverage·비용 증적을 기록하고 계획을 완료 처리.
+- 2026-08-18: 최종 candidate의 동일 SHA로 실행한 세 run의 시간·테스트 범위·비용을 기록하고 계획을 완료 처리.

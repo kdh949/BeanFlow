@@ -28,13 +28,13 @@
 
 ## [ADR-006 External Payment Transaction Boundary](../adr/ADR-006-external-payment-transaction-boundary.md)
 
-PG 응답을 기다리는 동안 DB 연결과 lock을 점유하면 주문 요청이 몰릴 때 connection pool에 부담이 생깁니다. 첫 트랜잭션에서 결제 요청과 멱등성 정보를 저장하고, PG를 호출한 뒤 두 번째 트랜잭션에서 승인 결과와 주문·예약 변경을 저장합니다.
+PG 응답을 기다리는 동안 DB 커넥션과 락을 점유하면 주문 요청이 몰릴 때 커넥션 풀이 부족해질 수 있습니다. 첫 트랜잭션에서 결제 요청과 멱등성 정보를 저장하고, PG를 호출한 뒤 두 번째 트랜잭션에서 승인 결과와 주문·예약 변경을 저장합니다.
 
-PG에서 승인이 완료됐지만 DB 저장에 실패하는 상황은 `UNKNOWN`과 reconciliation으로 처리합니다. [결제 승인 통합 테스트](../../src/test/kotlin/io/github/kdh949/beanflow/ordering/internal/PaymentConfirmationIntegrationTest.kt)와 [Transaction Boundaries](transaction-boundaries.md)에 구현 내용이 있습니다.
+PG 승인 뒤 DB 저장이 실패하면 PG 상태 조회와 reconciliation으로 결과를 확인합니다. 응답 유실로 승인 여부를 모르는 결제는 `UNKNOWN`으로 기록합니다. [결제 승인 통합 테스트](../../src/test/kotlin/io/github/kdh949/beanflow/ordering/internal/PaymentConfirmationIntegrationTest.kt)와 [Transaction Boundaries](transaction-boundaries.md)에 구현 내용이 있습니다.
 
 ## [ADR-007 Payment Idempotency and Reconciliation](../adr/ADR-007-payment-idempotency-reconciliation.md)
 
-결제 요청은 네트워크 오류나 재시도로 여러 번 들어올 수 있습니다. 사용자·작업 종류·멱등성 키를 묶고 요청 내용의 해시와 결과를 저장합니다. DB unique constraint로 중복 처리를 막습니다.
+결제 요청은 네트워크 오류나 재시도로 여러 번 들어올 수 있습니다. 사용자·작업 종류·멱등성 키를 묶고 요청 내용의 해시와 결과를 저장합니다. DB 유일 제약으로 중복 처리를 막습니다.
 
 응답 유실 후에는 같은 승인 요청을 다시 보내는 대신 PG 조회로 상태를 가져옵니다. 정해진 횟수만큼 조회해도 결과를 알 수 없으면 `MANUAL_REVIEW`로 넘깁니다. [결제 승인 통합 테스트](../../src/test/kotlin/io/github/kdh949/beanflow/ordering/internal/PaymentConfirmationIntegrationTest.kt), [Failure Semantics](failure-semantics.md), Flyway V6에 구현 사항을 연결했습니다.
 
@@ -48,7 +48,7 @@ PG에서 승인이 완료됐지만 DB 저장에 실패하는 상황은 `UNKNOWN`
 
 필수 Port나 설정이 누락되면 애플리케이션 시작 단계에서 오류를 반환합니다. 요청 처리 실패는 API 상태·오류 코드로 전달하고, 비동기 작업은 재시도·실패·결과 불명·수동 처리 상태로 기록합니다.
 
-[Failure Semantics](failure-semantics.md), 실패 시나리오 통합 테스트와 [Definition of Done](../testing/definition-of-done.md)에서 관련 규칙을 관리합니다. 필수 기능이 실패했을 때 대체 데이터로 성공 응답을 만드는 대신 사용자에게 처리 상태를 보여줍니다.
+[Failure Semantics](failure-semantics.md), 실패 시나리오 통합 테스트와 [Definition of Done](../testing/definition-of-done.md)에서 관련 규칙을 관리합니다. 필수 기능이 실패하면 오류나 진행 상태를 응답하고, 재처리가 필요한 작업은 별도로 저장합니다.
 
 ## [ADR-011 PointLot and Ledger](../adr/ADR-011-point-lot-ledger.md)
 

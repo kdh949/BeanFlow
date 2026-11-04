@@ -4,13 +4,13 @@
 |---|---|---|
 | Domain Unit | 상태 전이, 금액·정책 | 잘못된 상태, 금액 불일치 |
 | Application | 유스케이스·Port 순서 | 트랜잭션 경계, 보상 누락 |
-| Repository | JPA, SQL, constraint, lock | H2 차이, Lost Update, mapping |
-| API Contract | HTTP·오류·인가 | 계약 drift, 잘못된 status |
+| Repository | JPA·SQL·DB 제약·락 | H2와 PostgreSQL의 동작 차이, Lost Update, 매핑 오류 |
+| API Contract | HTTP·오류·권한 검사 | 명세와 구현 불일치, 잘못된 상태 코드 |
 | Module / Architecture | 경계와 순환 | 내부 패키지 침범 |
 | Concurrency | 경합·중복 | oversell, 초과 예약, 이중 사용 |
 | Idempotency | 같은 명령·이벤트 반복 | 중복 결제·적립·정산 |
 | Resilience | timeout·재시작·ACK 유실 | terminal state 누락, 숨은 실패 |
-| Load | 지연·처리량·resource | pool 고갈, lock wait, GC |
+| Load | 응답시간·처리량·자원 사용량 | 커넥션 풀 고갈, 락 대기, GC |
 | Time | 만료·영업시간·batch | 경계 시각 오류 |
 
 ## 테스트 환경
@@ -164,8 +164,8 @@
 
 ## 매장 메뉴·픽업 슬롯 조회 테스트
 
-- Menu projection: available/unavailable 메뉴와 옵션 조합이 실제 owner flag로 나오고, 판매 불가
-  항목을 `available: true`로 만들지 않는다. 다른 store의 메뉴·옵션은 절대 섞이지 않는다.
+- Menu projection: 메뉴와 옵션의 판매 가능 여부가 담당 모듈의 실제 상태와 일치해야 한다.
+  판매 불가 항목은 `available: false`로 반환하고, 요청한 store의 메뉴·옵션만 포함하는지 검증한다.
 - Pickup slot projection: `(startsAt, pickupSlotId)` 정렬, 종료된 슬롯 제외, 잔여
   `capacity - reserved - confirmed`와 0 하한, 커밋된 예약 이후 재조회가 줄어든 잔여를 보여준다.
 - Contract: 응답이 `MenuList`/`PickupSlotList` 필드 집합과 정확히 일치하고 write 필드
@@ -182,10 +182,10 @@
 
 고객지원·배달 기능 테스트는 [Support Test Strategy](support-test-strategy.md)에 정리했다.
 
-N+1은 FetchType 이름만으로 판단하지 않는다.
+N+1 여부는 실제 API가 실행한 SQL과 조회 횟수를 기준으로 확인한다.
 
 1. 필요한 API 필드 정의
 2. 발생 SQL과 쿼리 수 관찰
 3. Projection, Fetch Join, EntityGraph, Batch Fetch 비교
-4. pagination, row duplication, memory 영향 확인
+4. 페이지네이션, 행 중복, 메모리 사용량에 미치는 영향 확인
 5. 회귀 테스트와 실행계획 저장

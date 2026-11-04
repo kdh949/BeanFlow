@@ -58,11 +58,11 @@
 - Not run: 실제 Provider credential 기반 외부 E2E, non-local deployment/production smoke,
   push/PR/merge. 현재 작업 권한과 실제 지급 Non-goal 밖이다.
 
-이 증거는 local implementation readiness를 뒷받침하지만 non-local release 승인이나 배포 증거는 아니다.
+위 결과는 로컬 구현과 테스트의 완료 기록이다. 원격 release 승인과 배포 검증은 별도로 진행해야 한다.
 
 ## Measurement evidence
 
-단일 로컬 fixed fixture이며 기준선/SLA/개선율이 아니다.
+고정 데이터로 한 번 실행한 로컬 측정이다. 변경 전 기준선과 부하 비교는 수행하지 않았으며, SLA와 개선율은 별도 검증이 필요하다.
 
 | Input / observation | Measured result |
 |---|---:|

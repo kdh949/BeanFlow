@@ -5,13 +5,13 @@
 주요 구현 commit은 `ad449db28df64c8c9c51e897ca1524964a464f01`, bootstrap/보관 한도 보완을 포함한
 배포 후보는 `686ba07885ac0f7fece39da6a3569208c6bf1094`이다. 현재 로컬 회귀와 SQL 실험을
 완료했고 전체 CI 및 이미지 workflow가 통과했다. API/driver 배포와 재측정 및 Grafana 캡처를
-완료했다. 카운터 비용은 감소했지만 통합 HTTP 처리량 개선은 입증되지 않았다.
+완료했다. 카운터 SQL 비용은 감소했지만 통합 HTTP 처리량은 일관되게 개선되지 않았다.
 실행 계획: [잠금 구간 SQL 개선](../exec-plans/completed/order-lock-critical-section-sql.md).
 
 ## 원인과 변경
 
-견적 v3의 사용량 무효화 해결 뒤 관측한 픽업 슬롯 lock wait는 실제 DB 대기였다. 다만 대기 요청의
-trace만으로 특정 SQL이 유일한 원인이라고 할 수 없다. 추가 실험에서 다음을 구분했다.
+견적 v3 수정 뒤에는 픽업 슬롯의 DB lock wait가 관측됐다. 대기 중인 요청의 trace와 함께
+락을 보유한 트랜잭션과 background 작업을 조사해 다음 세 요인을 나눠 확인했다.
 
 1. **잠금 보유 중 불필요한 SQL:** 픽업번호 발급이 매 주문마다 과거 주문/slot의 count/max를
    집계했다. 정상 발급은 기존 counter의 원자 UPDATE RETURNING으로 바꾸고, missing counter에만
@@ -62,21 +62,20 @@ wall profile 10ms를 고정했다. local compile/test와 실제 부하를 겹치
 | `bf-0908-locks-isolated-before-r20` | 20/s, 90s | 80/80 | 1718/1718 | 83 | 1338.6/2418.1ms | 5625.8ms |
 
 실행한 workflow의 실패율은 모두 0이지만 warmup 및 두 20/s 실행은 dropped 또는 latency 기준에
-실패했다. 성공한 결제만으로 목표 부하가 처리됐다고 주장하지 않는다.
+실패했다. 실제 완료 건수와 목표 부하를 구분해 기록했다.
 
-`isolated`라는 실행 이름은 당시 PAID/event backlog가 비었음을 보고 붙인 이름이다.
-뒤이어 refund UNKNOWN이 남아 계속 재시도됨을 확인했으므로 완전한 격리 실행이 아니다.
-이 이름을 비교 가능성의 증거로 사용하지 않는다.
+`isolated`라는 이름은 당시 PAID/event backlog가 비어 있어 붙였다.
+이후 refund UNKNOWN의 재시도가 남아 있음을 확인했으므로, 이 실행도 이전 부하의 영향을 포함한다.
 
 20/s 첫 실행의 Hikari pending 관측 최대 82, 미완료 event 최대 137, ungranted lock 최대 5,
 host CPU 최대 82.0%, iowait 최대 20.1%였다. 두 번째 20/s는 pending 76, event backlog 0,
-lock 최대 5였다. event backlog 0이 모든 비동기 작업의 완료를 뜻하지 않는 사례다.
-이 최대값은 해당 실행 범위의 Prometheus 표본이며 모든 순간의 정확한 peak 보장은 아니다.
+lock 최대 5였다. event backlog는 0이었지만 환불 재시도는 계속 진행 중이었다.
+위 최대값은 Prometheus가 수집한 표본 중 최대값이며, scrape 사이의 더 짧은 peak는 빠질 수 있다.
 
 예시 trace `cf41c1a71e47eaeba646dfa7bb73b75`의 총 시간은 2171.8ms다.
 첫 DB span이 요청 시작 851.8ms 뒤 나타나며, 실제 pickup SELECT는 133.4ms다.
-repository span의 시간 전체를 행 잠금 대기로 간주하지 않는다. SQL 사이의 pool 획득 대기와
-DB 잠금 대기를 함께 봐야 한다.
+repository span에는 커넥션 획득과 SQL 실행 시간이 함께 들어간다. 지연 원인은 커넥션 풀 지표와
+각 SQL의 DB 락 대기를 나눠 확인한다.
 
 2026-09-07 18:07:31 UTC의 read-only repeatable-read 검증에서 위 본 실행 세 개의 native 생성·승인
 수와 DB distinct order 수가 일치했다. 픽업 슬롯 counter 불일치, 정원 초과, 중복 pickup 번호,
@@ -115,8 +114,8 @@ DB 잠금 대기를 함께 봐야 한다.
 
 ## 해석의 한계
 
-- 누적 DB 이력과 오래된 UNKNOWN/MANUAL_REVIEW, background 재시도는 보존한다. 이를 SQL로 성공
-  상태로 바꾸지 않는다. 전후 background 양이 다르면 순수 코드의 latency 개선율로 해석하지 않는다.
+- 누적 DB 이력과 오래된 UNKNOWN/MANUAL_REVIEW, background 재시도는 원래 상태로 보존한다.
+  SQL로 성공 상태를 만들지 않으며, 코드 변경만의 지연 개선율을 보려면 전후 background 작업량도 맞춰야 한다.
 - 기존 driver는 10,000개를 넘으면 오래된 합성 결제 사실을 삭제했다. 보완 후 최대 50,000개에서
   신규 승인을 503으로 거절하며 기존 사실을 보존한다. 교체 전 API를 정지하고 기존 driver 응답을
   백업·복원·조회 검증하는 절차를 준비했다. process 재시작은 여전히 명시적 상태 보존이 필요하며
@@ -135,7 +134,7 @@ DB 잠금 대기를 함께 봐야 한다.
 추가 예열 5/s30s40/40VU는 승인141, dropped10, HTTP p95 2756.0ms로 Failed였다.
 5/s 본 실행은 예열의 자동 거절/환불이 끝부분에 겹쳤고, 반복20/s는 앞선20/s 환불과 겹쳤다.
 이전 UNKNOWN8270건이 MANUAL_REVIEW로 이행했고 신규 환불 이후 금융 publication이 발생해
-수정 하나만 교체한 A/B로 해석하지 않는다. 전체 HTTP 성능/처리량 향상은 입증되지 않았다.
+여러 변경과 background 조건의 차이를 함께 포함한다. 이 통합 실행에서 전체 HTTP 성능과 처리량은 일관되게 개선되지 않았다.
 
 같은 90s 카운터 timer sum/count 증가량 평균은 5.142 → 0.388ms였다. 이 구간 개선은
 개별 SQL 비교와 일치하지만 Hikari pending77, ungranted lock5가 여전히 관측됐다.
@@ -215,5 +214,5 @@ PR140의 두 번째 실행은 같은 SHA의 실패 shard와 종속 gate만 재�
 [이미지 build](https://github.com/kdh949/BeanFlow/actions/runs/34217739663)가 모두 SUCCESS다.
 main의 `src/main`과 배포 기준 `686ba078`의 제품 소스는 동일하다.
 RCA 무관측 지연 쿼리와 드라이버 멱등키 테스트의 후속 보강, PR별 캡처·검증 문서는 main의 값을 유지한다.
-이 확인에서 서버를 다시 배포하거나 부하·복구를 다시 측정하지 않았다. 위 금융 publication snapshot과
-실패한 20/s 실행을 해소된 것으로 해석하지 않는다.
+이 확인의 범위는 병합 상태와 CI·이미지 결과다. 서버 재배포와 부하·복구 재측정은 수행하지 않아,
+위 금융 publication 미완료 기록과 실패한 20/s 실행은 후속 검증 대상으로 남아 있다.

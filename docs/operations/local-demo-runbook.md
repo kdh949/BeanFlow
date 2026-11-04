@@ -20,7 +20,7 @@
 | 결제 | `local` scripted adapter가 paymentKey suffix에 따라 승인·조회 결과를 반환한다. 카드번호·CVC·유효기간은 저장하지 않는다 |
 | 실행 결과 | 각 단계에 대기시간 제한을 두고 오류가 발생하면 smoke script가 0이 아닌 exit code로 종료된다 |
 
-`local-demo`는 `prod`와 함께 활성화될 수 없다. 동시에 켜면 startup이 실패한다
+`local-demo`와 `prod`를 함께 활성화하면 애플리케이션 시작을 실패시킨다
 (`LocalDemoSafetyConfigurationTest`).
 
 ## 2. 사전 요구사항
@@ -117,9 +117,9 @@ PID·PGID·실행 nonce·repository root가 함께 들어가며, `stop.sh`는 `p
 nonce, `lsof` cwd를 모두 다시 확인한 경우에만 그 group을 signal한다. stale 또는 다른 checkout의 record는
 삭제만 하고 process에는 signal하지 않으며 전역 `pkill`은 사용하지 않는다.
 
-`stop.sh`와 `stop.sh --reset`은 Docker/Compose 오류를 성공으로 바꾸지 않는다. reset은 `compose down`이
-성공하고 demo container의 부재를 정확히 확인한 뒤에만 `.demo-runtime` key material을 삭제한다. 실패하면
-non-zero로 끝나며 key material을 보존한다.
+`stop.sh`와 `stop.sh --reset`은 Docker/Compose 오류 시 0이 아닌 exit code로 종료한다.
+reset은 `compose down` 성공과 데모 컨테이너 종료를 확인한 뒤 `.demo-runtime`의 키 파일을 삭제한다.
+종료 확인에 실패하면 키 파일을 보존한다.
 
 `LocalDemoScriptGuardTest`가 stub docker와 임시 root로 script를 실제 실행해 첫 번째 guard를
 양방향으로 확인한다. 다른 DB 이름이면 거절하고 `compose down`을 호출하지 않으며, 일치할 때만
@@ -130,16 +130,16 @@ non-zero로 끝나며 key material을 보존한다.
 
 | 증상 | 원인 | 조치 |
 |---|---|---|
-| `Policy bootstrap failed` | workload identity 검증 실패 또는 정책 입력 오류 | `.demo-runtime/policy-bootstrap.log`를 본다. 신원 파일 권한이 `0400`인지 확인한다. 정책을 수동 INSERT하지 않는다 |
+| `Policy bootstrap failed` | workload identity 검증 실패 또는 정책 입력 오류 | `.demo-runtime/policy-bootstrap.log`와 신원 파일의 `0400` 권한을 확인한다. 원인을 수정한 뒤 bootstrap을 재실행한다. 정책 수동 INSERT는 금지한다 |
 | `Timed out after Ns waiting for ...` | 해당 단계가 deadline 안에 준비되지 않았다 | `.demo-runtime/app.log`, `frontend.log` 또는 `identity.log`를 본다. 대기 시간을 넘긴 단계의 로그를 확인한다 |
 | `Seed failed. The transaction rolled back` | fixture 쓰기 중 오류 | `.demo-runtime/seed.log`를 본다. 부분 fixture는 남지 않으므로 원인 수정 후 그대로 재실행한다 |
 | `Customer Session login expected 200` | 고객 seed 누락, 비밀번호 정책·계정 상태 또는 Session 저장 실패 | `seed.log`의 `LOCAL_DEMO_SEED_CUSTOMER_LOGIN_ID`와 `app.log`의 correlation ID를 확인한다. 고객 JWT로 우회하지 않는다 |
-| 기본 smoke의 점주 로그인·전환이 401/403 | seed 누락, 24시간 임시 비밀번호 만료, 초기 비밀번호가 이미 변경됐거나 다른 매장 membership | deterministic 전체 smoke는 `stop.sh --reset` 뒤 start·seed부터 다시 실행한다. JWT/fake Session으로 우회하지 않는다 |
+| 기본 smoke의 점주 로그인·전환이 401/403 | seed 누락, 24시간 임시 비밀번호 만료, 초기 비밀번호가 이미 변경됐거나 다른 매장 membership | 같은 초기 데이터로 전체 smoke를 실행하려면 `stop.sh --reset` 뒤 start·seed부터 다시 실행한다. 실제 Merchant Session으로 검증하며 JWT/fake Session 우회는 금지한다 |
 | `The GLOBAL ordinary point accrual policy is missing` | `start.sh`의 bootstrap 단계를 건너뛰었다 | `start.sh`를 실행한다. seed는 정책을 대신 만들지 않는다 |
-| `GLOBAL accrual policy is already initialized` | 이전 demo database가 남아 bootstrap result가 deterministic fixture와 다르다 | `stop.sh --reset` 후 `start.sh`를 다시 실행한다. 로그의 단어 `already`만으로 성공 처리하지 않는다 |
+| `GLOBAL accrual policy is already initialized` | 이전 demo database가 남아 bootstrap result가 초기 데이터 조건과 다르다 | `stop.sh --reset` 후 `start.sh`를 다시 실행한다. `already` 응답도 초기 설정 실패로 처리한다 |
 | smoke `[fail] ... expected 200 got 500` | 해당 단계의 실제 응답이 계약과 다르다 | 출력된 `correlationId`로 `.demo-runtime/app.log`를 조회한다 |
 | `Timed out waiting for the completion accrual transaction` | 완료 event consumer가 deadline 안에 적립 원장을 만들지 않았거나 source/금액이 정책과 다르다 | `.demo-runtime/app.log`에서 order ID와 event publication/retry state를 확인한다. smoke는 성공으로 끝나지 않는다 |
-| `unknown confirmation`이 수렴하지 않음 | local paymentKey가 유지되지 않았거나 lookup worker가 deadline 안에 실행되지 않았다 | smoke의 recovered payment ID와 correlation ID로 `.demo-runtime/app.log`를 확인한다. confirm을 새로 보내 성공으로 만들지 않는다 |
+| `unknown confirmation`이 수렴하지 않음 | local paymentKey가 유지되지 않았거나 lookup worker가 deadline 안에 실행되지 않았다 | smoke의 recovered payment ID와 correlation ID로 `.demo-runtime/app.log`를 확인한다. 새 confirm 요청은 보내지 않고 기존 결제의 lookup 경로를 점검한다 |
 | `Port ... is already in use by an unowned process` | 해당 checkout의 결정적 포트 블록을 다른 process가 사용 중 | 해당 process를 확인·정리하거나 다른 checkout에서 실행한다. demo는 기존 process를 kill하지 않는다 |
 | 재컴파일이 `build/classes/kotlin/test` 잠금으로 실패 | identity server JVM이 test classpath를 잡고 있다 | `stop.sh`를 먼저 실행한 뒤 컴파일한다 |
 | Flyway `checksum mismatch` | 기존 데모 DB가 이전 migration 내용으로 만들어졌다 | `stop.sh --reset` 후 `start.sh`를 다시 실행한다 |

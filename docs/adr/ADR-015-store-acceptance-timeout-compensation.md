@@ -15,8 +15,8 @@ BR-06, BR-07과 BR-14는 결제 승인 후 2분 경고, 3분 수락 제한과 �
 - `PAID`에서 수락과 거절 중 하나의 guarded transition만 성공한다.
 - `REJECTED` 후 각 owner Context에 결제 환불, 슬롯 해제, 쿠폰·포인트 복원과
   고객 알림 명령 또는 영속 event를 전달한다.
-- 보상 실패는 Order 전이를 되돌리지 않으며 각 owner 상태, retry와 Operations case로
-  남긴다. Order `REJECTED`를 보상 완료로 해석하지 않는다.
+- 보상이 실패해도 Order는 `REJECTED`를 유지한다. 각 담당 모듈의 처리 상태·재시도·Operations case에
+  실패를 기록하고, 주문 거절과 보상 완료 여부를 각각 관리한다.
 - `ACCEPTED` 이후 단순 거절은 허용하지 않는다.
 
 2026-07-30 implementation amendment:

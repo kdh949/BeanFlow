@@ -3,7 +3,7 @@
 이 문서는 v2 배포 당시의 원본 결과와 판단이다. 이후 정책·코드 수정, v3 배포 및 재측정 결과는
 [2026-09-08 후속 보고서](performance-quote-stability-retest-2026-09-08.md)를 따른다.
 
-공개 HTTPS 경로에서 9회 실행, 809 workflow와 2,686 HTTP 요청을 측정했다. 정상 결제 5 workflow/s의 실패 48건은 모두 주문 견적 충돌이었다. 낮은 지연과 충분한 CPU 여유만으로 주문 처리 용량을 판단하면 안 된다.
+공개 HTTPS 경로에서 9회 실행, 809 workflow와 2,686 HTTP 요청을 측정했다. 정상 결제 5 workflow/s의 실패 48건은 모두 주문 견적 충돌이었다. CPU와 응답시간에 여유가 있는 구간에서도 견적 충돌로 주문이 거절됐다.
 
 ## 측정 조건
 
@@ -13,7 +13,7 @@
 - 데이터: 정상 가입·로그인한 합성 고객 20명, 합성 점주 1명, 매장 1개, 메뉴 1개, 미래 슬롯 4개. 슬롯별 용량 100,000. 잠금 실험만 슬롯 1개로 제한했다. GLOBAL 정책은 기존 값을 사용했다.
 - 매장 fixture는 기존 엔티티와 DB 제약을 확인한 단일 트랜잭션으로 추가했다. 최초 지역 코드 FK 오류는 전체 rollback됐고, 실제 지역 코드로 재실행했다. 인증 세션은 정상 로그인 API로 발급했다.
 - 정상 결제는 견적→주문→결제 준비→승인까지다. 점주 접수·제조·픽업은 하지 않았으므로 기존 접수 만료·자동 거절·환불 worker도 시간 경과에 따라 실행됐다. 이후 실행은 이 배경 작업과 누적 데이터의 영향을 포함한다.
-- Toss는 내부 계약 드라이버이며 실제 결제망 성능이 아니다. AIStor/Vault는 실제 배포 의존성을 사용하지만 이번 시나리오는 이미지 업로드나 암호화 처리량 측정이 아니다.
+- Toss 호출은 내부 계약 드라이버로 실행했다. AIStor/Vault는 실제 배포 의존성을 사용했다. 측정 범위는 주문·결제 시나리오이며, 실제 결제망과 이미지 업로드·암호화 처리량은 별도 측정 대상이다.
 - 원본 manifest/summary/Prometheus/trace/span-profile 증거는 로컬 `/private/tmp/beanflow-load-20260907/runs/`에 있다. credential/fixture는 같은 상위 임시 디렉터리의 비공개 파일에만 있다. 임시 디렉터리는 장기 보관소가 아니다.
 
 ## 실행 결과
@@ -34,7 +34,7 @@ workflow는 HTTP 요청 수와 다르다. 숫자는 실행 종료의 native `sum
 
 - 정상 1/s: 88/90 승인, 2건 주문 409. 정상 5/s: 402/450 승인, 48건 주문 409. 5/s 실행의 실제 승인량은 약 4.47/s이다. 10/s 증량은 충돌률 10.7% 때문에 수행하지 않았다.
 - 점주 board: 80건 전부 성공, HTTP 200 56건과 304 24건. workflow p95 3,131ms에는 의도한 3초 sleep이 들어 있다.
-- decline: 결제까지 도달한 28건은 모두 기대한 422/PAYMENT_DECLINED. 전체 실패 3건은 결제 전 주문 409다. 정상 거절을 승인 실패나 HTTP 장애와 혼동하지 않는다.
+- decline: 결제까지 도달한 28건은 모두 기대한 422/PAYMENT_DECLINED였다. 실행기에서 실패로 집계한 3건은 결제 전에 발생한 주문 409다. Provider의 의도된 승인 거절과 주문 오류를 나눠 집계했다.
 - timeout: 16건 모두 확인 시 202/UNKNOWN 계열, 실행 내 follow-up까지 기대 상태를 만족했다. 실행 중 승인 counter는 0이지만, 이후 DB 조회에서 16건 모두 APPROVED로 reconciliation된 것을 확인했다.
 - unknown: 6건 모두 기대한 결과불명 응답. 후속 DB 조회 시 6건 UNKNOWN이며 최종 MANUAL_REVIEW 수렴은 아직 검증하지 않았다. 드라이버가 계속 IN_PROGRESS를 반환하도록 의도한 실험이다.
 - slot-lock: 18초 동안 합성 슬롯 한 행을 SELECT FOR UPDATE로 잠근 후 ROLLBACK했다. 59개 workflow 중 15개 stale, 1개 dropped iteration. 그 외 실행의 dropped는 0이다.
@@ -46,7 +46,7 @@ workflow는 HTTP 요청 수와 다르다. 숫자는 실행 종료의 native `sum
 
 같은 메뉴·슬롯의 견적 두 개를 먼저 받은 뒤 주문을 순서대로 제출했다. 첫 요청은 201, 다음 요청은 409 ORDER_QUOTE_STALE이었다. 오류의 currentQuote와 원래 quote는 표시 금액과 메뉴 구성이 같았다. `OrderQuoteCoordinator.kt`의 fingerprint는 공유 자원의 사용량 및 version을 포함한다. 다른 주문이나 만료·거절에 따른 자원 회수도 이를 바꾼다. 동일 자원을 공유하는 한 충돌이 남을 수 있다.
 
-5/s 구간 API CPU 최대 0.82 core, working set 최대 약 1.16 GiB/2 GiB, Hikari active 최대 3, pending 0, 관측된 미승인 DB lock 0이었다. 10초/15초 scrape에서 관측된 값이므로 짧은 미관측 대기까지 없었다는 주장은 하지 않는다. 그럼에도 이번 48건 실패가 견적 충돌이라는 응답·metric 증거는 명확하다.
+5/s 구간 API CPU 최대 0.82 core, working set 최대 약 1.16 GiB/2 GiB, Hikari active 최대 3, pending 0, 관측된 미승인 DB lock 0이었다. 10초/15초 scrape 사이의 짧은 대기는 누락될 수 있다. 이번 실패 48건은 응답 코드와 metric에서 모두 견적 충돌로 확인됐다.
 
 **우선 대응:** [ADR-116](../adr/ADR-116-non-reserving-order-quote.md)을 먼저 검토해 고객이 확인한 거래 의미와 순간적인 자원 점유 변화를 구분하는 fingerprint 계약을 설계한다. 가격·메뉴·benefit provenance·픽업 window 검증과 최종 트랜잭션의 원자적 자원 가용성 검증은 유지해야 한다. 변경한다면 fingerprint version, 동시 주문/마지막 슬롯/정책 변경 테스트를 함께 갱신해야 한다. 현재 ADR을 유지하는 동안에는 재조회·고객 재확인·새 멱등 키가 필요하며 무조건 자동 재시도로 성공 처리하면 안 된다. 이번 작업에서는 제품 정책을 변경하지 않았다.
 
@@ -54,7 +54,7 @@ workflow는 HTTP 요청 수와 다르다. 숫자는 실행 종료의 native `sum
 
 `d30aaae857cd9d0a49bcb9c7d36cccc3`: 전체 8,069.79ms 중 `beanflow.toss.confirm` 8,013.26ms. 같은 root span의 `pyroscope.profile.id=2d5dbe8a563a96ac`로 조회한 wall profile은 8.05초이며, 7.98초가 `TossOneTimePaymentGateway` → `CompletableFuture.get` → `LockSupport.park` 경로에 있다. DB pending은 0이고 active 최대 1이었다. 드라이버의 9초 응답 지연에 대해 앱이 약 8초에 결과불명으로 응답하는 의도된 현상이다.
 
-**대응:** timeout을 승인 실패로 단정하지 않고 기존 UNKNOWN/reconciliation을 유지한다. 연결 풀 증설로 해결할 문제가 아니다. 실제 결제망의 지연 분포와 사용자 대기 예산을 따로 측정한 뒤 deadline·화면 안내를 검토한다. UNKNOWN의 age와 최종 해소 상태를 계속 관측해야 한다.
+**대응:** 승인 여부를 알 수 없는 타임아웃은 기존 UNKNOWN/reconciliation으로 처리한다. 이 trace의 주된 대기는 외부 응답 구간에 있으므로, 커넥션 풀 증설보다 실제 결제망의 응답시간과 사용자 대기시간 기준을 먼저 측정한다. 그 결과로 deadline·화면 안내를 검토하고, UNKNOWN의 경과 시간과 최종 처리 상태를 추적한다.
 
 ### 3. DB 행 잠금은 낮은 CPU에서도 서비스 대기를 만든다 — 제어 실험
 
@@ -75,17 +75,17 @@ board 첫 네 요청은 약 0.85초이고 나머지는 대부분 짧았다. trac
 - 추가: 주문 예약 충돌 사유 패널(149), 선택 실행의 200ms 이상 trace 목록(150). 기존 전체 slow trace도 유지한다.
 - 수정: Tempo 검색 결과는 table frame이므로 기존 traces 시각화 대신 table을 사용했다. 브라우저에서 8초 confirmation trace들이 실제 목록으로 보이는 것을 확인했다.
 - 수정: Hikari 패널(4)은 구간 최대값과 10초 최소 간격을 사용한다. 기존 15초 query step은 10초 scrape의 짧은 포화를 놓쳤다. 수정 후 브라우저에서 active 10/pending 5 피크와 회복을 확인했다. 두 최대값은 구간 내 서로 다른 순간일 수 있음을 설명에 명시했다.
-- PromQL 84개를 실제 서버에서 조회해 모두 성공했고, 잠금 구간에서 82개에 데이터가 있었다. 나머지를 0/성공으로 대체하지 않는다. dashboard contract와 DB wait의 7개 가용성 사례 검증도 통과했다.
+- PromQL 84개를 실제 서버에서 조회해 모두 성공했고, 락 실험 구간에서는 82개에 데이터가 있었다. 나머지 조회는 데이터 없음으로 기록했다. dashboard contract와 DB wait의 7개 가용성 사례 검증도 통과했다.
 - 9개 실행 모두 k6 remote-write series ingest와 Grafana annotation 게시를 확인했다. 짧은 실행은 마지막 표본과 native summary의 합계가 다를 수 있어 최종 건수는 summary를 사용했다.
 - 정확한 span ID로 Pyroscope profile을 조회했으며, 단순히 같은 시간의 전체 JVM profile과 구분했다. exemplar 클릭부터 동일 trace log까지 UI 전체 이동은 이번 검증 범위에 포함하지 않았다.
-- 전체 wall flame graph는 모든 스레드의 대기 포함 시간을 합한다. 브라우저에서 약 2분 구간에 누적 3.07시간이 표시된 것은 이 집계 의미이며 CPU를 3시간 소비했다는 뜻이 아니다. 상단 libc/park 항목만으로 병목을 단정하지 않고 위 exact span profile로 요청 경로를 확인했다.
+- 전체 wall flame graph는 여러 스레드의 대기시간까지 합산한다. 약 2분 구간의 누적 3.07시간은 이 합산 값이며, CPU 사용시간은 별도 지표로 확인해야 한다. 요청별 원인 분석에는 위 span ID와 일치하는 profile을 사용했다.
 - 중앙 dashboard provisioning 파일을 백업 후 반영했고 datasource 설정은 재적용하지 않았다. 백업: 모니터링 서버 `/home/kdh949/beanflow-dashboard-before-load-analysis-1788786582.json`.
 
 ## 종료 상태와 해석 한계
 
 부하 발생과 잠금 주입은 종료했다. API/DB/frontend/driver는 healthy이고 BeanFlow 수집 대상 5개는 UP이다. DB lock wait 0, 회복 실행 pending 0, 멱등성 46건 성공을 확인했다. 앱 파일시스템은 23 GiB 중 81% 사용, 잔여 약 4.3 GiB였다. 장시간 soak 전에는 디스크 용량 수집·경보와 로그/trace 보관량을 점검해야 한다.
 
-합성 데이터와 결과불명 결제 6건은 진단 증거로 남겨 두었다. 실제 트래픽, 전체 사용자 경험, 여러 매장·대규모 backlog, WAF 한계, 장시간 안정성, 실결제망 capacity 또는 성능 개선을 증명한 결과가 아니다. 1/s와 5/s 실행은 데이터 누적·예열·배경 worker 조건이 달라 엄격한 성능 개선 비교로 사용할 수 없다.
+합성 데이터와 결과불명 결제 6건은 후속 진단을 위해 보존했다. 실제 트래픽, 전체 사용자 경험, 여러 매장·대규모 backlog, WAF 한계, 장시간 안정성과 실제 결제망 capacity는 미측정 항목이다. 1/s와 5/s 실행은 데이터 누적·예열·background worker 조건이 달라, 성능 개선율을 비교하려면 이 조건을 맞춘 추가 실행이 필요하다.
 
 - Passed: 부하 실행/증거 수집, 정상 거절·UNKNOWN 의미 검증, timeout 후 APPROVED 16건, 회복/멱등성, dashboard 실제 배포 및 브라우저 검증.
 - Failed: 정상 주문의 stale 허용률 기준, 의도한 DB lock 실행의 오류율·dropped 기준. 숨기거나 threshold를 낮춰 정상 처리량으로 재분류하지 않았다.

@@ -18,7 +18,7 @@ seed도, 토큰 발급 수단도 없어 수동 SQL과 임의 JWT를 만들어야
 
 이 작업은 짧은 명령열로 PostGIS와 ephemeral JWKS endpoint를 띄우고, 정책을 bootstrap하고,
 결정적 fixture를 만들고, 고객→점주→포인트→정산 흐름을 실제 HTTP로 smoke 검증하는 `local-demo`
-환경을 만든다. 인증을 끄거나 validation을 완화하지 않으며, 실패는 성공으로 위장하지 않는다.
+환경을 만든다. 실제 인증·validation·도메인 규칙을 적용하고, 실패한 단계는 오류와 exit code로 확인한다.
 
 ## Current State
 
@@ -77,7 +77,7 @@ seed도, 토큰 발급 수단도 없어 수동 SQL과 임의 JWT를 만들어야
 - 고객 좌표는 fixture에도 저장하지 않는다(BR-28). 매장 좌표만 둔다.
 - 필수 정책이 없다고 조용히 default를 만들지 않는다. bootstrap 단계와 결과를 출력한다.
 - reset은 지정한 demo DB만 대상으로 하고 이름이 정확히 일치할 때만 수행한다.
-- demo adapter 실패를 성공으로 위장하지 않는다. smoke는 실패 시 0이 아닌 exit code를 낸다.
+- demo adapter가 실패하면 smoke도 0이 아닌 exit code로 종료한다.
 
 ## Architecture and Transaction Boundaries
 
@@ -257,11 +257,12 @@ Milestone 1~5가 모두 구현·검증됐다.
 
 추가로 "필수 정책이 없으면 seed가 실패한다"를 `LocalDemoSeedIntegrationTest`가 고정한다.
 
-**증명하지 않은 것**
+<a id="증명하지-않은-것"></a>
 
-- smoke **성공** exit code는 위의 실제 실행으로만 확인했고 자동 테스트로 고정하지 않았다.
-  전체 흐름의 성공 응답을 stub으로 흉내 내면 이 plan이 금지한 "실패를 성공으로 위장"을 테스트가
-  스스로 하게 되므로, 실패 경로만 자동화하고 성공은 실행 증거로 남긴다.
+**자동 테스트 범위와 미실행 항목**
+
+- smoke의 **성공** exit code는 위의 실제 실행에서 확인했다. 자동 테스트는 실패 경로를 검증하며,
+  성공 경로의 확인에는 실제 서비스가 응답한 smoke 실행 결과를 사용한다.
 - reset guard의 runtime 디렉터리 조건은 자동 테스트에서 일치 경로만 실행된다. 불일치 경로를
   실행하려면 실제 삭제 대상 경로를 바꿔야 해 위험하므로 코드 검토로만 확인했다.
 - 정산 Batch 생성 조건이 충족되는 시나리오.

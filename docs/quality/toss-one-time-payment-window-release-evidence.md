@@ -118,10 +118,10 @@ export SPRING_PROFILES_ACTIVE='toss-sandbox-runtime'
 
 ## 남은 위험
 
-- 공식 sandbox auth simulation은 실제 국내 카드사 인증 동작·카드사별 차이를 증명하지 않는다.
-- 매장 수락 timeout Refund의 `PaymentRefundedV1` settlement publication은 고객 직접 취소 증적과
-  일치하지 않아 기존 fail-closed `SETTLEMENT_SOURCE_CONFLICT` 재처리 backlog에 남았다. 환불 성공과
-  정산 publication 완료를 같은 결과로 보고하지 않는다.
+- 공식 sandbox auth simulation으로 결제 연동 흐름을 확인했다. 실제 국내 카드사 인증 동작과 카드사별 차이는 별도 검증 대상이다.
+- 매장 수락 timeout Refund의 `PaymentRefundedV1` settlement publication은 고객 직접 취소 내역과
+  일치하지 않아 기존 fail-closed `SETTLEMENT_SOURCE_CONFLICT` 재처리 backlog에 남았다. 환불은 성공했고
+  정산 publication은 미완료 상태였다.
 - 운영자 부분·잔액 환불로 현금 잔액이 이미 0원이 된 미수락 Order도 이후 수락 timeout에서
   `REJECTED`로 전이됐고, rejection PAYMENT step은 `already partially refunded`로 fail-closed backlog에
   남았다. 중복 Provider 환불은 호출하지 않았지만 이 조합의 Order 보상 종결에는 별도 reconciliation이

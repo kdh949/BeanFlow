@@ -56,9 +56,9 @@ cached/stale owner 값 또는 가짜 슬롯으로 성공하지 않는다.
 
 ### 2. 하나의 versioned canonical fingerprint 함수를 공유한다
 
-quote와 최종 주문 생성은 `order-quote-fingerprint/v2` canonical material과 SHA-256 소문자 hex
-함수를 공유한다. transport는 fingerprint를 opaque 문자열로 취급하며 client가 내용을 해석하거나
-계산하지 않는다. `quotedAt`은 정보용이므로 material에 포함하지 않는다.
+견적과 최종 주문 생성은 `order-quote-fingerprint/v2`의 동일한 필드 구성과 SHA-256 소문자 hex
+계산 함수를 사용한다. API는 fingerprint를 서버가 계산한 문자열로 전달하며, 클라이언트는 이를
+해석하거나 다시 계산하지 않는다. `quotedAt`은 정보용이므로 fingerprint 계산에서 제외한다.
 
 V2 material은 최소한 다음 전체 의미를 결정적으로 포함한다. V2는 Store/Menu의 표시·이미지 변경에도
 증가하는 coarse persistence version을 제외하고, Store 주문/pickup policy와 선택된 메뉴·옵션의 이름,
@@ -69,7 +69,7 @@ V2 material은 최소한 다음 전체 의미를 결정적으로 포함한다. V
 - benefit snapshot: coupon source/terms/version과 line 배분, 실제 적용 포인트와 lot issuer provenance,
   적용 policy version
 - pickup snapshot: slot 식별자·시작/종료, Store 주문/pickup policy, 용량 eligibility와 관련 owner version
-- authoritative output: Store 표시 snapshot, line snapshot, subtotal·coupon·point·payable·currency
+- 서버 계산 결과: Store 표시 snapshot, line snapshot, subtotal·coupon·point·payable·currency
 
 식별자 목록과 option selection은 명시적인 안정 정렬을 사용하고, null과 empty를 같은 값으로
 암묵 정규화하지 않는다. canonical serializer나 필드 집합을 바꾸면 prefix version을 올리고 quote와
@@ -138,8 +138,8 @@ fresh quote는 quote endpoint와 새 key로 얻는다.
 
 read-only quote는 customer에게 server 계산을 보여 주면서 자원 hold의 운영 비용을 만들지 않는다.
 full fingerprint는 금액뿐 아니라 거래 구성과 귀속을 optimistic precondition으로 묶는다. 최종 transaction
-안의 재계산과 기존 lock이 authority를 유지하고, BR-25 terminal replay가 네트워크 재시도를 새 주문
-시도로 바꾸지 않는다.
+안에서는 기존 락을 잡은 상태에서 다시 계산한 결과로 주문을 확정한다. BR-25에 따라 같은 요청의 확정 결과를 반환하므로
+네트워크 재시도로 새 주문이 만들어지지 않는다.
 
 ## Consequences
 
@@ -167,8 +167,9 @@ full fingerprint는 금액뿐 아니라 거래 구성과 귀속을 optimistic pr
 
 ## Revisit Conditions
 
-가격 보장 기간, 장시간 cart hold, 사전 결제 승인, 분산 owner 저장소, 저장 quote 감사 증적 또는 quote
-전환율 측정에 persistent identity가 필요할 때 reservation/quote Aggregate를 별도 결정으로 재검토한다.
+가격 보장 기간, 장시간 cart hold, 사전 결제 승인 또는 분산 owner 저장소가 필요해질 때
+reservation/quote Aggregate를 별도 결정으로 재검토한다. 감사 목적으로 견적을 보존하거나
+quote 전환율을 측정하기 위해 persistent identity가 필요한 경우도 재검토 대상이다.
 
 ## Related Decisions
 

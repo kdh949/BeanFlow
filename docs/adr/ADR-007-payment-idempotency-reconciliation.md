@@ -27,10 +27,10 @@
 - 등록은 `actorId + REGISTER_PAYMENT_METHOD_V1 + Idempotency-Key` scope의 사전등록 모델이다.
 - Tx R1은 intended PaymentMethod, `authKey` SHA-256, alias, CSPRNG provider reference와 work를
   commit하고 Provider는 transaction 밖에서 claim당 한 번 호출한다. raw authKey는 저장하지 않는다.
-- 같은 key/payload는 최초 terminal 또는 현재 non-terminal result를 반환하고, 다른 payload와
-  다른 key의 같은 authKey hash는 Provider 호출 전에 409로 거부한다.
-- claim 뒤 timeout·응답 유실·process loss는 authKey를 재전송하지 않는다. Provider lookup이
-  없으면 새 side effect 없이 `MANUAL_REVIEW`로 종결한다.
+- 같은 key/payload 요청에는 이미 확정된 결과 또는 현재 처리 상태를 반환한다. key는 같고 payload가
+  다르거나, 다른 key로 같은 authKey hash를 보내면 Provider 호출 전에 409로 거부한다.
+- 작업을 가져간 뒤 타임아웃·응답 유실·프로세스 종료로 결과를 알 수 없으면 authKey를 재전송하지 않는다.
+  Provider가 결과 조회를 지원하지 않으면 추가 호출 없이 `MANUAL_REVIEW`로 전환한다.
 - registration 설정·인증 결함이 side effect 부재를 확인한 경우만 같은 key가 설정 수정 뒤 새
   claim을 획득할 수 있다. deactivation 설정 결함은 DELETE 재호출 없이 manual review다.
 
@@ -41,10 +41,10 @@
   non-terminal result를 반환하고 같은 key/다른 target은 409로 거부한다.
 - Tx D1이 deactivation state, work와 멱등 상태를 commit한 뒤 짧은 transaction에서 claim하고
   Provider DELETE는 transaction 밖에서 한 번만 호출한다.
-- claim 뒤 timeout·응답 유실·process loss와 result 저장 실패에서는 Provider가 DELETE 멱등키나
-  결과 조회를 보장하지 않으므로 DELETE를 자동 재호출하거나 not-found를 성공으로 간주하지 않는다.
-  검증된 `BILLING_DELETED`로만 자동 수렴하고 최초 unknown 판정부터 96시간 뒤에는
-  `MANUAL_REVIEW`로 종결한다.
+- 작업을 가져간 뒤 타임아웃·응답 유실·프로세스 종료 또는 결과 저장 실패가 발생하면 결과 불명 상태로 둔다.
+  Provider가 DELETE 멱등키와 결과 조회를 보장하지 않으므로 자동 재호출은 차단한다.
+  후속 not-found 응답만으로는 폐기 성공 여부를 확인할 수 없어, 검증된 `BILLING_DELETED`를 받아야 자동 완료한다.
+  최초 unknown 판정부터 96시간 뒤에도 확인되지 않으면 `MANUAL_REVIEW`로 전환한다.
 
 ## Alternatives Considered
 

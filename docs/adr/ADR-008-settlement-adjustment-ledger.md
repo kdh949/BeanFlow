@@ -35,9 +35,9 @@
 - 중복 Adjustment 방지
 - 다음 배치 상계 tie-out
 - **2026-08-03 정산 입력 처리:** V21과 Settlement consumer는 `COMPLETED` source만 immutable
-  Item으로 만들고, 고객 취소 Refund에는 Item/Adjustment 없이 실제 Order/Refund evidence와
-  source-unique `SETTLEMENT_REFUND_EXCLUDED` Audit만 남긴다. existing Item, source mismatch와
-  Audit rollback은 성공 처리되지 않는 통합 테스트로 검증했다.
+  Item으로 만든다. 고객 취소 Refund는 실제 Order/Refund 내역을 확인하고, source별로 유일한
+  `SETTLEMENT_REFUND_EXCLUDED` Audit을 남기며 Item/Adjustment는 생성하지 않는다.
+  기존 Item이 있거나 source가 다르거나 Audit 저장이 롤백되면 처리 실패로 남는지 통합 테스트로 검증했다.
 - **2026-08-03 정산 처리:** V28~V29와 Settlement Application Service는
   confirmed Item/Batch에만 append-only Adjustment를 허용하고 source/reason unique와 mutation
   trigger로 중복·변경을 막는다. completed Refund와 accepted Dispute는 각각 stable source로
