@@ -131,7 +131,8 @@ internal class OperatorCouponCampaignService(
         if (pageSize !in 1..MAX_PAGE_SIZE) invalid("limit must be between 1 and $MAX_PAGE_SIZE")
         val after = cursor?.let { cursors.verify(it, campaignCursorScope()).sort }
         val page = campaigns.list(after?.createdAt, after?.campaignId, pageSize)
-        val views = page.campaigns.map(::view)
+        val storesById = stores.requireAll(page.campaigns.map(LimitedCouponCampaignSnapshot::storeId))
+        val views = page.campaigns.map { campaign -> view(campaign, storesById.getValue(campaign.storeId).name) }
         val nextCursor =
             if (page.nextCreatedAt != null && page.nextCampaignId != null) {
                 cursors.issue(
