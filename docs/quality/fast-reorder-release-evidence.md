@@ -103,11 +103,11 @@
 - 검증 환경은 macOS arm64, Java/Gradle wrapper 9.6.1과 Docker Testcontainers의 PostgreSQL이다.
   최초 완료 baseline은 120 suites/561 tests였고 review correction 뒤 clean build는
   121 suites/568 tests다. 두 실행 모두 benchmark 성격의 기존 test 1개가 skipped 상태다.
-- 측정한 계약 inventory는 target/runtime 각각 28 paths/30 operations다. 테스트 시간은 위 명령의
-  Gradle wall time이며 production latency나 throughput이 아니다.
+- 확인한 API 명세는 target/runtime 각각 28 paths/30 operations다. 기록한 테스트 시간은
+  위 Gradle 명령의 전체 실행시간이다. 서비스 응답시간과 처리량은 아래 미측정 항목에 포함된다.
 - 실제 non-local migration/deployment, external Provider 장애 주입, production traffic과
   p50/p95/p99, source age, lock wait, item-unavailable 비율, retention throughput은 측정하지 않았다.
-  따라서 성능 개선, SLA 또는 배포 성공을 주장하지 않는다.
+  이번 결과는 로컬 구현·테스트 범위이며, 성능 비교와 SLA 검증, 원격 배포 확인은 후속 작업이다.
 - 최초 non-local migration 전 terminal idempotency corruption precheck와 V36 forward-only 적용을
   환경별로 확인한다. runtime traffic이 생기면 bounded metric으로 latency, stuck PROCESSING,
   MANUAL_REVIEW, owner 503와 retention backlog의 기준선을 먼저 수집한다.

@@ -10,7 +10,7 @@
 사용량이 바뀔 때 v2 견적이 무효화되는 동작이었다.
 [ADR-123](../adr/ADR-123-order-quote-trade-terms-and-shared-availability.md)에 따라 v3 fingerprint에서
 공유 자원의 사용량과 version만 제외했다. 가격·메뉴·옵션·혜택 귀속·픽업 시간/정원
-비교와 최종 트랜잭션의 owner row lock 및 실제 잔여량 검사는 유지한다.
+비교는 유지하고, 최종 트랜잭션에서 자원 담당 모듈의 row lock을 잡고 실제 잔여량을 검사한다.
 
 - 변경 전: 새 회귀를 포함한 19개 중 독립 owner 전이, 충분한 자원의 사전 견적 동시 주문 3개가 실패했다.
 - 변경 후: 동일 19개와 관련 77개 class의 368개 테스트가 모두 통과했다. 마지막 자원의 동시 주문은 한 건만 성공하고, 나머지는 typed failure로 종료하며 같은 키로 재생된다.
@@ -42,16 +42,17 @@ API 2 GiB, PostgreSQL 1.5 GiB, Hikari max 10, perf trace sampling 1.0과 wall pr
 `bf-0908-v2-baseline-r5`와 `bf-0908-v3-contention-r5`의 rate·duration·VU·script hash·논리 데이터셋·
 발생기·k6 버전·메모리/JVM/계측 설정·의존 이미지 비교는 모두 일치했다. fixture hash도 동일하다.
 
-누적 데이터와 접수 만료·환불 background worker, API 재시작 및 예열 차이는 남는다. 따라서 같은
-설정의 오류율 비교를 동일 DB snapshot 실험이나 엄격한 지연 개선율로 해석하지 않는다.
+전후 실행은 부하 설정과 fixture가 같지만 누적 데이터, 접수 만료·환불 background worker의 작업량,
+API 재시작과 예열 상태는 달랐다. 이번 비교는 견적 충돌 건수에 초점을 맞췄다.
+지연 개선율을 비교하려면 DB snapshot과 background 작업량, 예열 조건까지 맞춘 실험이 필요하다.
 기준선은 로컬 compile/test를 종료한 뒤 실행했고 v3 측정 중에도 로컬 build/test를 하지 않았다.
-예열은 별도 30초 실행으로 기록했으며 JVM이 완전히 동일하게 예열됐다는 증거는 아니다.
+예열은 별도 30초 실행으로 기록했다. JVM의 예열 상태 자체는 전후에 동일한지 확인하지 못했다.
 
 ## 실행 결과
 
-workflow/s는 HTTP RPS와 다르다. v3 정상 흐름은 workflow당 HTTP 4회이며 총 12,480회 요청했다.
-최종 건수는 native k6 summary 기준이다. PASSED는 HTTP p95 1초, 실패율 1%, 미투입 0 등의
-실행기 기준을 통과했다는 뜻이며 승인된 서비스 SLO나 최대 처리 용량을 뜻하지 않는다.
+workflow/s는 초당 시작하는 주문 시나리오 수다. v3 시나리오 하나는 HTTP 4회로 구성되며 총 12,480회 요청했다.
+최종 건수는 k6 summary를 기준으로 집계했다. PASSED는 HTTP p95 1초, 실패율 1%, 미투입 0 등의
+실행기 기준을 통과한 결과다. 서비스 SLO와 최대 처리 용량은 별도 측정 대상이며,
 전체 workflow p95에는 별도의 1초 threshold를 설정하지 않았다.
 
 | 실행 | 시작률 · 투입 시간 | VU 사전 / 상한 | 완료 / 승인 | 실패 | 미투입 | HTTP p95 / p99 | workflow p95 | 판정 |
@@ -70,20 +71,20 @@ workflow/s는 HTTP RPS와 다르다. v3 정상 흐름은 workflow당 HTTP 4회�
 
 v2 기준선은 서버 quote conflict counter가 112→149로 37건 증가했고 DB에도 주문 409가 37건
 남았다. v3의 3,120개 workflow는 모두 201 주문과 APPROVED 결제에 대응한다. 별도 재현과
-회귀 테스트도 사용량 변화에 견적이 안정적임을 확인했다. 단순히 오류를 무시하거나 재시도해
-성공률을 올린 결과가 아니다.
+회귀 테스트도 사용량 변화에 견적이 안정적임을 확인했다. 자동 재견적이나 오류 재시도 없이
+3,120건 모두 주문 생성과 결제 승인까지 완료했다.
 
 종료 후 repeatable-read read-only DB snapshot에서 실행별 멱등 레코드·distinct order·결제 승인
 건수가 native summary와 일치했다. 공유 자원 counter와 활성 reservation 합계의 불일치는 0,
 슬롯 초과 예약 0, 조회 당시 Lock waiting session 0이었다. 마지막 한 개 자원의 초과 예약 방지는
-별도 PostgreSQL 동시성 테스트로 검증했다. 여유로운 자원을 쓴 부하 실행만으로 이를 증명하지 않는다.
+별도 PostgreSQL 동시성 테스트로 검증했다. 부하 실행은 자원이 충분한 조건에서 견적 충돌이 사라졌는지를 확인했다.
 
 ### 2. 최초 5/s의 미투입은 VU 사전 확보 후 재실행에서 사라졌다
 
 동일 조건의 v2/v3 실행 모두 미투입 1건, 실제 초기 VU 10개에서 할당된 최대 11개였다.
 v3의 VU 20/20 재실행은 450건 완료·승인과 미투입 0으로 통과했다. 발생기의 사전 VU 확보가
-필요하다는 실측 근거다. 뒤 실행은 예열·누적 데이터도 달라 VU만의 인과 효과나 지연 개선율까지
-분리해서 입증한 것은 아니다. 원래 FAILED 결과와 threshold를 그대로 보존한다.
+필요함을 보여준다. 뒤 실행은 예열·누적 데이터도 달라, VU 변경만의 효과를 보려면 이 조건을 맞춰
+다시 비교해야 한다. 최초 실행의 FAILED 판정과 threshold는 그대로 기록했다.
 [k6 공식 설명](https://grafana.com/docs/k6/latest/using-k6/scenarios/concepts/arrival-rate-vu-allocation/)도
 iteration 시간 변동에 맞춰 VU를 사전 확보하고 실행 중 동적 할당의 영향을 고려하도록 안내한다.
 
@@ -91,7 +92,7 @@ iteration 시간 변동에 맞춰 VU를 사전 확보하고 실행 중 동적 �
 
 v3 최초 5/s의 HTTP p95는 236.7ms, workflow p95는 935.3ms로 v2의 105.7ms/290.8ms보다 컸다.
 같은 조건에서도 처리에 성공한 주문·결제가 413→450건으로 늘었고 예열·배경 작업이 달라졌다.
-따라서 이번 변경을 응답 속도 개선으로 설명하지 않는다.
+견적 충돌은 줄었지만 이 실행의 응답시간은 증가했다.
 
 5/s trace `265ab3b109e678ae78ae51559f2e8362`의 주문 1,140.96ms 중 공유 행 잠금 조회가
 583.21ms, 슬롯 잠금 조회가 390.49ms였다. 동일 root span의 profile `0e9652b12c7bc936`은
@@ -106,7 +107,7 @@ trace `39135d683a75bbe5df1812dc020df9cd`의 confirmation 1,761.74ms 중 슬롯 �
 
 다음 개선은 잠금을 보유한 transaction의 query/flush 순서와 소요 시간을 확인하고, 동일 자원 경합
 시나리오와 자원을 분산한 시나리오를 비교하는 것이다. 변경 시 현재 owner 잠금과 원자적 잔여량
-검사, 멱등성은 보호해야 한다. PostgreSQL의 행 잠금은 transaction 종료까지 유지되므로 잠금 구간을
+검사, 멱등성은 보호해야 한다. PostgreSQL의 row lock은 트랜잭션 종료까지 유지되므로 락 보유 구간을
 검토할 근거가 있다. [PostgreSQL 문서](https://www.postgresql.org/docs/current/explicit-locking.html)
 
 ### 4. 20/s 통과는 장시간 안정성이나 용량 상한의 증거가 아니다
@@ -117,15 +118,17 @@ trace `39135d683a75bbe5df1812dc020df9cd`의 confirmation 1,761.74ms 중 슬롯 �
 앱 디스크는 종료 시 86% 사용, 여유 약 3.1 GiB이므로 장시간 측정 전에 보관량과 용량을 점검한다.
 이 작업에서 DB volume이나 rollback 이미지는 삭제하지 않았다.
 
-## Grafana와 증거 경계
+<a id="grafana와-증거-경계"></a>
+
+## Grafana 측정 범위와 한계
 
 - 브라우저에서 v3의 실행 ID와 정확한 시간 범위를 선택해 요청량, 연결 풀, DB lock/wait 그래프를 직접 확인했다. 5/s 초반 active 10/pending 2, 20/s active 10/pending 5 피크가 보였다.
 - v3 6회 모두 k6 remote-write ingest와 Grafana annotation 게시를 확인했다. 기존 지연·자원·충돌·trace 패널로 이번 분석이 가능해 dashboard/schema는 추가 변경하지 않았다.
-- 서버 지표는 해당 시간 전체 트래픽이다. k6 전송 완료를 위해 수집한 종료 후 15초 padding은 자원 통계에서 제외했다. 1/s의 padding에 다음 5/s가 포함된 표본을 1/s 포화로 잘못 집계하지 않았다.
+- 서버 지표는 해당 시간의 전체 트래픽을 포함한다. k6 전송 완료를 위해 수집한 종료 후 15초 padding은 자원 통계에서 제외했다. 1/s 실행 뒤 padding에 들어온 다음 5/s 부하의 표본도 1/s 통계에서 제외했다.
 - 10초/15초 scrape 표본은 더 짧은 잠금을 놓칠 수 있다. 예를 들어 10/s의 ungranted lock 표본 최대 0이어도 느린 trace에는 수백 ms의 잠금 조회가 있었다.
-- 상단 rate 카드와 마지막 Prometheus 표본은 native summary의 최종 건수가 아니다. 실행 종료 후 No data를 성공·실패·0건으로 대체하지 않는다.
-- Tempo 검색은 실행 ID와 200ms 이상 조건, 최대 100개 결과 중 느린 표본을 조회했다. 전체 느린 요청 개수나 전체 지연 분포로 사용하지 않는다.
-- 5/s의 exact span profile은 조회됐지만 20/s 대표 두 span profile의 첫 조회는 빈 결과였다. 이 결과를 CPU 사용량 0 또는 원인 해소로 해석하지 않는다. 20/s 원인 근거는 trace·DB wait·pool 관측이다.
+- 최종 요청 건수는 k6 summary를 사용한다. 상단 rate 카드와 마지막 Prometheus 표본은 특정 시점의 값이며, 실행 종료 뒤 No data는 수집된 표본이 없음을 나타낸다.
+- Tempo에서는 실행 ID와 200ms 이상 조건으로 최대 100개의 느린 요청을 조회했다. 분석 범위는 이 표본이며, 전체 느린 요청 수와 지연 분포는 별도 집계가 필요하다.
+- 5/s의 해당 span profile은 조회됐지만 20/s 대표 두 span profile은 첫 조회에서 비어 있었다. 따라서 20/s의 원인 분석에는 trace, DB wait와 커넥션 풀 지표를 사용했다. 비어 있던 profile의 CPU 사용량은 확인하지 못했다.
 
 ## 종료 상태와 후속 범위
 
@@ -133,7 +136,7 @@ trace `39135d683a75bbe5df1812dc020df9cd`의 confirmation 1,761.74ms 중 슬롯 �
 5개는 UP이다. 부하 종료 후 active/pending과 DB Lock waiting session은 0으로 회복했다.
 
 - Passed: 코드 회귀/동시성·관련 368개 테스트, 전체 CI, 이미지 smoke/build/publish, API 배포, 직접 재현·terminal replay, DB 정합성, 1/s·5/s VU20·10/s·20/s 실행 및 telemetry/Grafana 확인.
-- Failed: 동일 조건의 첫 v3 5/s 실행은 미투입 1건 때문에 실행기 전체 기준 실패. 주문·결제 실패는 0건이며 재실행으로 원본 판정을 지우지 않는다.
+- Failed: 동일 조건의 첫 v3 5/s 실행은 미투입 1건 때문에 실행기 전체 기준 실패. 주문·결제 실패는 0건이었다. 이후 재실행 결과와 최초 실패를 각각 기록했다.
 - Not run: 장시간 soak/stress/capacity 상한, 실제 결제망, 여러 매장·메뉴를 분산한 workload, 잠금 구간 최적화 후 비교, v3 외부 결제 timeout/unknown 재주입.
 
 원본 manifest/summary/Prometheus/trace/profile은 저장소 밖의 private 디렉터리에 보관한다.
@@ -144,8 +147,8 @@ credential/fixture와 원본 계정·세션은 증거 묶음 및 저장소에서
 
 동일 5/s·90s·pre/max VU 10/20 조건이다. 두 실행 모두 dropped 1로 전체 threshold는 FAILED다.
 workflow 오류 37/450 → 0/450을 확인했으며 HTTP p95는 105.7 → 236.7ms로 증가했다.
-견적 안정성 개선을 응답 속도 개선으로 해석하지 않는다. 현재 패널의 0~100% 고정 축으로 과거 데이터를
-조회했다. 캡처의 rolling 값과 native 최종 통계는 다를 수 있다.
+이 비교에서는 견적 충돌이 줄고 HTTP 응답시간은 늘었다. 현재 패널의 0~100% 고정 축으로 과거 데이터를
+조회했다. 캡처는 이동 구간의 값, 표는 실행 전체의 k6 최종 통계다.
 
 ![견적 v2 실패율](assets/quote-stability/quote-before-failures.png)
 
@@ -154,6 +157,6 @@ workflow 오류 37/450 → 0/450을 확인했으며 HTTP p95는 105.7 → 236.7m
 ## 캡처 파일의 CI 등록
 
 PR에 추가한 PNG가 기존 저장소 안전성 테스트의 명시적 바이너리 목록에 없어 CI가 실패했다.
-검토한 이 PR 시리즈의 Grafana PNG 14개 경로만 공통 목록에 등록했다. 새 확장자 전체를 제외하거나
-비밀 패턴 검사를 비활성화하지 않는다. `LocalDemoRepositorySafetyTest` 5개 테스트를 로컬에서
+검토한 Grafana PNG 14개의 경로만 공통 목록에 등록하고, 다른 바이너리와 비밀 패턴 검사는 유지했다.
+`LocalDemoRepositorySafetyTest` 5개 테스트를 로컬에서
 통과시켰으며, 변경된 각 PR head의 전체 CI를 다시 실행한다.

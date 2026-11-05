@@ -191,7 +191,7 @@ inventory를 다시 확인하며 하나라도 생기면 V8/V9/V22 clean cutover�
   initialization failure와 1 skip, exit 1. 기능 assertion 실패가 아니라 `OutOfMemoryError`였으며
   실패를 release success로 계산하지 않는다.
 - completion audit에서 violation-only scanner backlog 진행, customer/operator/Refund worker/Settlement
-  즉시 감지, Refund/snapshot 단독·동시 누락과 source/amount 위반, 감지 증적 저장 실패 rollback을
+  즉시 감지, Refund/snapshot 단독·동시 누락과 source/amount 위반, 감지 기록 저장 실패 시 롤백을
   추가 검증했다.
 - test-only `maxHeapSize = "1g"` 보정 뒤 최종 `./gradlew clean build`: Passed, 358 tests,
   failures/errors/skips 0, 2분 25초, exit 0.

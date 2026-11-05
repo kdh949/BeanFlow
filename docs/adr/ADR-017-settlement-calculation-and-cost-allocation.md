@@ -37,7 +37,7 @@ BR-16~BR-21은 완료 주문의 일별 정산, 거래 당시 수수료율, 쿠�
   Merchant/Campaign/Loyalty 값을 조회해 Item을 만들지 않는다.
 - **Implementation evidence (2026-08-02):** V18–V20과 주문 생성 Application Service가
   versioned Merchant terms, CouponReservation final two-leg burden, PointReservation issuer
-  allocation을 Order당 하나의 immutable `OrderSettlementInputSnapshot`으로 물질화한다.
+  allocation을 Order별 immutable `OrderSettlementInputSnapshot` 하나로 만들어 저장한다.
   `OrderCompletedV2` factory/validator는 이 snapshot과 matching Payment approval fact만 받아
   exact ADR-068 payload를 만든다. Plan 15는 completion outbox, producer activation, Settlement
   Item/Batch/Adjustment를 추가하지 않았다.

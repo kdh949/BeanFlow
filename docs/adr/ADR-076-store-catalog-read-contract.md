@@ -6,12 +6,12 @@
 
 ## Context
 
-`PickupReservationService.reserve`는 슬롯 row lock, store 소속, 멱등 replay, capacity만 검증하고
-슬롯의 시간은 전혀 보지 않았다. 그래서 이미 시작했거나 이미 끝난 슬롯도 `pickupSlotId`만 알면
-예약할 수 있었고, `reserved_count`가 올라간 뒤 아무도 픽업할 수 없는 주문이 만들어졌다.
+`PickupReservationService.reserve`는 슬롯 row lock, store 소속, 동일 요청의 기존 결과와 capacity를
+검증했지만 시간 조건은 검사하지 않았다. 이미 시작했거나 끝난 슬롯 ID로도 예약이 가능해,
+픽업 시간이 지난 주문의 `reserved_count`가 증가하는 문제가 있었다.
 
 `GET /stores/{storeId}/pickup-slots`는 [MD-2026-010](../decisions/minor-decisions.md)에서
-`ends_at > now`를 읽기 창으로 잡았다. 읽기 창과 쓰기 창이 달랐고, 그 사실은 문서에만 남아 있었다.
+`ends_at > now`인 슬롯을 조회했다. 목록에 표시하는 조건과 실제 예약을 허용하는 조건이 달랐다.
 그 상태에서는 두 가지가 동시에 성립했다.
 
 - 목록에 보이는 슬롯(진행 중인 슬롯)이 예약 가능한 슬롯보다 넓다.
@@ -27,8 +27,8 @@ Store도 슬롯을 노출했다. 네 가지 모두 같은 공개 read 계약의 
 
 ## Decision
 
-픽업 슬롯의 예약 가능 창은 **슬롯이 시작하기 전까지**다. 주입된 `Clock` 기준으로
-`startsAt > now`인 슬롯만 예약할 수 있고, 조회 창은 이 창과 정확히 같다.
+픽업 슬롯은 **슬롯이 시작하기 전까지** 예약할 수 있다. 주입된 `Clock` 기준으로
+`startsAt > now`인 슬롯만 목록에 표시하고 예약 요청에도 같은 조건을 적용한다.
 
 ### Write path
 
@@ -137,13 +137,12 @@ production SLA 또는 쓰기 비용 측정은 아니다.
 
 ## Rationale
 
-읽기 창과 쓰기 창이 하나면 "목록에 있으면 예약할 수 있다"가 계약이 되고, 클라이언트가 두 창의
-차이를 알 필요가 없다. 판정 기준을 `startsAt` 하나로 두면 시간 비교가 단조로워 경계 정의가
-모호해지지 않는다.
+목록 조회와 예약 요청에 같은 시간 조건을 적용하면, 목록에 표시한 슬롯을 예약 대상으로 사용할 수 있다.
+두 경로 모두 `startsAt`을 기준으로 판단해 슬롯 시작 시각의 경계 처리도 일치시킨다.
 
-응답 경계는 두 목록에서 서로 다른 수단을 쓴다. 슬롯에는 자연스러운 시간축이 있어 시간 창이
-제품 의미와 일치하고, 메뉴에는 없으므로 수량 bound를 쓴다. 두 경우 모두 잘라서 반환하지 않는
-쪽을 택했다. 잘린 목록은 호출자에게 완전한 목록과 똑같이 보이므로, 성공처럼 보이는 실패가 된다.
+슬롯 목록은 조회 기간으로, 메뉴 목록은 개수로 응답 범위를 제한한다. 슬롯은 시간에 따라 예약 가능
+여부가 바뀌지만 메뉴는 그렇지 않기 때문이다. 상한을 넘으면 오류를 반환한다. 일부만 잘라 반환하면
+클라이언트가 누락 여부를 알 수 없어 완전한 목록으로 처리할 수 있다.
 
 ## Consequences
 
@@ -217,8 +216,8 @@ projection으로 earliest slot을 계산한다. 손상 counter나 query 실패�
 조용히 제외하거나 field를 생략하지 않고 전체 요청을 503으로 실패시킨다. 공개 운영시간, client clock,
 고정 lead time 또는 준비시간 추정은 이 값을 만들지 않는다.
 
-이 amendment는 예약 window와 write authority를 바꾸지 않는다. final Order creation은 같은 boundary를
-lock 아래 다시 검사하며 customer display는 reservation token이나 성공 보장이 아니다.
+이 amendment 이후에도 예약 가능 시간과 최종 주문의 검증 책임은 그대로다. 주문 생성 시 락을 잡고
+같은 조건을 다시 검사한다. 고객 화면의 표시는 조회 시점의 정보이며, 예약과 성공 여부는 주문 처리에서 확정한다.
 
 ## Related Decisions
 

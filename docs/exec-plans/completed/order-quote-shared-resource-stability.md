@@ -107,7 +107,8 @@ gh workflow run build-personal-staging-images.yml --ref feature/load-test-monito
 
 native k6 summary의 workflow 완료·실패·stale·dropped iteration을 최종 판정으로 사용한다.
 같은 test_id/time window의 Grafana에서 HTTP p95/p99, Hikari active/pending, PostgreSQL lock/wait,
-CPU/memory와 trace를 확인한다. live rate를 최종 건수로 오인하거나 No data를 0으로 해석하지 않는다.
+CPU/memory와 trace를 확인한다. Grafana의 rate는 시점별 변화율, 최종 건수는 k6 summary를 기준으로 한다.
+No data는 해당 구간에 수집된 값이 없는 상태로 기록한다.
 
 ## Documentation Updates
 
@@ -175,7 +176,7 @@ Doppler 배포 token은 읽기 전용이며 이 변경은 secret 쓰기를 요�
 남기고, VU 20개를 사전 확보한 후속 5/s에서는 450/450 승인·미투입 0을 확인했다.
 10/s·90초 900건, 20/s·60초 1,200건도 모두 승인됐다. 전체 v3 6회 3,120건/12,480 HTTP다.
 
-응답 속도 개선이나 capacity 상한은 주장하지 않는다. 20/s workflow p95는 1.52초이며 Hikari
+견적 충돌 수정 뒤에도 응답시간과 capacity는 추가 개선·측정 대상이다. 20/s workflow p95는 1.52초이며 Hikari
 pending 최대 5와 공유 자원 DB 대기가 나타났다. 부하 종료 후 대기는 회복했고, read-only DB
 snapshot의 실행별 distinct order/승인 건수 및 공유 자원 카운터 정합성을 확인했다.
 5/s exact span profile은 DB 응답 대기를 뒷받침했지만 20/s 두 span profile 조회는 빈 결과여서

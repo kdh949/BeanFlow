@@ -42,7 +42,7 @@ Behavior:
   유효하지 않으면 애플리케이션 시작을 실패시킨다. 운영 profile에서 local filesystem, in-memory,
   public bucket 또는 fake adapter로 대체하지 않는다.
 - startup probe가 연결 실패·timeout·5xx 때문에 AIStor 설정의 유효성을 판정할 수 없으면 media 상태를
-  `unavailable`로 기록하고 애플리케이션은 시작한다. 명시적인 credential·bucket 거절과 혼동하지 않는다.
+  `unavailable`로 기록하고 애플리케이션은 시작한다. credential·bucket 거절은 설정 오류로 별도 처리한다.
 - 실행 중 AIStor 장애는 이미지 PUT과 이미 발급된 presigned URL의 직접 GET에만 영향을 준다.
   주문·결제·매장 텍스트 조회와 애플리케이션 전체 readiness는 media health 때문에 실패시키지 않는다.
   매장 조회 응답의 15분 presigned URL은 서버 내부의 로컬 서명으로 만들고 AIStor에 availability probe를
@@ -119,10 +119,10 @@ Behavior:
   `RETRY_SCHEDULED`, bounded retry 후 `MANUAL_REVIEW` 의미를 보존한다.
 - 동일 source/version/동일 payload replay는 기존 owner result와 publication 한 벌을 반환한다.
   같은 source/version의 changed payload는 기존 row를 갱신하지 않고 conflict로 실패한다.
-- Settlement/Analytics consumer는 별도 후속 local transaction이다. Plan 20 이후 Settlement의
-  `OrderCompletedV2`와 고객 취소 `PaymentRefundedV1` target은 실제 listener가 처리하지만 Analytics
-  target과 completed/pre-completion Refund 조정은 후속 owner가 활성화할 때까지 성공으로 추정하지
-  않는다. 미완료 target row는 downstream 성공이 아니다.
+- Settlement/Analytics consumer는 별도의 후속 local transaction에서 실행된다. Plan 20 이후
+  Settlement의 `OrderCompletedV2`와 고객 취소 `PaymentRefundedV1` target은 실제 listener가 처리한다.
+  Analytics target과 completed/pre-completion Refund 조정은 후속 담당 모듈의 활성화를 기다린다.
+  target row가 미완료이면 후속 작업의 실제 결과를 별도로 확인하고, 확인 전에는 완료로 표시하지 않는다.
 - 고객 취소 Refund 제외는 실제 Order `CUSTOMER_REQUEST`, Refund `SUCCEEDED`와 exact source/version,
   Item 부재가 모두 맞고 append-only Audit이 commit된 경우만 `NOT_APPLICABLE`이다. 누락·불일치·기존
   Item 또는 Audit 실패는 `SETTLEMENT_SOURCE_CONFLICT` 메시지의 retry/manual-review failure이며
@@ -139,9 +139,9 @@ Examples:
 Behavior:
 
 - 이미 완료된 원본 거래를 부수효과 실패만으로 롤백하지 않음
-- `RETRY_SCHEDULED`, `FAILED`, `MANUAL_REVIEW` 같은 영속 상태
-- retry count와 last failure 노출
-- 원본 거래 성공을 부수효과 성공으로 간주하지 않음
+- 각 작업을 `RETRY_SCHEDULED`, `FAILED`, `MANUAL_REVIEW` 등의 상태로 DB에 저장
+- 재시도 횟수와 마지막 실패 원인 표시
+- 원본 거래와 후속 작업의 완료 상태를 각각 관리
 
 #### 중복·지연 이벤트 처리
 
@@ -258,11 +258,15 @@ Degraded mode를 제공하는 기능은 fallback을 활성화할 조건과 사�
 
 ## 오류 시나리오 테스트
 
-Customer Support adds these explicit outcomes: Audit failure returns no raw PII/high-risk success;
-verification timeout is pending/unknown; partial approval cannot execute; pickup reschedule failure preserves
-the old slot; post-acceptance partial effects stay partial; unknown compensation responsibility has no cost-owner
-fallback; Delivery timeout blocks silent cross-provider failover; deletion component failure stays partial and
-backup restore reapplies deletion decisions.
+Customer Support에서는 다음 결과를 검증한다.
+
+- Audit 저장 실패 시 개인정보 원문과 고위험 작업의 성공 응답을 반환하지 않는다.
+- 본인 확인 타임아웃은 pending/unknown으로 남기고, 일부 승인만 받은 작업은 실행을 차단한다.
+- 픽업 일정 변경 실패 시 기존 슬롯을 유지한다.
+- 매장 수락 후 후속 작업이 일부만 완료되면 부분 완료 상태로 남긴다.
+- 보상 책임이 불명확하면 비용 부담 주체도 미확정으로 두며 임의 기본값을 사용하지 않는다.
+- Delivery 타임아웃 시 다른 Provider로 자동 전환하지 않는다.
+- 삭제 작업의 일부가 실패하면 부분 완료로 남기고, 백업 복원 뒤에는 기존 삭제 결정을 다시 적용한다.
 
 새 오류 처리에는 다음 테스트를 추가한다.
 
@@ -270,16 +274,16 @@ backup restore reapplies deletion decisions.
 - DB에 어떤 상태가 남는가
 - 재시도가 같은 부작용을 만들지 않는가
 - 운영 화면에 오류를 어떻게 표시하고 재처리하는가
-- metric, log와 correlation이 존재하는가
+- metric과 로그에서 같은 요청을 correlation ID로 추적할 수 있는가
 - 자동 fallback이 실행되지 않는지 테스트
 
 ### Publication 결과를 알 수 없을 때 수동 처리
 
-- 수동 claim 후 결과가 확인되지 않으면 마지막 실제 실행 시작(시작 전에는 claim) 시각으로 조사한다.
-  초기 5분 경과는 MANUAL_REVIEW/UNKNOWN 전이 조건이며 확정 실패나 이전 실행 종료의 증거가 아니다.
+- 수동 claim 후 결과가 확인되지 않으면 마지막 실행 시작 시각을 기준으로 조사한다. 실행 전이면 claim 시각을 사용한다.
+  초기 5분이 지나면 MANUAL_REVIEW/UNKNOWN으로 전환한다. 이전 실행이 끝났는지와 실제 결과는 별도로 확인해야 한다.
 - 요청 ID와 baseline은 실제 claim에서 원자적으로 검사한다. 동일 키 replay와 오래된 후보는 추가 예산을 만들지 않는다.
 - 결과 불명 replay는 동시 실행과 owner commit 후 ACK 유실 안전성을 검증한 exact listener만 허용한다.
   초기 대상은 OrderReadyV1의 알림 접수이며 외부 발송은 별도 owner worker가 담당한다.
 - 원본 상태와 source/payload는 보존한다. 늦은 결과는 자기 시도에 기록하며 새 시도의 publication/Case를 덮지 않는다.
-  UNKNOWN은 계속 대사하고 90일 완료 원장 정리에서 제외한다.
+  UNKNOWN은 실제 처리 결과와 계속 비교·확인하고, 90일 완료 원장 정리 대상에서 제외한다.
 - 상세 정책은 [ADR-125](../adr/ADR-125-publication-unknown-execution-recovery.md)를 따른다.

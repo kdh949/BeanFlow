@@ -24,7 +24,7 @@
 | IdempotencyRecord | 명령 중복 실행 방지와 응답 재사용 | 같은 scope·key에 payload hash 하나, 처리 중/UNKNOWN은 정리 금지, terminal response는 만료 시각까지 보존 | `actorId`, target ID |
 | SettlementItem | 완료 주문 단위의 불변 정산 명세 | Order/source당 하나, KRW 금액·수수료·혜택·순정산 tie-out, 서울 완료일 일치, OPEN Batch에만 귀속, update/delete 금지 | `orderId`, `settlementBatchId`, `storeId` |
 | SettlementBatch | 서울 완료일·매장별 Item 귀속, 집계·확정 | store/date당 하나, Item은 OPEN Batch에만 귀속, `OPEN → CALCULATED → CONFIRMED`, summary·이월 tie-out, 확정 후 직접 수정 금지 | `storeId`, 이전 confirmed Batch ID |
-| SettlementAdjustment | 확정 후 보정 | confirmed Item/Batch만 대상, signed KRW, source/reason unique, update/delete 금지, 미완료 고객 취소 환불 제외 증적으로 사용 금지 | Item/Batch/store IDs |
+| SettlementAdjustment | 확정 후 보정 | confirmed Item/Batch만 대상, signed KRW, source/reason unique, update/delete 금지, 미완료 고객 취소 환불의 정산 제외 근거로 사용 금지 | Item/Batch/store IDs |
 | SettlementDispute | Dispute Context의 이의제기 Workflow와 held 예상액 | confirmed Item만 대상, Item당 진행 중 하나, actor command key terminal replay, 재이의는 immediate previous ID·새 증빙·1회 제한, Adjustment commit 전 terminal success 금지 | Settlement Item/Adjustment/previous Dispute ID |
 | NotificationDelivery | 발송·재시도 | logical source+recipient+channel 중복 금지, Provider attempt 상한 | IDs |
 | ReprocessingCase | 운영 재처리 | 대상·사유·주체 필수, 중복 실행 방지 | IDs |

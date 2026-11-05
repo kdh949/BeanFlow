@@ -26,6 +26,6 @@
 Delivery에는 아직 정식 fulfillment runtime 기능이 없다. Support에는 S20–S100의 Case·검색·개인정보 접근·타임라인·평가·승인·주문 변경·처리·보상·프로필 변경 기능이 있다.
 Support의 후속 작업은 [API 목록](../api/support-api-surface.md), [ADR-081](../adr/ADR-081-support-context-case-and-query-boundary.md), [ADR-088](../adr/ADR-088-canonical-delivery-provider-boundary.md)에 정리했다.
 
-- 현재 Runtime OpenAPI: 107개 경로, 111개 operation. `RuntimeOpenApiParityTest`에서 Spring MVC mapping과 비교한다.
-- Accepted 설계 문서: 107개 경로, 111개 operation, 244개 schema.
-- 설계 문서에만 있는 operation은 없다. S100 프로필 기능은 구현됐으며 Support·Delivery·LegalHold의 후속 operation은 DRAFT 상태다.
+- 현재 Runtime OpenAPI: 255개 경로, 290개 operation. `RuntimeOpenApiParityTest`에서 Spring MVC mapping과 비교한다.
+- 전체 OpenAPI: 265개 경로, 300개 operation, 512개 schema. 두 명세의 수치는 `scripts/verify-docs.sh`의 참조 해석 결과를 기준으로 한다.
+- 실행 중인 API는 Runtime OpenAPI, 설계·계획을 포함한 전체 API는 전체 OpenAPI에서 확인한다. S100 프로필 기능은 구현됐으며 Support·Delivery·LegalHold의 후속 operation은 DRAFT 상태다.

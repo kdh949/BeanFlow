@@ -312,8 +312,8 @@ lifecycle 계약과 후속 구현이 먼저 필요하다.
   같은 delivery 처리 안에서 다음 Tx W2까지 메모리로만 전달한다.
 - Tx W2는 notification의 token binding을 정확히 하나의 PaymentMethod에 매핑하고 row를 잠근다.
   0건 또는 다건이면 소유자를 추정하거나 임의 row를 바꾸지 않고 inbox를 `MANUAL_REVIEW`로
-  보존한다. raw token과 provider customer reference는 inbox·Audit에 복제하지 않고, 실패
-  증적에는 비가역 fingerprint와 닫힌 reason만 남긴다.
+  보존한다. raw token과 provider customer reference는 inbox·Audit에 복제하지 않는다.
+  실패 기록에는 원문을 복원할 수 없는 fingerprint와 사전에 정의한 reason code만 남긴다.
 - mapped 또는 manual-review terminal 결과가 Tx W2에 commit된 뒤에만 transport가 2xx를 반환한다.
   W2 저장이 실패하면 non-2xx로 재전송을 유도하고, 같은 notification replay가 다시 제공한 raw
   token으로 non-terminal inbox를 처리한다. terminal replay만 새 Audit·부수효과 없이 2xx다.

@@ -13,23 +13,26 @@
 
 [2026-09-07 실측](../quality/performance-load-rca-2026-09-07.md)에서 1 workflow/s의 stale는
 2/90, 5 workflow/s에서는 48/450이었다. 별도 두 견적→첫 주문→두 번째 주문 재현에서도
-동일 표시 내용의 두 번째 주문이 거절됐다. 이 수치 자체가 처리 용량 한계나 개별 owner의
-단독 원인을 증명하지는 않는다. 후속 회귀 테스트는 공유 픽업 사용량을 독립적으로 검증한다.
+동일한 금액과 메뉴 구성을 보여 주는 두 번째 주문이 거절됐다. 이 실행에서는 견적 충돌을 확인했고,
+후속 회귀 테스트에서 공유 픽업 사용량만 바꿔 원인을 분리했다. 처리 용량 상한은 별도 측정 대상이다.
 
 ## Decision
 
 ### 1. 비예약 견적과 거래 조건의 전체 비교를 유지한다
 
-ADR-116의 customer Session/CSRF, editable input과 응답 shape, `guarantee=NONE`, quote의
-무부수효과·무예약·Provider 미호출 경계를 그대로 계승한다. quote는 예약이나 가격 보장이 아니다.
+ADR-116의 고객 Session/CSRF, 입력·응답 구조와 `guarantee=NONE`을 유지한다.
+견적은 조회 시점의 계산 결과를 보여 주며, 데이터를 변경하거나 자원을 예약하거나 Provider를 호출하지 않는다.
+예약 가능 여부와 최종 가격은 주문 생성 시 다시 검사한다.
 정규화 입력, 메뉴·옵션 구성/표시/가격, 메뉴·옵션·구성의 판매 가능 여부, Store 주문 정책·표시명,
 쿠폰 조건·비용 귀속, 포인트 lot/issuer provenance, 정산·적립 정책과 금액 배분 전체를 비교한다.
 [ADR-118](ADR-118-merchant-transactional-catalog-lifecycle.md)의 Store root shared/exclusive lock과
 Merchant 거래 의미 비교를 유지한다. 금액만 비교하거나 최신 견적을 자동 수락하지 않는다.
 
-### 2. 사용량은 fingerprint가 아니라 잠금 아래의 가용성 검사로 보호한다
+<a id="2-사용량은-fingerprint가-아니라-잠금-아래의-가용성-검사로-보호한다"></a>
 
-`order-quote-fingerprint/v6`는 다음 필드를 canonical material에서 제외한다.
+### 2. 슬롯 잔여량은 주문 시점에 락을 잡고 검사한다
+
+`order-quote-fingerprint/v6`를 계산할 때 다음 필드는 비교 대상에서 제외한다.
 
 - Fulfillment: `reservedCount`, `confirmedCount`, `version`
 
@@ -37,8 +40,9 @@ Merchant 거래 의미 비교를 유지한다. 금액만 비교하거나 최신 
 정원 변경은 운영 정책 변경이므로 재확인 대상이다. 고객별 쿠폰·포인트 version 비교는 유지한다.
 다른 주문의 예약·확정·해제만으로 유효한 거래 조건의 견적을 stale로 만들지 않는다.
 
-최종 `OrderCreationTransaction`은 기존 순서대로 owner row를 잠근 뒤 `PickupQuoteOperations`에서 **현재** 잔여량·시간·소유 Store를 검사한다. 자원이 충분하고 fingerprint가
-일치할 때만 같은 transaction에서 자원을 예약하고 immutable Order snapshot을 저장한다.
+최종 `OrderCreationTransaction`은 기존 순서대로 자원별 row lock을 잡은 뒤 `PickupQuoteOperations`에서
+**현재** 잔여량·시간·소유 Store를 검사한다. 자원이 충분하고 fingerprint가 일치할 때만 같은
+트랜잭션에서 자원을 예약하고 주문 시점의 immutable Order snapshot을 저장한다.
 슬롯 소진은 `PICKUP_SLOT_FULL`, 시작된 슬롯은 기존
 `ORDER_STATE_CONFLICT`다. 잠금·검사·예약을 분리하거나 초과 예약을 허용하지 않는다.
 
@@ -72,9 +76,9 @@ API를 동시에 서비스하지 않고 이 단일 API 배포의 health/이미�
 
 ## Consequences
 
-충분한 자원의 사용량 경합은 고객 재확인 사유가 되지 않는다. 고부하 시 owner row 잠금은 여전히
-직렬화 지점이므로 이 변경만으로 처리 용량 증가를 주장하지 않는다. 슬롯 정원 등 실제 정책 변경,
-슬롯 소진, 외부 실패는 여전히 명시적으로 실패한다. 새 dependency나 migration은 없다.
+자원이 충분하면 다른 주문의 사용량 변화만으로 고객에게 재확인을 요구하지 않는다. 같은 자원에 대한
+변경은 여전히 row lock에서 순서대로 처리하므로, 고부하 처리 용량은 이 락의 대기 시간을 포함해 측정해야 한다.
+슬롯 정원 등 실제 정책 변경, 슬롯 소진과 외부 실패는 기존 오류로 반환한다. 새 dependency나 migration은 없다.
 
 ## Verification
 

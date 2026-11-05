@@ -10,10 +10,10 @@
 사용한다. 매장은 이 번호로 고객을 호명하고, 고객은 이 번호로 자기 주문을 확인한다.
 
 [ADR-096](ADR-096-public-order-reference.md)의 공개 주문번호는 전역 유일하고 추측 저항성이 있지만
-길다. 매장에서 소리내어 부르기에 맞지 않는다. 두 식별자는 목적이 다르다.
+길어 매장에서 소리 내어 부르기 어렵다. 공개 주문번호는 조회에, 짧은 픽업번호는 고객 호명에 사용한다.
 
 픽업번호는 매장·영업일 안에서만 유일하면 되고, 다음 날 재사용된다. 문제는 동시성이다.
-`현재 최대값 + 1`을 조회한 뒤 저장하는 방식은 점심 피크의 동시 주문에서 반드시 충돌한다.
+`현재 최대값 + 1`을 조회한 뒤 저장하면, 동시 요청이 같은 최대값을 읽고 같은 번호를 발급하려 해 유일 제약 위반이 발생할 수 있다.
 
 ## Decision
 
@@ -39,8 +39,8 @@ CREATE UNIQUE INDEX ux_ordering_order_pickup_sequence
 
 ### 순번 발급
 
-애플리케이션의 `MAX + 1` 조회를 금지한다. 매장·영업일 단위 카운터 테이블을 두고 원자적으로
-증가시킨다.
+매장·영업일 단위 카운터를 SQL 한 문장으로 원자적으로 증가시킨다. 애플리케이션에서 `MAX + 1`을
+먼저 조회한 뒤 저장하는 방식은 사용하지 않는다.
 
 ```sql
 INSERT INTO ordering_pickup_counter (store_id, business_date, last_sequence)
@@ -103,11 +103,11 @@ RETURNING last_sequence;
 
 ## Rationale
 
-`INSERT ... ON CONFLICT DO UPDATE ... RETURNING`은 읽기·증가·쓰기를 한 문장으로 만들어 경합을
-DB의 행 잠금으로 직렬화한다. 애플리케이션 재시도 없이 동시성을 해결하는 가장 단순한 방법이다.
+`INSERT ... ON CONFLICT DO UPDATE ... RETURNING`은 읽기·증가·쓰기를 한 문장으로 처리한다.
+DB의 row lock이 같은 카운터의 동시 변경을 순서대로 실행하므로, 애플리케이션에서 번호 충돌을 재시도하는 로직이 필요 없다.
 
-커밋 뒤 종료된 주문의 번호를 재사용하지 않는 선택은 의도적이다. 반납 큐를 만들면 같은 날 고객 두
-명에게 같은 번호가 보일 수 있어 호명과 문의가 모호해진다.
+커밋된 주문이 종료돼도 번호는 보존한다. 반납한 번호를 다른 주문에 부여하면 같은 날 두 고객에게
+같은 번호가 보여 호명과 문의 과정에서 주문을 구분하기 어려워진다.
 
 ## Consequences
 
@@ -160,12 +160,12 @@ DB의 행 잠금으로 직렬화한다. 애플리케이션 재시도 없이 동�
 - UPDATE 결과가 없는 최초 발급에만 기존 주문의 `GREATEST(count(*), max(pickup_sequence)) + 1`
   기준선을 구하고 UPSERT한다. 동시 최초 발급은 `GREATEST(counter + 1, EXCLUDED.last_sequence)`로
   직렬화한다. V50 당시 누락된 슬롯을 복구한 뒤 새 카운터를 만드는 경로도 유지한다.
-- V50/V51 및 bounded backfill이 초기화·동기화한 카운터를 정상 발급의 authority로 사용한다.
-  운영 중 카운터를 임의 삭제하거나 낮춘 뒤 매 요청의 전체 집계로 보정하는 방식은 지원하지 않는다.
-  기존 runbook의 old writer 배제, backfill·contract preflight와 카운터 보존 조건을 유지한다.
-- 두 경로 모두 주문과 같은 transaction이다. 초기화 실패를 1로 대체하거나 rollback된 증가를
-  별도 transaction에 남기지 않는다. 최초 경로의 한 번 더 실행되는 UPDATE는 정상 경로의
-  이력 크기에 비례하는 집계 비용을 제거하기 위한 비용이다.
+- V50/V51과 backfill로 초기화·동기화한 카운터를 이후 번호 발급의 기준값으로 사용한다.
+  운영 중 카운터를 임의 삭제하거나 낮춘 경우에는 runbook에 따른 별도 복구가 필요하다.
+  기존 writer 실행 차단, backfill·contract preflight와 카운터 보존 조건은 유지한다.
+- 두 경로 모두 주문 저장과 같은 트랜잭션이다. 초기화가 실패하면 주문도 실패하고, 롤백 시 번호 증가도
+  취소된다. 최초 발급에서는 카운터 존재 확인용 UPDATE를 한 번 더 실행하지만, 이후 발급부터는
+  과거 주문 수에 비례하는 집계 비용이 사라진다.
 - 검증과 배포 전후 측정은 [잠금 구간 SQL 개선 계획](../exec-plans/completed/pickup-counter-pr-extraction.md)에 기록한다.
   환불·감사 후속 처리까지 포함한 통합 측정은 [잠금 구간 SQL 재측정](../quality/performance-lock-critical-section-retest-2026-09-08.md)을 참조한다.
 

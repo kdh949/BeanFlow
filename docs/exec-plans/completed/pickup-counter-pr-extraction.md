@@ -11,7 +11,7 @@
 
 ## Purpose / Big Picture
 
-주문 생성이 픽업 슬롯 잠금을 보유한 동안 매번 과거 주문 count/max를 집계하던 SQL 비용을 줄인다.
+주문 생성 중 슬롯 락을 잡은 상태에서 매번 과거 주문 수와 최대 번호를 집계하던 SQL 비용을 줄인다.
 
 ## Current State
 
@@ -71,7 +71,7 @@ Flyway 변경 없음. 측정 DB를 삭제하거나 실패 상태를 성공으로
 같은 실제 DB/매장/영업일에서 old/new SQL을 번갈아 5회씩 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`
 실행하고 각각 ROLLBACK했다. 첫 실행은 old 57.161ms/new 1.266ms로 별도 보존했다.
 나머지 4회 중앙값은 **4.834ms → 0.036ms**, root plan shared hit blocks는 **345 → 3**이다.
-이는 SQL 한 문장의 비교이며 HTTP 개선율이 아니다.
+측정 대상은 픽업번호 발급 SQL 한 문장이다. HTTP 응답시간은 통합 부하 결과에서 별도로 비교한다.
 
 기존 구현에서 `ordering_order` 테이블을 잠근 회귀 테스트가 실패했고 새 정상 발급은 history를
 읽지 않아 통과했다. main 기반 분리 worktree에서 allocator 9 + migration 9 + exhaustion 1 =
@@ -102,7 +102,7 @@ bash scripts/verify-docs.sh
 
 ## Surprises & Discoveries
 
-SQL 또는 환불 계약 개선과 HTTP 처리량 개선은 다른 주장이다. 20/s 측정에서 전체 처리량 개선이 입증되지 않았다.
+카운터 SQL 비용과 환불 드라이버의 요청 처리는 개선됐지만, 20/s 통합 측정의 전체 처리량은 일관되게 개선되지 않았다.
 
 ## Decision Log
 

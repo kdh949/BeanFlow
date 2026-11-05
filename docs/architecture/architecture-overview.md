@@ -73,10 +73,10 @@ Customer / Store / Operations API
 - mock/fake Adapter는 test 또는 명시적 local profile에서만 활성화한다.
 - 외부 HTTP를 호출하는 sandbox Adapter도 명시적 sandbox profile과 `!prod`에서만 활성화하고
   테스트 키 접두사를 검사한다. local scripted adapter, 외부 sandbox, live adapter는 각기 다른 profile에서 실행한다.
-- 필수 Port가 없거나 adapter가 중복 선택되면 애플리케이션 시작 단계에서 오류를 반환한다.
-  `@ConditionalOnMissingBean`을 이용한 scripted/fake/no-op 자동 대체는 사용하지 않는다.
-- 외부 호출을 장시간 DB 트랜잭션 안에서 수행하지 않는다.
-- timeout은 실패와 구분된 unknown 상태가 필요할 수 있다.
+- 필수 Port가 없거나 adapter가 중복 선택되면 애플리케이션 시작을 실패시킨다.
+  `@ConditionalOnMissingBean`으로 scripted/fake/no-op 구현을 자동 선택하는 방식은 사용하지 않는다.
+- 외부 네트워크 호출은 DB 트랜잭션 밖에서 실행한다.
+- 타임아웃으로 외부 처리 결과를 알 수 없으면 unknown 상태로 저장하고 결과를 확인하는 복구 절차를 둔다.
 
 ## Evolution
 

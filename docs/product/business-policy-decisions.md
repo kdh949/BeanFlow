@@ -137,7 +137,7 @@
   - 만료 작업 재실행 시 중복 해제 방지
   - worker 전후 조회가 같은 `EXPIRED` representation을 반환
   - 조회 중 만료 해제 실패 시 503과 전체 rollback
-  - 고객 목록 candidate window의 만료 Order가 반환 전에 모두 `EXPIRED`로 물질화되는지 검증
+  - 고객 목록 한 페이지의 조회 후보 중 만료된 Order가 응답 전에 모두 `EXPIRED`로 변경·저장되는지 검증
   - 활성 목록에서 만료 Order가 빠져 빈 페이지가 되어도 scan boundary cursor가 다음 주문을 건너뛰지 않는지 검증
   - 결제와 만료 작업의 동시 실행 테스트
   - Provider 응답 또는 `UNKNOWN` lookup이 슬롯 시작 경계를 넘을 때 주문 비복구·예약 비확정과 reconciliation

@@ -83,6 +83,6 @@
 ## Deployment limits
 
 실제 non-local database migration, Platform Operator credential, external Analytics consumer와
-production smoke는 실행하지 않았다. 이 저장소에는 해당 환경과 credential이 없으며 local
-completion은 배포 성공을 주장하지 않는다. 최초 non-local migration 전 V14 issuer evidence,
+production smoke는 실행하지 않았다. 검증 범위는 로컬 환경이며, 원격 실행에 필요한 환경과 credential은
+준비되지 않았다. 최초 non-local migration 전 V14 issuer evidence,
 V31 precheck와 audited grant를 환경별로 다시 확인한다.
