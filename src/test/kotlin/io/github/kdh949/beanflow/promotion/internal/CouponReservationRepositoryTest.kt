@@ -5,10 +5,14 @@ import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.promotion.api.CouponCostBearer
 import io.github.kdh949.beanflow.promotion.api.CouponDiscountType
 import io.github.kdh949.beanflow.promotion.api.CouponPricingLine
+import io.github.kdh949.beanflow.promotion.api.CouponQuoteCommand
+import io.github.kdh949.beanflow.promotion.api.CouponQuoteOperations
 import io.github.kdh949.beanflow.promotion.api.CouponReservationOperations
+import io.github.kdh949.beanflow.promotion.api.CouponReservationQuote
 import io.github.kdh949.beanflow.promotion.api.ExpiredCouponRestorationMode
 import io.github.kdh949.beanflow.promotion.api.ReserveCouponCommand
 import io.github.kdh949.beanflow.promotion.api.RestoreCouponAfterTerminationCommand
+import io.github.kdh949.beanflow.promotion.api.UseCouponImmediatelyCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
 import io.github.kdh949.beanflow.shared.api.OrderTerminationTrigger
@@ -16,25 +20,37 @@ import io.github.kdh949.beanflow.shared.api.ReservationTransitionResult
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.UUID
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, CouponReservationTestClockConfiguration::class)
 @BeanflowIsolatedSpringContext("verifies committed state across a transaction or thread boundary")
 @SpringBootTest
 internal class CouponReservationRepositoryTest
     @Autowired
     constructor(
         private val operations: CouponReservationOperations,
+        private val quotes: CouponQuoteOperations,
+        private val clock: CouponReservationTestClock,
         private val campaignRepository: CampaignJpaRepository,
         private val eligibleMenuRepository: CampaignEligibleMenuJpaRepository,
         private val issuanceRepository: CouponIssuanceJpaRepository,
@@ -48,11 +64,87 @@ internal class CouponReservationRepositoryTest
 
         @BeforeEach
         fun cleanDatabase() {
+            clock.set(Instant.parse("2026-09-16T03:00:00Z"))
             jdbcTemplate.execute(
                 "TRUNCATE TABLE promotion_compensation_coupon_eligible_menu, " +
                     "promotion_compensation_coupon_terms_snapshot, promotion_coupon_reservation, " +
                     "promotion_coupon_issuance, promotion_campaign_eligible_menu, promotion_campaign CASCADE",
             )
+        }
+
+        @ParameterizedTest
+        @ValueSource(longs = [0, 1])
+        fun `immediate coupon use rejects expiry reached while waiting for its lock`(secondsAfterExpiry: Long) {
+            val expiresAt = clock.instant().plusSeconds(60)
+            val fixture = insertFixedCoupon(couponExpiresAt = expiresAt)
+            val command = immediateCommand(fixture, "immediate-expired-while-waiting")
+            val waiterPid = AtomicInteger()
+            val executor = Executors.newSingleThreadExecutor()
+
+            try {
+                val attempt =
+                    requireNotNull(
+                        transactions.execute {
+                            issuanceRepository.findLockedById(fixture.issuanceId)
+                            val holderPid = requireNotNull(jdbcTemplate.queryForObject("SELECT pg_backend_pid()", Int::class.java))
+                            executor
+                                .submit<Result<CouponReservationQuote>> {
+                                    runCatching {
+                                        requireNotNull(
+                                            transactions.execute {
+                                                waiterPid.set(
+                                                    requireNotNull(jdbcTemplate.queryForObject("SELECT pg_backend_pid()", Int::class.java)),
+                                                )
+                                                operations.useImmediately(command)
+                                            },
+                                        )
+                                    }
+                                }.also {
+                                    assertThat(waitForCouponLockWait(holderPid, waiterPid)).isTrue()
+                                    clock.set(expiresAt.plusSeconds(secondsAfterExpiry))
+                                }
+                        },
+                    )
+
+                assertThat(attempt.get(10, TimeUnit.SECONDS).exceptionOrNull())
+                    .isInstanceOfSatisfying(DomainFailure::class.java) {
+                        assertThat(it.code).isEqualTo(FailureCode.COUPON_NOT_AVAILABLE)
+                    }
+                transactions.executeWithoutResult {
+                    val issuance = issuanceRepository.findById(fixture.issuanceId).orElseThrow()
+                    assertThat(issuance.state).isEqualTo(CouponIssuanceState.AVAILABLE)
+                    assertThat(issuance.reservedOrderId).isNull()
+                    assertThat(reservationRepository.count()).isZero()
+                }
+            } finally {
+                executor.shutdownNow()
+                assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue()
+            }
+        }
+
+        @Test
+        fun `immediate coupon use records current time and replays after expiry`() {
+            val expiresAt = clock.instant().plusSeconds(60)
+            val fixture = insertFixedCoupon(couponExpiresAt = expiresAt)
+            val command = immediateCommand(fixture, "immediate-valid-replay")
+            val actualUsedAt = clock.instant().plusSeconds(10)
+            clock.set(actualUsedAt)
+
+            val first = requireNotNull(transactions.execute { operations.useImmediately(command) })
+            clock.set(expiresAt.plusSeconds(1))
+            val replay = requireNotNull(transactions.execute { operations.useImmediately(command) })
+
+            assertThat(replay).isEqualTo(first)
+            transactions.executeWithoutResult {
+                val issuance = issuanceRepository.findById(fixture.issuanceId).orElseThrow()
+                val reservation = reservationRepository.findById(first.reservationId).orElseThrow()
+                assertThat(issuance.state).isEqualTo(CouponIssuanceState.USED)
+                assertThat(issuance.reservedOrderId).isEqualTo(command.orderId)
+                assertThat(reservation.state).isEqualTo(CouponReservationState.USED)
+                assertThat(reservation.createdAt).isEqualTo(actualUsedAt)
+                assertThat(reservation.updatedAt).isEqualTo(actualUsedAt)
+                assertThat(reservationRepository.count()).isOne()
+            }
         }
 
         @Test
@@ -315,6 +407,7 @@ internal class CouponReservationRepositoryTest
             platformShareBps: Int = 0,
             storeShareBps: Int = 10_000,
             allMenusEligible: Boolean = true,
+            couponExpiresAt: Instant = Instant.parse("2030-01-01T00:00:00Z"),
         ): CouponFixture {
             val fixture =
                 CouponFixture(
@@ -352,7 +445,7 @@ internal class CouponReservationRepositoryTest
                         campaignId = campaignId,
                         customerId = fixture.customerId,
                         state = CouponIssuanceState.AVAILABLE,
-                        couponExpiresAt = Instant.parse("2030-01-01T00:00:00Z"),
+                        couponExpiresAt = couponExpiresAt,
                     ),
                 )
             }
@@ -373,6 +466,55 @@ internal class CouponReservationRepositoryTest
             sourceReference = sourceReference,
         )
 
+        private fun immediateCommand(
+            fixture: CouponFixture,
+            sourceReference: String,
+        ): UseCouponImmediatelyCommand {
+            val quoted =
+                requireNotNull(
+                    transactions.execute {
+                        quotes.inspect(
+                            CouponQuoteCommand(
+                                fixture.customerId,
+                                fixture.storeId,
+                                fixture.issuanceId,
+                                listOf(CouponPricingLine(0, fixture.menuId, 1_000)),
+                            ),
+                        )
+                    },
+                )
+            return UseCouponImmediatelyCommand(
+                orderId = UUID.randomUUID(),
+                customerId = fixture.customerId,
+                storeId = fixture.storeId,
+                couponIssuanceId = fixture.issuanceId,
+                quoted = quoted,
+                sourceReference = sourceReference,
+                usedAt = clock.instant(),
+            )
+        }
+
+        private fun waitForCouponLockWait(
+            holderPid: Int,
+            waiterPid: AtomicInteger,
+        ): Boolean {
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (System.nanoTime() < deadline) {
+                if (waiterPid.get() != 0 &&
+                    jdbcTemplate.queryForObject(
+                        "SELECT ? = ANY(pg_blocking_pids(?))",
+                        Boolean::class.java,
+                        holderPid,
+                        waiterPid.get(),
+                    ) == true
+                ) {
+                    return true
+                }
+                Thread.sleep(10)
+            }
+            return false
+        }
+
         private data class CouponFixture(
             val storeId: UUID,
             val customerId: UUID,
@@ -380,3 +522,24 @@ internal class CouponReservationRepositoryTest
             val issuanceId: UUID,
         )
     }
+
+@TestConfiguration(proxyBeanMethods = false)
+internal class CouponReservationTestClockConfiguration {
+    @Bean
+    @Primary
+    fun couponReservationClock(): CouponReservationTestClock = CouponReservationTestClock()
+}
+
+internal class CouponReservationTestClock : Clock() {
+    private val current = AtomicReference(Instant.parse("2026-09-16T03:00:00Z"))
+
+    fun set(value: Instant) {
+        current.set(value)
+    }
+
+    override fun instant(): Instant = current.get()
+
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId): Clock = Clock.fixed(instant(), zone)
+}

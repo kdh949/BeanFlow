@@ -231,7 +231,7 @@ internal class CouponReservationService(
             }
             fail(FailureCode.ORDER_STATE_CONFLICT, "Coupon source reference was reused")
         }
-        val usedAt = command.usedAt
+        val usedAt = clock.instant()
         if (issuance.customerId != command.customerId ||
             issuance.state !in setOf(CouponIssuanceState.AVAILABLE, CouponIssuanceState.RESTORED) ||
             !usedAt.isBefore(issuance.couponExpiresAt)
