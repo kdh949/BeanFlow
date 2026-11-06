@@ -25,3 +25,9 @@ export function couponReturnTarget(rawReturnTo: string | null, storeId: string, 
   if (parsed.pathname === "/app") return { to, label: "홈" };
   return { to, label: storeName };
 }
+
+/** Only a validated customer-app return target travels through store event discovery. */
+export function couponEventPath(storeId: string, returnTo: string): string {
+  const safeReturn = couponReturnTarget(returnTo, storeId, "매장").to;
+  return `/app/events?${new URLSearchParams({ storeId, returnTo: safeReturn }).toString()}`;
+}

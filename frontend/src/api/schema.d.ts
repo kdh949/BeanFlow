@@ -995,6 +995,8 @@ export interface paths {
          * @description 게시 상태이고 현재 다운로드 기간 안에 있으며 잔여 수량이 있는 캠페인만 다운로드 종료 시각과
          *     캠페인 ID 오름차순으로 반환합니다. `remainingCount`는 이 조회 시점의 참고값이며 실제 다운로드
          *     성공은 다운로드 트랜잭션이 캠페인 잠금 아래 다시 결정합니다. 중단·품절·기간 밖 캠페인은 노출하지 않습니다.
+         *     선택적 `storeId`를 지정하면 해당 매장만 페이지 분할 전에 필터링합니다. 커서는 같은 고객과
+         *     같은 매장 필터에서만 사용할 수 있으며 필터를 바꾸면 처음부터 조회해야 합니다.
          */
         get: operations["listCurrentCustomerEvents"];
         put?: never;
@@ -15696,6 +15698,8 @@ export interface operations {
     listCurrentCustomerEvents: {
         parameters: {
             query?: {
+                /** @description 해당 매장의 다운로드 가능한 이벤트만 조회합니다. 생략하면 전체 매장입니다. */
+                storeId?: components["schemas"]["Identifier"];
                 /** @description 이전 페이지의 `nextCursor` 값을 그대로 보내는 HMAC-signed(서명된) 페이지 이동 문자열입니다. 같은 API와 같은 매장·계정·필터에서만 사용할 수 있으며 형식이 잘못됐거나 만료되면 400을 반환합니다. */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 한 페이지에 반환할 최대 항목 수입니다. 기본값은 20이며 100을 초과할 수 없습니다. */
