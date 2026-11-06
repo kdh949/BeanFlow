@@ -44,6 +44,7 @@ export const Cancelled: Story = {
   play: async ({ canvas, canvasElement }) => {
     await expect(await canvas.findByText("취소된 주문이에요")).toBeVisible();
     await expect(canvas.queryByText("픽업 번호")).not.toBeInTheDocument();
+    await expect(canvas.queryByText(/준비 예상|픽업 시간|매장 수락 후/)).not.toBeInTheDocument();
     await expect(canvasElement.querySelector('[aria-current="step"]')).toBeNull();
   },
 };
@@ -110,5 +111,14 @@ export const ReorderFromHistory: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "현재 조건으로 주문" }));
     await expect(await canvas.findByRole("alert")).toHaveTextContent("포인트");
     await expect(reorderRequest).toHaveBeenCalledWith(expect.objectContaining({ pointsToUseKrw: 500 }));
+  },
+};
+
+/** Terminal orders must not promise future preparation, even with a historical estimate. */
+export const Expired: Story = {
+  parameters: { msw: { handlers: [...signedInHandlers, ...orderDetailHandlers({ status: "EXPIRED", allowedActions: [] })] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText("결제 시간이 만료됐어요")).toBeVisible();
+    await expect(canvas.queryByText(/준비 예상|픽업 시간|매장 수락 후/)).not.toBeInTheDocument();
   },
 };

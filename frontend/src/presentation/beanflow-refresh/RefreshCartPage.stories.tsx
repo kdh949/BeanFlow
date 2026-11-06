@@ -188,6 +188,14 @@ export const EditOptions: Story = {
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("button", { name: /17,800.*주문하기/ })).toBeEnabled();
     await userEvent.click(await canvas.findByRole("button", { name: "오트 라떼 옵션 변경" }));
+    await expect(canvas.getByRole("button", { name: /17,800.*주문하기/ })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "카페라떼 삭제" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "메뉴 더 담기" })).toBeDisabled();
+    await expect(canvas.getByRole("button", { name: "쿠폰 보기" })).toBeDisabled();
+    await expect(canvas.getByRole("textbox", { name: "사용할 포인트" })).toBeDisabled();
+    await userEvent.click(canvas.getByRole("button", { name: "닫기" }));
+    await expect(canvas.getByRole("button", { name: /17,800.*주문하기/ })).toBeEnabled();
+    await userEvent.click(canvas.getByRole("button", { name: "오트 라떼 옵션 변경" }));
     await userEvent.click(await canvas.findByRole("radio", { name: /샷 추가/ }));
     await userEvent.click(canvas.getByRole("button", { name: "옵션 적용" }));
     await expect(await canvas.findByText("샷 추가")).toBeVisible();

@@ -387,3 +387,18 @@ describe("customer reorder", () => {
     document.cookie = "BEANFLOW_CUSTOMER_XSRF=; Max-Age=0; path=/";
   });
 });
+
+
+describe("preparation estimate lifecycle", () => {
+  it.each(["PENDING_PAYMENT", "COMPLETED", "CANCELLED", "REJECTED", "EXPIRED"])("does not show future preparation for %s", async (status) => {
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response({ ...detail, status, lifecycle: { ...detail.lifecycle, estimatedReadyAt: "2026-08-14T03:20:00Z" } }) as never);
+    renderAt(`/app/orders/${detail.orderReference}`);
+    await screen.findByRole("heading", { name: "거래 요약" });
+    expect(screen.queryByText(/준비 예상|픽업 시간|매장 수락 후/)).not.toBeInTheDocument();
+  });
+  it.each(["PAID", "ACCEPTED", "PREPARING"])("preserves the server estimate for %s", async (status) => {
+    vi.spyOn(customerApi, "GET").mockResolvedValue(response({ ...detail, status, lifecycle: { ...detail.lifecycle, estimatedReadyAt: "2026-08-14T03:20:00Z" } }) as never);
+    renderAt(`/app/orders/${detail.orderReference}`);
+    expect(await screen.findByText(/준비 예상/)).toBeVisible();
+  });
+});

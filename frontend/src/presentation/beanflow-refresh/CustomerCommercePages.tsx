@@ -139,7 +139,7 @@ function RefreshMenuRow({ menu, storeId, storeName, orderable }: { menu: Menu; s
   );
 }
 
-type QuoteState = { status: "idle" } | { status: "loading" } | { status: "ready"; quote: OrderQuote } | { status: "failed"; error: unknown } | { status: "stale"; quote: OrderQuote };
+type QuoteState = { status: "idle" } | { status: "loading" } | { status: "ready"; quote: OrderQuote; inputKey: string } | { status: "failed"; error: unknown } | { status: "stale"; quote: OrderQuote; inputKey: string };
 
 export function RefreshCartPage() {
   const state = useCart();
@@ -157,6 +157,10 @@ function RefreshCartContents({ storeId, savedStoreName, revision, lines }: { sto
   const points = usePointUse();
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const quoteRequest = useRef(0);
+  const submittingRef = useRef(false);
+  const editingRef = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const intent = useRef(new SubmissionIntent());
   const store = useStore(storeId);
   const storeName = store.state.status === "ready" ? store.state.value.name : savedStoreName;
@@ -164,6 +168,12 @@ function RefreshCartContents({ storeId, savedStoreName, revision, lines }: { sto
   const catalog = useCurrentMenuCatalog(storeId);
   const [failedImages, setFailedImages] = useState<string[]>([]);
   const selectedCoupon = useCouponSelection(storeId);
+  const inputKey = JSON.stringify(editableOrderInput(storeId, lines, points.amount, selectedCoupon?.couponIssuanceId));
+  const currentInput = useRef({ inputKey, revision, available: storeAcceptsOrders && points.valid });
+  currentInput.current = { inputKey, revision, available: storeAcceptsOrders && points.valid };
+  const inputsLocked = submitting || editingIndex !== null;
+  const quoteMatchesInput = (quoteState.status === "ready" || quoteState.status === "stale") && quoteState.inputKey === inputKey;
+  function closeEditor() { editingRef.current = false; setEditingIndex(null); }
 
   useEffect(() => {
     intent.current.rotate(); setFailure(null); const requestId = ++quoteRequest.current;
@@ -172,18 +182,25 @@ function RefreshCartContents({ storeId, savedStoreName, revision, lines }: { sto
     const timer = window.setTimeout(() => void (async () => {
       try {
         const quote = unwrap(await customerApi.POST("/me/order-quotes", { params: { header: await customerCsrfHeader() }, body: editableOrderInput(storeId, lines, points.amount, selectedCoupon?.couponIssuanceId) })) as OrderQuote;
-        if (quoteRequest.current === requestId) setQuoteState({ status: "ready", quote });
+        if (quoteRequest.current === requestId) setQuoteState({ status: "ready", quote, inputKey });
       } catch (error) { if (quoteRequest.current === requestId) setQuoteState({ status: "failed", error }); }
     })(), 250);
     return () => { window.clearTimeout(timer); ++quoteRequest.current; };
-  }, [storeId, lines, selectedCoupon?.couponIssuanceId, storeAcceptsOrders, quoteReload, points.amount, points.valid]);
+  }, [storeId, lines, selectedCoupon?.couponIssuanceId, storeAcceptsOrders, quoteReload, points.amount, points.valid, inputKey]);
 
   async function createOrder() {
-    if (quoteState.status !== "ready" || !storeAcceptsOrders || !points.valid || submitting) return;
+    if (quoteState.status !== "ready" || !quoteMatchesInput || !storeAcceptsOrders || !points.valid || submittingRef.current || editingRef.current) return;
     const body = { ...editableOrderInput(storeId, lines, points.amount, selectedCoupon?.couponIssuanceId), expectedQuoteFingerprint: quoteState.quote.quoteFingerprint };
-    setSubmitting(true); setFailure(null);
+    submittingRef.current = true; setSubmitting(true); setFailure(null);
     try {
-      const created = unwrap(await customerApi.POST("/orders", { params: { header: { "Idempotency-Key": intent.current.keyFor(JSON.stringify(body)), ...(await customerCsrfHeader()) } }, body })).order as Order;
+      const csrf = await customerCsrfHeader();
+      const saved = cart.read();
+      if (!mounted.current) return;
+      if (currentInput.current.inputKey !== inputKey || currentInput.current.revision !== revision || !currentInput.current.available || editingRef.current || saved.status !== "ready" || saved.cart.revision !== revision) {
+        setQuoteReload((value) => value + 1);
+        return;
+      }
+      const created = unwrap(await customerApi.POST("/orders", { params: { header: { "Idempotency-Key": intent.current.keyFor(JSON.stringify(body)), ...csrf } }, body })).order as Order;
       intent.current.complete();
       checkoutCartStorage.save(created.publicReference, {
         cartRevision: revision,
@@ -210,12 +227,14 @@ function RefreshCartContents({ storeId, savedStoreName, revision, lines }: { sto
       navigate(`/app/orders/${created.publicReference}`);
     } catch (error) {
       const current = staleQuote(error);
-      if (current) setQuoteState({ status: "stale", quote: current });
+      if (current) {
+        if (currentInput.current.inputKey === inputKey && currentInput.current.revision === revision) setQuoteState({ status: "stale", quote: current, inputKey });
+      }
       else { if (shouldRotateIdempotencyKey(error)) intent.current.rotate(); setFailure(error); }
-    } finally { setSubmitting(false); }
+    } finally { submittingRef.current = false; setSubmitting(false); }
   }
 
-  const quote = quoteState.status === "ready" || quoteState.status === "stale" ? quoteState.quote : null;
+  const quote = quoteMatchesInput && (quoteState.status === "ready" || quoteState.status === "stale") ? quoteState.quote : null;
   const guidance = orderConflictGuidance(failure);
   const quoteGuidance = quoteState.status === "failed" ? orderConflictGuidance(quoteState.error) : null;
   return (
@@ -225,25 +244,26 @@ function RefreshCartContents({ storeId, savedStoreName, revision, lines }: { sto
       {store.state.status !== "loading" ? <section className="bfr-cart-store"><div><MapPin size={16} /><span><strong>{storeName}</strong><small>{store.state.status === "ready" ? store.state.value.customerDisplay.addressLine ?? "주소 정보 없음" : "매장 안내를 불러오지 못했어요."}</small></span></div>{store.state.status === "ready" ? <span>{store.state.value.orderingAvailable ? "주문 가능" : "주문 쉬는 중"}</span> : null}</section> : null}
       {store.state.status === "failed" ? <RefreshError error={store.state.error} retry={store.reload} /> : null}
       <section className="bfr-cart-lines" aria-label="담은 메뉴">
-        <header><h2>주문 메뉴</h2><ButtonLink variant="ghost" to={`/app/stores/${storeId}`}>메뉴 더 담기</ButtonLink></header>
+        <header><h2>주문 메뉴</h2>{inputsLocked ? <Button variant="ghost" disabled>메뉴 더 담기</Button> : <ButtonLink variant="ghost" to={`/app/stores/${storeId}`}>메뉴 더 담기</ButtonLink>}</header>
         {catalog.state.status === "failed" ? <RefreshError error={catalog.state.error} retry={catalog.reload} /> : null}
         {failedImages.length ? <div role="alert"><p>메뉴 이미지를 표시하지 못했어요.</p><Button variant="secondary" onClick={() => { setFailedImages([]); catalog.reload(); }}>이미지 다시 불러오기</Button></div> : null}
         {lines.map((line, index) => { const quotedLine = quote?.lines[index]; const menuName = quotedLine?.menuName ?? line.display.menuName; const optionNames = quotedLine?.optionNames ?? line.display.optionNames; const currentMenu = catalog.state.status === "ready" ? catalog.state.value.find((menu) => menu.menuId === line.menuId) : undefined; const image = currentMenu?.image; return <article className="bfr-cart-line" key={`${line.menuId}-${line.optionIds.join("-")}`}>
           <div className="bfr-cart-line-summary"><span className="bfr-cart-line-media">{image && !failedImages.includes(image.url) ? <img src={image.url} alt="" onError={() => setFailedImages((current) => current.includes(image.url) ? current : [...current, image.url])} /> : <Coffee size={21} aria-hidden="true" />}</span><span><strong>{menuName}</strong><small>{optionNames.join(" · ") || "기본 옵션"}</small><b>{quote?.lines[index] ? won.format(quote.lines[index]!.lineTotalKrw) : `예상 ${won.format(line.display.unitPriceKrw * line.quantity)}`}</b></span></div>
-          <div className="bfr-cart-line-actions"><QuantityStepper value={line.quantity} label={`${menuName} 수량`} disabled={submitting} onChange={(value) => cart.setQuantity(index, value)} /><Button variant="ghost" disabled={submitting} aria-label={`${menuName} 옵션 변경`} onClick={() => setEditingIndex(index)}>옵션 변경</Button><Button variant="ghost" disabled={submitting} aria-label={`${menuName} 삭제`} onClick={() => { setEditingIndex(null); cart.setQuantity(index, 0); }}><Trash2 size={16} aria-hidden="true" />삭제</Button></div>
-          {editingIndex === index ? <CartLineEditor storeId={storeId} line={line} onClose={() => setEditingIndex(null)} onSave={(updated) => { setEditingIndex(null); cart.updateLine(index, updated); }} /> : null}
+          <div className="bfr-cart-line-actions"><QuantityStepper value={line.quantity} label={`${menuName} 수량`} disabled={inputsLocked} onChange={(value) => cart.setQuantity(index, value)} /><Button variant="ghost" disabled={inputsLocked} aria-label={`${menuName} 옵션 변경`} onClick={() => { if (submittingRef.current || editingRef.current) return; editingRef.current = true; setEditingIndex(index); }}>옵션 변경</Button><Button variant="ghost" disabled={inputsLocked} aria-label={`${menuName} 삭제`} onClick={() => { setEditingIndex(null); cart.setQuantity(index, 0); }}><Trash2 size={16} aria-hidden="true" />삭제</Button></div>
+          {editingIndex === index ? <CartLineEditor storeId={storeId} line={line} onClose={closeEditor} onSave={(updated) => { cart.updateLine(index, updated); closeEditor(); }} /> : null}
         </article>; })}
         {quoteState.status === "idle" ? <p>매장 주문 가능 여부를 확인하면 최종 금액과 혜택을 보여드릴게요.</p> : null}
         {quoteState.status === "loading" ? <RefreshLoading label="현재 주문 금액을 확인하는 중" /> : null}
         {quoteState.status === "failed" ? quoteGuidance ? <div className="bfr-decision" role="alert"><strong>{quoteGuidance.title}</strong><p>{quoteGuidance.description}</p><Button variant="secondary" onClick={() => setQuoteReload((value) => value + 1)}>견적 다시 확인</Button></div> : <RefreshError error={quoteState.error} retry={() => setQuoteReload((value) => value + 1)} /> : null}
       </section>
       <p className="bfr-inline-status" role="status">픽업 시간을 고르지 않아도 돼요. 결제가 확인되면 매장이 주문을 접수하고 준비 예상시간을 알려드려요.</p>
-      <section className="bfr-coupon-row"><span><small>쿠폰</small><strong>{selectedCoupon?.label ?? "선택하지 않음"}</strong></span>{selectedCoupon ? <Button variant="ghost" onClick={() => couponSelection.clear(storeId)}>선택 해제</Button> : <ButtonLink variant="ghost" to={couponWalletPath(storeId, "/app/cart")}>쿠폰 보기</ButtonLink>}</section>
-      <PointUseField selection={points} disabled={submitting} maximum={quoteState.status === "ready" ? quoteState.quote.pricing.subtotalKrw - quoteState.quote.pricing.couponDiscountKrw : undefined} />
+      <section className="bfr-coupon-row"><span><small>쿠폰</small><strong>{selectedCoupon?.label ?? "선택하지 않음"}</strong></span>{selectedCoupon ? <Button variant="ghost" disabled={inputsLocked} onClick={() => couponSelection.clear(storeId)}>선택 해제</Button> : inputsLocked ? <Button variant="ghost" disabled>쿠폰 보기</Button> : <ButtonLink variant="ghost" to={couponWalletPath(storeId, "/app/cart")}>쿠폰 보기</ButtonLink>}</section>
+      <PointUseField selection={points} disabled={inputsLocked} maximum={quoteState.status === "ready" && quoteMatchesInput ? quoteState.quote.pricing.subtotalKrw - quoteState.quote.pricing.couponDiscountKrw : undefined} />
       {quote ? <section className="bfr-transaction-card bfr-cart-pricing"><RefreshQuotePricing quote={quote} /></section> : null}
       {guidance ? <div className="bfr-decision" role="alert"><strong>{guidance.title}</strong><p>{guidance.description}</p></div> : failure ? <RefreshError error={failure} /> : null}
-      {quoteState.status === "stale" ? <div className="bfr-decision" role="alert"><strong>주문 금액과 조건이 변경됐어요</strong><p>변경된 금액과 조건을 확인한 뒤 다시 주문해 주세요.</p><Button variant="brand" onClick={() => { intent.current.rotate(); setFailure(null); setQuoteState({ status: "ready", quote: quoteState.quote }); }}>변경 내용 확인</Button></div> : null}
-      <Button variant="brand" size="xl" block loading={submitting} disabled={!storeAcceptsOrders || !points.valid || quoteState.status !== "ready"} onClick={() => void createOrder()}>{quoteState.status === "ready" ? `${won.format(quoteState.quote.pricing.payableKrw)} 주문하기` : "견적 확인 후 주문하기"}</Button>
+      {quoteState.status === "stale" && quoteMatchesInput ? <div className="bfr-decision" role="alert"><strong>주문 금액과 조건이 변경됐어요</strong><p>변경된 금액과 조건을 확인한 뒤 다시 주문해 주세요.</p><Button variant="brand" disabled={inputsLocked} onClick={() => { intent.current.rotate(); setFailure(null); setQuoteState({ status: "ready", quote: quoteState.quote, inputKey }); }}>변경 내용 확인</Button></div> : null}
+      {editingIndex !== null ? <p role="status">옵션을 적용하거나 닫은 뒤 주문해 주세요.</p> : null}
+      <Button variant="brand" size="xl" block loading={submitting} disabled={inputsLocked || !storeAcceptsOrders || !points.valid || quoteState.status !== "ready" || !quoteMatchesInput} onClick={() => void createOrder()}>{quoteState.status === "ready" && quoteMatchesInput ? `${won.format(quoteState.quote.pricing.payableKrw)} 주문하기` : "견적 확인 후 주문하기"}</Button>
     </div>
   );
 }
