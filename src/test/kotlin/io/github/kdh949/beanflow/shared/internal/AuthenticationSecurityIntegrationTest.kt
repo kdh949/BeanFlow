@@ -1,5 +1,8 @@
 package io.github.kdh949.beanflow.shared.internal
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.internal.CustomerAccountEntity
@@ -16,6 +19,7 @@ import io.github.kdh949.beanflow.shared.api.MerchantActor
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
@@ -59,6 +63,36 @@ internal class AuthenticationSecurityIntegrationTest(
     @Autowired private val clock: Clock,
 ) {
     private val transactions = TransactionTemplate(transactionManager)
+
+    @Test
+    fun `security rejection shares its support code with response header and failure log`() {
+        val logger = LoggerFactory.getLogger(CorrelationIdFilter::class.java) as Logger
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        logger.addAppender(appender)
+        try {
+            val codes =
+                (1..2).map {
+                    val result =
+                        mockMvc
+                            .perform(get("/api/v1/me/orders").header("X-Correlation-Id", "security-support-code"))
+                            .andExpect(status().isUnauthorized)
+                            .andReturn()
+                    val code = result.response.getHeader("X-Correlation-Id")!!
+                    assertThat(UUID.fromString(code).toString()).isEqualTo(code)
+                    assertThat(code).isNotEqualTo("security-support-code")
+                    jsonPath("$.correlationId").value(code).match(result)
+                    code
+                }
+            assertThat(codes).doesNotHaveDuplicates()
+            val fields = appender.list.map { event -> event.keyValuePairs.associate { it.key to it.value } }
+            assertThat(fields.map { it["correlationId"] }).containsExactlyElementsOf(codes)
+            assertThat(fields).allSatisfy { assertThat(it).containsEntry("status", 401) }
+            assertThat(appender.list.joinToString { it.formattedMessage + it.keyValuePairs }).doesNotContain("security-support-code")
+        } finally {
+            logger.detachAppender(appender)
+            appender.stop()
+        }
+    }
 
     @Test
     fun `exactly four security filter chains are registered`() {

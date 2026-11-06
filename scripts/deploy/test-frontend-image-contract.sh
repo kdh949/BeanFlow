@@ -28,7 +28,13 @@ grep -Eq 'location[[:space:]]+\^~[[:space:]]+/auth/admin/' "$nginx_config" || fa
 grep -A2 -E 'location[[:space:]]+\^~[[:space:]]+/auth/admin/' "$nginx_config" | grep -q 'return 404' || fail "Keycloak admin route must be blocked"
 grep -q 'try_files \$uri \$uri/ /index.html' "$nginx_config" || fail "SPA fallback is required"
 grep -q 'proxy_set_header X-Forwarded-Proto https' "$nginx_config" || fail "Sophos TLS termination must be explicit"
-grep -q '\$request_method \$uri \$server_protocol' "$nginx_config" || fail "safe request log format is required"
+access_log_format="$(sed -n '/^log_format beanflow_safe/,/;/p' "$nginx_config")"
+for field in '$request_method' '$status' '$request_id' '$upstream_http_x_correlation_id'; do
+  grep -Fq "$field" <<< "$access_log_format" || fail "access log must contain $field"
+done
+for field in '$uri' '$remote_addr' '$remote_user' '$http_user_agent'; do
+  ! grep -Fq "$field" <<< "$access_log_format" || fail "access log must not contain $field"
+done
 ! grep -q '\$request_uri' "$nginx_config" || fail "query-bearing request_uri must not be logged"
 ! grep -q '\$http_referer' "$nginx_config" || fail "raw Referer must not be logged"
 grep -Eq 'location[[:space:]]+=[[:space:]]+/healthz' "$nginx_config" || fail "health endpoint is required"

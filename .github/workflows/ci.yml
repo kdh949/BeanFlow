@@ -116,6 +116,11 @@ jobs:
           scripts/ci/run-and-capture.sh .ci-artifacts/deployment-contract.log \
             bash scripts/deploy/test-deployment-contract.sh
 
+      - name: Verify HTTP failure support-code correlation through Nginx
+        run: >-
+          scripts/ci/run-and-capture.sh .ci-artifacts/http-failure-nginx.log
+          python3 scripts/test-http-failure-nginx.py
+
       - name: Check whitespace errors
         run: >-
           scripts/ci/run-and-capture.sh .ci-artifacts/diff-check.log
