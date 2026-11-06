@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { merchantApi } from "../../../api/merchantClient";
-import { clearMerchantBrowserState, merchantSession } from "./merchantSession";
+import { clearMerchantBrowserState, merchantSession, sanitizeStoreReturnPath } from "./merchantSession";
 
 const actor = {
   actorType: "MERCHANT" as const,
@@ -115,5 +115,15 @@ describe("merchant logout browser cleanup", () => {
     clearMerchantBrowserState();
 
     expect(sessionStorage.getItem("beanflow.idempotency.payment-attempt.order-1")).toBe("customer-submit-key");
+  });
+});
+
+
+describe("store return paths", () => {
+  it.each(["/store", "/store?tab=orders#ready", "/store/management?tab=menu#catalog"])("preserves %s", (path) => {
+    expect(sanitizeStoreReturnPath(path)).toBe(path);
+  });
+  it.each([null, "https://example.com/store", "//example.com/store", "/storefront", "/store/../ops", "/store/login", "/store/login?next=/store", "/store/password#form", "/store/%6cogin", "/store/%ZZ", "/store/\\evil", "/store/%5cevil"])("rejects %s", (path) => {
+    expect(sanitizeStoreReturnPath(path)).toBe("/store");
   });
 });

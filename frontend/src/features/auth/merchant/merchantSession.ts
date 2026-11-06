@@ -166,6 +166,14 @@ export async function requestMerchantStores(): Promise<MerchantStore[]> {
  * or absolute URL from the query string is discarded rather than sanitized.
  */
 export function sanitizeStoreReturnPath(value: string | null): string {
-  if (!value || !value.startsWith("/store") || value.startsWith("//")) return "/store";
-  return value;
+  if (!value || !/^\/store(?:[/?#]|$)/.test(value) || /[\\\u0000-\u0020]/.test(value)) return "/store";
+  try {
+    const url = new URL(value, "https://beanflow.invalid");
+    const path = decodeURIComponent(url.pathname);
+    if (url.origin !== "https://beanflow.invalid" || !/^\/store(?:\/|$)/.test(path)) return "/store";
+    if (/^\/store\/(?:login|password)(?:\/|$)/.test(path) || /[\\\u0000-\u0020]/.test(path)) return "/store";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "/store";
+  }
 }

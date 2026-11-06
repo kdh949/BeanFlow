@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect } from "storybook/test";
+import { expect, userEvent } from "storybook/test";
 import { HttpResponse, http } from "msw";
 import { merchantIdentity, pending } from "../../../../.storybook/fixtures";
 import { MerchantSessionGate } from "./MerchantSessionGate";
@@ -14,6 +14,7 @@ const meta = {
   component: MerchantSessionGate,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: {
         component:
@@ -41,10 +42,17 @@ export const Checking: Story = {
 /** 403 is a different actor, not a signed-out operator, so it never redirects to login. */
 export const WrongActor: Story = {
   parameters: {
+    routing: { path: "/store/*", initialEntry: "/store/management?tab=menu#catalog" },
     msw: { handlers: merchantMeResponds(403, { code: "ACCESS_DENIED", message: "매장 권한이 없습니다." }) },
   },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText(/점주 계정으로 다시 로그인해 주세요/)).toBeVisible();
+    const login = canvas.getByRole("link", { name: "매장 계정으로 로그인" });
+    await expect(login).toHaveAttribute("href", "/store/login?next=%2Fstore%2Fmanagement%3Ftab%3Dmenu%23catalog");
+    await userEvent.tab();
+    await userEvent.tab();
+    await expect(login).toHaveFocus();
+    await expect(canvas.queryByRole("navigation", { name: "매장 운영 메뉴" })).toBeNull();
   },
 };
 
