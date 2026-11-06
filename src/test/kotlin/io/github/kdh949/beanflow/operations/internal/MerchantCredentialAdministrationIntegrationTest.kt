@@ -4,6 +4,10 @@ import io.github.kdh949.beanflow.BeanflowIsolatedSpringContext
 import io.github.kdh949.beanflow.TestcontainersConfiguration
 import io.github.kdh949.beanflow.identity.internal.AuthenticationScopeHmac
 import io.github.kdh949.beanflow.identity.internal.LoginAttemptActorType
+import io.github.kdh949.beanflow.identity.internal.LoginAttemptRepository
+import io.github.kdh949.beanflow.identity.internal.MerchantAccountJpaRepository
+import io.github.kdh949.beanflow.identity.internal.MerchantAccountTransactions
+import io.github.kdh949.beanflow.identity.internal.PreparedMerchantLogin
 import io.github.kdh949.beanflow.operations.api.OperatorPermission
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
@@ -25,6 +29,8 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.ObjectMapper
 import java.sql.Timestamp
 import java.time.Instant
@@ -33,6 +39,7 @@ import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 @Import(TestcontainersConfiguration::class)
 @AutoConfigureMockMvc
@@ -48,6 +55,10 @@ internal class MerchantCredentialAdministrationIntegrationTest(
     @Autowired private val jdbc: JdbcTemplate,
     @Autowired private val objectMapper: ObjectMapper,
     @Autowired private val scopeHmac: AuthenticationScopeHmac,
+    @Autowired private val attempts: LoginAttemptRepository,
+    @Autowired private val accounts: MerchantAccountJpaRepository,
+    @Autowired private val merchantTransactions: MerchantAccountTransactions,
+    @Autowired private val transactionManager: PlatformTransactionManager,
 ) {
     private val operatorId = UUID.fromString("40000000-0000-0000-0000-000000000040")
     private lateinit var storeId: UUID
@@ -290,6 +301,257 @@ internal class MerchantCredentialAdministrationIntegrationTest(
     }
 
     @Test
+    fun `one release after thirty failed merchant logins clears account id and ip and permits login`() {
+        val (accountId, password) = createdCredential("ip.recovery", "merchant-create-ip-recovery")
+        repeat(30) { index ->
+            merchantLogin("ip.recovery", "incorrect-password-for-test", "192.0.2.10")
+                .andExpect(if (index == 29) status().isTooManyRequests else status().isUnauthorized)
+        }
+        merchantLogin("ip.recovery", password, "192.0.2.10")
+            .andExpect(status().isTooManyRequests)
+            .andExpect(jsonPath("$.code").value("AUTHENTICATION_RATE_LIMITED"))
+        val version =
+            jdbc.queryForObject(
+                "SELECT credential_version FROM identity_merchant_account WHERE id = ?",
+                Long::class.java,
+                accountId,
+            )
+
+        postReason("/api/v1/operations/merchant-accounts/$accountId/lock-releases", "merchant-release-ip-recovery")
+            .andExpect(status().isNoContent)
+
+        assertThat(count("identity_login_attempt")).isZero()
+        assertThat(count("identity_merchant_login_attempt_source")).isZero()
+        assertThat(
+            jdbc.queryForObject("SELECT credential_version FROM identity_merchant_account WHERE id = ?", Long::class.java, accountId),
+        ).isEqualTo(version)
+        assertReleasedIpCount(1)
+        merchantLogin("ip.recovery", password, "192.0.2.10").andExpect(status().isOk)
+    }
+
+    @Test
+    fun `blocked valid logins link multiple ips while unrelated customer legacy and old windows stay blocked`() {
+        val (accountId, password) = createdCredential("ip.scoped", "merchant-create-ip-scoped")
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
+        listOf("192.0.2.20", "192.0.2.21", "192.0.2.22", "192.0.2.23", "192.0.2.24").forEach { seedBlockedIp(it, now) }
+        seedBlockedIp("192.0.2.20", now, LoginAttemptActorType.CUSTOMER)
+        seedBlockedIp("192.0.2.25", now.minusSeconds(901))
+        attempts.recordMerchantSource(merchantIdHmac("shared.merchant"), merchantIpHmac("192.0.2.20"), now)
+        attempts.recordMerchantSource(merchantIdHmac("unrelated.merchant"), merchantIpHmac("192.0.2.22"), now)
+        attempts.recordMerchantSource(merchantIdHmac("ip.scoped"), merchantIpHmac("192.0.2.25"), now.minusSeconds(901))
+        seedBlockedLoginAttempt("shared.merchant", now)
+        attempts.recordMerchantSource(merchantIdHmac("ip.scoped"), merchantIpHmac("192.0.2.23"), now.minusSeconds(1))
+        merchantLogin("ip.scoped", password, "192.0.2.20").andExpect(status().isTooManyRequests)
+        merchantLogin("ip.scoped", password, "192.0.2.21").andExpect(status().isTooManyRequests)
+
+        postReason("/api/v1/operations/merchant-accounts/$accountId/lock-releases", "merchant-release-ip-scoped")
+            .andExpect(status().isNoContent)
+
+        assertReleasedIpCount(2)
+        assertThat(count("identity_login_attempt")).isEqualTo(6)
+        assertThat(count("identity_merchant_login_attempt_source")).isEqualTo(3)
+        listOf("192.0.2.22", "192.0.2.23", "192.0.2.24", "192.0.2.25").forEach { ip ->
+            assertThat(ipAttemptCount(ip)).isEqualTo(1)
+        }
+        assertThat(ipAttemptCount("192.0.2.20", LoginAttemptActorType.CUSTOMER)).isEqualTo(1)
+        val audit =
+            jdbc.queryForObject(
+                "SELECT after_summary::text FROM operations_audit_record WHERE action = 'MERCHANT_LOCK_RELEASED'",
+                String::class.java,
+            )
+        assertThat(audit).doesNotContain("192.0.2.", merchantIdHmac("ip.scoped"), merchantIpHmac("192.0.2.20"))
+        merchantLogin("ip.scoped", password, "192.0.2.20").andExpect(status().isOk)
+    }
+
+    @Test
+    fun `release audit failure rolls back account id ip sources and terminal outcome`() {
+        val (accountId, _) = createdCredential("ip.atomic", "merchant-create-ip-atomic")
+        seedAccountAndIpLock(accountId, "ip.atomic", "192.0.2.30")
+        installAuditFailureTrigger("MERCHANT_LOCK_RELEASED")
+
+        postReason("/api/v1/operations/merchant-accounts/$accountId/lock-releases", "merchant-release-ip-atomic")
+            .andExpect(status().isServiceUnavailable)
+
+        assertThat(jdbc.queryForObject("SELECT locked_until FROM identity_merchant_account WHERE id = ?", Timestamp::class.java, accountId))
+            .isNotNull()
+        assertThat(count("identity_login_attempt")).isEqualTo(2)
+        assertThat(count("identity_merchant_login_attempt_source")).isEqualTo(1)
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM operations_merchant_credential_command_idempotency WHERE operation = 'RELEASE_LOCK'",
+                Long::class.java,
+            ),
+        ).isZero()
+        dropAuditFailureTrigger()
+        postReason("/api/v1/operations/merchant-accounts/$accountId/lock-releases", "merchant-release-ip-atomic")
+            .andExpect(status().isNoContent)
+        assertThat(count("identity_login_attempt")).isZero()
+        assertReleasedIpCount(1)
+    }
+
+    @Test
+    fun `release replay does not clear a new account or ip block`() {
+        val (accountId, _) = createdCredential("ip.replay", "merchant-create-ip-replay")
+        seedAccountAndIpLock(accountId, "ip.replay", "192.0.2.40")
+        val path = "/api/v1/operations/merchant-accounts/$accountId/lock-releases"
+        postReason(path, "merchant-release-ip-replay").andExpect(status().isNoContent)
+        seedAccountAndIpLock(accountId, "ip.replay", "192.0.2.40")
+
+        postReason(path, "merchant-release-ip-replay").andExpect(status().isNoContent)
+
+        assertThat(count("identity_login_attempt")).isEqualTo(2)
+        assertThat(count("identity_merchant_login_attempt_source")).isEqualTo(1)
+        assertThat(jdbc.queryForObject("SELECT locked_until FROM identity_merchant_account WHERE id = ?", Timestamp::class.java, accountId))
+            .isNotNull()
+        assertThat(
+            jdbc.queryForObject("SELECT count(*) FROM operations_audit_record WHERE action = 'MERCHANT_LOCK_RELEASED'", Long::class.java),
+        ).isEqualTo(1)
+        postReason(path, "merchant-release-ip-replay-new").andExpect(status().isNoContent)
+        assertThat(count("identity_login_attempt")).isZero()
+    }
+
+    @Test
+    fun `release waits for concurrent merchant failure and clears its committed ip connection`() {
+        val (accountId, password) = createdCredential("ip.concurrent", "merchant-create-ip-concurrent")
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
+        val command =
+            PreparedMerchantLogin(
+                merchantIdHmac("ip.concurrent"),
+                merchantIpHmac("192.0.2.50"),
+                accounts.findById(accountId).orElseThrow().snapshot(),
+                false,
+                null,
+                now,
+            )
+        val recorded = CountDownLatch(1)
+        val commit = CountDownLatch(1)
+        val releaseStarted = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val failure =
+                executor.submit {
+                    TransactionTemplate(transactionManager).executeWithoutResult {
+                        merchantTransactions.completeLogin(command)
+                        recorded.countDown()
+                        check(commit.await(10, TimeUnit.SECONDS))
+                    }
+                }
+            assertThat(recorded.await(5, TimeUnit.SECONDS)).isTrue()
+            val release =
+                executor.submit<MockHttpServletResponse> {
+                    releaseStarted.countDown()
+                    postReason(
+                        "/api/v1/operations/merchant-accounts/$accountId/lock-releases",
+                        "merchant-release-ip-concurrent",
+                    ).andReturn().response
+                }
+            assertThat(releaseStarted.await(5, TimeUnit.SECONDS)).isTrue()
+            org.assertj.core.api.Assertions
+                .assertThatThrownBy { release.get(200, TimeUnit.MILLISECONDS) }
+                .isInstanceOf(TimeoutException::class.java)
+            commit.countDown()
+            failure.get(10, TimeUnit.SECONDS)
+            assertThat(release.get(10, TimeUnit.SECONDS).status).isEqualTo(204)
+            assertThat(count("identity_login_attempt")).isZero()
+            assertThat(count("identity_merchant_login_attempt_source")).isZero()
+            assertReleasedIpCount(1)
+            merchantLogin("ip.concurrent", password, "192.0.2.50").andExpect(status().isOk)
+        } finally {
+            commit.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `two accounts release shared ips concurrently without duplicate effects or deadlocks`() {
+        val (firstAccount, _) = createdCredential("shared.first", "merchant-create-shared-first")
+        val (secondAccount, _) = createdCredential("shared.second", "merchant-create-shared-second")
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
+        val ips = listOf("192.0.2.80", "192.0.2.81")
+        ips.forEach { seedBlockedIp(it, now) }
+        listOf(firstAccount to "shared.first", secondAccount to "shared.second").forEach { (id, loginId) ->
+            seedBlockedLoginAttempt(loginId, now)
+            jdbc.update("UPDATE identity_merchant_account SET locked_until = ? WHERE id = ?", Timestamp.from(now.plusSeconds(900)), id)
+            ips.forEach { attempts.recordMerchantSource(merchantIdHmac(loginId), merchantIpHmac(it), now) }
+        }
+        val start = CountDownLatch(1)
+        val ready = CountDownLatch(2)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val responses =
+                listOf(firstAccount, secondAccount).mapIndexed { index, accountId ->
+                    executor.submit<MockHttpServletResponse> {
+                        ready.countDown()
+                        check(start.await(5, TimeUnit.SECONDS))
+                        postReason(
+                            "/api/v1/operations/merchant-accounts/$accountId/lock-releases",
+                            "merchant-release-shared-$index",
+                        ).andReturn().response
+                    }
+                }
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue()
+            start.countDown()
+            assertThat(responses.map { it.get(10, TimeUnit.SECONDS).status }).containsExactly(204, 204)
+            assertThat(count("identity_login_attempt")).isZero()
+            assertThat(count("identity_merchant_login_attempt_source")).isZero()
+            assertThat(
+                jdbc.queryForObject("SELECT count(*) FROM identity_merchant_account WHERE locked_until IS NOT NULL", Long::class.java),
+            ).isZero()
+            assertThat(
+                jdbc.queryForObject(
+                    "SELECT sum((after_summary::jsonb ->> 'releasedIpRestrictionCount')::integer) FROM operations_audit_record WHERE action = 'MERCHANT_LOCK_RELEASED'",
+                    Int::class.java,
+                ),
+            ).isEqualTo(2)
+        } finally {
+            start.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `source retention is bounded even for active shared ips and ip deletion cascades`() {
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
+        val cutoff = now.minusSeconds(24 * 60 * 60)
+        val ip = merchantIpHmac("192.0.2.60")
+        seedBlockedIp("192.0.2.60", now)
+        repeat(102) { index ->
+            attempts.recordMerchantSource(merchantIdHmac("retention.$index"), ip, cutoff.minusSeconds(1))
+        }
+        attempts.recordMerchantSource(merchantIdHmac("retention.boundary"), ip, cutoff)
+        assertThat(attempts.deleteExpiredMerchantSources(cutoff, 100)).isEqualTo(100)
+        assertThat(attempts.deleteExpiredMerchantSources(cutoff, 100)).isEqualTo(2)
+        assertThat(count("identity_merchant_login_attempt_source")).isEqualTo(1)
+        assertThat(ipAttemptCount("192.0.2.60")).isEqualTo(1)
+        jdbc.update("DELETE FROM identity_login_attempt WHERE scope_hmac = ?", ip)
+        assertThat(count("identity_merchant_login_attempt_source")).isZero()
+    }
+
+    @Test
+    fun `source persistence failure rejects authentication and rolls back attempted lock records`() {
+        createdCredential("ip.storage", "merchant-create-ip-storage")
+        jdbc.execute(
+            """
+            CREATE FUNCTION fail_merchant_source_insert() RETURNS trigger AS ${'$'}${'$'}
+            BEGIN RAISE EXCEPTION 'forced source persistence failure'; END;
+            ${'$'}${'$'} LANGUAGE plpgsql
+            """.trimIndent(),
+        )
+        jdbc.execute(
+            "CREATE TRIGGER fail_merchant_source_insert_trigger BEFORE INSERT ON identity_merchant_login_attempt_source FOR EACH ROW EXECUTE FUNCTION fail_merchant_source_insert()",
+        )
+        try {
+            merchantLogin("ip.storage", "incorrect-password-for-test", "192.0.2.70")
+                .andExpect(status().isServiceUnavailable)
+            assertThat(count("identity_login_attempt")).isZero()
+            assertThat(count("identity_merchant_login_attempt_source")).isZero()
+        } finally {
+            jdbc.execute("DROP TRIGGER IF EXISTS fail_merchant_source_insert_trigger ON identity_merchant_login_attempt_source")
+            jdbc.execute("DROP FUNCTION IF EXISTS fail_merchant_source_insert()")
+        }
+    }
+
+    @Test
     fun `permission store and audit failures leave no orphan account membership or outcome`() {
         jdbc.update("UPDATE operations_operator_permission_grant SET state = 'REVOKED', revoked_at = now()")
         create("forbidden.merchant", "merchant-create-deny").andExpect(status().isForbidden)
@@ -389,6 +651,100 @@ internal class MerchantCredentialAdministrationIntegrationTest(
             .assertThatThrownBy {
                 jdbc.update("UPDATE operations_merchant_credential_command_idempotency SET outcome = 'LOCK_RELEASED'")
             }.isInstanceOf(org.springframework.dao.DataAccessException::class.java)
+    }
+
+    private fun createdCredential(
+        loginId: String,
+        key: String,
+    ): Pair<UUID, String> {
+        val response = create(loginId, key).andExpect(status().isCreated).andReturn().response
+        val body = objectMapper.readTree(response.contentAsString)
+        return UUID.fromString(body["merchantAccountId"].textValue()) to body["temporaryPassword"].textValue()
+    }
+
+    private fun merchantLogin(
+        loginId: String,
+        password: String,
+        ip: String,
+    ): org.springframework.test.web.servlet.ResultActions {
+        val csrf =
+            requireNotNull(
+                mockMvc
+                    .perform(get("/api/v1/auth/merchant/csrf"))
+                    .andExpect(status().isNoContent)
+                    .andReturn()
+                    .response
+                    .getCookie("BEANFLOW_MERCHANT_XSRF"),
+            )
+        return mockMvc.perform(
+            post("/api/v1/auth/merchant/sessions")
+                .cookie(csrf)
+                .header("X-BEANFLOW-CSRF", csrf.value)
+                .with { request ->
+                    request.remoteAddr = ip
+                    request
+                }.contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(mapOf("loginId" to loginId, "password" to password))),
+        )
+    }
+
+    private fun merchantIdHmac(loginId: String) = scopeHmac.loginId(LoginAttemptActorType.MERCHANT, loginId)
+
+    private fun merchantIpHmac(ip: String) = scopeHmac.ip(LoginAttemptActorType.MERCHANT, ip)
+
+    private fun seedBlockedIp(
+        ip: String,
+        now: Instant,
+        actor: LoginAttemptActorType = LoginAttemptActorType.MERCHANT,
+    ) {
+        jdbc.update(
+            """
+            INSERT INTO identity_login_attempt
+                (id, actor_type, scope_type, scope_hmac, window_start, failure_count, blocked_until, updated_at)
+            VALUES (?, ?, 'IP', ?, ?, 30, ?, ?)
+            """.trimIndent(),
+            UUID.randomUUID(),
+            actor.name,
+            scopeHmac.ip(actor, ip),
+            Timestamp.from(now),
+            Timestamp.from(now.plusSeconds(900)),
+            Timestamp.from(now),
+        )
+    }
+
+    private fun seedAccountAndIpLock(
+        accountId: UUID,
+        loginId: String,
+        ip: String,
+    ) {
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
+        jdbc.update(
+            "UPDATE identity_merchant_account SET locked_until = ?, credential_version = credential_version + 1 WHERE id = ?",
+            Timestamp.from(now.plusSeconds(900)),
+            accountId,
+        )
+        seedBlockedLoginAttempt(loginId, now)
+        seedBlockedIp(ip, now)
+        attempts.recordMerchantSource(merchantIdHmac(loginId), merchantIpHmac(ip), now)
+    }
+
+    private fun ipAttemptCount(
+        ip: String,
+        actor: LoginAttemptActorType = LoginAttemptActorType.MERCHANT,
+    ) = jdbc.queryForObject(
+        "SELECT count(*) FROM identity_login_attempt WHERE actor_type = ? AND scope_type = 'IP' AND scope_hmac = ?",
+        Long::class.java,
+        actor.name,
+        scopeHmac.ip(actor, ip),
+    )
+
+    private fun assertReleasedIpCount(expected: Int) {
+        assertThat(
+            jdbc.queryForObject(
+                "SELECT after_summary::jsonb ->> 'releasedIpRestrictionCount' FROM operations_audit_record WHERE action = 'MERCHANT_LOCK_RELEASED'",
+                String::class.java,
+            ),
+        ).isEqualTo(expected.toString())
     }
 
     private fun create(

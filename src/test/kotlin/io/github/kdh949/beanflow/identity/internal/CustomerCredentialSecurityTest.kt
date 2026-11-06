@@ -124,4 +124,26 @@ internal class CustomerCredentialSecurityTest {
                 .count(),
         ).isEqualTo(1.0)
     }
+
+    @Test
+    fun `source retention failure is observable and stops the retention transaction`() {
+        val now = Instant.parse("2026-10-01T00:00:00Z")
+        val repository = mock(LoginAttemptRepository::class.java)
+        val registry = SimpleMeterRegistry()
+        `when`(repository.deleteExpiredMerchantSources(now.minusSeconds(24 * 60 * 60), 100))
+            .thenThrow(IllegalStateException("injected source retention failure"))
+        val worker = LoginAttemptRetentionWorker(repository, Clock.fixed(now, ZoneOffset.UTC), registry)
+
+        assertThatThrownBy(worker::deleteExpired).hasMessage("injected source retention failure")
+        assertThat(
+            registry
+                .get("beanflow.identity.login_attempt.retention")
+                .tag("outcome", "failed")
+                .counter()
+                .count(),
+        ).isEqualTo(1.0)
+        org.mockito.Mockito
+            .verify(repository, org.mockito.Mockito.never())
+            .deleteExpired(now.minusSeconds(24 * 60 * 60), 100)
+    }
 }

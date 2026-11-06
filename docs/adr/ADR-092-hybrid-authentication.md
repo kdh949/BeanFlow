@@ -1,8 +1,11 @@
 # ADR-092: 고객·점주 Session과 운영자 Keycloak의 Hybrid 인증
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-138](ADR-138-operations-memory-token-refresh.md)
 - **Date:** 2026-08-11
 - **Implementation owners:** [Authentication foundation](../exec-plans/completed/productization-20-authentication-foundation.md), [P0 operations console](../exec-plans/active/productization-100-operations-work-queues.md)
+
+2026-10-01: ADR-138은 이 ADR의 Hybrid 인증, Chain·actor 소유권과 메모리 token 경계를 유지하면서
+운영자 access token 만료 즉시 재인증 결정을 메모리 refresh로 대체한다. 아래는 원래 결정의 기록이다.
 
 ## Context
 

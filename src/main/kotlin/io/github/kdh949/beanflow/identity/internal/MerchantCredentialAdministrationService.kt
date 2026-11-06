@@ -7,6 +7,7 @@ import io.github.kdh949.beanflow.operations.api.MerchantCredentialSecurityPort
 import io.github.kdh949.beanflow.operations.api.ProvisionMerchantCredentialCommand
 import io.github.kdh949.beanflow.operations.api.ProvisionedMerchantCredential
 import io.github.kdh949.beanflow.operations.api.ProvisionedMerchantMembership
+import io.github.kdh949.beanflow.operations.api.ReleasedMerchantLock
 import io.github.kdh949.beanflow.operations.api.ReplaceMerchantTemporaryPasswordCommand
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
@@ -83,12 +84,15 @@ internal class MerchantCredentialAdministrationService(
     override fun releaseLock(
         accountId: UUID,
         now: java.time.Instant,
-    ): ProvisionedMerchantCredential {
+    ): ReleasedMerchantLock {
         val account = requireLocked(accountId)
         account.releaseLock(now)
-        clearLoginAttempts(account.loginId)
+        val releasedIpCount = attempts.deleteMerchantRestrictions(scopeHmac.loginId(LoginAttemptActorType.MERCHANT, account.loginId), now)
         entityManager.flush()
-        return account.toAdministrationSnapshot(memberships.findAllByActorIdOrderByStoreIdAsc(account.id))
+        return ReleasedMerchantLock(
+            account.toAdministrationSnapshot(memberships.findAllByActorIdOrderByStoreIdAsc(account.id)),
+            releasedIpCount,
+        )
     }
 
     @Transactional(propagation = Propagation.MANDATORY, readOnly = true)

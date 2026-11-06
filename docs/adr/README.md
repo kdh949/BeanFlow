@@ -93,8 +93,8 @@
 | [ADR-089](ADR-089-purpose-based-retention-legal-hold-and-deletion.md) | Accepted | 목적별 retention, expiring LegalHold와 deletion replay |
 | [ADR-090](ADR-090-support-console-frontend-and-sensitive-cache.md) | Accepted | 기존 frontend의 격리 `/support` route와 non-persistent sensitive state |
 | [ADR-091](ADR-091-support-migration-queue-metadata.md) | Rejected | queue priority를 direct ExecPlan dependency로 표현하는 metadata 제안 |
-| [ADR-092](ADR-092-hybrid-authentication.md) | Accepted | 고객·점주 Session과 운영자 Keycloak의 Hybrid 인증 |
-| [ADR-093](ADR-093-merchant-credential-lifecycle.md) | Accepted | 점주 계정 자격증명 lifecycle과 최초 비밀번호 강제 변경 |
+| [ADR-092](ADR-092-hybrid-authentication.md) | Superseded | 고객·점주 Session과 운영자 Keycloak의 Hybrid 인증 (ADR-138로 대체) |
+| [ADR-093](ADR-093-merchant-credential-lifecycle.md) | Superseded (조기 해제 범위) | 점주 계정 자격증명 lifecycle과 최초 비밀번호 강제 변경 |
 | [ADR-094](ADR-094-browser-session-security.md) | Accepted | 브라우저 Session 보안과 저장소 |
 | [ADR-095](ADR-095-unified-current-actor.md) | Accepted | 인증 구현을 Application 계층에서 분리하는 CurrentActor |
 | [ADR-096](ADR-096-public-order-reference.md) | Accepted | 내부 UUID와 분리한 공개 주문번호 |
@@ -140,3 +140,5 @@
 
 - [ADR-136: 담당 상담원의 직접 처리](ADR-136-support-direct-processing.md)
 - [ADR-137: 결제 멱등성 payment 조회 인덱스](ADR-137-payment-idempotency-payment-lookup-index.md)
+- [ADR-138: 운영자·고객센터 메모리 token 갱신](ADR-138-operations-memory-token-refresh.md)
+- [ADR-139: 점주 계정과 연결된 IP 제한의 원자 해제](ADR-139-merchant-account-and-ip-lock-release.md)

@@ -17,6 +17,7 @@ function bearerClient() {
   });
   const authentication: Middleware = {
     async onRequest({ request }) {
+      await operationsAuth.refreshAccessToken();
       const token = authToken.get();
       if (token) {
         request.headers.set("Authorization", `Bearer ${token}`);
@@ -24,8 +25,10 @@ function bearerClient() {
       request.headers.set("Accept", "application/json");
       return request;
     },
-    async onResponse({ response }) {
-      if (response.status === 401) operationsAuth.clear();
+    async onResponse({ request, response }) {
+      if (response.status === 401) {
+        operationsAuth.rejectToken(request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? null);
+      }
       return response;
     },
   };

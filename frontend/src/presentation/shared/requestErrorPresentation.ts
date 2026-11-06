@@ -83,6 +83,10 @@ const knownErrors: Record<string, Omit<RequestErrorPresentation, "reference">> =
     title: "운영자 로그인 설정을 확인할 수 없습니다",
     description: "잠시 뒤 다시 시도하거나 운영 담당자에게 문의해 주세요.",
   },
+  OPERATIONS_TOKEN_REFRESH_UNAVAILABLE: {
+    title: "조직 로그인 연결을 확인할 수 없습니다",
+    description: "로그인 상태를 다시 확인한 뒤 업무를 계속해 주세요. 잠시 뒤 다시 시도해 주세요.",
+  },
   IDEMPOTENCY_REQUEST_IN_PROGRESS: {
     title: "요청을 처리하고 있습니다",
     description: "같은 요청을 다시 보내지 말고 잠시 뒤 결과를 확인해 주세요.",

@@ -114,6 +114,73 @@ internal class LoginAttemptRepository(
         )
     }
 
+    fun recordMerchantSource(
+        loginIdHmac: String,
+        ipHmac: String,
+        now: Instant,
+    ) {
+        jdbc.update(
+            """
+            INSERT INTO identity_merchant_login_attempt_source (login_id_hmac, ip_hmac, last_attempt_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT (login_id_hmac, ip_hmac) DO UPDATE
+               SET last_attempt_at = GREATEST(identity_merchant_login_attempt_source.last_attempt_at, EXCLUDED.last_attempt_at)
+            """.trimIndent(),
+            loginIdHmac,
+            ipHmac,
+            Timestamp.from(now),
+        )
+    }
+
+    // Caller holds the merchant account lock before acquiring any attempt locks.
+    fun deleteMerchantRestrictions(
+        loginIdHmac: String,
+        now: Instant,
+    ): Int {
+        val ids =
+            jdbc.query(
+                """
+                SELECT attempt.id
+                  FROM identity_login_attempt attempt
+                  JOIN identity_merchant_login_attempt_source source
+                    ON source.ip_hmac = attempt.scope_hmac
+                 WHERE attempt.actor_type = 'MERCHANT' AND attempt.scope_type = 'IP'
+                   AND source.login_id_hmac = ?
+                   AND source.last_attempt_at >= attempt.window_start
+                   AND (attempt.window_start + INTERVAL '15 minutes' > ? OR attempt.blocked_until > ?)
+                 ORDER BY attempt.scope_hmac
+                 FOR UPDATE OF attempt
+                """.trimIndent(),
+                { row, _ -> row.getObject("id", UUID::class.java) },
+                loginIdHmac,
+                Timestamp.from(now),
+                Timestamp.from(now),
+            )
+        val deleted = ids.sumOf { id -> jdbc.update("DELETE FROM identity_login_attempt WHERE id = ?", id) }
+        deleteLoginId(LoginAttemptActorType.MERCHANT, loginIdHmac)
+        return deleted
+    }
+
+    fun deleteExpiredMerchantSources(
+        cutoff: Instant,
+        limit: Int,
+    ): Int =
+        jdbc.update(
+            """
+            DELETE FROM identity_merchant_login_attempt_source
+             WHERE (login_id_hmac, ip_hmac) IN (
+                SELECT login_id_hmac, ip_hmac
+                  FROM identity_merchant_login_attempt_source
+                 WHERE last_attempt_at < ?
+                 ORDER BY last_attempt_at, login_id_hmac, ip_hmac
+                 LIMIT ?
+                 FOR UPDATE SKIP LOCKED
+             )
+            """.trimIndent(),
+            Timestamp.from(cutoff),
+            limit,
+        )
+
     fun deleteExpired(
         cutoff: Instant,
         limit: Int,
@@ -235,11 +302,14 @@ internal class LoginAttemptRetentionWorker(
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun deleteExpired() {
         try {
-            val deleted = repository.deleteExpired(clock.instant().minus(24, ChronoUnit.HOURS), 100)
+            val cutoff = clock.instant().minus(24, ChronoUnit.HOURS)
+            val sourcesDeleted = repository.deleteExpiredMerchantSources(cutoff, 100)
+            val deleted = repository.deleteExpired(cutoff, 100)
+            registry.counter("beanflow.identity.login_attempt.source_retention", "outcome", "success").increment(sourcesDeleted.toDouble())
             registry.counter("beanflow.identity.login_attempt.retention", "outcome", "success").increment(deleted.toDouble())
         } catch (failure: RuntimeException) {
             registry.counter("beanflow.identity.login_attempt.retention", "outcome", "failed").increment()
-            logger.error("Customer login-attempt retention failed; authentication persistence remains required", failure)
+            logger.error("Login-attempt retention failed; authentication persistence remains required", failure)
             throw failure
         }
     }

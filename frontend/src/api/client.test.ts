@@ -3,7 +3,7 @@ import { ApiRequestError, SubmissionIntent, idempotencyKey, unwrap } from "./cli
 import { customerApi, customerCsrfHeader, customerCsrfToken } from "./customerClient";
 import { operationsApi } from "./consoleClient";
 import { merchantApi, merchantCsrfHeader } from "./merchantClient";
-import { authToken } from "../auth/session";
+import { authToken, operationsAuth } from "../auth/session";
 
 function clearCsrfCookie() {
   document.cookie = "BEANFLOW_CUSTOMER_XSRF=; Max-Age=0; path=/";
@@ -12,7 +12,67 @@ function clearCsrfCookie() {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  authToken.clear();
   clearCsrfCookie();
+});
+
+describe("operations refresh boundary", () => {
+  it("waits for refresh and sends the latest token to both operations and support", async () => {
+    authToken.set("old-token");
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => { finish = resolve; });
+    vi.spyOn(operationsAuth, "refreshAccessToken").mockImplementation(async () => {
+      await pending;
+      authToken.set("refreshed-token");
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("{}", { status: 200 }));
+    const requests = [operationsApi.GET("/operations/me"), operationsApi.GET("/support/cases")];
+    await Promise.resolve();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    finish();
+    await Promise.all(requests);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    for (const [request] of fetchSpy.mock.calls) expect((request as Request).headers.get("Authorization")).toBe("Bearer refreshed-token");
+  });
+
+  it("does not send a protected request if refresh fails", async () => {
+    authToken.set("expired-token");
+    vi.spyOn(operationsAuth, "refreshAccessToken").mockRejectedValue(new ApiRequestError(503, "OPERATIONS_TOKEN_REFRESH_UNAVAILABLE", "Refresh unavailable"));
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await expect(operationsApi.GET("/operations/me")).rejects.toMatchObject({ status: 503 });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("ends the current credential on 401 without replaying the request", async () => {
+    authToken.set("rejected-token");
+    const rejected = vi.spyOn(operationsAuth, "rejectToken");
+    const refresh = vi.spyOn(operationsAuth, "refreshAccessToken").mockResolvedValue(undefined);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 401 }));
+    const result = await operationsApi.POST("/operations/merchant-accounts/{merchantAccountId}/lock-releases", {
+      params: { path: { merchantAccountId: "merchant-fixture" }, header: { "Idempotency-Key": "intent-fixture" } },
+      body: { reason: "계정 잠금 해제 테스트" },
+    });
+    expect(result.response.status).toBe(401);
+    expect(authToken.get()).toBe("");
+    expect(rejected).toHaveBeenCalledWith("rejected-token");
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const sent = fetchSpy.mock.calls[0]![0] as Request;
+    expect(sent.method).toBe("POST");
+    expect(sent.headers.get("Idempotency-Key")).toBe("intent-fixture");
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("does not clear a new token when an older request returns 401", async () => {
+    authToken.set("old-request-token");
+    vi.spyOn(operationsAuth, "refreshAccessToken").mockResolvedValue(undefined);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      authToken.set("new-login-token");
+      return new Response("{}", { status: 401 });
+    });
+    const result = await operationsApi.GET("/operations/me");
+    expect(result.response.status).toBe(401);
+    expect(authToken.get()).toBe("new-login-token");
+  });
 });
 
 describe("API client helpers", () => {

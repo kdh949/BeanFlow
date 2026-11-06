@@ -286,15 +286,16 @@ internal class MerchantCredentialAdministrationTransactions(
                 metrics.replay(MerchantCredentialOperation.RELEASE_LOCK)
                 return
             }
-        val account = identity.releaseLock(command.accountId, now)
+        val released = identity.releaseLock(command.accountId, now)
         appendAudit(
             command.operatorId,
             "MERCHANT_LOCK_RELEASED",
-            account,
+            released.account,
             command.reason,
             now,
             "LOCK_RELEASED",
             "command:${sha256(command.idempotencyKey)}",
+            mapOf("releasedIpRestrictionCount" to released.releasedIpRestrictionCount.toString()),
         )
         saveOutcome(
             command.operatorId,
@@ -384,6 +385,7 @@ internal class MerchantCredentialAdministrationTransactions(
         now: Instant,
         before: String,
         sourceSuffix: String,
+        additionalAfterSummary: Map<String, String> = emptyMap(),
     ) {
         audits.appendAll(
             listOf(
@@ -401,7 +403,7 @@ internal class MerchantCredentialAdministrationTransactions(
                         mapOf(
                             "accountState" to account.accountState.name,
                             "credentialVersion" to account.credentialVersion.toString(),
-                        ),
+                        ) + additionalAfterSummary,
                     correlationId = correlationIds.currentOrCreate(),
                     sourceReference = "merchant-credential:${account.accountId}:$sourceSuffix",
                 ),
