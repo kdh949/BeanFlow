@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent } from "storybook/test";
-import { HttpResponse, http } from "msw";
+import { HttpResponse, delay, http } from "msw";
 import { ApiRequestError } from "../../../api/client";
 import type { OperationsAuthState } from "../../../auth/session";
 import { OperationsSessionGate } from "./OperationsSessionGate";
@@ -12,6 +12,7 @@ function session(state: OperationsAuthState) {
     initialize: fn().mockResolvedValue(state),
     retry: fn().mockResolvedValue(state),
     logIn: fn().mockResolvedValue(undefined),
+    logOut: fn().mockResolvedValue(undefined),
     clear: fn(),
     consumeReturnPath: () => "/ops",
   };
@@ -22,6 +23,7 @@ const meta = {
   component: OperationsSessionGate,
   tags: ["autodocs"],
   parameters: {
+    a11y: { test: "error" },
     docs: {
       description: {
         component:
@@ -75,7 +77,34 @@ export const PermissionDenied: Story = {
       ],
     },
   },
-  play: async ({ canvas }) => {
+  play: async ({ canvas, args }) => {
     await expect(await canvas.findByText("업무 접근 권한이 없습니다")).toBeVisible();
+    await expect(canvas.queryByRole("navigation", { name: "플랫폼 운영 메뉴" })).toBeNull();
+    await userEvent.click(canvas.getByRole("button", { name: "로그아웃" }));
+    await expect(args.session?.logOut).toHaveBeenCalled();
+  },
+};
+
+
+export const CheckingSupportPermission: Story = {
+  args: { kind: "support", session: session({ status: "authenticated", expiresAt: null }) },
+  parameters: { routing: { path: "*", initialEntry: "/support/inquiries" }, msw: { handlers: [
+    http.get("/api/v1/operations/me", async () => { await delay("infinite"); return HttpResponse.json({}); }),
+  ] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText(/로그인을 확인하는 중/)).toBeVisible();
+    await expect(canvas.queryByRole("navigation", { name: "고객지원 메뉴" })).toBeNull();
+  },
+};
+
+export const VerifiedSupport: Story = {
+  args: { kind: "support", session: session({ status: "authenticated", expiresAt: null }) },
+  parameters: { routing: { path: "*", initialEntry: "/support/inquiries" }, msw: { handlers: [
+    http.get("/api/v1/operations/me", () => HttpResponse.json({ actorType: "OPERATOR", operatorId: "support-test", roles: ["SUPPORT_AGENT"], display: { state: "AVAILABLE", loginName: "테스트 상담 담당자" } })),
+  ] } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("navigation", { name: "고객지원 메뉴" })).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "고객 문의" })).toHaveAttribute("href", "/support/inquiries");
+    await expect(canvas.queryByRole("navigation", { name: "플랫폼 운영 메뉴" })).toBeNull();
   },
 };

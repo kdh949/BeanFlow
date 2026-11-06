@@ -1959,6 +1959,7 @@
   IndexedDB 또는 일반 Cookie에 저장하지 않는다. redirect 왕복에 필요한 state, nonce, code verifier와
   검증된 same-origin return path만 일회성 `sessionStorage`에 둘 수 있으며 callback 성공·실패 뒤 즉시
   삭제한다. P0는 `offline_access`를 요청하거나 refresh token을 지속 저장하지 않는다.
+- **Return Path Clarification (2026-10-03):** 자동 SSO 확인과 수동 로그인 전에 /ops 또는 /support 업무 경로(query/hash 포함)를 보존한다. 외부 URL, 유사 접두사와 callback 경로는 허용하지 않는다. callback에서 일회성 storage를 제거한 뒤 메모리의 목적지를 재사용하여 재렌더에도 같은 업무로 복귀한다. 업무 메뉴는 서버의 현재 actor 확인 뒤에만 표시한다.
 - **Runtime Configuration:** Public endpoint는 검증된 issuer, public client ID, callback path와 scope만
   반환하며 secret이나 관리 endpoint를 반환하지 않는다. issuer/client/callback 설정이 누락·불일치하면
   애플리케이션 기동 또는 로그인 시작을 명시적으로 실패시킨다. Keycloak callback allowlist는 정확한

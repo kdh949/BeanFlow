@@ -203,3 +203,7 @@ Operations 전용 PointAccount·refund URI로 분리했다. 반대 actor credent
 - [ADR-027](ADR-027-store-membership-authorization.md)
 - [ADR-069](ADR-069-operator-permission-grants-and-audited-policy-read.md)
 - [Design Contract Conflicts C-1](../product/design-contract-conflicts.md)
+
+## 2026-10-03 조직 업무 복귀 경로 명확화
+
+BR-41의 일회성 복귀 경로는 /ops와 /support 업무 화면을 모두 포함한다. check-sso 전에 경로를 저장하고 callback 처리 뒤 storage를 삭제하며, 같은 callback의 렌더 반복에는 메모리 목적지를 재사용한다. 토큰 보관·PKCE·서버 permission 경계는 유지한다. ConsoleFrame의 authenticated 표시는 기존 /operations/me 검증 결과에 종속하며 추가 actor cache/조회는 도입하지 않는다.

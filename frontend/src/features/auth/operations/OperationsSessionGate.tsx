@@ -6,6 +6,7 @@ import { operationsApi } from "../../../api/consoleClient";
 import { operationsAuth, type OperationsAuthState } from "../../../auth/session";
 import { PageHeading, InlineNotice, LoadingState } from "../../../design-system";
 import { Button } from "../../../design-system";
+import { ConsoleFrame, type ConsoleAccess } from "../../../presentation/ConsoleFrame";
 import { ErrorState } from "../../../presentation/shared";
 
 type OperationsSession = {
@@ -14,6 +15,7 @@ type OperationsSession = {
   initialize(): Promise<OperationsAuthState>;
   retry(): Promise<OperationsAuthState>;
   logIn(): Promise<void>;
+  logOut(): Promise<void>;
   clear(): void;
   consumeReturnPath(): string;
 };
@@ -27,9 +29,11 @@ type OperatorActor = components["schemas"]["OperatorActor"];
  */
 export function OperationsSessionGate({
   callback = false,
+  kind = "ops",
   session = operationsAuth,
 }: {
   callback?: boolean;
+  kind?: "ops" | "support";
   session?: OperationsSession;
 }) {
   const auth = useSyncExternalStore(session.subscribe, session.get, session.get);
@@ -38,6 +42,7 @@ export function OperationsSessionGate({
   const [checkingActor, setCheckingActor] = useState(false);
   const [actorAttempt, setActorAttempt] = useState(0);
   const [loginError, setLoginError] = useState<unknown>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     if (auth.status === "idle") void session.initialize();
@@ -70,45 +75,65 @@ export function OperationsSessionGate({
     };
   }, [auth.status, session, actorAttempt]);
 
-  if (auth.status === "idle" || auth.status === "loading" || checkingActor) {
-    return <div className="console-page state-page"><LoadingState label="운영자 로그인을 확인하는 중" /></div>;
+  async function logOut() {
+    setLoggingOut(true);
+    setLoginError(null);
+    try { await session.logOut(); }
+    catch (error) { setLoginError(error); }
+    finally { setLoggingOut(false); }
   }
-  if (auth.status === "unavailable") {
-    return (
-      <div className="console-page state-page">
-        <ErrorState error={auth.error} retry={() => void session.retry()} />
-      </div>
-    );
+
+  function renderContent() {
+    if (auth.status === "idle" || auth.status === "loading" || checkingActor) {
+      return <div className="console-page state-page"><LoadingState label="운영자 로그인을 확인하는 중" /></div>;
+    }
+    if (auth.status === "unavailable") {
+      return (
+        <div className="console-page state-page">
+          <ErrorState error={auth.error} retry={() => void session.retry()} />
+        </div>
+      );
+    }
+    if (auth.status === "unauthenticated") {
+      return (
+        <div className="console-page state-page operations-login-state">
+          <PageHeading title="조직 계정 로그인" />
+          <InlineNotice title="로그인이 필요합니다" description="업무 권한이 연결된 조직 계정으로 로그인해 주세요." />
+          <Button onClick={() => {
+            setLoginError(null);
+            void Promise.resolve(session.logIn()).catch(setLoginError);
+          }}>조직 계정으로 로그인</Button>
+          {loginError ? <ErrorState error={loginError} /> : null}
+        </div>
+      );
+    }
+    if (actorError) {
+      const permissionDenied = actorError instanceof ApiRequestError && actorError.status === 403;
+      return (
+        <div className="console-page state-page">
+          {permissionDenied ? (
+            <>
+              <PageHeading title="업무 접근 권한이 없습니다" />
+              <InlineNotice tone="warning" title="현재 계정의 업무 권한을 확인해 주세요" description="관리자에게 필요한 업무 권한을 요청해 주세요. 권한이 부여되었다면 다시 확인할 수 있습니다." action={<Button variant="secondary" onClick={() => setActorAttempt((value) => value + 1)}>권한 다시 확인</Button>} />
+            </>
+          ) : (
+            <ErrorState error={actorError} retry={() => setActorAttempt((value) => value + 1)} />
+          )}
+          <Button variant="secondary" loading={loggingOut} onClick={() => void logOut()}>로그아웃</Button>
+          {loginError ? <ErrorState error={loginError} /> : null}
+        </div>
+      );
+    }
+    if (!actor) return <div className="console-page state-page"><LoadingState label="운영자 권한을 확인하는 중" /></div>;
+    if (callback) return <Navigate to={session.consumeReturnPath()} replace />;
+    return <Outlet />;
   }
-  if (auth.status === "unauthenticated") {
-    return (
-      <div className="console-page state-page operations-login-state">
-        <PageHeading title="조직 계정 로그인" />
-        <InlineNotice title="로그인이 필요합니다" description="업무 권한이 연결된 조직 계정으로 로그인해 주세요." />
-        <Button onClick={() => {
-          setLoginError(null);
-          void Promise.resolve(session.logIn()).catch(setLoginError);
-        }}>조직 계정으로 로그인</Button>
-        {loginError ? <ErrorState error={loginError} /> : null}
-      </div>
-    );
-  }
-  if (actorError) {
-    const permissionDenied = actorError instanceof ApiRequestError && actorError.status === 403;
-    return (
-      <div className="console-page state-page">
-        {permissionDenied ? (
-          <>
-            <PageHeading title="업무 접근 권한이 없습니다" />
-            <InlineNotice tone="warning" title="현재 계정의 업무 권한을 확인해 주세요" description="관리자에게 필요한 업무 권한을 요청해 주세요. 권한이 부여되었다면 다시 확인할 수 있습니다." action={<Button variant="secondary" onClick={() => setActorAttempt((value) => value + 1)}>권한 다시 확인</Button>} />
-          </>
-        ) : (
-          <ErrorState error={actorError} retry={() => setActorAttempt((value) => value + 1)} />
-        )}
-      </div>
-    );
-  }
-  if (!actor) return <div className="console-page state-page"><LoadingState label="운영자 권한을 확인하는 중" /></div>;
-  if (callback) return <Navigate to={session.consumeReturnPath()} replace />;
-  return <Outlet />;
+
+  const verified = !callback && auth.status === "authenticated" && actor !== null && !actorError && !checkingActor;
+  const access: ConsoleAccess = verified ? "authenticated"
+    : auth.status === "unauthenticated" ? "unauthenticated"
+    : auth.status === "unavailable" || actorError ? "unavailable" : "checking";
+  const actorLabel = verified ? actor.display.loginName ?? (auth.status === "authenticated" ? auth.displayName : undefined) ?? "조직 계정 로그인됨"
+    : access === "checking" ? "로그인 확인 중" : access === "unavailable" ? "업무 권한 확인 필요" : "로그인 필요";
+  return <ConsoleFrame kind={kind} access={access} actorLabel={actorLabel} onLogOut={() => session.logOut()}>{renderContent()}</ConsoleFrame>;
 }
