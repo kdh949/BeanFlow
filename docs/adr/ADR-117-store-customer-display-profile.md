@@ -210,3 +210,7 @@ schedule/category 모델을 별도 결정으로 확장한다.
 - [ADR-087](ADR-087-field-risk-and-purpose-specific-profile-change.md)
 - [ADR-103](ADR-103-store-search-strategy.md)
 - [ADR-115](ADR-115-store-and-menu-image-storage.md)
+
+## 탐색 표시 정합성 보정 (2026-10-03)
+
+신규 탐색 두 카드와 상세·장바구니는 BR-50의 즉시 주문 개정을 반영한다. 현재 주문 가능은 orderingAvailable·pickupAvailable·OPEN이 모두 맞을 때만 표시하며 nextPickupWindow 부재를 신규 주문 불가 사유로 사용하지 않는다. 기존 예약 주문 조회 의미는 변경하지 않는다. 검색 복귀는 BR-28의 브라우저 메모리 수명을 따르는 최대 20개 방문 메타데이터와 기존 API 재조회만으로 구현한다. 공개 API·Aggregate·transaction·서버 cache 계약은 바꾸지 않는다.

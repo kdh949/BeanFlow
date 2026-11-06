@@ -24,6 +24,15 @@ export function operatingStatusLabel(status: CustomerStoreDisplay["operatingStat
   return operatingStatusLabels[status];
 }
 
+/** BR-50: accepting orders and being open are separate facts; both are required now. */
+export function immediateOrderDisplay(store: { orderingAvailable: boolean; pickupAvailable: boolean; customerDisplay: CustomerStoreDisplay }) {
+  const available = store.orderingAvailable && store.pickupAvailable && store.customerDisplay.operatingStatus === "OPEN";
+  const label = available ? "주문 가능" : !store.orderingAvailable ? "주문 쉬는 중"
+    : store.customerDisplay.operatingStatus === "CLOSED" ? "영업시간 아님"
+      : store.customerDisplay.operatingStatus === "UNSPECIFIED" ? "운영시간 정보 없음" : "현재 주문 불가";
+  return { available, label, description: available ? "결제 후 바로 접수" : "현재 주문 불가" };
+}
+
 export function nextPickupLabel(window?: NextPickupWindow) {
   return window
     ? `가장 빠른 픽업 ${pickupDateTimeLabel(window.startsAt)}`

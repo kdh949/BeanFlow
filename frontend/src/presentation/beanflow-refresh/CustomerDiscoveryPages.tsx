@@ -1,10 +1,11 @@
 import { ChevronRight, LocateFixed, MapPin, Search, ShoppingBag, TicketPercent } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { unwrap } from "../../api/client";
 import { customerApi } from "../../api/customerClient";
-import { coordinatesOf, useBrowserLocation } from "../../features/discovery/useBrowserLocation";
+import { coordinatesOf, type Coordinates, useBrowserLocation } from "../../features/discovery/useBrowserLocation";
+import { newSearchVisit, searchOriginState, searchVisitForEntry, updateSearchVisit, type SearchVisit } from "../../features/discovery/storeSearchNavigation";
 import { useAttentionRefresh } from "../../features/shared/useAttentionRefresh";
 import { useResource } from "../../features/shared/useResource";
 import { RefreshEmpty, RefreshError, RefreshLoading, RefreshMobileTopbar, RefreshStoreCard } from "./RefreshShared";
@@ -71,23 +72,47 @@ const queryHelpers = ["라떼", "디저트", "성수", "강남"];
 const MIN_QUERY_LENGTH = 2;
 
 export function RefreshStoreSearchPage() {
+  const entry = useLocation();
+  return <StoreSearchVisitPage key={entry.key} />;
+}
+
+function StoreSearchVisitPage() {
+  const entry = useLocation();
   const [params, setParams] = useSearchParams();
   const query = params.get("query") ?? "";
+  const sort = params.get("sort") === "distance" ? "distance" : "relevance";
+  const openOnly = params.get("openOnly") === "true";
+  const [visit] = useState(() => searchVisitForEntry(entry.key, `${entry.pathname}${entry.search}`, entry.state));
   const [draft, setDraft] = useState(query);
-  useEffect(() => setDraft(query), [query]);
-  const [sort, setSort] = useState<"relevance" | "distance">("relevance");
-  const [openOnly, setOpenOnly] = useState(false);
-  const { state: location, locate } = useBrowserLocation();
+  const { state: location, locate } = useBrowserLocation(visit.coordinates);
   const coordinates = coordinatesOf(location);
+  const needsLocation = sort === "distance" && !coordinates;
 
+  useEffect(() => {
+    if (coordinates?.latitude !== visit.coordinates?.latitude || coordinates?.longitude !== visit.coordinates?.longitude) {
+      updateSearchVisit(visit, { coordinates, pageCount: 1, scrollY: 0 });
+    }
+  }, [coordinates, visit]);
+  useEffect(() => {
+    const save = () => updateSearchVisit(visit, { scrollY: window.scrollY });
+    window.addEventListener("scroll", save, { passive: true });
+    return () => window.removeEventListener("scroll", save);
+  }, [visit]);
+
+  function changeConditions(next: URLSearchParams) {
+    const search = next.toString();
+    const nextVisit = newSearchVisit(`/app/stores${search ? `?${search}` : ""}`, coordinates);
+    updateSearchVisit(visit, { scrollY: window.scrollY });
+    setParams(next, { state: { searchVisitId: nextVisit.id } });
+  }
   function search(value: string) {
     const next = new URLSearchParams(params);
     const normalized = value.trim();
     if (normalized) next.set("query", normalized); else next.delete("query");
-    setDraft(normalized);
-    setParams(next, { replace: true });
+    changeConditions(next);
   }
   function submit(event: FormEvent) { event.preventDefault(); if (draft.trim().length >= MIN_QUERY_LENGTH) search(draft); }
+  const sameCoordinates = coordinates?.latitude === visit.coordinates?.latitude && coordinates?.longitude === visit.coordinates?.longitude;
 
   return (
     <div className="bfr-page bfr-search-page bfr-has-page-topbar">
@@ -100,52 +125,59 @@ export function RefreshStoreSearchPage() {
         {queryHelpers.map((helper) => <ChipButton key={helper} onClick={() => search(helper)}>{helper}</ChipButton>)}
         <ChipButton aria-label="현재 위치로 가까운 매장 찾기" onClick={locate} disabled={location.status === "locating"}><LocateFixed size={14} />{location.status === "locating" ? "위치 확인 중" : "현재 위치"}</ChipButton>
       </div>
-      {location.status === "denied" ? <p className="bfr-inline-status" role="status">위치 권한이 꺼져 있어 거리 대신 검색어로만 찾을 수 있어요.</p> : null}
-      {location.status === "unavailable" ? <p className="bfr-inline-status" role="status">현재 위치를 확인하지 못했어요. 검색어로 매장을 찾아 주세요.</p> : null}
-      {query.length >= MIN_QUERY_LENGTH ? <div className="bfr-search-filters"><SelectField label="검색 정렬" value={coordinates ? sort : "relevance"} onValueChange={(value) => setSort(value as "relevance" | "distance")}><option value="relevance">관련도순</option><option value="distance" disabled={!coordinates}>거리순{coordinates ? "" : " · 위치 필요"}</option></SelectField><ChipButton aria-pressed={openOnly} onClick={() => setOpenOnly((current) => !current)}>주문 가능한 매장만</ChipButton></div> : null}
-      {query.length >= MIN_QUERY_LENGTH ? <RefreshSearchResults key={`${query}-${coordinates?.latitude}-${coordinates?.longitude}-${sort}-${openOnly}`} query={query} coordinates={coordinates} sort={coordinates ? sort : "relevance"} openOnly={openOnly} /> : coordinates ? <RefreshNearbyResults key={`${coordinates.latitude}-${coordinates.longitude}`} coordinates={coordinates} /> : <RefreshEmpty title="찾고 싶은 매장을 알려주세요" description="검색어를 입력하거나 현재 위치로 가까운 매장을 찾을 수 있어요." />}
+      {location.status === "denied" ? <p className="bfr-inline-status" role="status">위치 권한이 꺼져 있어요. 관련도순으로 검색하거나 위치 권한을 켜 주세요.</p> : null}
+      {location.status === "unavailable" ? <p className="bfr-inline-status" role="status">현재 위치를 확인하지 못했어요. 관련도순으로 검색하거나 다시 시도해 주세요.</p> : null}
+      <p className="form-footnote">위치는 이 화면을 사용하는 동안만 기억해요. 새로고침 후에는 위치를 다시 확인해 주세요.</p>
+      {query.length >= MIN_QUERY_LENGTH ? <div className="bfr-search-filters"><SelectField label="검색 정렬" value={sort} onValueChange={(value) => { const next = new URLSearchParams(params); next.set("sort", value); changeConditions(next); }}><option value="relevance">관련도순</option><option value="distance" disabled={!coordinates}>거리순{coordinates ? "" : " · 위치 필요"}</option></SelectField><ChipButton aria-pressed={openOnly} onClick={() => { const next = new URLSearchParams(params); next.set("openOnly", String(!openOnly)); changeConditions(next); }}>주문 가능한 매장만</ChipButton></div> : null}
+      {needsLocation && query.length >= MIN_QUERY_LENGTH ? <RefreshEmpty title="거리순 검색에 위치가 필요해요" description="현재 위치 버튼으로 확인하거나 관련도순으로 바꿔 주세요." />
+        : query.length >= MIN_QUERY_LENGTH || coordinates ? <RefreshStoreResults key={`${query}-${coordinates?.latitude}-${coordinates?.longitude}-${sort}-${openOnly}`} query={query.length >= MIN_QUERY_LENGTH ? query : undefined} coordinates={coordinates} sort={sort} openOnly={openOnly} visit={visit} restorePages={sameCoordinates ? visit.pageCount : 1} restoreScroll={sameCoordinates ? visit.scrollY : 0} />
+          : <RefreshEmpty title="찾고 싶은 매장을 알려주세요" description="검색어를 입력하거나 현재 위치로 가까운 매장을 찾을 수 있어요." />}
     </div>
   );
 }
 
-function RefreshSearchResults({ query, coordinates, sort, openOnly }: { query: string; coordinates: { latitude: number; longitude: number } | null; sort: "relevance" | "distance"; openOnly: boolean }) {
-  const [page, setPage] = useState<StoreSearchPage | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const generation = useRef(0);
-  const load = useCallback(async (cursor?: string, append = false) => {
-    const request = ++generation.current;
-    append ? setLoadingMore(true) : setPage(null); setError(null);
-    try {
-      const next = unwrap(await customerApi.GET("/stores/search", { params: { query: { query, limit: 20, cursor, sort, openOnly, ...(coordinates ?? {}) } } }));
-      if (request !== generation.current) return;
-      setPage((current) => append && current ? { ...next, items: [...current.items, ...next.items] } : next);
-    } catch (failure) { if (request === generation.current) setError(failure); } finally { if (request === generation.current) setLoadingMore(false); }
-  }, [coordinates, query, sort, openOnly]);
-  useEffect(() => { void load(); return () => { ++generation.current; }; }, [load]);
-  if (!page && !error) return <RefreshLoading label="매장을 찾는 중" />;
-  if (!page) return <RefreshError error={error} retry={() => void load()} />;
-  if (page.items.length === 0) return <RefreshEmpty title={`'${query}' 검색 결과가 없어요`} description="다른 매장, 지역 또는 메뉴 이름으로 찾아보세요." />;
-  return <section className="bfr-search-results" aria-label="검색 결과"><h2>검색 결과</h2><div className="bfr-store-list">{page.items.map((store) => <RefreshStoreCard key={store.storeId} store={store} />)}</div>{error ? <RefreshError error={error} retry={() => void load(page.page.nextCursor, true)} /> : null}{page.page.nextCursor ? <Button block variant="secondary" loading={loadingMore} onClick={() => void load(page.page.nextCursor, true)}>매장 더 보기</Button> : null}</section>;
-}
+type StoreResults = { items: Array<StoreSearchPage["items"][number] | NearbyStorePage["items"][number]>; page: { nextCursor?: string } };
 
-function RefreshNearbyResults({ coordinates }: { coordinates: { latitude: number; longitude: number } }) {
-  const [page, setPage] = useState<NearbyStorePage | null>(null);
+/** Rebuild only this visit's visible pages from fresh server cursors; never replay cached results. */
+function RefreshStoreResults({ query, coordinates, sort, openOnly, visit, restorePages, restoreScroll }: {
+  query?: string; coordinates: Coordinates | null; sort: "relevance" | "distance"; openOnly: boolean;
+  visit: SearchVisit; restorePages: number; restoreScroll: number;
+}) {
+  const [page, setPage] = useState<StoreResults | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [restore] = useState({ pages: restorePages, scroll: restoreScroll });
   const generation = useRef(0);
+  const pagesLoaded = useRef(0);
+  const restored = useRef(false);
   const load = useCallback(async (cursor?: string, append = false) => {
     const request = ++generation.current;
     append ? setLoadingMore(true) : setPage(null); setError(null);
     try {
-      const next = unwrap(await customerApi.GET("/stores/nearby", { params: { query: { ...coordinates, radiusMeters: 10_000, pickupAvailable: true, limit: 20, cursor } } }));
-      if (request !== generation.current) return;
-      setPage((current) => append && current ? { ...next, items: [...current.items, ...next.items] } : next);
-    } catch (failure) { if (request === generation.current) setError(failure); } finally { if (request === generation.current) setLoadingMore(false); }
-  }, [coordinates]);
+      let next: StoreResults | undefined;
+      let items: StoreResults["items"] = [];
+      let count = 0;
+      do {
+        next = query ? unwrap(await customerApi.GET("/stores/search", { params: { query: { query, limit: 20, cursor, sort, openOnly, ...(coordinates ?? {}) } } }))
+          : unwrap(await customerApi.GET("/stores/nearby", { params: { query: { ...coordinates!, radiusMeters: 10_000, pickupAvailable: true, limit: 20, cursor } } }));
+        if (request !== generation.current) return;
+        items = [...items, ...next.items]; count += 1; cursor = next.page.nextCursor;
+      } while (!append && count < restore.pages && cursor);
+      pagesLoaded.current = append ? pagesLoaded.current + count : count;
+      updateSearchVisit(visit, { pageCount: pagesLoaded.current });
+      const result = { items, page: next.page };
+      setPage((current) => append && current ? { ...result, items: [...current.items, ...items] } : result);
+    } catch (failure) { if (request === generation.current) setError(failure); }
+    finally { if (request === generation.current) setLoadingMore(false); }
+  }, [coordinates, query, sort, openOnly, restore.pages, visit]);
   useEffect(() => { void load(); return () => { ++generation.current; }; }, [load]);
-  if (!page && !error) return <RefreshLoading label="가까운 매장을 찾는 중" />;
+  useEffect(() => {
+    if (!page || restored.current) return;
+    const frame = requestAnimationFrame(() => { window.scrollTo(0, restore.scroll); restored.current = true; });
+    return () => cancelAnimationFrame(frame);
+  }, [page, restore.scroll]);
+  if (!page && !error) return <RefreshLoading label={query ? "매장을 찾는 중" : "가까운 매장을 찾는 중"} />;
   if (!page) return <RefreshError error={error} retry={() => void load()} />;
-  if (!page.items.length) return <RefreshEmpty title="가까운 매장이 없어요" description="반경 10km 안에 픽업 가능한 매장이 없습니다." />;
-  return <section className="bfr-search-results" aria-label="가까운 매장"><h2>가까운 매장</h2><div className="bfr-store-list">{page.items.map((store) => <RefreshStoreCard key={store.storeId} store={store} />)}</div>{error ? <RefreshError error={error} retry={() => void load(page.page.nextCursor, true)} /> : null}{page.page.nextCursor ? <Button block variant="secondary" loading={loadingMore} onClick={() => void load(page.page.nextCursor, true)}>매장 더 보기</Button> : null}</section>;
+  if (!page.items.length) return <RefreshEmpty title={query ? `'${query}' 검색 결과가 없어요` : "가까운 매장이 없어요"} description={query ? "다른 매장, 지역 또는 메뉴 이름으로 찾아보세요." : "반경 10km 안에 현재 주문 가능한 매장이 없습니다."} />;
+  return <section className="bfr-search-results" aria-label={query ? "검색 결과" : "가까운 매장"}><h2>{query ? "검색 결과" : "가까운 매장"}</h2><div className="bfr-store-list">{page.items.map((store) => <RefreshStoreCard key={store.storeId} store={store} navigationState={searchOriginState(visit)} />)}</div>{error ? <RefreshError error={error} retry={() => void load(page.page.nextCursor, true)} /> : null}{page.page.nextCursor ? <Button block variant="secondary" loading={loadingMore} onClick={() => void load(page.page.nextCursor, true)}>매장 더 보기</Button> : null}</section>;
 }

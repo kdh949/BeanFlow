@@ -9,14 +9,15 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiRequestError, SubmissionIntent, unwrap } from "../../api/client";
 import { customerApi, customerCsrfHeader } from "../../api/customerClient";
 import { MenuConfigurationChoice } from "../../features/discovery/MenuConfigurationChoice";
 import { useCurrentMenuCatalog } from "../../features/discovery/useCurrentMenuCatalog";
 import { useStore } from "../../features/discovery/useStore";
-import { operatingStatusLabel, operatingDayLabel } from "../../features/discovery/storeDisplay";
+import { immediateOrderDisplay, operatingStatusLabel, operatingDayLabel } from "../../features/discovery/storeDisplay";
+import { searchReturnTarget } from "../../features/discovery/storeSearchNavigation";
 import { couponSelection, useCouponSelection } from "../../features/customer/couponSelection";
 import { couponWalletPath } from "../../features/customer/couponNavigation";
 import { type CartLine, cart, useCart } from "../../features/ordering/cart";
@@ -38,6 +39,7 @@ type Catalog = { store: CustomerStore; menus: Menu[] };
 
 export function RefreshStoreDetailPage() {
   const { storeId = "" } = useParams();
+  const returnTarget = searchReturnTarget(useLocation().state);
   const [storeInformationOpen, setStoreInformationOpen] = useState(false);
   const load = useCallback(async (): Promise<Catalog> => {
     const [storeResult, menuResult] = await Promise.all([
@@ -50,16 +52,16 @@ export function RefreshStoreDetailPage() {
 
   if (state.status === "loading") return <div className="bfr-page"><RefreshLoading label="메뉴와 매장 정보를 준비하는 중" /></div>;
   if (state.status === "failed" && state.error instanceof ApiRequestError && state.error.status === 404) {
-    return <div className="bfr-page"><BackLink to="/app/stores">매장 찾기</BackLink><RefreshEmpty title="지금은 주문할 수 없는 매장이에요" description="주소가 바뀌었거나 더 이상 주문을 받지 않는 매장입니다." action={<ButtonLink variant="brand" to="/app/stores">다른 매장 찾기</ButtonLink>} /></div>;
+    return <div className="bfr-page"><BackLink to={returnTarget.to} state={returnTarget.state}>매장 찾기</BackLink><RefreshEmpty title="지금은 주문할 수 없는 매장이에요" description="주소가 바뀌었거나 더 이상 주문을 받지 않는 매장입니다." action={<ButtonLink variant="brand" to="/app/stores">다른 매장 찾기</ButtonLink>} /></div>;
   }
   if (state.status === "failed") return <div className="bfr-page"><RefreshError error={state.error} retry={reload} /></div>;
 
   const { store, menus } = state.value;
-  const orderable = store.orderingAvailable && store.pickupAvailable;
+  const orderable = immediateOrderDisplay(store).available;
   const groups = groupMenus(menus);
   return (
     <div className="bfr-page bfr-catalog bfr-has-page-topbar">
-      <RefreshMobileTopbar title="BeanFlow" backTo="/app/stores" brand />
+      <RefreshMobileTopbar title="BeanFlow" backTo={returnTarget.to} backState={returnTarget.state} brand />
       <section className="bfr-store-hero">
         <span className="bfr-store-hero__media">{store.image ? <img src={store.image.url} alt="" /> : <Coffee size={42} />}</span>
         <div><h1>{store.name}</h1><p>{store.customerDisplay.addressLine ?? "주소 정보 없음"}</p></div>
@@ -79,7 +81,7 @@ export function RefreshStoreDetailPage() {
       </div>
       <div id="bfr-store-information-content" hidden={!storeInformationOpen}>
         <section className="bfr-store-facts" aria-label="매장 이용 안내">
-          <div><span>주문</span><strong>{store.orderingAvailable ? "주문 가능" : "주문 쉬는 중"}</strong></div>
+          <div><span>주문</span><strong>{immediateOrderDisplay(store).label}</strong></div>
           <div><span>운영시간</span><strong>{operatingStatusLabel(store.customerDisplay.operatingStatus)}</strong></div>
           <div><span>픽업</span><strong>{orderable ? "결제 후 바로 접수" : "현재 주문 불가"}</strong></div>
         </section>
@@ -160,7 +162,7 @@ function RefreshCartContents({ storeId, savedStoreName, revision, lines }: { sto
   const intent = useRef(new SubmissionIntent());
   const store = useStore(storeId);
   const storeName = store.state.status === "ready" ? store.state.value.name : savedStoreName;
-  const storeAcceptsOrders = store.state.status === "ready" && store.state.value.orderingAvailable && store.state.value.pickupAvailable;
+  const storeAcceptsOrders = store.state.status === "ready" && immediateOrderDisplay(store.state.value).available;
   const catalog = useCurrentMenuCatalog(storeId);
   const [failedImages, setFailedImages] = useState<string[]>([]);
   const selectedCoupon = useCouponSelection(storeId);
@@ -222,7 +224,7 @@ function RefreshCartContents({ storeId, savedStoreName, revision, lines }: { sto
     <div className="bfr-page bfr-cart bfr-has-page-topbar">
       <RefreshMobileTopbar title="BeanFlow" brand />
       <PageHeading title="장바구니" />
-      {store.state.status !== "loading" ? <section className="bfr-cart-store"><div><MapPin size={16} /><span><strong>{storeName}</strong><small>{store.state.status === "ready" ? store.state.value.customerDisplay.addressLine ?? "주소 정보 없음" : "매장 안내를 불러오지 못했어요."}</small></span></div>{store.state.status === "ready" ? <span>{store.state.value.orderingAvailable ? "주문 가능" : "주문 쉬는 중"}</span> : null}</section> : null}
+      {store.state.status !== "loading" ? <section className="bfr-cart-store"><div><MapPin size={16} /><span><strong>{storeName}</strong><small>{store.state.status === "ready" ? store.state.value.customerDisplay.addressLine ?? "주소 정보 없음" : "매장 안내를 불러오지 못했어요."}</small></span></div>{store.state.status === "ready" ? <span>{immediateOrderDisplay(store.state.value).label}</span> : null}</section> : null}
       {store.state.status === "failed" ? <RefreshError error={store.state.error} retry={store.reload} /> : null}
       <section className="bfr-cart-lines" aria-label="담은 메뉴">
         <header><h2>주문 메뉴</h2><ButtonLink variant="ghost" to={`/app/stores/${storeId}`}>메뉴 더 담기</ButtonLink></header>
@@ -270,8 +272,8 @@ function groupMenus(menus: Menu[]) {
   return [...groups.entries()].map(([name, items], index) => ({ name, items, key: `${index}-${name.replace(/\s+/g, "-")}` }));
 }
 
-function BackLink({ to, children }: { to: string; children: string }) {
-  return <Link className="bfr-back-link" to={to}><ArrowLeft size={16} />{children}</Link>;
+function BackLink({ to, state, children }: { to: string; state?: unknown; children: string }) {
+  return <Link className="bfr-back-link" to={to} state={state}><ArrowLeft size={16} />{children}</Link>;
 }
 
 function CartLineEditor({ storeId, line, onClose, onSave }: { storeId: string; line: CartLine; onClose: () => void; onSave: (line: CartLine) => void }) {

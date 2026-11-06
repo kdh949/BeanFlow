@@ -1,7 +1,7 @@
 import { ArrowRight, Coffee, MapPin } from "lucide-react";
 import { Link } from "react-router";
 import type { components } from "../../api/schema";
-import { nextPickupLabel, operatingStatusLabel } from "./storeDisplay";
+import { immediateOrderDisplay, operatingStatusLabel } from "./storeDisplay";
 import { distanceLabel } from "./useBrowserLocation";
 
 export type StoreCardModel = {
@@ -17,12 +17,13 @@ export type StoreCardModel = {
 };
 
 export function StoreCard({ store }: { store: StoreCardModel }) {
+  const availability = immediateOrderDisplay(store);
   const distance = distanceLabel(store.distanceMeters);
   return (
-    <Link className={`store-card ${store.orderingAvailable ? "" : "is-unavailable"}`} to={`/app/stores/${store.storeId}`}>
+    <Link className={`store-card ${availability.available ? "" : "is-unavailable"}`} to={`/app/stores/${store.storeId}`}>
       {store.image ? <img className="store-thumbnail" src={store.image.url} alt="" /> : <span className="store-mark"><Coffee size={25} /></span>}
       <span className="store-copy"><strong>{store.name}</strong><span>{distance ? <><MapPin size={14} /> {distance}</> : null}{store.caption ? <em>{store.caption}</em> : null}</span><span>{store.customerDisplay.addressLine ?? "주소 정보 없음"}</span></span>
-      <span className="store-state-copy"><strong className={`availability ${store.orderingAvailable ? "is-open" : ""}`}>{store.orderingAvailable ? "주문 가능" : "주문 불가"}</strong><span>{operatingStatusLabel(store.customerDisplay.operatingStatus)}</span><span>{nextPickupLabel(store.nextPickupWindow)}</span></span>
+      <span className="store-state-copy"><strong className={`availability ${availability.available ? "is-open" : ""}`}>{availability.label}</strong><span>{operatingStatusLabel(store.customerDisplay.operatingStatus)}</span><span>{availability.description}</span></span>
       <ArrowRight size={18} />
     </Link>
   );
