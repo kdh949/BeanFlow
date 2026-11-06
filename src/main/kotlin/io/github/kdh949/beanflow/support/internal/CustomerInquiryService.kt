@@ -12,6 +12,7 @@ import io.github.kdh949.beanflow.ordering.api.CustomerSupportOrderOperations
 import io.github.kdh949.beanflow.shared.api.CursorSortAdapter
 import io.github.kdh949.beanflow.shared.api.DomainFailure
 import io.github.kdh949.beanflow.shared.api.FailureCode
+import io.github.kdh949.beanflow.shared.api.FailureDetail
 import io.github.kdh949.beanflow.shared.api.IdentifierSource
 import io.github.kdh949.beanflow.shared.api.SignedCursorCodec
 import io.github.kdh949.beanflow.shared.api.SignedCursorScope
@@ -143,8 +144,8 @@ internal class CustomerInquiryService(
         correlation: String,
     ): InquiryCommandResult =
         boundary {
-            val normalizedTitle = CustomerInquiryContent.title(title)
-            val normalizedContent = CustomerInquiryContent.message(content)
+            val normalizedTitle = validatedContent("title") { CustomerInquiryContent.title(title) }
+            val normalizedContent = validatedContent("content") { CustomerInquiryContent.message(content) }
             val reference = orderReference?.trim()?.takeIf { it.isNotEmpty() }
             val operation = "CUSTOMER_INQUIRY_CREATE"
             lock(actor, operation, key)
@@ -257,7 +258,7 @@ internal class CustomerInquiryService(
     ): InquiryCommandResult =
         boundary {
             if (staff) permissions.requireActive(actor, OperatorPermission.SUPPORT_CASE_WRITE)
-            val normalized = CustomerInquiryContent.message(content)
+            val normalized = validatedContent("content") { CustomerInquiryContent.message(content) }
             val operation = if (staff) "SUPPORT_INQUIRY_MESSAGE" else "CUSTOMER_INQUIRY_MESSAGE"
             lock(actor, operation, key)
             val hash = digest(listOf(id.toString(), version.toString(), caseVersion?.toString(), normalized))
@@ -439,6 +440,20 @@ internal class CustomerInquiryService(
     private fun conflict(): Nothing = throw DomainFailure(FailureCode.RESOURCE_STATE_CONFLICT, "Inquiry or case state changed")
 
     private fun unavailable(): Nothing = throw DomainFailure(FailureCode.DEPENDENCY_UNAVAILABLE, "Inquiry case context is unavailable")
+
+    private fun validatedContent(
+        field: String,
+        block: () -> String,
+    ): String =
+        try {
+            block()
+        } catch (_: IllegalArgumentException) {
+            throw DomainFailure(
+                FailureCode.INVALID_REQUEST,
+                "Inquiry content is not permitted",
+                details = listOf(FailureDetail(field, "INVALID_VALUE")),
+            )
+        }
 
     private fun <T> boundary(block: () -> T): T =
         try {

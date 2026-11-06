@@ -7300,8 +7300,8 @@ export interface components {
              */
             field?: string;
             /**
-             * @description 실패 사유(한국어).
-             * @example 보유 포인트 잔액을 초과했습니다.
+             * @description 안정적인 실패 사유 코드. 문의 입력 오류는 title 또는 content 필드와 INVALID_VALUE를 반환하며 입력값은 포함하지 않는다.
+             * @example INVALID_VALUE
              */
             reason: string;
         };

@@ -81,9 +81,15 @@ enum class FailureCode {
     DEPENDENCY_UNAVAILABLE,
 }
 
+data class FailureDetail(
+    val field: String,
+    val reason: String,
+)
+
 class DomainFailure(
     val code: FailureCode,
     override val message: String,
     val retryAfterSeconds: Long? = null,
     val targetReference: String? = null,
+    val details: List<FailureDetail> = emptyList(),
 ) : RuntimeException(message)

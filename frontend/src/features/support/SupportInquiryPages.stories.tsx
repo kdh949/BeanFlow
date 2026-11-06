@@ -57,3 +57,12 @@ export const StaleClaim: Story = {
     await expect(canvas.queryByRole("button", { name: "인수하여 상담 열기" })).not.toBeInTheDocument();
   },
 };
+
+export const LongDirectoryTitle: Story = {
+  parameters: { msw: { handlers: [http.get("/api/v1/support/inquiries", () => HttpResponse.json({ items: [{ ...inquiry, title: "주문과 결제 처리 상태 확인을 위한 긴 문의 제목입니다. ".repeat(3) }], nextCursor: null }))] } },
+  play: async ({ canvas }) => {
+    const link = await canvas.findByRole("link", { name: /주문과 결제 처리 상태/ });
+    await expect(link).toHaveAttribute("href", `/support/inquiries/${id}`);
+    await expect(link.scrollWidth).toBeLessThanOrEqual(link.clientWidth);
+  },
+};
