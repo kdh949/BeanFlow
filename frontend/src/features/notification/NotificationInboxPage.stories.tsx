@@ -135,3 +135,32 @@ export const DependencyUnavailable: Story = {
     await expect(canvas.queryByText("아직 받은 알림이 없어요")).not.toBeInTheDocument();
   },
 };
+
+/** New snapshots link directly; legacy transactional notifications explain the missing link. */
+export const ReadyAndLegacy: Story = {
+  parameters: { msw: { handlers: notificationHandlers([
+    { ...unreadOrder, title: "주문이 준비되었습니다", body: "시청점 · 오트 라떼 외 2개 항목 준비를 마쳤습니다. 주문 번호 BF-7K3M-9Q2P" },
+    { ...unreadOrder, notificationId: "71000000-0000-4000-8000-000000000003", body: "매장에서 주문 준비를 마쳤습니다.", target: { type: "NONE" } },
+    marketingBenefit,
+  ]) } },
+  play: async ({ canvas }) => {
+    const link = await canvas.findByRole("link", { name: "주문 보기" });
+    await expect(link).toHaveAttribute("href", "/app/orders/BF-7K3M-9Q2P");
+    link.focus();
+    await expect(link).toHaveFocus();
+    await expect(canvas.getAllByText(/읽지 않음/)).toHaveLength(2);
+    await expect(canvas.getByText("이 알림에는 주문 연결 정보가 없어요. 주문 내역에서 확인해 주세요.")).toBeVisible();
+    await expect(canvas.getAllByRole("link", { name: "주문 내역 보기" })).toHaveLength(1);
+    await expect(canvas.getByRole("link", { name: "주문 내역 보기" })).toHaveAttribute("href", "/app/orders");
+  },
+};
+
+export const ReadFailure: Story = {
+  parameters: { msw: { handlers: [http.patch("/api/v1/me/notifications/:notificationId", () => HttpResponse.json({ code: "DEPENDENCY_UNAVAILABLE" }, { status: 503 })), ...notificationHandlers([unreadOrder])] } },
+  play: async ({ canvas }) => {
+    await userEvent.click(await canvas.findByRole("button", { name: "읽음으로 표시" }));
+    await expect(await canvas.findByRole("alert")).toHaveTextContent("읽음으로 표시하지 못했어요");
+    await expect(canvas.getByText(/읽지 않음/)).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "읽음으로 표시" })).toBeEnabled();
+  },
+};

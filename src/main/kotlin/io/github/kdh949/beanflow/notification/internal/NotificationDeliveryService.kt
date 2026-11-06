@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.notification.internal
 import io.github.kdh949.beanflow.eventing.api.CustomerCancellationRefundDelayedV1
 import io.github.kdh949.beanflow.eventing.api.CustomerCancellationRefundSucceededV1
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
+import io.github.kdh949.beanflow.eventing.api.OrderReadyV2
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
 import io.github.kdh949.beanflow.notification.api.AcceptedCustomerCancellationNotification
@@ -82,6 +83,8 @@ private data class NewNotificationDelivery(
     val payload: Map<String, Any>,
     val correlationId: String,
     val occurredAt: Instant,
+    val inboxCopy: NotificationInboxCopy? = null,
+    val inboxTarget: NotificationTarget = NotificationTarget.none(),
 )
 
 private data class RequestedNotification(
@@ -383,6 +386,42 @@ internal class NotificationDeliveryService(
     }
 
     @Transactional
+    fun requestReady(event: OrderReadyV2) {
+        require(event.additionalLineCount >= 0 && event.storeName.isNotBlank() && event.firstMenuName.isNotBlank()) {
+            "Ready notification display snapshot is invalid"
+        }
+        val summary = event.firstMenuName + if (event.additionalLineCount > 0) " 외 ${event.additionalLineCount}개 항목" else ""
+        request(
+            NewNotificationDelivery(
+                eventId = event.envelope.eventId,
+                eventType = event.envelope.eventType,
+                logicalSource = genericLogicalSource(event.envelope.eventId, event.customerId, NotificationLogicalChannel.CUSTOMER_APP),
+                providerIdempotencyKey =
+                    genericProviderKey(event.envelope.eventId, event.customerId, NotificationLogicalChannel.CUSTOMER_APP),
+                orderId = event.orderId,
+                recipientType = NotificationRecipientType.CUSTOMER,
+                recipientId = event.customerId,
+                logicalChannel = NotificationLogicalChannel.CUSTOMER_APP,
+                template = NotificationTemplate.ORDER_READY,
+                payload =
+                    mapOf(
+                        "orderId" to event.orderId,
+                        "storeId" to event.storeId,
+                        "readyAt" to event.readyAt,
+                        "publicReference" to event.publicReference,
+                        "storeName" to event.storeName,
+                        "firstMenuName" to event.firstMenuName,
+                        "additionalLineCount" to event.additionalLineCount,
+                    ),
+                correlationId = event.envelope.correlationId,
+                occurredAt = event.envelope.occurredAt,
+                inboxCopy = NotificationInboxCopy("주문이 준비되었습니다", "${event.storeName} · $summary 준비를 마쳤습니다. 주문 번호 ${event.publicReference}"),
+                inboxTarget = NotificationTarget.order(event.publicReference),
+            ),
+        )
+    }
+
+    @Transactional
     fun requestCustomerCancellationRefundSucceeded(event: CustomerCancellationRefundSucceededV1) {
         requestCustomerCancellationRefund(
             eventId = event.envelope.eventId,
@@ -625,7 +664,7 @@ internal class NotificationDeliveryService(
         classification: NotificationClassification,
     ): NotificationInboxItem {
         check(recipientType == NotificationRecipientType.CUSTOMER) { "Inbox item requires a customer recipient" }
-        val copy = NotificationInboxCopy.forTemplate(template)
+        val copy = inboxCopy ?: NotificationInboxCopy.forTemplate(template)
         return NotificationInboxItem.create(
             id = id,
             customerId = recipientId,
@@ -635,7 +674,7 @@ internal class NotificationDeliveryService(
             template = template,
             title = copy.title,
             body = copy.body,
-            target = NotificationTarget.none(),
+            target = inboxTarget,
             createdAt = occurredAt,
         )
     }

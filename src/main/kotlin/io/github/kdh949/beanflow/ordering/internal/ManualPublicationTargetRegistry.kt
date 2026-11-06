@@ -2,6 +2,7 @@ package io.github.kdh949.beanflow.ordering.internal
 
 import io.github.kdh949.beanflow.eventing.api.OrderCancelledV1
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
+import io.github.kdh949.beanflow.eventing.api.OrderReadyV2
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import org.springframework.context.ApplicationContext
 import org.springframework.context.event.ApplicationListenerMethodAdapter
@@ -74,7 +75,11 @@ internal class ManualPublicationTargetRegistry(
         eventType: String,
         listenerId: String,
     ): Boolean =
-        supports(eventType, listenerId) && eventType == OrderReadyV1::class.java.name &&
-            listenerId ==
-            "io.github.kdh949.beanflow.notification.internal.OrderReadyNotificationListener.on(${OrderReadyV1::class.java.name})"
+        supports(eventType, listenerId) && (
+            (
+                eventType == OrderReadyV1::class.java.name && listenerId ==
+                    "io.github.kdh949.beanflow.notification.internal.OrderReadyNotificationListener.on(${OrderReadyV1::class.java.name})"
+            ) ||
+                (eventType == OrderReadyV2::class.java.name && listenerId == "beanflow.notification.order-ready.v2")
+        )
 }

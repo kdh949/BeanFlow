@@ -395,6 +395,25 @@ internal class StoreOrderLifecycleIntegrationTest
                     orderId,
                 ) == 1L
             }
+            assertThat(
+                count("SELECT count(*) FROM event_publication WHERE event_type = ?", "io.github.kdh949.beanflow.eventing.api.OrderReadyV1"),
+            ).isZero()
+            assertThat(
+                count("SELECT count(*) FROM event_publication WHERE event_type = ?", "io.github.kdh949.beanflow.eventing.api.OrderReadyV2"),
+            ).isOne()
+            assertThat(value<String>("SELECT target_reference FROM notification_inbox_item WHERE order_id = ?", orderId))
+                .isEqualTo(value<String>("SELECT public_reference FROM ordering_order WHERE id = ?", orderId))
+            assertThat(value<String>("SELECT body FROM notification_inbox_item WHERE order_id = ?", orderId))
+                .contains(value<String>("SELECT store_name_snapshot FROM ordering_order WHERE id = ?", orderId))
+                .contains(
+                    value<String>("SELECT menu_name FROM ordering_order_line WHERE order_id = ? ORDER BY line_sequence LIMIT 1", orderId),
+                )
+            assertThat(
+                value<String>(
+                    "SELECT serialized_event::jsonb -> 'envelope' ->> 'payloadVersion' FROM event_publication WHERE event_type = ?",
+                    "io.github.kdh949.beanflow.eventing.api.OrderReadyV2",
+                ),
+            ).isEqualTo("2")
             assertThat(value<String>("SELECT state FROM ordering_order WHERE id = ?", orderId))
                 .isEqualTo("COMPLETED")
             await("completion settlement item") {

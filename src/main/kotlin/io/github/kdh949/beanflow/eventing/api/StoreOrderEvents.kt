@@ -75,6 +75,18 @@ data class OrderReadyV1(
     val readyAt: Instant,
 )
 
+data class OrderReadyV2(
+    val envelope: EventEnvelope,
+    val orderId: UUID,
+    val customerId: UUID,
+    val storeId: UUID,
+    val readyAt: Instant,
+    val publicReference: String,
+    val storeName: String,
+    val firstMenuName: String,
+    val additionalLineCount: Int,
+)
+
 data class OrderCompletedV1(
     val envelope: EventEnvelope,
     val orderId: UUID,

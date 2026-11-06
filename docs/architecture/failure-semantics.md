@@ -283,7 +283,7 @@ Customer Support에서는 다음 결과를 검증한다.
   초기 5분이 지나면 MANUAL_REVIEW/UNKNOWN으로 전환한다. 이전 실행이 끝났는지와 실제 결과는 별도로 확인해야 한다.
 - 요청 ID와 baseline은 실제 claim에서 원자적으로 검사한다. 동일 키 replay와 오래된 후보는 추가 예산을 만들지 않는다.
 - 결과 불명 replay는 동시 실행과 owner commit 후 ACK 유실 안전성을 검증한 exact listener만 허용한다.
-  초기 대상은 OrderReadyV1의 알림 접수이며 외부 발송은 별도 owner worker가 담당한다.
+  검증 대상은 기존 OrderReadyV1과 OrderReadyV2의 `beanflow.notification.order-ready.v2` 알림 접수이며 외부 발송은 별도 owner worker가 담당한다.
 - 원본 상태와 source/payload는 보존한다. 늦은 결과는 자기 시도에 기록하며 새 시도의 publication/Case를 덮지 않는다.
   UNKNOWN은 실제 처리 결과와 계속 비교·확인하고, 90일 완료 원장 정리 대상에서 제외한다.
 - 상세 정책은 [ADR-125](../adr/ADR-125-publication-unknown-execution-recovery.md)를 따른다.

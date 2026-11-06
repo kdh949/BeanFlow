@@ -3,6 +3,7 @@ package io.github.kdh949.beanflow.notification.internal
 import io.github.kdh949.beanflow.eventing.api.CustomerCancellationRefundDelayedV1
 import io.github.kdh949.beanflow.eventing.api.CustomerCancellationRefundSucceededV1
 import io.github.kdh949.beanflow.eventing.api.OrderReadyV1
+import io.github.kdh949.beanflow.eventing.api.OrderReadyV2
 import io.github.kdh949.beanflow.eventing.api.OrderRejectedV1
 import io.github.kdh949.beanflow.eventing.api.StoreAcceptanceWarningRequestedV1
 import org.springframework.modulith.events.ApplicationModuleListener
@@ -50,5 +51,15 @@ internal class CustomerCancellationRefundNotificationListener(
     @ApplicationModuleListener(id = "beanflow.notification.customer-cancellation-refund-delayed-v1")
     fun onDelayed(event: CustomerCancellationRefundDelayedV1) {
         deliveryService.requestCustomerCancellationRefundDelayed(event)
+    }
+}
+
+@Component
+internal class OrderReadyV2NotificationListener(
+    private val deliveryService: NotificationDeliveryService,
+) {
+    @ApplicationModuleListener(id = "beanflow.notification.order-ready.v2")
+    fun on(event: OrderReadyV2) {
+        deliveryService.requestReady(event)
     }
 }
