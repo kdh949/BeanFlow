@@ -8618,57 +8618,32 @@ export interface components {
             expiringHasMore: boolean;
         };
         /**
-         * @description 포인트 적립, 사용, 만료, 복원, 수동 조정 내역 한 건입니다. 부호 있는 금액, 발생 시각과 원인 식별값을 포함합니다.
-         * @example {
-         *       "transactionId": "6d024053-6f94-53c6-8741-17a3bfca6f6a",
-         *       "type": "ADJUSTMENT",
-         *       "amountKrw": 3000,
-         *       "occurredAt": "2026-08-15T15:00:00+09:00",
-         *       "sourceReference": "point-adjustment:sample:001"
-         *     }
+         * @description 포인트 적립, 사용, 만료, 복원 또는 수동 조정 종류입니다. RECOVERY is an actual debit
+         *     (RECOVERY는 환불 뒤 실제 차감되는 회수 포인트)를, ADJUSTMENT는 운영자가 직접 조정한 내역을
+         *     뜻합니다.
+         * @enum {string}
          */
-        PointTransaction: {
-            /** @description 해당 포인트 거래 자원을 가리키는 UUID 식별자입니다. */
-            transactionId: components["schemas"]["Identifier"];
-            /**
-             * @description 포인트 적립, 사용, 만료, 복원 또는 수동 조정 종류입니다. RECOVERY is an actual debit
-             *     (RECOVERY는 환불 뒤 실제 차감되는 회수 포인트)를, ADJUSTMENT는 운영자가 직접 조정한 내역을
-             *     뜻합니다.
-             * @enum {string}
-             */
-            type: "ACCRUAL" | "USE" | "EXPIRATION" | "RESTORE" | "COMPENSATION" | "RESTORE_SKIPPED_EXPIRED" | "RECOVERY" | "ADJUSTMENT";
-            /**
-             * @description 고객에게 표시되는 포인트 잔액에 미치는 부호 있는 효과입니다. ACCRUAL, RESTORE, COMPENSATION은
-             *     양수이고 USE, EXPIRATION, RECOVERY are negative(음수)이며 RESTORE_SKIPPED_EXPIRED is zero
-             *     (0)입니다. 항상 0 이상인 금액이 아니며 ADJUSTMENT follows its stored CREDIT or DEBIT balance effect(저장된 CREDIT 또는 DEBIT 효과를 따릅니다).
-             */
-            amountKrw: components["schemas"]["SignedMoneyKrw"];
-            /** @description 포인트 거래가 발생한 시각입니다. */
-            occurredAt: components["schemas"]["DateTime"];
-            /** @description 이 포인트 거래가 어떤 주문, 환불 또는 수동 조정에서 발생했는지 가리키는 식별값입니다. */
-            sourceReference: string;
+        type: "ACCRUAL" | "USE" | "EXPIRATION" | "RESTORE" | "COMPENSATION" | "RESTORE_SKIPPED_EXPIRED" | "RECOVERY" | "ADJUSTMENT";
+        /** @description 이 포인트 거래가 어떤 주문, 환불 또는 수동 조정에서 발생했는지 가리키는 식별값입니다. */
+        sourceReference: string;
+        /** @description 고객 소유 주문의 생성 당시 표시 정보입니다. 현재 매장과 메뉴를 조회해 대체하지 않습니다. */
+        CustomerPointOrderContext: {
+            publicReference: string;
+            storeName: string;
+            firstMenuName: string;
         };
-        /**
-         * @description 포인트 거래 내역과 다음 페이지 정보를 담는 응답입니다.
-         * @example {
-         *       "items": [
-         *         {
-         *           "transactionId": "6d024053-6f94-53c6-8741-17a3bfca6f6a",
-         *           "type": "ACCRUAL",
-         *           "amountKrw": 500,
-         *           "occurredAt": "2026-08-15T10:30:00+09:00",
-         *           "sourceReference": "order:74131bb9-688f-5370-8042-21015b3cd43a"
-         *         }
-         *       ],
-         *       "page": {
-         *         "nextCursor": "v1.sample.cursor.eyJvY2N1cnJlZEF0IjoiMjAyNi0wOC0xNVQxMDozMDowMCswOTowMCJ9"
-         *       }
-         *     }
-         */
-        PointTransactionPage: {
-            /** @description 현재 페이지에 포함된 리소스 목록입니다. */
-            items: components["schemas"]["PointTransaction"][];
-            /** @description 다음 페이지 커서 등 페이지네이션 정보입니다. */
+        /** @description 기존 포인트 거래 필드와 주문 ACCRUAL의 선택적 고객 소유 주문 맥락입니다. 과거/비주문 기록에는 orderContext가 없습니다. */
+        CustomerPointTransaction: {
+            transactionId: components["schemas"]["Identifier"];
+            type: components["schemas"]["type"];
+            amountKrw: components["schemas"]["SignedMoneyKrw"];
+            occurredAt: components["schemas"]["DateTime"];
+            sourceReference: components["schemas"]["sourceReference"];
+            orderContext?: components["schemas"]["CustomerPointOrderContext"];
+        };
+        /** @description 고객 범위의 기존 정렬과 서명 cursor를 보존하는 포인트 거래 페이지입니다. 주문 binding이 있으나 맥락 조회가 실패하면503입니다. */
+        CustomerPointTransactionPage: {
+            items: components["schemas"]["CustomerPointTransaction"][];
             page: components["schemas"]["PageInfo"];
         };
         NotificationSummary: {
@@ -9762,6 +9737,37 @@ export interface components {
             currency: components["schemas"]["Currency"];
         };
         /**
+         * @description 포인트 적립, 사용, 만료, 복원, 수동 조정 내역 한 건입니다. 부호 있는 금액, 발생 시각과 원인 식별값을 포함합니다.
+         * @example {
+         *       "transactionId": "6d024053-6f94-53c6-8741-17a3bfca6f6a",
+         *       "type": "ADJUSTMENT",
+         *       "amountKrw": 3000,
+         *       "occurredAt": "2026-08-15T15:00:00+09:00",
+         *       "sourceReference": "point-adjustment:sample:001"
+         *     }
+         */
+        PointTransaction: {
+            /** @description 해당 포인트 거래 자원을 가리키는 UUID 식별자입니다. */
+            transactionId: components["schemas"]["Identifier"];
+            /**
+             * @description 포인트 적립, 사용, 만료, 복원 또는 수동 조정 종류입니다. RECOVERY is an actual debit
+             *     (RECOVERY는 환불 뒤 실제 차감되는 회수 포인트)를, ADJUSTMENT는 운영자가 직접 조정한 내역을
+             *     뜻합니다.
+             * @enum {string}
+             */
+            type: "ACCRUAL" | "USE" | "EXPIRATION" | "RESTORE" | "COMPENSATION" | "RESTORE_SKIPPED_EXPIRED" | "RECOVERY" | "ADJUSTMENT";
+            /**
+             * @description 고객에게 표시되는 포인트 잔액에 미치는 부호 있는 효과입니다. ACCRUAL, RESTORE, COMPENSATION은
+             *     양수이고 USE, EXPIRATION, RECOVERY are negative(음수)이며 RESTORE_SKIPPED_EXPIRED is zero
+             *     (0)입니다. 항상 0 이상인 금액이 아니며 ADJUSTMENT follows its stored CREDIT or DEBIT balance effect(저장된 CREDIT 또는 DEBIT 효과를 따릅니다).
+             */
+            amountKrw: components["schemas"]["SignedMoneyKrw"];
+            /** @description 포인트 거래가 발생한 시각입니다. */
+            occurredAt: components["schemas"]["DateTime"];
+            /** @description 이 포인트 거래가 어떤 주문, 환불 또는 수동 조정에서 발생했는지 가리키는 식별값입니다. */
+            sourceReference: string;
+        };
+        /**
          * @description 포인트 수동 조정 결과입니다. 조정 후 계정 잔액과 이번 작업으로 생성된 포인트 거래 내역을 함께 반환합니다.
          * @example {
          *       "account": {
@@ -9809,6 +9815,29 @@ export interface components {
         DismissPointAdjustmentPreparationRequest: {
             /** @enum {string} */
             expectedState: "PREPARED" | "APPLIED";
+        };
+        /**
+         * @description 포인트 거래 내역과 다음 페이지 정보를 담는 응답입니다.
+         * @example {
+         *       "items": [
+         *         {
+         *           "transactionId": "6d024053-6f94-53c6-8741-17a3bfca6f6a",
+         *           "type": "ACCRUAL",
+         *           "amountKrw": 500,
+         *           "occurredAt": "2026-08-15T10:30:00+09:00",
+         *           "sourceReference": "order:74131bb9-688f-5370-8042-21015b3cd43a"
+         *         }
+         *       ],
+         *       "page": {
+         *         "nextCursor": "v1.sample.cursor.eyJvY2N1cnJlZEF0IjoiMjAyNi0wOC0xNVQxMDozMDowMCswOTowMCJ9"
+         *       }
+         *     }
+         */
+        PointTransactionPage: {
+            /** @description 현재 페이지에 포함된 리소스 목록입니다. */
+            items: components["schemas"]["PointTransaction"][];
+            /** @description 다음 페이지 커서 등 페이지네이션 정보입니다. */
+            page: components["schemas"]["PageInfo"];
         };
         /**
          * @description 전체 기본 정책 또는 매장별 정책의 한 버전입니다. 매장별 설정을 직접 지정했는지, 전체 기본 정책을 따르는지, 언제부터 적용되는지와 변경 사유를 기록합니다.
@@ -16008,7 +16037,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PointTransactionPage"];
+                    "application/json": components["schemas"]["CustomerPointTransactionPage"];
                 };
             };
             400: components["responses"]["BadRequest"];

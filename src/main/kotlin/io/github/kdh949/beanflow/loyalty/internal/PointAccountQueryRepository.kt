@@ -98,6 +98,28 @@ internal class PointAccountQueryRepository(
             limit,
         )
 
+    /** Only order-backed accruals from the already selected, owned ledger page are enriched. */
+    fun findAccrualOrders(
+        accountId: UUID,
+        transactionIds: Set<UUID>,
+    ): Map<UUID, UUID> {
+        if (transactionIds.isEmpty()) return emptyMap()
+        require(transactionIds.size <= 100) { "Accrual lookup exceeds one page" }
+        return jdbcTemplate
+            .query(
+                """
+                SELECT tx.id, lot.accrual_order_id
+                  FROM loyalty_point_transaction tx
+                  JOIN loyalty_point_lot lot ON lot.id = tx.point_lot_id AND lot.point_account_id = tx.point_account_id
+                 WHERE tx.point_account_id = ? AND tx.type = 'ACCRUAL'
+                   AND lot.accrual_order_id IS NOT NULL AND tx.id IN (${transactionIds.joinToString { "?" }})
+                """.trimIndent(),
+                { row, _ -> row.getObject("id", UUID::class.java) to row.getObject("accrual_order_id", UUID::class.java) },
+                accountId,
+                *transactionIds.toTypedArray(),
+            ).toMap()
+    }
+
     fun findTransactions(
         accountId: UUID,
         after: PointTransactionSort?,

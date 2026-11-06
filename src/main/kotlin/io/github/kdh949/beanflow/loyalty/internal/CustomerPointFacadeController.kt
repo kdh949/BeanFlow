@@ -1,10 +1,8 @@
 package io.github.kdh949.beanflow.loyalty.internal
 
-import io.github.kdh949.beanflow.loyalty.api.ListPointTransactionsCommand
 import io.github.kdh949.beanflow.loyalty.api.PointAccountQueryOperations
 import io.github.kdh949.beanflow.loyalty.api.PointAccountReadActor
 import io.github.kdh949.beanflow.loyalty.api.PointAccountReadActorType
-import io.github.kdh949.beanflow.loyalty.api.PointTransactionPage
 import io.github.kdh949.beanflow.loyalty.api.ReadPointAccountCommand
 import io.github.kdh949.beanflow.shared.api.CustomerActor
 import io.github.kdh949.beanflow.shared.api.DomainFailure
@@ -137,8 +135,7 @@ internal class CustomerPointSummaryReader(
 @RestController
 @RequestMapping("/api/v1/me")
 internal class CustomerPointFacadeController(
-    private val accounts: CustomerPointAccountLocator,
-    private val queries: PointAccountQueryOperations,
+    private val transactions: CustomerPointTransactionReader,
     private val summaries: CustomerPointSummaryReader,
     private val clock: Clock,
 ) {
@@ -152,18 +149,5 @@ internal class CustomerPointFacadeController(
         actor: CustomerActor,
         @RequestParam(required = false) @Size(max = 2048) cursor: String?,
         @RequestParam(required = false) limit: Int?,
-    ): PointTransactionPageResponse =
-        queries
-            .listTransactions(
-                ListPointTransactionsCommand(
-                    actor = PointAccountReadActor(actor.actorId, PointAccountReadActorType.CUSTOMER),
-                    accountId = accounts.locate(actor.actorId),
-                    accessReason = null,
-                    cursor = cursor,
-                    limit = limit,
-                    now = clock.instant(),
-                ),
-            ).toCustomerResponse()
+    ): CustomerPointTransactionPageResponse = transactions.read(actor.actorId, cursor, limit, clock.instant())
 }
-
-private fun PointTransactionPage.toCustomerResponse() = PointTransactionPageResponse(items, PointAccountPageInfoResponse(nextCursor))

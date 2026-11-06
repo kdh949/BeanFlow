@@ -737,6 +737,8 @@
 
 ## BR-10 포인트 적립 기준 금액
 
+- **Customer Read Clarification (2026-10-03):** 고객 적립 내역은 ACCRUAL transaction의 PointLot.accrualOrderId가 있는 경우에만 고객 소유 주문의 공개 번호·주문 당시 매장·대표 메뉴를 함께 보여준다. 과거/비주문 기록의 링크를 추측하지 않으며, 결합된 주문 조회 실패는 명시적 오류다. 기존 거래 필드·금액·순서·cursor와 운영 응답은 유지한다. 만료 안내는 연도와 시각을 표시하고 조회된 목록 기준임을 밝힌다. [ADR-011](../adr/ADR-011-point-lot-ledger.md)을 따른다.
+
 - **Status:** Accepted for MVP
 - **Decision:** 포인트는 쿠폰 할인과 포인트 사용을 모두 반영한 뒤 외부 결제수단 또는 혜택 전용 결제로 최종 확정된 실결제액을 기준으로 적립한다. 환불된 금액에는 포인트를 적립하지 않는다.
 - **Immutable Ordinary Accrual Snapshot Amendment (2026-08-01):** 일반 적립에 적용할
